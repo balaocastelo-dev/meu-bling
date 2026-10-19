@@ -124,6 +124,12 @@ else
   fi
 fi
 
+msg "Backup diário (cron 03:00 → /root/backups/meu-bling, guarda 14 dias)"
+chmod +x "$CODIGO/deploy/vps/backup.sh"
+LINHA_CRON="0 3 * * * bash $CODIGO/deploy/vps/backup.sh >> /var/log/meu-bling-backup.log 2>&1"
+( crontab -l 2>/dev/null | grep -v 'meu-bling' ; echo "$LINHA_CRON" ) | crontab -
+echo "agendado: $LINHA_CRON"
+
 HOSTVPS="$(grep -m1 -oE '^[A-Za-z0-9.-]+\.[a-z]+ *\{' "$CADDYFILE" | sed 's/ *{//' || true)"
 msg "Testando pela VPS"
 if [ -n "$HOSTVPS" ]; then
@@ -136,6 +142,5 @@ cat <<EOF
    Site: ${URL_PUBLICA}   (depende do rewrite /sistema no repositório balao2026, já publicado na Vercel)
    Login inicial: admin@balao.info / admin123 — troque na primeira entrada.
    Dados: ${DADOS}   Segredos: ${ENV_FILE}   Logs: docker logs -f ${CONTAINER}
-   Backup diário sugerido (crontab -e):
-     0 3 * * * tar czf /root/meu-bling-backup-\$(date +\\%F).tgz ${DADOS} ${ENV_FILE}
+   Backup: todo dia às 03:00 em /root/backups/meu-bling (log em /var/log/meu-bling-backup.log)
 EOF

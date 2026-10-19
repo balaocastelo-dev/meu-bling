@@ -21,12 +21,16 @@ Limitação: se o PC da loja desligar ou a internet cair, o sistema fica fora do
 A VPS `srv1963897.hstgr.cloud` (Hostinger KVM 2, Ubuntu 24.04, Docker + Caddy no host) já serve o CRM de WhatsApp. O ERP entra nela como mais um container (`meu-bling`, porta 127.0.0.1:3333) e o Caddy ganha a rota `/sistema/*`. No site (Vercel, repositório `balao2026`), um rewrite em `next.config.ts` repassa `www.balao.info/sistema` para a VPS — o endereço visível é sempre o do site.
 
 1. No site: mesclar o ramo `meu-bling-sistema` do `balao2026` (rewrite `/sistema` → VPS). A Vercel publica sozinha.
-2. No Windows, dentro da pasta do projeto: `.\scripts\deploy-vps.ps1` (pede a senha de root da VPS duas vezes: envio do código e instalação). Ele envia o código para `/opt/meu-bling` e roda `deploy/vps/instalar-vps.sh`, que: gera `/etc/meu-bling.env` com segredos aleatórios, constrói a imagem com base `/sistema/`, sobe o container com dados em `/var/lib/meu-bling`, adiciona `handle_path /sistema/*` no `/etc/caddy/Caddyfile` (com backup) e recarrega o Caddy.
+2. No Windows, dentro da pasta do projeto (`C:\meu-bling`): `.\scripts\deploy-vps.ps1`. O PC da loja entra na VPS por chave SSH (`C:\Users\user\.ssh\id_ed25519`, já autorizada em `root@179.199.148.87`), então não pede senha. O script envia o código para `/opt/meu-bling` e roda `deploy/vps/instalar-vps.sh`, que: gera `/etc/meu-bling.env` com segredos aleatórios (só na primeira vez), constrói a imagem com base `/sistema/`, sobe o container com dados em `/var/lib/meu-bling`, adiciona `handle_path /sistema/*` no `/etc/caddy/Caddyfile` (com backup), recarrega o Caddy e agenda o backup diário.
 3. Abrir https://www.balao.info/sistema → `admin@balao.info` / `admin123` → trocar a senha.
-4. Atualizações futuras: rodar `.\scripts\deploy-vps.ps1` de novo (banco e arquivos ficam no volume).
-5. Backup na VPS (`crontab -e`): `0 3 * * * tar czf /root/meu-bling-backup-$(date +\%F).tgz /var/lib/meu-bling /etc/meu-bling.env`
+4. Atualizações futuras: `git pull` + `.\scripts\deploy-vps.ps1` de novo (banco e arquivos ficam em `/var/lib/meu-bling`, fora do container). Leva uns 5 minutos (build do Docker); o sistema fica fora do ar só nos segundos da troca do container.
+5. Backup: `deploy/vps/backup.sh` roda todo dia às 03:00 pelo cron da VPS → `/root/backups/meu-bling/meu-bling-AAAA-MM-DD.tgz` (guarda 14 dias; log em `/var/log/meu-bling-backup.log`). Baixe uma cópia de vez em quando: `scp root@179.199.148.87:/root/backups/meu-bling/*.tgz D:\backups\`.
 
-Guarde `/etc/meu-bling.env`: o `APP_SECRET` dele descriptografa o certificado A1, a senha SMTP e os tokens.
+Guarde `/etc/meu-bling.env`: o `APP_SECRET` dele descriptografa o certificado A1, a senha SMTP e os tokens (está dentro do backup).
+
+**Status: no ar desde 19/10/2026.** Primeiro deploy quebrou duas vezes — CRLF nos scripts (resolvido com `.gitattributes`) e `npm install` rodando `prisma generate` antes de o schema estar na imagem (resolvido no `Dockerfile`).
+
+Comandos úteis na VPS: `docker logs -f meu-bling` · `docker restart meu-bling` · `curl 127.0.0.1:3333/api/v1/saude` · `bash /opt/meu-bling/deploy/vps/backup.sh`.
 
 ## Opção B — Servidor na nuvem (VPS) com Docker
 
