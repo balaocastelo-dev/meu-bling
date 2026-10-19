@@ -128,7 +128,8 @@ fi
 msg "Backup diário (cron 03:00 → /root/backups/meu-bling, guarda 14 dias)"
 chmod +x "$CODIGO/deploy/vps/backup.sh"
 LINHA_CRON="0 3 * * * bash $CODIGO/deploy/vps/backup.sh >> /var/log/meu-bling-backup.log 2>&1"
-( crontab -l 2>/dev/null | grep -v 'meu-bling' ; echo "$LINHA_CRON" ) | crontab -
+# mantém as outras linhas do cron; "|| true" porque o grep -v sem linhas sobrando sai com 1 (e o set -e mataria o script)
+{ crontab -l 2>/dev/null | grep -v 'meu-bling' || true; echo "$LINHA_CRON"; } | crontab -
 echo "agendado: $LINHA_CRON"
 
 HOSTVPS="$(grep -m1 -oE '^[A-Za-z0-9.-]+\.[a-z]+ *\{' "$CADDYFILE" | sed 's/ *{//' || true)"
