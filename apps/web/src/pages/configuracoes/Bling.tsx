@@ -136,7 +136,7 @@ export default function Bling() {
             {sel.has('vendas') && (
               <div className="mt-4 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs font-medium text-slate-600">Opções dos pedidos de venda</p>
-                <Checkbox label='Considerar fechadas as vendas que estão "Em aberto", "Em andamento" ou "Verificado" no Bling (entram como Atendido)' checked={fecharEmAberto} disabled={imp?.emAndamento} onChange={(ev) => setFecharEmAberto(ev.target.checked)} />
+                <Checkbox label='Considerar fechadas as vendas que estão "Em aberto", "Em andamento" ou "Verificado" no Bling (entram como Fechada)' checked={fecharEmAberto} disabled={imp?.emAndamento} onChange={(ev) => setFecharEmAberto(ev.target.checked)} />
                 <Checkbox label="Lançar o valor das vendas fechadas como recebido no Caixa, na data de cada venda (gera contas a receber baixadas e o fluxo de caixa)" checked={baixarNoCaixa} disabled={imp?.emAndamento} onChange={(ev) => setBaixarNoCaixa(ev.target.checked)} />
                 <p className="text-[11px] text-slate-400">O resumo (quantidade de pedidos, total por mês/situação e valor lançado no caixa) aparece no log ao final.</p>
               </div>

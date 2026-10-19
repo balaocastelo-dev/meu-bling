@@ -50,6 +50,19 @@ registrarAcao('VENDA', 'reservarEstoque', acaoReservarEstoque);
 registrarAcao('VENDA', 'liberarReserva', acaoLiberarReserva);
 registrarAcao('VENDA', 'gerarNfe', acaoGerarNfe);
 
+// NF-e autorizada → venda vai para "NF emitida"; NF-e cancelada → volta para "Fechada" (quando essas situações existem)
+async function moverVendaPorNota(notaId: number, destinoNome: 'NF emitida' | 'Fechada', observacao: string) {
+  const venda = await prisma.venda.findFirst({ where: { notaId }, include: { situacao: true } });
+  if (!venda) return;
+  const destino = await prisma.situacao.findFirst({ where: { modulo: 'VENDA', nome: destinoNome, ativo: true } });
+  if (!destino || venda.situacaoId === destino.id) return;
+  if (destinoNome === 'NF emitida' && venda.situacao.cancelamento) return;
+  if (destinoNome === 'Fechada' && venda.situacao.nome !== 'NF emitida') return;
+  await mudarSituacao({ modulo: 'VENDA', entidadeId: venda.id, situacaoDestinoId: destino.id, usuarioId: null, observacao, forcar: true });
+}
+eventos.ouvir('nfe.autorizada', (d) => moverVendaPorNota(d.notaId, 'NF emitida', 'Automático: NF-e autorizada'));
+eventos.ouvir('nfe.cancelada', (d) => moverVendaPorNota(d.notaId, 'Fechada', 'Automático: NF-e cancelada'));
+
 export default async function vendasRoutes(app: FastifyInstance) {
   // ---------------------------------------------------------------- listagem
   app.get('/api/v1/vendas', async (req) => {

@@ -104,7 +104,7 @@ export default function DashboardVendas() {
             </ResponsiveContainer>
           </div>
         ) : (
-          <EmptyState compacto titulo="Sem vendas no período" descricao="Apenas vendas em situação final (ex.: Atendido) entram no faturamento." />
+          <EmptyState compacto titulo="Sem vendas no período" descricao="Apenas vendas em situação final (Fechada / NF emitida) entram no faturamento." />
         )}
       </Card>
 

@@ -8,6 +8,7 @@ import { arredondar, competenciaDe } from '../../lib/util.js';
 import { historico, situacoesPermitidas, type ContextoAcao } from '../../core/situacoes.js';
 import { linkPublico, tokenPublico } from '../publico/token.js';
 import { depositoPadraoId, liberarReservas, movimentarEstoque, movimentaEstoque, reservarItens, reservasAtivas } from '../comum/estoque.js';
+import { alocarComprasParaVenda, desalocarComprasDaVenda } from '../compras/service.js';
 import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, recriarComissoes } from '../comum/financeiro.js';
 import { criarNotaPendente } from '../comum/nfe.js';
 import { hojeMeioDia } from '../comum/datas.js';
@@ -202,6 +203,8 @@ export async function acaoLancarEstoque(ctx: ContextoAcao) {
   }
   await liberarReservas(tx, 'VENDA', venda.id, `Baixa da venda nº ${venda.numero}`, ctx.usuarioId);
   await tx.venda.update({ where: { id }, data: { estoqueLancado: true, depositoId, dataSaida: venda.dataSaida || new Date() } });
+  // compra de origem da mercadoria vira "Vendido" automaticamente
+  await alocarComprasParaVenda(tx, id, ctx.usuarioId);
 }
 
 export async function acaoEstornarEstoque(ctx: ContextoAcao) {
@@ -227,6 +230,7 @@ export async function acaoEstornarEstoque(ctx: ContextoAcao) {
     });
   }
   await tx.venda.update({ where: { id }, data: { estoqueLancado: false } });
+  await desalocarComprasDaVenda(tx, id, ctx.usuarioId);
 }
 
 export async function acaoLancarContas(ctx: ContextoAcao) {

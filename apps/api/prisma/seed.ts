@@ -4,9 +4,8 @@
  *   npm run db:seed            → configuração base (empresa, admin, situações, depósitos, formas de pagamento...)
  *   npm run db:seed -- --demo  → além da base, cria dados de exemplo (clientes, produtos, vendas, OS, financeiro)
  *
- * As situações de VENDA replicam exatamente as da conta Bling do Balão
- * (Em digitação, Em aberto, Em andamento, Verificado, Atendido, Cancelado,
- *  Venda Agenciada, Aguardando Estorno, Estornado OK).
+ * Situações de VENDA/COMPRA: as definidas pelo Balão (Em aberto, Em andamento, Fechada, NF emitida, Cancelada /
+ * Em aberto, Fechado, Consignado, Vendido, Cancelado). Bancos antigos são migrados por migrarSituacoesBalao().
  */
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
@@ -17,22 +16,25 @@ const DEMO = process.argv.includes('--demo');
 
 type SitSeed = { nome: string; cor: string; acoes?: string[]; inicial?: boolean; final?: boolean; cancelamento?: boolean };
 
-const SITUACOES: Record<'VENDA' | 'COMPRA' | 'OS', SitSeed[]> = {
+/**
+ * Situações do Balão (definidas pelo Thiago em 19/10/2026):
+ *  VENDA:  Em aberto → Em andamento → Fechada → NF emitida | Cancelada
+ *  COMPRA: Em aberto → Fechado | Consignado → Vendido (automático quando a mercadoria da compra é vendida) | Cancelado
+ *  OS: fluxo da assistência técnica.
+ */
+export const SITUACOES: Record<'VENDA' | 'COMPRA' | 'OS', SitSeed[]> = {
   VENDA: [
-    { nome: 'Em digitação', cor: '#94a3b8', inicial: true },
-    { nome: 'Em aberto', cor: '#3b82f6', acoes: ['reservarEstoque'] },
+    { nome: 'Em aberto', cor: '#3b82f6', acoes: ['reservarEstoque'], inicial: true },
     { nome: 'Em andamento', cor: '#f59e0b' },
-    { nome: 'Verificado', cor: '#8b5cf6' },
-    { nome: 'Atendido', cor: '#22c55e', acoes: ['lancarEstoque', 'lancarContas'], final: true },
-    { nome: 'Cancelado', cor: '#ef4444', acoes: ['estornarEstoque', 'estornarContas', 'liberarReserva'], cancelamento: true },
-    { nome: 'Venda Agenciada', cor: '#0ea5e9', final: true },
-    { nome: 'Aguardando Estorno', cor: '#f97316' },
-    { nome: 'Estornado OK', cor: '#64748b', acoes: ['estornarEstoque', 'estornarContas'], cancelamento: true },
+    { nome: 'Fechada', cor: '#22c55e', acoes: ['lancarEstoque', 'lancarContas'], final: true },
+    { nome: 'NF emitida', cor: '#0ea5e9', acoes: ['lancarEstoque', 'lancarContas', 'gerarNfe'], final: true },
+    { nome: 'Cancelada', cor: '#ef4444', acoes: ['estornarEstoque', 'estornarContas', 'liberarReserva'], cancelamento: true },
   ],
   COMPRA: [
     { nome: 'Em aberto', cor: '#3b82f6', inicial: true },
-    { nome: 'Em andamento', cor: '#f59e0b' },
-    { nome: 'Atendido', cor: '#22c55e', acoes: ['lancarEstoque', 'lancarContas'], final: true },
+    { nome: 'Fechado', cor: '#22c55e', acoes: ['lancarEstoque', 'lancarContas'], final: true },
+    { nome: 'Consignado', cor: '#8b5cf6', acoes: ['lancarEstoque'] },
+    { nome: 'Vendido', cor: '#16a34a', acoes: ['lancarContas'], final: true },
     { nome: 'Cancelado', cor: '#ef4444', acoes: ['estornarEstoque', 'estornarContas'], cancelamento: true },
   ],
   OS: [
@@ -50,22 +52,20 @@ const SITUACOES: Record<'VENDA' | 'COMPRA' | 'OS', SitSeed[]> = {
   ],
 };
 
-// Transições da conta Bling do Balão (vendas) + fluxos padrão para compras e OS
-const TRANSICOES: Record<'VENDA' | 'COMPRA' | 'OS', [string, string][]> = {
+export const TRANSICOES: Record<'VENDA' | 'COMPRA' | 'OS', [string, string][]> = {
   VENDA: [
-    ['Em digitação', 'Em aberto'], ['Em digitação', 'Verificado'], ['Em digitação', 'Em andamento'], ['Em digitação', 'Atendido'], ['Em digitação', 'Cancelado'], ['Em digitação', 'Venda Agenciada'],
-    ['Em aberto', 'Em andamento'], ['Em aberto', 'Atendido'], ['Em aberto', 'Verificado'], ['Em aberto', 'Cancelado'], ['Em aberto', 'Em digitação'], ['Em aberto', 'Venda Agenciada'], ['Em aberto', 'Aguardando Estorno'],
-    ['Em andamento', 'Em aberto'], ['Em andamento', 'Atendido'], ['Em andamento', 'Verificado'], ['Em andamento', 'Cancelado'], ['Em andamento', 'Em digitação'], ['Em andamento', 'Venda Agenciada'],
-    ['Verificado', 'Em digitação'], ['Verificado', 'Em aberto'], ['Verificado', 'Em andamento'], ['Verificado', 'Atendido'], ['Verificado', 'Cancelado'], ['Verificado', 'Venda Agenciada'],
-    ['Atendido', 'Em andamento'], ['Atendido', 'Verificado'], ['Atendido', 'Cancelado'], ['Atendido', 'Em aberto'], ['Atendido', 'Em digitação'], ['Atendido', 'Venda Agenciada'],
-    ['Cancelado', 'Em andamento'], ['Cancelado', 'Atendido'], ['Cancelado', 'Em aberto'], ['Cancelado', 'Em digitação'], ['Cancelado', 'Verificado'], ['Cancelado', 'Venda Agenciada'], ['Cancelado', 'Aguardando Estorno'], ['Cancelado', 'Estornado OK'],
-    ['Aguardando Estorno', 'Estornado OK'],
+    ['Em aberto', 'Em andamento'], ['Em aberto', 'Fechada'], ['Em aberto', 'NF emitida'], ['Em aberto', 'Cancelada'],
+    ['Em andamento', 'Em aberto'], ['Em andamento', 'Fechada'], ['Em andamento', 'NF emitida'], ['Em andamento', 'Cancelada'],
+    ['Fechada', 'NF emitida'], ['Fechada', 'Em andamento'], ['Fechada', 'Em aberto'], ['Fechada', 'Cancelada'],
+    ['NF emitida', 'Fechada'], ['NF emitida', 'Cancelada'],
+    ['Cancelada', 'Em aberto'], ['Cancelada', 'Fechada'],
   ],
   COMPRA: [
-    ['Em aberto', 'Em andamento'], ['Em aberto', 'Atendido'], ['Em aberto', 'Cancelado'],
-    ['Em andamento', 'Em aberto'], ['Em andamento', 'Atendido'], ['Em andamento', 'Cancelado'],
-    ['Atendido', 'Em aberto'], ['Atendido', 'Em andamento'], ['Atendido', 'Cancelado'],
-    ['Cancelado', 'Em aberto'], ['Cancelado', 'Em andamento'], ['Cancelado', 'Atendido'],
+    ['Em aberto', 'Fechado'], ['Em aberto', 'Consignado'], ['Em aberto', 'Cancelado'],
+    ['Fechado', 'Vendido'], ['Fechado', 'Consignado'], ['Fechado', 'Em aberto'], ['Fechado', 'Cancelado'],
+    ['Consignado', 'Vendido'], ['Consignado', 'Fechado'], ['Consignado', 'Em aberto'], ['Consignado', 'Cancelado'],
+    ['Vendido', 'Fechado'], ['Vendido', 'Consignado'], ['Vendido', 'Cancelado'],
+    ['Cancelado', 'Em aberto'], ['Cancelado', 'Fechado'], ['Cancelado', 'Consignado'],
   ],
   OS: [
     ['Aberta', 'Em orçamento'], ['Aberta', 'Em andamento'], ['Aberta', 'Cancelada'], ['Aberta', 'Aguardando peça'],
@@ -81,6 +81,64 @@ const TRANSICOES: Record<'VENDA' | 'COMPRA' | 'OS', [string, string][]> = {
     ['Cancelada', 'Aberta'], ['Cancelada', 'Em andamento'],
   ],
 };
+
+/**
+ * Migração das situações antigas (réplica do Bling) para as do Balão. Idempotente e versionada
+ * (Configuracao "situacoes.versao" = 2): renomeia Atendido→Fechada/Fechado e Cancelado→Cancelada (vendas),
+ * cria as novas (NF emitida, Consignado, Vendido), desativa/remove as que sobraram e refaz as transições.
+ */
+export async function migrarSituacoesBalao(db: PrismaClient) {
+  const cfg = await db.configuracao.findUnique({ where: { chave: 'situacoes.versao' } });
+  if (cfg && Number(cfg.valor) >= 2) return false;
+  const RENOMEAR: Record<'VENDA' | 'COMPRA', Record<string, string>> = {
+    VENDA: { Atendido: 'Fechada', Cancelado: 'Cancelada' },
+    COMPRA: { Atendido: 'Fechado' },
+  };
+  // vendas que estavam em situações que deixam de existir vão para a equivalente
+  const EQUIVALENTE: Record<'VENDA' | 'COMPRA', Record<string, string>> = {
+    VENDA: { 'Em digitação': 'Em aberto', Verificado: 'Em andamento', 'Venda Agenciada': 'Fechada', 'Aguardando Estorno': 'Cancelada', 'Estornado OK': 'Cancelada' },
+    COMPRA: { 'Em andamento': 'Em aberto' },
+  };
+  for (const modulo of ['VENDA', 'COMPRA'] as const) {
+    for (const [de, para] of Object.entries(RENOMEAR[modulo])) {
+      const antiga = await db.situacao.findUnique({ where: { modulo_nome: { modulo, nome: de } } });
+      const nova = await db.situacao.findUnique({ where: { modulo_nome: { modulo, nome: para } } });
+      if (antiga && !nova) await db.situacao.update({ where: { id: antiga.id }, data: { nome: para } });
+    }
+    // garante as situações do spec com flags/ações/cores/ordem corretas
+    let ordem = 0;
+    const ids: Record<string, number> = {};
+    for (const s of SITUACOES[modulo]) {
+      const r = await db.situacao.upsert({
+        where: { modulo_nome: { modulo, nome: s.nome } },
+        create: { modulo, nome: s.nome, cor: s.cor, ordem: ordem, sistema: true, inicial: !!s.inicial, final: !!s.final, cancelamento: !!s.cancelamento, acoes: JSON.stringify(s.acoes || []), ativo: true },
+        update: { cor: s.cor, ordem: ordem, sistema: true, inicial: !!s.inicial, final: !!s.final, cancelamento: !!s.cancelamento, acoes: JSON.stringify(s.acoes || []), ativo: true },
+      });
+      ids[s.nome] = r.id;
+      ordem += 1;
+    }
+    // situações que sobraram: move registros para a equivalente e remove (ou desativa se ainda referenciada)
+    const sobras = await db.situacao.findMany({ where: { modulo, nome: { notIn: SITUACOES[modulo].map((s) => s.nome) } } });
+    for (const sob of sobras) {
+      const alvoNome = EQUIVALENTE[modulo][sob.nome] || (sob.cancelamento ? SITUACOES[modulo].find((s) => s.cancelamento)!.nome : sob.final ? SITUACOES[modulo].find((s) => s.final)!.nome : SITUACOES[modulo].find((s) => s.inicial)!.nome);
+      const alvoId = ids[alvoNome];
+      if (modulo === 'VENDA') await db.venda.updateMany({ where: { situacaoId: sob.id }, data: { situacaoId: alvoId } });
+      else await db.compra.updateMany({ where: { situacaoId: sob.id }, data: { situacaoId: alvoId } });
+      await db.templateNotificacao.updateMany({ where: { situacaoId: sob.id }, data: { situacaoId: alvoId } });
+      await db.situacaoTransicao.deleteMany({ where: { OR: [{ origemId: sob.id }, { destinoId: sob.id }] } });
+      await db.situacao.delete({ where: { id: sob.id } }).catch(async () => {
+        await db.situacao.update({ where: { id: sob.id }, data: { ativo: false } });
+      });
+    }
+    // transições: refaz conforme o spec
+    await db.situacaoTransicao.deleteMany({ where: { modulo } });
+    for (const [de, para] of TRANSICOES[modulo]) {
+      if (ids[de] && ids[para]) await db.situacaoTransicao.create({ data: { modulo, origemId: ids[de], destinoId: ids[para] } });
+    }
+  }
+  await db.configuracao.upsert({ where: { chave: 'situacoes.versao' }, create: { chave: 'situacoes.versao', valor: '2' }, update: { valor: '2' } });
+  return true;
+}
 
 const DEPOSITOS = [
   { nome: 'LOJA CASTELO', padrao: true },
@@ -134,11 +192,11 @@ const CATEGORIAS_FIN: { nome: string; tipo: 'RECEITA' | 'DESPESA'; grupoDre: str
 const TEMPLATES = (sit: Record<string, number>) => [
   // ---- WhatsApp
   {
-    nome: 'WhatsApp — Venda confirmada', evento: 'VENDA_SITUACAO', canal: 'WHATSAPP', situacaoId: sit['VENDA:Atendido'],
+    nome: 'WhatsApp — Venda confirmada', evento: 'VENDA_SITUACAO', canal: 'WHATSAPP', situacaoId: sit['VENDA:Fechada'],
     corpo: 'Olá {{cliente.nome}}! 👋\nSua compra nº *{{numero}}* na *{{empresa.nome}}* foi confirmada ✅\nTotal: *{{total}}*\n\nQualquer dúvida é só chamar. Obrigado pela preferência!',
   },
   {
-    nome: 'WhatsApp — Venda cancelada', evento: 'VENDA_SITUACAO', canal: 'WHATSAPP', situacaoId: sit['VENDA:Cancelado'],
+    nome: 'WhatsApp — Venda cancelada', evento: 'VENDA_SITUACAO', canal: 'WHATSAPP', situacaoId: sit['VENDA:Cancelada'],
     corpo: 'Olá {{cliente.nome}}. A venda nº *{{numero}}* foi *cancelada*. Se precisar de ajuda, fale com a gente. — {{empresa.nome}}',
   },
   {
@@ -175,7 +233,7 @@ const TEMPLATES = (sit: Record<string, number>) => [
   },
   // ---- E-mail
   {
-    nome: 'E-mail — Venda confirmada', evento: 'VENDA_SITUACAO', canal: 'EMAIL', situacaoId: sit['VENDA:Atendido'], assunto: 'Pedido {{numero}} confirmado — {{empresa.nome}}',
+    nome: 'E-mail — Venda confirmada', evento: 'VENDA_SITUACAO', canal: 'EMAIL', situacaoId: sit['VENDA:Fechada'], assunto: 'Pedido {{numero}} confirmado — {{empresa.nome}}',
     corpo: '<p>Olá <b>{{cliente.nome}}</b>,</p><p>Seu pedido nº <b>{{numero}}</b> foi confirmado.</p><p>{{itens}}</p><p>Total: <b>{{total}}</b></p><p>Obrigado pela preferência!<br>{{empresa.nome}}</p>',
   },
   {
@@ -246,6 +304,7 @@ async function base() {
   });
 
   console.log('→ Situações e transições');
+  if (await migrarSituacoesBalao(prisma)) console.log('   situações migradas para o padrão do Balão (v2)');
   const sitIds: Record<string, number> = {};
   for (const modulo of ['VENDA', 'COMPRA', 'OS'] as const) {
     let ordem = 0;
@@ -358,7 +417,7 @@ async function demo() {
   const dia = (n: number) => new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - n, 12);
 
   // ---- Vendas (algumas atendidas com financeiro/estoque já lançados)
-  const vendaAtendidoId = await sit('VENDA', 'Atendido');
+  const vendaAtendidoId = await sit('VENDA', 'Fechada');
   const vendaAbertoId = await sit('VENDA', 'Em aberto');
   const catVenda = await catFin('Venda de produtos');
   const pixId = await fp('PIX');
@@ -407,12 +466,12 @@ async function demo() {
       }
       await prisma.comissao.create({ data: { tipo: 'VENDEDOR', vendedorId: v.vend, origemTipo: 'VENDA', vendaId: venda.id, descricao: `Venda nº ${venda.numero}`, base: total, pct: 3, valor: total * 0.03, competencia: dia(v.dias).toISOString().slice(0, 7) } });
     }
-    await prisma.historicoSituacao.create({ data: { entidadeTipo: 'VENDA', entidadeId: venda.id, paraSituacaoId: venda.situacaoId, paraSituacao: v.atendida ? 'Atendido' : 'Em aberto', data: dia(v.dias) } });
+    await prisma.historicoSituacao.create({ data: { entidadeTipo: 'VENDA', entidadeId: venda.id, paraSituacaoId: venda.situacaoId, paraSituacao: v.atendida ? 'Fechada' : 'Em aberto', data: dia(v.dias) } });
   }
   await prisma.sequencia.update({ where: { nome: 'VENDA' }, data: { valor: nSeq } });
 
   // ---- Compras
-  const compraAtendidoId = await sit('COMPRA', 'Atendido');
+  const compraAtendidoId = await sit('COMPRA', 'Fechado');
   const compraAbertoId = await sit('COMPRA', 'Em aberto');
   const catCmv = await catFin('Compra de mercadorias (CMV)');
   const boletoId = await fp('Boleto');

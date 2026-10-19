@@ -72,7 +72,7 @@ export default async function blingRoutes(app: FastifyInstance) {
         dataInicial: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         dataFinal: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         detalhesProdutos: z.boolean().optional(),
-        /** vendas "Em aberto/Em andamento/Verificado" do Bling entram como "Atendido" */
+        /** vendas "Em aberto/Em andamento/Verificado" do Bling entram como fechadas ("Fechada") */
         fecharEmAberto: z.boolean().optional(),
         /** vendas fechadas têm o valor lançado como recebido no Caixa na data da venda */
         baixarNoCaixa: z.boolean().optional(),

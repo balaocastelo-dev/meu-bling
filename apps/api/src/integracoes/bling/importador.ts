@@ -146,10 +146,7 @@ async function carregarSituacoesVendaBling(): Promise<Map<string, { nome: string
     const mod = (modulos.data || []).find((m) => /venda/i.test(m.nome || m.descricao || ''));
     if (!mod) return mapa;
     const sits = await blingGet<{ data: any[] }>(`/situacoes/modulos/${mod.id}`);
-    for (const s of sits.data || []) {
-      mapa.set(String(s.id), { nome: s.nome, cor: s.cor || null });
-      await situacaoPorNome('VENDA', s.nome, String(s.id), s.cor);
-    }
+    for (const s of sits.data || []) mapa.set(String(s.id), { nome: String(s.nome || '').trim(), cor: s.cor || null });
     log(`Situações de venda do Bling: ${mapa.size}`);
   } catch (e: any) {
     log(`Aviso: não foi possível ler as situações do Bling (${e.message}); vendas usarão o nome da situação do pedido.`);
@@ -420,6 +417,40 @@ async function importarEstoque(r: { importados: number; atualizados: number; err
 const SIT_VENDA_ABERTA_IDS = new Set(['6', '15', '24']); // Em aberto, Em andamento, Verificado
 const SIT_VENDA_ABERTA_NOMES = /^(em aberto|em andamento|verificado)$/i;
 
+/** Nome da situação do Bling → situação do Balão (vendas). Se a situação do Balão não existir, usa o nome do Bling. */
+const MAPA_SIT_VENDA: Record<string, string> = {
+  'Em digitação': 'Em aberto',
+  'Em aberto': 'Em aberto',
+  'Em andamento': 'Em andamento',
+  Verificado: 'Em andamento',
+  Atendido: 'Fechada',
+  'Venda Agenciada': 'Fechada',
+  Cancelado: 'Cancelada',
+  'Aguardando Estorno': 'Cancelada',
+  'Estornado OK': 'Cancelada',
+};
+const MAPA_SIT_COMPRA: Record<string, string> = { 'Em aberto': 'Em aberto', 'Em andamento': 'Em aberto', Atendido: 'Fechado', Cancelado: 'Cancelado' };
+
+/** Situação de destino para um nome vindo do Bling: a equivalente do Balão quando existir, senão a do Bling (criada se preciso). */
+async function situacaoDoBling(modulo: 'VENDA' | 'COMPRA', nomeBling: string, blingId?: string | null) {
+  const alvo = (modulo === 'VENDA' ? MAPA_SIT_VENDA : MAPA_SIT_COMPRA)[nomeBling];
+  if (alvo) {
+    const s = await prisma.situacao.findUnique({ where: { modulo_nome: { modulo, nome: alvo } } });
+    if (s) return s;
+  }
+  return situacaoPorNome(modulo, nomeBling, blingId);
+}
+
+/** Situação final (fechada) do módulo de vendas: "Fechada" no padrão do Balão, "Atendido" no padrão antigo. */
+async function situacaoFechadaVenda() {
+  return (
+    (await prisma.situacao.findUnique({ where: { modulo_nome: { modulo: 'VENDA', nome: 'Fechada' } } })) ||
+    (await prisma.situacao.findUnique({ where: { modulo_nome: { modulo: 'VENDA', nome: 'Atendido' } } })) ||
+    (await prisma.situacao.findFirst({ where: { modulo: 'VENDA', final: true, cancelamento: false, ativo: true }, orderBy: { ordem: 'asc' } })) ||
+    situacaoPorNome('VENDA', 'Fechada')
+  );
+}
+
 /**
  * Lança as parcelas de uma venda fechada como RECEBIDAS no Caixa, na data da venda.
  * Idempotente: parcelas já ligadas a uma conta recebida não são tocadas; sem parcelas, cria uma com o total.
@@ -493,10 +524,10 @@ export interface ContextoVendas {
 export async function prepararContextoVendas(op: OpcoesImportacao, logFn: (m: string) => void = log, sitBling?: Map<string, { nome: string; cor: string | null }>): Promise<ContextoVendas> {
   const depPadrao = await prisma.deposito.findFirst({ where: { padrao: true } });
   const catVenda = await prisma.categoriaFinanceira.findFirst({ where: { grupoDre: 'RECEITA_BRUTA', nome: { contains: 'produto' } } });
-  const sitAtendido = op.fecharEmAberto ? await situacaoPorNome('VENDA', 'Atendido') : null;
+  const sitAtendido = op.fecharEmAberto ? await situacaoFechadaVenda() : null;
   const caixa = op.baixarNoCaixa ? (await prisma.contaFinanceira.findFirst({ where: { tipo: 'CAIXA', ativo: true }, orderBy: [{ padrao: 'desc' }, { id: 'asc' }] })) || (await prisma.contaFinanceira.findFirst({ where: { padrao: true } })) : null;
   if (op.baixarNoCaixa && !caixa) throw new Error('Nenhuma conta financeira do tipo Caixa encontrada para lançar os recebimentos.');
-  if (op.fecharEmAberto) logFn('Opção: vendas "Em aberto", "Em andamento" e "Verificado" serão gravadas como "Atendido".');
+  if (sitAtendido) logFn(`Opção: vendas "Em aberto", "Em andamento" e "Verificado" do Bling serão gravadas como "${sitAtendido.nome}".`);
   if (caixa) logFn(`Opção: vendas fechadas serão lançadas como recebidas na conta "${caixa.nome}" na data da venda.`);
   const mapa = sitBling || new Map(Object.entries(SIT_VENDA_BLING_PADRAO).map(([id, nome]) => [id, { nome, cor: null }]));
   return {
@@ -526,7 +557,7 @@ export async function gravarPedidoVendaBling(v: any, ctx: ContextoVendas): Promi
   const nomeSitBling = String(ctx.sitBling.get(bid(v.situacao?.id) || '')?.nome || v.situacao?.nome || SIT_VENDA_BLING_PADRAO[bid(v.situacao?.id) || ''] || 'Em aberto').trim();
   const estavaAberta = SIT_VENDA_ABERTA_IDS.has(bid(v.situacao?.id) || '') || SIT_VENDA_ABERTA_NOMES.test(nomeSitBling);
   const fecharAgora = !!(ctx.sitAtendido && estavaAberta);
-  const situacao = fecharAgora ? (await prisma.situacao.findUniqueOrThrow({ where: { id: ctx.sitAtendido!.id } })) : await situacaoPorNome('VENDA', nomeSitBling, bid(v.situacao?.id));
+  const situacao = fecharAgora ? (await prisma.situacao.findUniqueOrThrow({ where: { id: ctx.sitAtendido!.id } })) : await situacaoDoBling('VENDA', nomeSitBling, bid(v.situacao?.id));
   const contato = await contatoPorBling(bid(v.contato?.id), { nome: v.contato?.nome, numeroDocumento: v.contato?.numeroDocumento, tipoPessoa: v.contato?.tipoPessoa });
   if (!contato) throw new Error('venda sem contato');
   const vendedor = v.vendedor?.id ? await prisma.vendedor.findUnique({ where: { blingId: bid(v.vendedor.id)! } }) : null;
@@ -535,17 +566,18 @@ export async function gravarPedidoVendaBling(v: any, ctx: ContextoVendas): Promi
   for (const it of v.itens || []) {
     const prod = await produtoPorBling(bid(it.produto?.id));
     const qtd = num(it.quantidade, 1);
+    // na API v3 do Bling, "valor" do item já é o unitário líquido e "desconto" é só o % em relação ao preço de tabela
+    // (o total do pedido = Σ quantidade × valor). Aqui desconto é em R$ e já está embutido no unitário.
     const unit = num(it.valor);
-    const desc = num(it.desconto);
-    const total = arredondar(qtd * unit - (desc <= 100 && it.desconto && String(it.desconto).includes('%') ? (qtd * unit * desc) / 100 : desc));
+    const total = arredondar(qtd * unit);
     itens.push({
       produtoId: prod?.id ?? null,
       codigo: it.codigo || prod?.codigo || null,
       descricao: it.descricao || prod?.nome || 'Item',
-      unidade: it.unidade || 'UN',
+      unidade: (it.unidade || 'UN').trim() || 'UN',
       quantidade: qtd,
       valorUnitario: unit,
-      desconto: desc,
+      desconto: 0,
       total,
       custoUnitario: prod?.precoCusto ?? 0,
       comissaoPct: num(it.comissao?.aliquota),
@@ -582,7 +614,7 @@ export async function gravarPedidoVendaBling(v: any, ctx: ContextoVendas): Promi
     custoTotal: arredondar(itens.reduce((s, i) => s + i.custoUnitario * i.quantidade, 0)),
     observacoes: v.observacoes || null,
     observacoesInternas: fecharAgora
-      ? [v.observacoesInternas, `[Migração do Bling] Estava "${nomeSitBling}" no Bling em ${format(new Date(), 'dd/MM/yyyy')}; considerada fechada (Atendido).`].filter(Boolean).join('\n')
+      ? [v.observacoesInternas, `[Migração do Bling] Estava "${nomeSitBling}" no Bling em ${format(new Date(), 'dd/MM/yyyy')}; considerada fechada (${situacao.nome}).`].filter(Boolean).join('\n')
       : v.observacoesInternas || null,
     transportadoraId: transportadora?.id ?? null,
     fretePorConta: num(v.transporte?.fretePorConta, 9),
@@ -628,7 +660,7 @@ export async function gravarPedidoVendaBling(v: any, ctx: ContextoVendas): Promi
   t.quantidade += 1;
   t.total = arredondar(t.total + total);
   if (fecharAgora) t.fechadasNaMigracao += 1;
-  somarResumo(t.porSituacao, fecharAgora ? `Atendido (era ${nomeSitBling})` : situacao.nome, total);
+  somarResumo(t.porSituacao, fecharAgora ? `${situacao.nome} (era ${nomeSitBling})` : situacao.nome, total);
   somarResumo(t.porMes, competenciaDe(dados.data), total);
   // ---- caixa
   let caixaLancado = 0;
@@ -694,7 +726,7 @@ async function importarCompras(r: { importados: number; atualizados: number; err
         const c: any = (await blingGet<{ data: any }>(`/pedidos/compras/${resumo.id}`)).data || resumo;
         const blingId = bid(c.id)!;
         const nomeSit = SITUACOES_COMPRA[num(c.situacao?.valor, 0)] || 'Em aberto';
-        const situacao = await situacaoPorNome('COMPRA', nomeSit);
+        const situacao = await situacaoDoBling('COMPRA', nomeSit);
         const fornecedor = await contatoPorBling(bid(c.fornecedor?.id), { nome: c.fornecedor?.nome, numeroDocumento: c.fornecedor?.numeroDocumento });
         if (!fornecedor) throw new Error('compra sem fornecedor');
         const itens: any[] = [];
