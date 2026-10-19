@@ -7,6 +7,8 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+# o postinstall da API roda "prisma generate": o schema precisa estar na imagem antes do npm install
+COPY apps/api/prisma/schema.prisma apps/api/prisma/
 RUN npm install --no-audit --no-fund
 
 FROM base AS build
