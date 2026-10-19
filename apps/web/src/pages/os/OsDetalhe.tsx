@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { BadgeCheck, ExternalLink, FileText, Image as ImageIcon, Link2, Paperclip, Pencil, Printer, Send, Trash2, Undo2, Upload, Zap } from 'lucide-react';
-import { abrirEmNovaAba, api, mensagemErro } from '@/lib/api';
+import { abrirEmNovaAba, api, mensagemErro, urlUpload, BASE_PATH } from '@/lib/api';
 import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, PageHeader, StatusBadge, StatusChanger, Tabs, tomPorStatus } from '@/components/ui';
 import { HistoricoSituacoes } from '@/components/compartilhados/HistoricoSituacoes';
 import { NotificarModal } from '@/components/compartilhados/NotificarModal';
@@ -16,7 +16,7 @@ const PRIORIDADE_TOM: Record<string, 'neutro' | 'azul' | 'amarelo' | 'vermelho'>
 
 function urlAnexo(a: OsAnexo): string {
   if (a.url) return a.url;
-  if (a.caminho) return a.caminho.startsWith('/') ? a.caminho : `/uploads/${a.caminho}`;
+  if (a.caminho) return urlUpload(a.caminho);
   return '#';
 }
 
@@ -91,7 +91,7 @@ export default function OsDetalhe() {
 
   const contato = os.contato as Contato;
   const atrasada = os.atrasada ?? (os.dataPrevista ? diasAtraso(os.dataPrevista) > 0 && !os.dataConclusao : false);
-  const linkPublico = os.linkPublico ?? (os.token ? `${location.origin}/p/os/${os.token}` : null);
+  const linkPublico = os.linkPublico ?? (os.token ? `${location.origin}${BASE_PATH}/p/os/${os.token}` : null);
   const pecas = os.itens.filter((i) => i.tipo === 'PECA');
   const servicos = os.itens.filter((i) => i.tipo === 'SERVICO');
 

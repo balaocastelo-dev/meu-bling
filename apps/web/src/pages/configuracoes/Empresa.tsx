@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Building2, Save, Upload } from 'lucide-react';
-import { api, mensagemErro } from '@/lib/api';
+import { api, mensagemErro, urlUpload } from '@/lib/api';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { Button, FormSkeleton, Input, PageHeader, Secao, Select } from '@/components/ui';
 import type { Empresa as TEmpresa } from '@/types';
@@ -47,7 +47,7 @@ export default function Empresa() {
   });
 
   if (isLoading || !form) return <FormSkeleton />;
-  const logoUrl = emp?.logoPath ? (emp.logoPath.startsWith('http') || emp.logoPath.startsWith('/') ? emp.logoPath : `/uploads/${emp.logoPath}`) : null;
+  const logoUrl = emp?.logoPath ? urlUpload(emp.logoPath) : null;
 
   return (
     <div className="pb-6">

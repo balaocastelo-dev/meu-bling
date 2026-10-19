@@ -5,7 +5,7 @@ import { prisma } from '../../lib/prisma.js';
 import { AppError, Forbidden, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
 import { env } from '../../lib/env.js';
-import { COOKIE_SESSAO } from '../../plugins/arquivos.js';
+import { COOKIE_SESSAO, COOKIE_PATH } from '../../plugins/arquivos.js';
 import { DESCRICAO_PERFIS } from '../../plugins/politicas.js';
 
 const PERFIS = ['ADMIN', 'GERENTE', 'VENDEDOR', 'TECNICO', 'FINANCEIRO'] as const;
@@ -23,12 +23,12 @@ export default async function authRoutes(app: FastifyInstance) {
     const token = app.jwt.sign(payload);
     await auditar(req, 'Usuario', u.id, 'LOGIN');
     // cookie usado apenas para servir arquivos (/uploads/*) em <img>/<a>; a API usa o Bearer
-    reply.setCookie(COOKIE_SESSAO, token, { path: '/uploads', httpOnly: true, sameSite: 'lax', secure: env.isProd && env.APP_URL.startsWith('https'), maxAge: 12 * 3600 });
+    reply.setCookie(COOKIE_SESSAO, token, { path: COOKIE_PATH, httpOnly: true, sameSite: 'lax', secure: env.isProd && env.APP_URL.startsWith('https'), maxAge: 12 * 3600 });
     return reply.send({ token, usuario: payload, senhaFraca: body.senha === 'admin123' });
   });
 
   app.post('/api/v1/auth/logout', async (_req, reply) => {
-    reply.clearCookie(COOKIE_SESSAO, { path: '/uploads' });
+    reply.clearCookie(COOKIE_SESSAO, { path: COOKIE_PATH });
     return { ok: true };
   });
 

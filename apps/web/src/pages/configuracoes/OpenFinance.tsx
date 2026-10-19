@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { PlugZap, Save } from 'lucide-react';
-import { api, mensagemErro } from '@/lib/api';
+import { api, mensagemErro, API_BASE } from '@/lib/api';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { Badge, Button, FormSkeleton, Input, PageHeader, Secao, Switch } from '@/components/ui';
 import type { OpenFinanceStatus } from '@/types';
@@ -51,7 +51,7 @@ export default function OpenFinance() {
         <Secao titulo="Próximo passo">
           <p className="text-sm text-slate-600">Com as credenciais salvas e ativas, vá em <Link to="/financeiro/bancos" className="font-medium text-brand-600 hover:underline">Financeiro → Bancos & conciliação</Link> e clique em “Conectar banco”. O widget da Pluggy abre para autenticar no banco e as contas são vinculadas automaticamente.</p>
           <Link to="/financeiro/bancos" className="mt-3 inline-block"><Button variante="secundario" icone={<PlugZap className="h-4 w-4" />}>Ir para Bancos</Button></Link>
-          <p className="mt-3 text-xs text-slate-400">Webhook (opcional): configure na Pluggy a URL <code className="rounded bg-slate-100 px-1">{location.origin}/api/v1/webhooks/pluggy</code> para sincronização automática.</p>
+          <p className="mt-3 text-xs text-slate-400">Webhook (opcional): configure na Pluggy a URL <code className="rounded bg-slate-100 px-1">{location.origin}{API_BASE}/webhooks/pluggy</code> para sincronização automática.</p>
         </Secao>
       </div>
     </div>

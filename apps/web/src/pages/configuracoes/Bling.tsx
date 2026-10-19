@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { CircleCheck, Download, ExternalLink, FileUp, Loader2, Play, Save } from 'lucide-react';
-import { api, mensagemErro } from '@/lib/api';
+import { api, mensagemErro, BASE_PATH } from '@/lib/api';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { Badge, Button, Card, Checkbox, DateInput, Input, PageHeader, Select, Skeleton } from '@/components/ui';
 import { dataHora } from '@/lib/format';
@@ -102,7 +102,7 @@ export default function Bling() {
             </div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-slate-500">
-                URL de redirecionamento: <code className="rounded bg-slate-100 px-1">{status?.callbackUrl ?? `${location.origin}/configuracoes/bling/callback`}</code>
+                URL de redirecionamento: <code className="rounded bg-slate-100 px-1">{status?.callbackUrl ?? `${location.origin}${BASE_PATH}/configuracoes/bling/callback`}</code>
               </p>
               <Button variante="secundario" tamanho="sm" icone={<Save className="h-3.5 w-3.5" />} carregando={salvarCred.isPending} disabled={!cred.blingClientId.trim()} onClick={() => salvarCred.mutate()}>Salvar credenciais</Button>
             </div>

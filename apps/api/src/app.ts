@@ -29,7 +29,8 @@ export async function construirApp() {
 
   await app.register(helmet, { contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'cross-origin' } });
   // CORS: em produção só a própria origem (APP_URL) + origens extras de CORS_ORIGENS; em dev libera localhost
-  const origensPermitidas = [env.APP_URL, ...(process.env.CORS_ORIGENS || '').split(',').map((s) => s.trim()).filter(Boolean)];
+  const origemDe = (u: string) => { try { return new URL(u).origin; } catch { return u; } };
+  const origensPermitidas = [env.APP_URL, ...(process.env.CORS_ORIGENS || '').split(',').map((s) => s.trim()).filter(Boolean)].map(origemDe);
   await app.register(cors, {
     credentials: true,
     origin: (origem, cb) => {
@@ -50,11 +51,22 @@ export async function construirApp() {
   // Frontend compilado (produção): apps/web/dist
   const webDist = path.resolve(__dirname, '../../web/dist');
   if (fs.existsSync(webDist)) {
-    await app.register(fastifyStatic, { root: webDist, prefix: '/', decorateReply: true, wildcard: true, cacheControl: true, maxAge: '1h', immutable: false });
+    await app.register(fastifyStatic, {
+      root: webDist,
+      prefix: '/',
+      decorateReply: true,
+      wildcard: true,
+      cacheControl: false,
+      setHeaders: (res, caminho) => {
+        // assets com hash no nome podem ficar em cache; o index.html nunca (senão o deploy novo demora a aparecer)
+        res.setHeader('Cache-Control', /\/assets\//.test(caminho) ? 'public, max-age=31536000, immutable' : 'no-cache');
+      },
+    });
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api/') || req.url.startsWith('/uploads/')) {
         return reply.code(404).send({ erro: 'Rota não encontrada', code: 'NAO_ENCONTRADO' });
       }
+      reply.header('Cache-Control', 'no-cache');
       return reply.sendFile('index.html');
     });
   }

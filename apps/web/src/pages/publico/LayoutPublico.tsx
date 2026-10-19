@@ -1,9 +1,10 @@
+import { urlUpload } from '@/lib/api';
 import type { ReactNode } from 'react';
 import { Logo } from '@/components/layout/Sidebar';
 
 /** Layout simples das páginas públicas (cliente sem login) */
 export function LayoutPublico({ empresa, children }: { empresa?: { nome: string; telefone?: string | null; endereco?: string | null; logoPath?: string | null } | null; children: ReactNode }) {
-  const logo = empresa?.logoPath ? (empresa.logoPath.startsWith('http') || empresa.logoPath.startsWith('/') ? empresa.logoPath : `/uploads/${empresa.logoPath}`) : null;
+  const logo = empresa?.logoPath ? urlUpload(empresa.logoPath) : null;
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-slate-950 text-white">

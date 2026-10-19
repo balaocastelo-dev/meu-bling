@@ -10,6 +10,9 @@ COPY apps/web/package.json apps/web/
 RUN npm install --no-audit --no-fund
 
 FROM base AS build
+# Caminho base do frontend: "/" (raiz) ou "/sistema/" (www.balao.info/sistema)
+ARG VITE_BASE_PATH=/
+ENV VITE_BASE_PATH=$VITE_BASE_PATH
 COPY . .
 RUN cd apps/api && npx prisma generate && cd ../web && npm run build
 

@@ -19,7 +19,9 @@ export const env = {
   HOST: process.env.HOST || '0.0.0.0',
   JWT_SECRET: req('JWT_SECRET', 'dev-jwt-secret-troque'),
   APP_SECRET: req('APP_SECRET', 'dev-app-secret-troque-por-32-chars!!'),
-  APP_URL: process.env.APP_URL || 'http://localhost:5173',
+  APP_URL: (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, ''),
+  /** Caminho base quando o app é publicado em uma subpasta (ex.: '/sistema'). Vazio = raiz. */
+  BASE_PATH: (process.env.BASE_PATH || '').replace(/\/$/, ''),
   STORAGE_DIR: storageDir,
   isProd: (process.env.NODE_ENV || 'development') === 'production',
 };

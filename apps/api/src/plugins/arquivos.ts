@@ -24,6 +24,8 @@ const MIME: Record<string, string> = {
 };
 
 export const COOKIE_SESSAO = 'mb_token';
+/** Caminho do cookie de sessão de arquivos (acompanha o BASE_PATH). */
+export const COOKIE_PATH = `${env.BASE_PATH}/uploads`;
 
 export const arquivosPlugin = fp(async function (app: FastifyInstance) {
   app.get('/uploads/*', async (req, reply) => {

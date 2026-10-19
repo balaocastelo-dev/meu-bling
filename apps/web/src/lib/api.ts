@@ -8,7 +8,16 @@
 import { useAuth } from '@/stores/auth';
 import type { ErroApi } from '@/types';
 
-export const API_BASE = '/api/v1';
+/** Caminho base do app (ex.: '/sistema' quando publicado em www.balao.info/sistema). Vem do `base` do Vite. */
+export const BASE_PATH = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+export const API_BASE = `${BASE_PATH}/api/v1`;
+/** Prefixa um caminho de arquivo do storage ('/uploads/...') com o caminho base do app. */
+export function urlUpload(caminho: string): string {
+  if (!caminho) return caminho;
+  if (caminho.startsWith('http')) return caminho;
+  const rel = caminho.startsWith('/uploads/') ? caminho : caminho.startsWith('/') ? caminho : `/uploads/${caminho}`;
+  return `${BASE_PATH}${rel}`;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -48,8 +57,8 @@ async function tratarResposta<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     // Sessão expirada: limpa e manda para o login (exceto se já estiver lá)
     useAuth.getState().logout();
-    if (!location.pathname.startsWith('/login') && !location.pathname.startsWith('/p/')) {
-      location.href = '/login';
+    if (!location.pathname.startsWith(`${BASE_PATH}/login`) && !location.pathname.startsWith(`${BASE_PATH}/p/`)) {
+      location.href = `${BASE_PATH}/login`;
     }
     throw new ApiError(401, 'Sessão expirada. Faça login novamente.', 'NAO_AUTENTICADO');
   }

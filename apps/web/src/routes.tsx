@@ -6,6 +6,7 @@ import { useAuth } from '@/stores/auth';
 import type { Perfil } from '@/types';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import ErroPagina from '@/components/layout/ErroPagina';
+import { BASE_PATH } from '@/lib/api';
 import { AppShell } from '@/components/layout/AppShell';
 import { PaginaSkeleton } from '@/components/ui/Skeleton';
 
@@ -91,7 +92,8 @@ const ADMIN = (el: ReactNode) => S(<Somente perfis={['ADMIN']}>{el}</Somente>);
 const GESTAO = (el: ReactNode) => S(<Somente perfis={['ADMIN', 'GERENTE']}>{el}</Somente>);
 const FIN = (el: ReactNode) => S(<Somente perfis={['ADMIN', 'GERENTE', 'FINANCEIRO']}>{el}</Somente>);
 
-export const router = createBrowserRouter([
+export const router = createBrowserRouter(
+  [
   { path: '/login', element: S(<Login />) },
   { path: '/p/os/:token', element: S(<OsPublica />) },
   { path: '/p/venda/:token', element: S(<VendaPublica />) },
@@ -168,4 +170,6 @@ export const router = createBrowserRouter([
       { path: '*', element: S(<NotFound />) },
     ],
   },
-]);
+],
+  { basename: BASE_PATH || undefined },
+);
