@@ -14,9 +14,10 @@ import { arredondar, competenciaDe, formatarMoeda } from '../src/lib/util.js';
 import { baixarContaPagar } from '../src/modules/financeiro/service.js';
 
 const args = process.argv.slice(2);
-const arquivo = args.find((a) => !a.startsWith('--') && a !== args[args.indexOf('--saida') + 1]);
+const iSaida = args.indexOf('--saida');
+const saida = iSaida >= 0 ? args[iSaida + 1] : undefined;
+const arquivo = args.find((a, i) => !a.startsWith('--') && i !== iSaida + 1);
 const simular = args.includes('--simular');
-const saida = args.includes('--saida') ? args[args.indexOf('--saida') + 1] : undefined;
 if (!arquivo) throw new Error('Informe o JSON com as linhas.');
 
 const data = (br: string) => {
