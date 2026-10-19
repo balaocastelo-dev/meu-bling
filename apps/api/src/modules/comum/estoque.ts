@@ -132,6 +132,79 @@ export async function ajustarReserva(tx: Db, produtoId: number, depositoId: numb
   });
 }
 
+// ---------------------------------------------------------------- RESERVAS
+// A reserva é registrada como MovimentoEstoque tipo RESERVA / LIBERACAO (não altera o
+// saldo; saldoAnterior = saldoPosterior) e ajusta EstoqueSaldo.reservado. Assim fica
+// idempotente e auditável sem alterar o schema.
+
+export interface ItemReserva {
+  produtoId: number;
+  depositoId: number;
+  quantidade: number;
+}
+
+/** Movimentos de RESERVA ainda não liberados de uma origem. */
+export async function reservasAtivas(tx: Db, origemTipo: 'VENDA' | 'OS', origemId: number) {
+  const movs = await tx.movimentoEstoque.findMany({
+    where: { origemTipo, origemId, tipo: { in: ['RESERVA', 'LIBERACAO'] } },
+    orderBy: { id: 'asc' },
+  });
+  const ultimaLiberacao = movs.filter((m) => m.tipo === 'LIBERACAO').map((m) => m.id).pop() ?? 0;
+  return movs.filter((m) => m.tipo === 'RESERVA' && m.id > ultimaLiberacao);
+}
+
+/** Reserva os itens (idempotente: se já houver reserva ativa, não faz nada). */
+export async function reservarItens(tx: Db, origemTipo: 'VENDA' | 'OS', origemId: number, itens: ItemReserva[], observacao: string, usuarioId: number | null) {
+  if ((await reservasAtivas(tx, origemTipo, origemId)).length) return false;
+  let reservou = false;
+  for (const it of itens) {
+    if (it.quantidade <= 0) continue;
+    await ajustarReserva(tx, it.produtoId, it.depositoId, it.quantidade);
+    const saldo = await tx.estoqueSaldo.findUnique({ where: { produtoId_depositoId: { produtoId: it.produtoId, depositoId: it.depositoId } } });
+    await tx.movimentoEstoque.create({
+      data: {
+        produtoId: it.produtoId,
+        depositoId: it.depositoId,
+        tipo: 'RESERVA',
+        quantidade: it.quantidade,
+        saldoAnterior: saldo?.saldo ?? 0,
+        saldoPosterior: saldo?.saldo ?? 0,
+        origemTipo,
+        origemId,
+        observacao,
+        usuarioId,
+      },
+    });
+    reservou = true;
+  }
+  return reservou;
+}
+
+/** Libera exatamente o que foi reservado (idempotente). */
+export async function liberarReservas(tx: Db, origemTipo: 'VENDA' | 'OS', origemId: number, observacao: string, usuarioId: number | null) {
+  const ativas = await reservasAtivas(tx, origemTipo, origemId);
+  if (!ativas.length) return false;
+  for (const r of ativas) {
+    await ajustarReserva(tx, r.produtoId, r.depositoId, -r.quantidade);
+    const saldo = await tx.estoqueSaldo.findUnique({ where: { produtoId_depositoId: { produtoId: r.produtoId, depositoId: r.depositoId } } });
+    await tx.movimentoEstoque.create({
+      data: {
+        produtoId: r.produtoId,
+        depositoId: r.depositoId,
+        tipo: 'LIBERACAO',
+        quantidade: r.quantidade,
+        saldoAnterior: saldo?.saldo ?? 0,
+        saldoPosterior: saldo?.saldo ?? 0,
+        origemTipo,
+        origemId,
+        observacao,
+        usuarioId,
+      },
+    });
+  }
+  return true;
+}
+
 /** Soma dos saldos nos depósitos que contam (desconsiderarSaldo=false). */
 export async function saldosDoProduto(db: Db, produtoId: number) {
   const saldos = await db.estoqueSaldo.findMany({

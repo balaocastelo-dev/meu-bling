@@ -65,7 +65,7 @@ $envPath = Join-Path $Raiz 'apps\api\.env'
 if (-not (Test-Path $envPath)) {
   $rand = { -join ((48..57 + 65..90 + 97..122) | Get-Random -Count 48 | ForEach-Object { [char]$_ }) }
   @"
-DATABASE_URL="file:./data/meubling.db"
+DATABASE_URL="file:../data/meubling.db"
 PORT=3333
 HOST=0.0.0.0
 JWT_SECRET="$(& $rand)"

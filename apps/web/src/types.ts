@@ -376,6 +376,8 @@ export interface VendaResumo {
   estoqueLancado: boolean;
   contasLancadas: boolean;
   origem?: OrigemVenda;
+  criadoEm?: string;
+  atualizadoEm?: string;
 }
 
 export interface Comissao {
