@@ -15,6 +15,34 @@ const VARIAVEIS_PADRAO = ['cliente.nome', 'cliente.primeiroNome', 'numero', 'sit
 type Form = Omit<TemplateNotificacao, 'id' | 'situacao'>;
 const vazio: Form = { nome: '', evento: 'VENDA_SITUACAO', canal: 'WHATSAPP', situacaoId: null, assunto: '', corpo: '', anexarPdf: false, ativo: true };
 
+interface VariavelInfo {
+  nome: string;
+  descricao?: string;
+}
+interface EventoVariaveis {
+  evento: string;
+  variaveis: (VariavelInfo | string)[];
+}
+/** A API devolve { eventos: [{evento, variaveis:[{nome,descricao}]}] }; aceita também formatos simples */
+type VariaveisResposta = { eventos: EventoVariaveis[] } | Record<string, string[]> | string[] | VariavelInfo[];
+
+function normalizar(v: VariavelInfo | string): VariavelInfo {
+  return typeof v === 'string' ? { nome: v } : v;
+}
+
+function extrairVariaveis(r: VariaveisResposta | null | undefined, evento: string): VariavelInfo[] {
+  if (!r) return VARIAVEIS_PADRAO.map((nome) => ({ nome }));
+  if (Array.isArray(r)) return r.map(normalizar);
+  if ('eventos' in r && Array.isArray(r.eventos)) {
+    const eventos = r.eventos as EventoVariaveis[];
+    const ev = eventos.find((e) => e.evento === evento) ?? eventos[0];
+    return (ev?.variaveis ?? []).map(normalizar);
+  }
+  const mapa = r as Record<string, string[]>;
+  const lista = mapa[evento] ?? Object.values(mapa).flat();
+  return lista.map((nome) => ({ nome }));
+}
+
 function moduloDoEvento(ev: string): Modulo | null {
   if (ev.startsWith('VENDA')) return 'VENDA';
   if (ev.startsWith('OS') || ev === 'ORCAMENTO_OS') return 'OS';
@@ -33,7 +61,7 @@ export default function Templates() {
   const corpoRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: templates, isLoading } = useQuery({ queryKey: ['templates', 'todos'], queryFn: () => api.get<TemplateNotificacao[]>('/templates-notificacao') });
-  const { data: variaveis } = useQuery({ queryKey: ['templates-variaveis'], queryFn: () => api.get<Record<string, string[]> | string[] | { nome: string; descricao?: string }[]>('/templates-notificacao/variaveis').catch(() => null) });
+  const { data: variaveis } = useQuery({ queryKey: ['templates-variaveis'], queryFn: () => api.get<VariaveisResposta>('/templates-notificacao/variaveis').catch(() => null) });
   const modulo = moduloDoEvento(form.evento);
   const { data: situacoes } = useSituacoes(modulo ?? 'VENDA');
 
@@ -75,9 +103,7 @@ export default function Templates() {
   });
 
   // Lista de variáveis: do backend (por evento) ou padrão
-  let listaVars: string[] = VARIAVEIS_PADRAO;
-  if (Array.isArray(variaveis)) listaVars = variaveis.map((v) => (typeof v === 'string' ? v : v.nome));
-  else if (variaveis && typeof variaveis === 'object') listaVars = variaveis[form.evento] ?? Object.values(variaveis).flat();
+  const listaVars = extrairVariaveis(variaveis, form.evento);
 
   const inserirVariavel = (v: string) => {
     const ta = corpoRef.current;
@@ -153,7 +179,7 @@ export default function Templates() {
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <span className="mr-1 text-xs text-slate-400">Inserir variável:</span>
                     {listaVars.map((v) => (
-                      <button key={v} type="button" onClick={() => inserirVariavel(v)} className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[11px] text-slate-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700">{`{{${v}}}`}</button>
+                      <button key={v.nome} type="button" title={v.descricao} onClick={() => inserirVariavel(v.nome)} className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[11px] text-slate-700 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700">{`{{${v.nome}}}`}</button>
                     ))}
                   </div>
                 </div>

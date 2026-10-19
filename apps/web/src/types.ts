@@ -579,7 +579,9 @@ export interface OrdemServico extends OsResumo {
   vendedorId: number | null;
   tecnicoId: number | null;
   depositoId: number | null;
+  deposito?: Ref | null;
   categoriaFinanceiraId: number | null;
+  categoriaFinanceira?: Ref | null;
   dataConclusao?: string | null;
   dataSaida?: string | null;
   numeroSerie?: string | null;
@@ -607,7 +609,9 @@ export interface OrdemServico extends OsResumo {
   historico: HistoricoSituacao[];
   situacoesPermitidas: SituacaoRef[];
   contato: Contato | Ref;
+  /** token/link público de acompanhamento (se a API devolver) */
   token?: string | null;
+  linkPublico?: string | null;
 }
 
 export interface OsPayload {
@@ -892,16 +896,33 @@ export interface WhatsappStatus {
 // Dashboards / relatórios
 // ---------------------------------------------------------------------
 
+/** Último movimento no dashboard: pode ser de estoque ou financeiro (a API devolve financeiro) */
+export interface MovimentoDashboard {
+  id: number;
+  data: string;
+  tipo: string;
+  valor?: number;
+  descricao?: string;
+  quantidade?: number;
+  saldoPosterior?: number;
+  origemTipo?: string;
+  origemId?: number | null;
+  produtoId?: number;
+  produto?: Ref | null;
+  contaFinanceira?: Ref | null;
+  categoria?: Ref | null;
+}
+
 export interface DashboardGeral {
   hoje: { vendas: number; valorVendas: number; osAbertas: number; osConcluidasHoje: number };
-  financeiro: { saldoTotal: number; receberHoje: number; receberAtrasado: number; pagarHoje: number; pagarAtrasado: number };
+  financeiro: { saldoTotal: number; receberHoje: number; receberAtrasado: number; pagarHoje: number; pagarAtrasado: number; saldoContas?: ResumoFinanceiro['saldoContas'] };
   os: { porSituacao: (SituacaoRef & { qtd: number })[]; atrasadas: number };
   vendas: { porSituacao: (SituacaoRef & { qtd: number; valor?: number })[] };
-  estoque: { abaixoMinimo: { produtoId: number; nome: string; saldo: number; estoqueMinimo: number }[]; qtdAbaixoMinimo: number };
-  fiscal: { pendentes: number; rejeitadas: number };
-  comissoes: { pendentes: number };
-  whatsapp: { status: WhatsappStatus['status'] };
-  ultimosMovimentos: MovimentoEstoque[];
+  estoque: { abaixoMinimo: { produtoId: number; nome: string; codigo?: string | null; saldo: number; estoqueMinimo: number }[]; qtdAbaixoMinimo: number };
+  fiscal: { pendentes: number; rejeitadas: number; ambiente?: string };
+  comissoes: { pendentes: number; valorPendente?: number };
+  whatsapp: { status: WhatsappStatus['status']; numero?: string | null };
+  ultimosMovimentos: MovimentoDashboard[];
   alertas: { tipo: string; mensagem: string; link?: string }[];
 }
 
@@ -990,13 +1011,17 @@ export interface Empresa {
   smtp?: { temSenha: boolean };
   whatsapp?: { ativo: boolean };
   openFinance?: { ativo: boolean; clientId?: string | null; temSecret: boolean };
-  bling?: { temToken: boolean; expira?: string | null };
+  bling?: { temToken: boolean; expira?: string | null; clientId?: string | null; temSecret?: boolean };
+  blingClientId?: string | null;
+  temCscToken?: boolean;
 }
 
 export interface BlingStatus {
   conectado: boolean;
+  configurado?: boolean;
   expira?: string | null;
   ultimaImportacao?: string | null;
+  callbackUrl?: string;
 }
 
 export interface BlingImportStatus {
@@ -1015,31 +1040,70 @@ export interface OpenFinanceStatus {
 // Público
 // ---------------------------------------------------------------------
 
+export interface EmpresaPublica {
+  nome: string;
+  telefone?: string | null;
+  email?: string | null;
+  site?: string | null;
+  endereco?: string | null;
+  logoPath?: string | null;
+}
+
 export interface OsPublica {
   numero: number;
+  /** primeiro nome do cliente */
+  cliente?: string | null;
   dataEntrada: string;
   dataPrevista?: string | null;
+  dataConclusao?: string | null;
   situacao: SituacaoRef;
   equipamento?: string | null;
-  marca?: string | null;
-  modelo?: string | null;
+  numeroSerie?: string | null;
   defeitoRelatado?: string | null;
   diagnostico?: string | null;
+  servicoExecutado?: string | null;
+  tecnico?: string | null;
+  atrasada?: boolean;
   orcar: boolean;
   orcamentoAprovado: boolean;
-  itens: { tipo: string; descricao: string; quantidade: number; valorUnitario: number; total: number }[];
+  orcamentoAprovadoEm?: string | null;
+  podeAprovar?: boolean;
+  itens: { tipo?: string; descricao: string; quantidade: number; valorUnitario: number; desconto?: number; total: number }[];
+  totalServicos?: number;
+  totalPecas?: number;
+  descontoValor?: number;
   total: number;
-  empresa?: { nome: string; telefone?: string | null; endereco?: string | null; logoPath?: string | null };
-  cliente?: { nome: string };
+  garantiaDias?: number;
+  parcelas?: { numero: number; dataVencimento: string; valor: number; formaPagamento?: string | null; situacao?: string | null }[];
+  observacoes?: string | null;
   historico?: { data: string; paraSituacao: string }[];
+}
+
+/** Resposta de GET /publico/os/:token */
+export interface OsPublicaResposta {
+  empresa: EmpresaPublica;
+  os: OsPublica;
 }
 
 export interface VendaPublica {
   numero: number;
+  cliente?: string | null;
   data: string;
+  dataPrevista?: string | null;
+  vendedor?: string | null;
   situacao: SituacaoRef;
-  itens: { descricao: string; quantidade: number; valorUnitario: number; total: number }[];
+  itens: { descricao: string; quantidade: number; unidade?: string; valorUnitario: number; desconto?: number; total: number }[];
+  totalProdutos?: number;
+  desconto?: number;
+  frete?: number;
+  outrasDespesas?: number;
   total: number;
-  empresa?: { nome: string; telefone?: string | null; endereco?: string | null; logoPath?: string | null };
-  cliente?: { nome: string };
+  parcelas?: { numero: number; dataVencimento: string; valor: number; formaPagamento?: string | null; situacao?: string | null }[];
+  observacoes?: string | null;
+}
+
+/** Resposta de GET /publico/venda/:token */
+export interface VendaPublicaResposta {
+  empresa: EmpresaPublica;
+  venda: VendaPublica;
 }

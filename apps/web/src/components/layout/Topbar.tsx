@@ -53,8 +53,8 @@ export function Topbar({ onAbrirMenu, onAbrirBusca }: { onAbrirMenu: () => void;
         onClick={onAbrirBusca}
         className="flex h-9 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-400 transition hover:border-slate-300 hover:bg-white md:max-w-md"
       >
-        <Search className="h-4 w-4" />
-        <span className="flex-1 text-left">Buscar clientes, produtos, vendas, OS…</span>
+        <Search className="h-4 w-4 shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-left">Buscar clientes, produtos, vendas, OS…</span>
         <kbd className="hidden rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-500 sm:inline">{ehMac ? '⌘' : 'Ctrl'} K</kbd>
       </button>
 

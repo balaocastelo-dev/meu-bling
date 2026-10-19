@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { Bar, BarChart, CartesianGrid, Legend, Line, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { endOfMonth, format, startOfMonth, startOfYear } from 'date-fns';
 import { Download } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -172,10 +172,16 @@ export default function Dre() {
               <div className="h-40">
                 <ResponsiveContainer>
                   <BarChart data={data.linhas.filter((l) => l.total && l.codigo !== '3').map((l) => ({ nome: l.nome.replace(/^= /, '').replace(/ \(.*\)/, ''), pct: l.pct ?? pctReceita(l.valor) }))} layout="vertical" margin={{ left: 8, right: 24 }}>
-                    <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10, fill: CORES.eixo }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                    <XAxis type="number" domain={['auto', 'auto']} tick={{ fontSize: 10, fill: CORES.eixo }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(Number(v))}%`} />
                     <YAxis type="category" dataKey="nome" width={130} tick={{ fontSize: 10, fill: '#334155' }} axisLine={false} tickLine={false} />
                     <Tooltip content={<TooltipPadrao moedaFmt={false} />} />
-                    <Bar dataKey="pct" name="% da receita" fill={CORES.lucro} radius={[0, 4, 4, 0]} barSize={14} />
+                    <Bar dataKey="pct" name="% da receita" radius={[0, 4, 4, 0]} barSize={14}>
+                      {data.linhas
+                        .filter((l) => l.total && l.codigo !== '3')
+                        .map((l, i) => (
+                          <Cell key={i} fill={(l.pct ?? pctReceita(l.valor)) < 0 ? CORES.saida : CORES.lucro} />
+                        ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>

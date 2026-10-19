@@ -75,13 +75,13 @@ export default function DashboardGeral() {
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
         <StatCard rotulo="Vendas hoje" valor={inteiro(h?.vendas)} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={isLoading} onClick={() => nav('/vendas')} />
         <StatCard rotulo="Faturamento hoje" valor={moeda(h?.valorVendas)} icone={<CircleDollarSign className="h-4 w-4" />} tom="verde" carregando={isLoading} onClick={() => nav('/dashboard/vendas')} />
         <StatCard rotulo="OS abertas" valor={inteiro(h?.osAbertas)} sub={data ? `${inteiro(data.os.atrasadas)} atrasadas` : undefined} icone={<Wrench className="h-4 w-4" />} tom={data && data.os.atrasadas > 0 ? 'amarelo' : 'neutro'} carregando={isLoading} onClick={() => nav('/ordens-servico')} />
         <StatCard rotulo="Saldo em contas" valor={moeda(f?.saldoTotal)} icone={<Wallet className="h-4 w-4" />} tom="neutro" carregando={isLoading} onClick={() => nav('/financeiro/bancos')} />
         <StatCard rotulo="A receber hoje" valor={moeda(f?.receberHoje)} sub={f ? `a pagar ${moeda(f.pagarHoje)}` : undefined} icone={<Clock className="h-4 w-4" />} tom="azul" carregando={isLoading} onClick={() => nav('/financeiro/receber')} />
-        <StatCard rotulo="Atrasados" valor={moeda(f?.receberAtrasado)} sub={f ? `a pagar ${moeda(f.pagarAtrasado)}` : undefined} icone={<TriangleAlert className="h-4 w-4" />} tom={f && f.receberAtrasado > 0 ? 'vermelho' : 'neutro'} carregando={isLoading} onClick={() => nav('/financeiro/receber?situacao=ATRASADO')} />
+        <StatCard rotulo="Receber atrasado" valor={moeda(f?.receberAtrasado)} sub={f ? `a pagar ${moeda(f.pagarAtrasado)}` : undefined} icone={<TriangleAlert className="h-4 w-4" />} tom={f && f.receberAtrasado > 0 ? 'vermelho' : 'neutro'} carregando={isLoading} onClick={() => nav('/financeiro/receber?situacao=ATRASADO')} />
       </div>
 
       {/* Alertas */}
@@ -142,7 +142,7 @@ export default function DashboardGeral() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card titulo="Últimos movimentos de estoque" className="lg:col-span-2" semPadding acoes={<Link to="/estoque?aba=movimentos" className="text-xs text-brand-600 hover:underline">Ver todos</Link>}>
+        <Card titulo="Últimos movimentos" descricao="Entradas e saídas mais recentes" className="lg:col-span-2" semPadding acoes={<Link to="/financeiro/bancos?aba=extrato" className="text-xs text-brand-600 hover:underline">Ver extrato</Link>}>
           {isLoading ? (
             <div className="p-4">
               <Skeleton className="h-40" />
@@ -153,29 +153,30 @@ export default function DashboardGeral() {
                 <thead>
                   <tr>
                     <th>Data</th>
-                    <th>Produto</th>
+                    <th>Descrição</th>
                     <th>Tipo</th>
-                    <th>Origem</th>
-                    <th className="text-right">Qtd</th>
-                    <th className="text-right">Saldo</th>
+                    <th>Conta / origem</th>
+                    <th className="text-right">Valor</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.ultimosMovimentos.slice(0, 10).map((m) => (
-                    <tr key={m.id}>
-                      <td className="whitespace-nowrap text-xs text-slate-500">{dataHora(m.data)}</td>
-                      <td className="max-w-[260px] truncate">{m.produto?.nome ?? `#${m.produtoId}`}</td>
-                      <td>
-                        <Badge tom={m.tipo === 'ENTRADA' ? 'verde' : m.tipo === 'SAIDA' ? 'vermelho' : 'neutro'}>{rotulo(m.tipo)}</Badge>
-                      </td>
-                      <td className="text-xs text-slate-500">
-                        {rotulo(m.origemTipo)}
-                        {m.origemId ? ` #${m.origemId}` : ''}
-                      </td>
-                      <td className="num text-right">{numero(m.quantidade)}</td>
-                      <td className="num text-right text-slate-500">{numero(m.saldoPosterior)}</td>
-                    </tr>
-                  ))}
+                  {data.ultimosMovimentos.slice(0, 10).map((m) => {
+                    // A API pode devolver movimentos financeiros (valor/descricao) ou de estoque (quantidade/produto)
+                    const financeiro = typeof m.valor === 'number';
+                    return (
+                      <tr key={m.id}>
+                        <td className="whitespace-nowrap text-xs text-slate-500">{dataHora(m.data)}</td>
+                        <td className="max-w-[280px] truncate">{financeiro ? m.descricao : m.produto?.nome ?? `#${m.produtoId}`}</td>
+                        <td>
+                          <Badge tom={m.tipo === 'ENTRADA' ? 'verde' : m.tipo === 'SAIDA' ? 'vermelho' : 'neutro'}>{rotulo(m.tipo)}</Badge>
+                        </td>
+                        <td className="text-xs text-slate-500">{financeiro ? m.contaFinanceira?.nome ?? m.categoria?.nome ?? '—' : `${rotulo(m.origemTipo)}${m.origemId ? ` #${m.origemId}` : ''}`}</td>
+                        <td className={`num text-right font-medium ${m.tipo === 'SAIDA' ? 'text-red-600' : m.tipo === 'ENTRADA' ? 'text-emerald-700' : ''}`}>
+                          {financeiro ? `${m.tipo === 'SAIDA' ? '-' : '+'}${moeda(m.valor)}` : `${numero(m.quantidade)} (saldo ${numero(m.saldoPosterior)})`}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

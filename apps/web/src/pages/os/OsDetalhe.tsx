@@ -91,7 +91,7 @@ export default function OsDetalhe() {
 
   const contato = os.contato as Contato;
   const atrasada = os.atrasada ?? (os.dataPrevista ? diasAtraso(os.dataPrevista) > 0 && !os.dataConclusao : false);
-  const linkPublico = os.token ? `${location.origin}/p/os/${os.token}` : null;
+  const linkPublico = os.linkPublico ?? (os.token ? `${location.origin}/p/os/${os.token}` : null);
   const pecas = os.itens.filter((i) => i.tipo === 'PECA');
   const servicos = os.itens.filter((i) => i.tipo === 'SERVICO');
 

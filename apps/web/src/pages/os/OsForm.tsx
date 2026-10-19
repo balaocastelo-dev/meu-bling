@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Plus, Save, Trash2, UserPlus, X } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
@@ -170,6 +170,17 @@ export default function OsForm() {
   const [erros, setErros] = useState<Record<string, string>>({});
 
   const { data: os, isLoading } = useQuery({ queryKey: ['os', id], queryFn: () => api.get<OrdemServico>(`/ordens-servico/${id}`), enabled: editando });
+
+  // Cliente pré-selecionado via ?contatoId=
+  const [sp] = useSearchParams();
+  const contatoInicial = sp.get('contatoId');
+  const { data: contatoPre } = useQuery({ queryKey: ['contato', contatoInicial], queryFn: () => api.get<Contato>(`/contatos/${contatoInicial}`), enabled: !editando && !!contatoInicial });
+  useEffect(() => {
+    if (contatoPre) {
+      setForm((f) => ({ ...f, contatoId: contatoPre.id }));
+      setClienteNome(contatoPre.nome);
+    }
+  }, [contatoPre]);
 
   useEffect(() => {
     if (os) {

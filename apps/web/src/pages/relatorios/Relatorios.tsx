@@ -31,10 +31,13 @@ const RELATORIOS: Relatorio[] = [
     usaVendedor: true,
     colunas: [
       { chave: 'periodo', titulo: 'Período' },
-      { chave: 'qtd', titulo: 'Vendas', formato: 'numero' },
+      { chave: 'qtdVendas', titulo: 'Vendas', formato: 'numero' },
+      { chave: 'itens', titulo: 'Itens', formato: 'numero' },
       { chave: 'faturamento', titulo: 'Faturamento', formato: 'moeda' },
-      { chave: 'ticketMedio', titulo: 'Ticket médio', formato: 'moeda' },
+      { chave: 'descontos', titulo: 'Descontos', formato: 'moeda' },
+      { chave: 'custo', titulo: 'Custo', formato: 'moeda' },
       { chave: 'lucro', titulo: 'Lucro', formato: 'moeda' },
+      { chave: 'ticketMedio', titulo: 'Ticket médio', formato: 'moeda' },
     ],
   },
   {
@@ -44,11 +47,15 @@ const RELATORIOS: Relatorio[] = [
     descricao: 'Ranking de produtos por quantidade e valor.',
     usaPeriodo: true,
     colunas: [
+      { chave: 'posicao', titulo: '#', formato: 'texto' },
       { chave: 'nome', titulo: 'Produto' },
       { chave: 'codigo', titulo: 'Código' },
+      { chave: 'categoria', titulo: 'Categoria' },
       { chave: 'qtd', titulo: 'Qtd', formato: 'numero' },
       { chave: 'valor', titulo: 'Valor', formato: 'moeda' },
+      { chave: 'custo', titulo: 'Custo', formato: 'moeda' },
       { chave: 'lucro', titulo: 'Lucro', formato: 'moeda' },
+      { chave: 'margemPct', titulo: 'Margem %', formato: 'numero' },
     ],
   },
   {
@@ -60,11 +67,14 @@ const RELATORIOS: Relatorio[] = [
     usaDeposito: true,
     colunas: [
       { chave: 'deposito', titulo: 'Depósito' },
-      { chave: 'nome', titulo: 'Produto' },
+      { chave: 'produto', titulo: 'Produto' },
       { chave: 'codigo', titulo: 'Código' },
+      { chave: 'categoria', titulo: 'Categoria' },
       { chave: 'saldo', titulo: 'Saldo', formato: 'numero' },
-      { chave: 'precoCusto', titulo: 'Custo', formato: 'moeda' },
-      { chave: 'valor', titulo: 'Valor', formato: 'moeda' },
+      { chave: 'reservado', titulo: 'Reservado', formato: 'numero' },
+      { chave: 'custoUnitario', titulo: 'Custo', formato: 'moeda' },
+      { chave: 'valorCusto', titulo: 'Valor (custo)', formato: 'moeda' },
+      { chave: 'valorVenda', titulo: 'Valor (venda)', formato: 'moeda' },
     ],
   },
   {
@@ -75,10 +85,13 @@ const RELATORIOS: Relatorio[] = [
     usaPeriodo: true,
     usaVendedor: true,
     colunas: [
-      { chave: 'nome', titulo: 'Pessoa' },
+      { chave: 'pessoa', titulo: 'Pessoa' },
       { chave: 'tipo', titulo: 'Tipo' },
-      { chave: 'qtd', titulo: 'Qtd', formato: 'numero' },
+      { chave: 'descricao', titulo: 'Origem' },
+      { chave: 'cliente', titulo: 'Cliente' },
+      { chave: 'competencia', titulo: 'Competência' },
       { chave: 'base', titulo: 'Base', formato: 'moeda' },
+      { chave: 'pct', titulo: '%', formato: 'numero' },
       { chave: 'valor', titulo: 'Comissão', formato: 'moeda' },
       { chave: 'status', titulo: 'Status' },
     ],
@@ -113,15 +126,16 @@ export default function Relatorios() {
     retry: 0,
   });
 
-  // Colunas: as definidas que existirem nos dados; se os dados tiverem outras chaves, acrescenta
+  // Colunas: apenas as definidas que existirem nos dados (ignora chaves extras da API)
   const linhas = data?.linhas ?? [];
   const chavesDados = linhas.length ? Object.keys(linhas[0]).filter((k) => typeof linhas[0][k] !== 'object') : [];
-  const colunas = [...rel.colunas.filter((c) => !linhas.length || chavesDados.includes(c.chave)), ...chavesDados.filter((k) => !rel.colunas.some((c) => c.chave === k)).map((k) => ({ chave: k, titulo: k, formato: 'texto' as const }))];
+  const colunas = rel.colunas.filter((c) => !linhas.length || chavesDados.includes(c.chave));
 
   const exportar = () => baixarArquivo(rel.rota, `${rel.id}.csv`, { ...params, formato: 'csv' }).catch((e) => toast.error(mensagemErro(e)));
 
-  // Totais calculados no cliente para colunas numéricas
-  const totais = colunas.map((c) => (c.formato === 'moeda' || c.formato === 'numero' ? linhas.reduce((s, l) => s + (Number(l[c.chave]) || 0), 0) : null));
+  // Totais calculados no cliente para colunas de valor/quantidade (não soma percentuais, posições e ticket médio)
+  const SEM_TOTAL = new Set(['posicao', 'pct', 'margemPct', 'ticketMedio', 'custoUnitario', 'periodo', 'competencia']);
+  const totais = colunas.map((c) => ((c.formato === 'moeda' || c.formato === 'numero') && !SEM_TOTAL.has(c.chave) ? linhas.reduce((s, l) => s + (Number(l[c.chave]) || 0), 0) : null));
 
   return (
     <div>
@@ -152,7 +166,7 @@ export default function Relatorios() {
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50 font-semibold">
-                  {colunas.map((c, i) => <td key={c.chave} className={`px-3 py-2 ${totais[i] !== null ? 'num text-right' : ''}`}>{i === 0 && totais[0] === null ? 'Total' : totais[i] !== null && c.chave !== 'periodo' && c.chave !== 'ticketMedio' ? fmt(totais[i], c.formato) : ''}</td>)}
+                  {colunas.map((c, i) => <td key={c.chave} className={`px-3 py-2 ${totais[i] !== null ? 'num text-right' : ''}`}>{i === 0 && totais[0] === null ? 'Total' : totais[i] !== null ? fmt(totais[i], c.formato) : ''}</td>)}
                 </tr>
               </tfoot>
             </table>

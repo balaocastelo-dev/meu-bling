@@ -36,8 +36,8 @@ export function StatCard({ rotulo, valor, sub, icone, tom = 'neutro', carregando
     >
       {icone && <div className={clsx('flex h-9 w-9 shrink-0 items-center justify-center rounded-md', tons[tom])}>{icone}</div>}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-slate-500">{rotulo}</p>
-        {carregando ? <Skeleton className="mt-1.5 h-6 w-24" /> : <p className="mt-0.5 truncate text-xl font-semibold tracking-tight text-slate-900 num">{valor}</p>}
+        <p className="truncate text-xs font-medium text-slate-500" title={typeof rotulo === 'string' ? rotulo : undefined}>{rotulo}</p>
+        {carregando ? <Skeleton className="mt-1.5 h-6 w-24" /> : <p className="mt-0.5 text-lg font-semibold leading-tight tracking-tight text-slate-900 num xl:text-xl" title={typeof valor === 'string' ? valor : undefined}>{valor}</p>}
         {sub && <p className="mt-0.5 truncate text-xs text-slate-400">{sub}</p>}
       </div>
     </div>

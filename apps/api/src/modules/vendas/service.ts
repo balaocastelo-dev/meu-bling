@@ -6,6 +6,7 @@ import { prisma, type Tx } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { arredondar, competenciaDe } from '../../lib/util.js';
 import { historico, situacoesPermitidas, type ContextoAcao } from '../../core/situacoes.js';
+import { linkPublico, tokenPublico } from '../publico/token.js';
 import { depositoPadraoId, liberarReservas, movimentarEstoque, movimentaEstoque, reservarItens, reservasAtivas } from '../comum/estoque.js';
 import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, recriarComissoes } from '../comum/financeiro.js';
 import { criarNotaPendente } from '../comum/nfe.js';
@@ -49,7 +50,7 @@ export async function carregarVenda(db: Db, id: number) {
 export async function vendaCompleta(id: number) {
   const v = await carregarVenda(prisma, id);
   const [hist, permitidas] = await Promise.all([historico('VENDA', id), situacoesPermitidas('VENDA', v.situacaoId)]);
-  return { ...v, historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })) };
+  return { ...v, historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
 }
 
 // ---------------------------------------------------------------- cálculo

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Plus, Save, Trash2, UserPlus, X } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
@@ -94,6 +94,18 @@ export default function VendaForm() {
   const [erros, setErros] = useState<Record<string, string>>({});
 
   const { data: venda, isLoading } = useQuery({ queryKey: ['venda', id], queryFn: () => api.get<Venda>(`/vendas/${id}`), enabled: editando });
+
+  // Cliente pré-selecionado via ?contatoId= (vindo da ficha do cliente)
+  const [sp] = useSearchParams();
+  const contatoInicial = sp.get('contatoId');
+  const { data: contatoPre } = useQuery({ queryKey: ['contato', contatoInicial], queryFn: () => api.get<Contato>(`/contatos/${contatoInicial}`), enabled: !editando && !!contatoInicial });
+  useEffect(() => {
+    if (contatoPre) {
+      setForm((f) => ({ ...f, contatoId: contatoPre.id }));
+      setClienteNome(contatoPre.nome);
+      setCliente(contatoPre);
+    }
+  }, [contatoPre]);
 
   // Preenche o formulário ao editar
   useEffect(() => {
@@ -344,11 +356,11 @@ export default function VendaForm() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="flex-1 text-slate-500">Desconto</span>
-                <select disabled={bloqueado} value={form.descontoTipo} onChange={(e) => set('descontoTipo', e.target.value as 'REAL' | 'PERCENTUAL')} className="input-base h-8 w-16 py-0 pr-6 text-xs">
+                <select disabled={bloqueado} value={form.descontoTipo} onChange={(e) => set('descontoTipo', e.target.value as 'REAL' | 'PERCENTUAL')} className="input-base h-8 !w-16 shrink-0 py-0 pl-2 pr-1 text-xs">
                   <option value="REAL">R$</option>
                   <option value="PERCENTUAL">%</option>
                 </select>
-                <MoneyInput value={form.descontoValor} onChange={(v) => set('descontoValor', v)} prefixo="" disabled={bloqueado} className="w-28" inputClassName="h-8 py-0" />
+                <MoneyInput value={form.descontoValor} onChange={(v) => set('descontoValor', v)} prefixo="" disabled={bloqueado} className="w-28 shrink-0" inputClassName="h-8 py-0" />
               </div>
               {form.descontoTipo === 'PERCENTUAL' && <p className="text-right text-xs text-slate-400">= {moeda(totais.desconto)}</p>}
               <div className="flex items-center gap-2">

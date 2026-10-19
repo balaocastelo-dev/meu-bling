@@ -7,6 +7,7 @@ import { prisma, type Tx } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { arredondar, competenciaDe, dataSchema } from '../../lib/util.js';
 import { historico, situacoesPermitidas, type ContextoAcao } from '../../core/situacoes.js';
+import { linkPublico, tokenPublico } from '../publico/token.js';
 import { depositoPadraoId, liberarReservas, movimentarEstoque, movimentaEstoque, reservarItens } from '../comum/estoque.js';
 import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, recriarComissoes, type ComissaoNova } from '../comum/financeiro.js';
 import { criarNotaPendente } from '../comum/nfe.js';
@@ -127,6 +128,8 @@ export async function osCompleta(id: number) {
     atrasada: calcularAtrasada(os),
     historico: hist,
     situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })),
+    tokenPublico: tokenPublico('os', id),
+    linkPublico: linkPublico('os', id),
   };
 }
 
