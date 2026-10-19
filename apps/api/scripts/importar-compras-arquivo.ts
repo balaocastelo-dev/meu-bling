@@ -45,6 +45,47 @@ function lerJsonl(caminho: string): any[] {
   return out;
 }
 
+
+/**
+ * Liga cada parcela de compra à conta a pagar importada do relatório do Bling ("Ref. ao pedido de compra nº N").
+ * Critérios, nesta ordem: número do documento NNNNNN/PP (que aparece nas observações); valor igual; primeira livre.
+ */
+async function religar(rel: any) {
+  const compras = await prisma.compra.findMany({ where: { blingId: { not: null }, situacao: { cancelamento: false } }, include: { parcelas: { orderBy: { numero: 'asc' } }, situacao: true } });
+  const contas = await prisma.contaPagar.findMany({ where: { blingId: { startsWith: 'RELCP:' }, descricao: { contains: 'pedido de compra' } } });
+  const porNumero = new Map<number, typeof contas>();
+  for (const ct of contas) {
+    const m = ct.descricao.match(/pedido de compra n[º°o]?\s*(\d+)/i);
+    if (!m) continue;
+    const n = Number(m[1]);
+    (porNumero.get(n) || porNumero.set(n, []).get(n)!).push(ct);
+  }
+  rel.parcelasLigadas = 0;
+  rel.parcelasSemConta = 0;
+  rel.semConta = [];
+  const usadas = new Set<number>();
+  for (const cp of await prisma.compraParcela.findMany({ where: { contaPagarId: { not: null } }, select: { contaPagarId: true } })) usadas.add(cp.contaPagarId!);
+  for (const c of compras) {
+    const candidatas = (porNumero.get(c.numero) || []).filter((x) => !usadas.has(x.id));
+    for (const p of c.parcelas) {
+      if (p.contaPagarId) continue;
+      const doc = `${pad(c.numero, 6)}/${pad(p.numero, 2)}`;
+      let conta = candidatas.find((x) => !usadas.has(x.id) && (x.observacoes || '').includes(doc));
+      if (!conta) conta = candidatas.find((x) => !usadas.has(x.id) && Math.abs(x.valor - p.valor) < 0.005);
+      if (!conta && c.parcelas.length === 1) conta = candidatas.find((x) => !usadas.has(x.id));
+      if (!conta) {
+        rel.parcelasSemConta += 1;
+        rel.semConta.push({ numero: c.numero, parcela: p.numero, venc: p.dataVencimento.toISOString().slice(0, 10), valor: p.valor, situacao: c.situacao.nome });
+        continue;
+      }
+      usadas.add(conta.id);
+      await prisma.compraParcela.update({ where: { id: p.id }, data: { contaPagarId: conta.id } });
+      await prisma.contaPagar.update({ where: { id: conta.id }, data: { origemTipo: 'COMPRA', origemId: c.id, parcela: `${p.numero}/${c.parcelas.length}` } });
+      rel.parcelasLigadas += 1;
+    }
+  }
+}
+
 async function main() {
   const brutos = lerJsonl(arquivo!);
   const porId = new Map<string, any>();
@@ -169,23 +210,12 @@ async function main() {
         compraId = nova.id;
         rel.novas += 1;
       }
-      // parcelas + ligação com as contas a pagar já importadas (não cria contas novas)
+      // parcelas (a ligação com as contas a pagar é feita depois, em religar())
       let np = 0;
       for (const p of c.parc || []) {
         np += 1;
-        let parcela = await prisma.compraParcela.findFirst({ where: { compraId, numero: np } });
-        if (!parcela) parcela = await prisma.compraParcela.create({ data: { compraId, numero: np, dataVencimento: dia(p.venc) || dados.data, valor: arredondar(Number(p.vlr)), observacoes: p.obs || null } });
-        if (parcela.contaPagarId) continue;
-        const doc = `${pad(dados.numero, 6)}/${pad(np, 2)}`;
-        const conta = await prisma.contaPagar.findFirst({ where: { blingId: { startsWith: 'RELCP:' }, observacoes: { contains: `Documento: ${doc}` } } });
-        if (conta) {
-          await prisma.compraParcela.update({ where: { id: parcela.id }, data: { contaPagarId: conta.id } });
-          await prisma.contaPagar.update({ where: { id: conta.id }, data: { origemTipo: 'COMPRA', origemId: compraId, parcela: `${np}/${(c.parc || []).length}` } });
-          rel.parcelasLigadas += 1;
-        } else {
-          rel.parcelasSemConta += 1;
-          if (sit.nome !== 'Cancelado') rel.semConta.push({ numero: dados.numero, parcela: np, venc: p.venc, valor: p.vlr, situacao: sit.nome });
-        }
+        const parcela = await prisma.compraParcela.findFirst({ where: { compraId, numero: np } });
+        if (!parcela) await prisma.compraParcela.create({ data: { compraId, numero: np, dataVencimento: dia(p.venc) || dados.data, valor: arredondar(Number(p.vlr)), observacoes: p.obs || null } });
       }
       if (i % 100 === 0) console.log(`  ${i}/${pedidos.length}`);
     } catch (e: any) {
@@ -193,6 +223,7 @@ async function main() {
       console.log(`  ! compra ${c?.numero} (${id}): ${e.message}`);
     }
   }
+  if (!simular) await religar(rel);
   if (!simular && rel.maiorNumero) {
     const seq = await prisma.sequencia.findUnique({ where: { nome: 'COMPRA' } });
     if (!seq || seq.valor < rel.maiorNumero) await prisma.sequencia.upsert({ where: { nome: 'COMPRA' }, create: { nome: 'COMPRA', valor: rel.maiorNumero }, update: { valor: rel.maiorNumero } });
