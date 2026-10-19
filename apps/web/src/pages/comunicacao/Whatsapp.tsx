@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { Loader2, LogOut, MessageCircle, QrCode, Send, Smartphone } from 'lucide-react';
+import { Loader2, LogOut, MessageCircle, QrCode, RefreshCw, Send, Smartphone } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { useWhatsappStatus } from '@/hooks/useEmpresa';
 import { Badge, Button, Card, Input, PageHeader, Textarea, tomPorStatus } from '@/components/ui';
@@ -18,6 +18,7 @@ export default function Whatsapp() {
   const invalidar = () => qc.invalidateQueries({ queryKey: ['whatsapp-status'] });
   const conectar = useMutation({ mutationFn: () => api.post('/whatsapp/conectar'), onSuccess: () => { toast.info('Sessão iniciada. Escaneie o QR Code.'); invalidar(); }, onError: (e) => toast.error(mensagemErro(e)) });
   const desconectar = useMutation({ mutationFn: () => api.post('/whatsapp/desconectar'), onSuccess: () => { toast.success('WhatsApp desconectado.'); invalidar(); }, onError: (e) => toast.error(mensagemErro(e)) });
+  const reconectar = useMutation({ mutationFn: () => api.post('/whatsapp/reconectar'), onSuccess: () => { toast.info('Sessão recriada. Escaneie o novo QR Code.'); invalidar(); }, onError: (e) => toast.error(mensagemErro(e)) });
   const teste = useMutation({ mutationFn: () => api.post('/whatsapp/enviar-teste', { numero: numero.replace(/\D/g, ''), mensagem }), onSuccess: () => toast.success('Mensagem de teste enviada.'), onError: (e) => toast.error(mensagemErro(e)) });
 
   const status = st?.status ?? 'DESCONECTADO';
@@ -31,7 +32,10 @@ export default function Whatsapp() {
         extra={<Badge tom={tomPorStatus(status)} ponto>{rotulo(status)}</Badge>}
         acoes={
           conectado ? (
-            <Button variante="perigo" icone={<LogOut className="h-4 w-4" />} carregando={desconectar.isPending} onClick={() => { if (confirm('Desconectar e apagar a sessão do WhatsApp?')) desconectar.mutate(); }}>Desconectar</Button>
+            <>
+              <Button variante="secundario" icone={<RefreshCw className="h-4 w-4" />} carregando={reconectar.isPending} onClick={() => { if (confirm('Apagar a sessão atual e gerar um QR Code novo? Use isto se as mensagens chegam como "Aguardando mensagem" no celular do cliente.')) reconectar.mutate(); }}>Reconectar do zero</Button>
+              <Button variante="perigo" icone={<LogOut className="h-4 w-4" />} carregando={desconectar.isPending} onClick={() => { if (confirm('Desconectar e apagar a sessão do WhatsApp?')) desconectar.mutate(); }}>Desconectar</Button>
+            </>
           ) : (
             <Button variante="primario" icone={<QrCode className="h-4 w-4" />} carregando={conectar.isPending || status === 'CONECTANDO'} onClick={() => conectar.mutate()}>{status === 'AGUARDANDO_QR' ? 'Gerar novo QR Code' : 'Conectar'}</Button>
           )
@@ -90,6 +94,7 @@ export default function Whatsapp() {
                 'Templates com evento “mudança de situação” disparam automaticamente para o celular do cliente.',
                 'Mensagens entram na fila de Notificações e são enviadas com intervalo para evitar bloqueios.',
                 'Se o número for desconectado no celular, o status volta para “Desconectado” — reconecte por aqui.',
+                'Se o cliente vê “Aguardando mensagem” ou as respostas dele não chegam, clique em “Reconectar do zero” e leia o novo QR Code.',
               ].map((t, i) => (
                 <li key={i} className={clsx('flex gap-2')}><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />{t}</li>
               ))}

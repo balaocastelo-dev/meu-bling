@@ -5,7 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { registrarServico } from '../../core/servicos.js';
 import { auditar } from '../../lib/auditoria.js';
-import { conectar, desconectar, enviarTexto, status, whatsappEventos, iniciarSeNecessario } from './servico.js';
+import { conectar, desconectar, reconectarDoZero, enviarTexto, status, whatsappEventos, iniciarSeNecessario } from './servico.js';
 
 export default async function whatsappRoutes(app: FastifyInstance) {
   const cfg = app.exigirPerfil('ADMIN', 'GERENTE');
@@ -30,6 +30,20 @@ export default async function whatsappRoutes(app: FastifyInstance) {
     const r = await desconectar();
     await auditar(req, 'Empresa', 1, 'ACAO', { acao: 'whatsapp.desconectar' });
     return r;
+  });
+
+  /** Apaga a sessão e gera um QR Code novo — resolve "Aguardando mensagem" no celular do cliente (sessão corrompida). */
+  app.post('/api/v1/whatsapp/reconectar', { preHandler: cfg }, async (req) => {
+    await reconectarDoZero();
+    const inicio = Date.now();
+    while (Date.now() - inicio < 8000) {
+      const s = status();
+      if (s.status === 'AGUARDANDO_QR' || s.status === 'CONECTADO') break;
+      if (s.status === 'DESCONECTADO' && s.ultimoErro) break;
+      await new Promise((res) => setTimeout(res, 300));
+    }
+    await auditar(req, 'Empresa', 1, 'ACAO', { acao: 'whatsapp.reconectar' });
+    return status();
   });
 
   app.post('/api/v1/whatsapp/enviar-teste', { preHandler: cfg }, async (req) => {
