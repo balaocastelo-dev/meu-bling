@@ -28,7 +28,7 @@ npm run dev        # API :3333 + frontend :5173
 | Certificado A1 (.pfx + senha), série/numeração, ambiente (homologação → produção), CSC da NFC-e | Configurações → Fiscal |
 | Conectar WhatsApp (ler QR Code com o celular da loja) | Comunicação → WhatsApp |
 | SMTP (Gmail: senha de app) | Configurações → SMTP |
-| Open Finance (Client ID/Secret do pluggy.ai) ou importação OFX | Configurações → Open Finance / Financeiro → Bancos |
+| Open Finance (Client ID/Secret da Pluggy — gratuito via Meu Pluggy, ver `docs/OPEN-FINANCE.md`) ou importação OFX | Configurações → Open Finance / Financeiro → Bancos |
 | Trazer os dados do Bling (contatos, produtos, estoque, vendas, contas, notas) | Configurações → Migração do Bling |
 | Ajustar situações, transições e ações | Configurações → Situações |
 | Mensagens automáticas por situação | Comunicação → Templates |
@@ -48,7 +48,7 @@ apps/api   Fastify + Prisma (SQLite) — API REST /api/v1 (contrato em docs/API.
   src/integracoes/bling     importador (OAuth + API v3 + CSV)
 apps/web   React + Vite + Tailwind — interface
 scripts/   instalar.ps1, iniciar.ps1, backup.ps1
-docs/      ANALISE-BLING.md (análise do Bling), API.md (contrato), DEV.md (guia do código), ROADMAP.md
+docs/      ANALISE-BLING.md (análise do Bling), API.md (contrato), DEV.md (guia do código), OPEN-FINANCE.md (Pluggy), ROADMAP.md
 ```
 
 ## Acesso pela internet e perfis

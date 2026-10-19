@@ -63,7 +63,7 @@ Data: 19/10/2026 · Fonte: conta Bling do Balão da Informática (API v3 via MCP
 | Risco | Ação |
 |---|---|
 | Homologação da NF-e | Testar em ambiente de homologação com o certificado A1 real (Configurações → Fiscal → ambiente 2), emitir 2–3 notas, depois mudar para produção. Precisa do **CSC** para NFC-e (gerado no site da SEFAZ-SP). |
-| Open Finance | Criar conta em pluggy.ai (plano pago), copiar Client ID/Secret em Configurações → Open Finance. Sem Pluggy, use importação OFX (gratuita). |
+| Open Finance | Caminho gratuito: conectar o banco em meu.pluggy.ai + aplicação *Development* no dashboard da Pluggy (ver `docs/OPEN-FINANCE.md`); plano pago só se precisar de atualização mais frequente. Sem Pluggy, use importação OFX (gratuita). |
 | Migração | Conectar o Bling (Client ID/Secret de um app em developer.bling.com.br) e rodar a importação por entidade. Faça **em paralelo** por 1–2 semanas antes de cancelar. |
 | Backup | Agendar cópia diária de `apps/api/data/meubling.db` e da pasta `apps/api/storage` (XMLs das notas = obrigação fiscal por 5 anos). |
 | Certificado A1 | Vence anualmente; o sistema avisa quando faltar 30 dias. |
