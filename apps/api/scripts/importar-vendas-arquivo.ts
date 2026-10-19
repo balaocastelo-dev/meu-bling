@@ -60,7 +60,7 @@ function expandir(c: any): any {
     total: c.total,
     desconto: { unidade: c.descUn || 'REAL', valor: c.desc || 0 },
     outrasDespesas: c.outras || 0,
-    observacoes: c.obs === '[PADRAO]' ? OBS_PADRAO : c.obs || '',
+    observacoes: typeof c.obs === 'string' && c.obs.startsWith('[PADRAO]') ? OBS_PADRAO + c.obs.slice('[PADRAO]'.length) : c.obs || '',
     observacoesInternas: c.obsInt || '',
     transporte: { frete: c.frete || 0, fretePorConta: c.freteConta ?? 9, contato: c.transp?.id ? { id: c.transp.id, nome: c.transp.nome } : undefined },
     itens: (c.itens || []).map((i: any) => ({
