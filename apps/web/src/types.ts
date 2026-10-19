@@ -45,6 +45,7 @@ export interface Usuario {
 export interface LoginResposta {
   token: string;
   usuario: Usuario;
+  senhaFraca?: boolean;
 }
 
 // ---------------------------------------------------------------------
@@ -915,12 +916,12 @@ export interface MovimentoDashboard {
 
 export interface DashboardGeral {
   hoje: { vendas: number; valorVendas: number; osAbertas: number; osConcluidasHoje: number };
-  financeiro: { saldoTotal: number; receberHoje: number; receberAtrasado: number; pagarHoje: number; pagarAtrasado: number; saldoContas?: ResumoFinanceiro['saldoContas'] };
+  financeiro: { saldoTotal: number; receberHoje: number; receberAtrasado: number; pagarHoje: number; pagarAtrasado: number; saldoContas?: ResumoFinanceiro['saldoContas'] } | null;
   os: { porSituacao: (SituacaoRef & { qtd: number })[]; atrasadas: number };
   vendas: { porSituacao: (SituacaoRef & { qtd: number; valor?: number })[] };
   estoque: { abaixoMinimo: { produtoId: number; nome: string; codigo?: string | null; saldo: number; estoqueMinimo: number }[]; qtdAbaixoMinimo: number };
   fiscal: { pendentes: number; rejeitadas: number; ambiente?: string };
-  comissoes: { pendentes: number; valorPendente?: number };
+  comissoes: { pendentes: number; valorPendente?: number } | null;
   whatsapp: { status: WhatsappStatus['status']; numero?: string | null };
   ultimosMovimentos: MovimentoDashboard[];
   alertas: { tipo: string; mensagem: string; link?: string }[];

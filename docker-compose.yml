@@ -1,0 +1,49 @@
+# MEU BLING em um servidor (VPS) com HTTPS automático via Caddy.
+#
+#   1. Aponte o DNS do seu domínio (ex.: erp.balao.info) para o IP do servidor.
+#   2. Copie .env.docker.example para .env e preencha DOMINIO, JWT_SECRET, APP_SECRET.
+#   3. docker compose up -d --build
+#   Acesse https://erp.balao.info — o Caddy emite o certificado Let's Encrypt sozinho.
+#
+# Dados persistentes: volumes meubling_data (banco) e meubling_storage (XMLs, DANFEs, anexos, WhatsApp).
+
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3333
+      HOST: 0.0.0.0
+      DATABASE_URL: "file:../data/meubling.db"
+      STORAGE_DIR: "./storage"
+      APP_URL: "https://${DOMINIO}"
+      JWT_SECRET: "${JWT_SECRET}"
+      APP_SECRET: "${APP_SECRET}"
+      CORS_ORIGENS: "${CORS_ORIGENS:-}"
+    volumes:
+      - meubling_data:/app/apps/api/data
+      - meubling_storage:/app/apps/api/storage
+    expose:
+      - "3333"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMINIO: "${DOMINIO}"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  meubling_data:
+  meubling_storage:
+  caddy_data:
+  caddy_config:

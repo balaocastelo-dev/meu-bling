@@ -89,7 +89,7 @@ export const MENU: GrupoMenu[] = [
       { rotulo: 'Contas a pagar', para: '/financeiro/pagar', icone: Banknote, perfis: FIN },
       { rotulo: 'Bancos & conciliação', para: '/financeiro/bancos', icone: Landmark, perfis: FIN },
       { rotulo: 'Fluxo de caixa', para: '/financeiro/fluxo-caixa', icone: ChartLine, perfis: FIN },
-      { rotulo: 'Comissões', para: '/comissoes', icone: Percent, perfis: FIN },
+      { rotulo: 'Comissões', para: '/comissoes', icone: Percent, perfis: [...FIN, 'VENDEDOR', 'TECNICO'] },
     ],
   },
   {
@@ -123,18 +123,18 @@ export const MENU: GrupoMenu[] = [
 /** Submenu da área de configurações */
 export const CONFIG_ITENS: { rotulo: string; para: string; descricao: string; perfis?: Perfil[] }[] = [
   { rotulo: 'Empresa', para: '/configuracoes/empresa', descricao: 'Razão social, CNPJ, endereço, logo' },
-  { rotulo: 'Fiscal / Certificado', para: '/configuracoes/fiscal', descricao: 'Ambiente, séries, CSC, certificado A1, SEFAZ' },
+  { rotulo: 'Fiscal / Certificado', para: '/configuracoes/fiscal', descricao: 'Ambiente, séries, CSC, certificado A1, SEFAZ', perfis: ['ADMIN'] },
   { rotulo: 'Usuários', para: '/configuracoes/usuarios', descricao: 'Acessos e perfis', perfis: ['ADMIN'] },
   { rotulo: 'Vendedores', para: '/configuracoes/vendedores', descricao: 'Comissão padrão por vendedor' },
   { rotulo: 'Técnicos', para: '/configuracoes/tecnicos', descricao: 'Técnicos da assistência' },
-  { rotulo: 'Situações', para: '/configuracoes/situacoes', descricao: 'Status, ações automáticas e transições' },
+  { rotulo: 'Situações', para: '/configuracoes/situacoes', descricao: 'Status, ações automáticas e transições', perfis: ['ADMIN'] },
   { rotulo: 'Formas de pagamento', para: '/configuracoes/formas-pagamento', descricao: 'Taxas, prazos e código fiscal' },
   { rotulo: 'Categorias financeiras', para: '/configuracoes/categorias-financeiras', descricao: 'Receitas/despesas e grupo do DRE' },
   { rotulo: 'Depósitos', para: '/configuracoes/depositos', descricao: 'Locais de estoque e distribuidores' },
   { rotulo: 'Contas financeiras', para: '/configuracoes/contas-financeiras', descricao: 'Caixa, bancos e cartões' },
-  { rotulo: 'E-mail (SMTP)', para: '/configuracoes/smtp', descricao: 'Servidor de envio e teste' },
-  { rotulo: 'Open Finance', para: '/configuracoes/open-finance', descricao: 'Credenciais Pluggy' },
-  { rotulo: 'Migração do Bling', para: '/configuracoes/bling', descricao: 'Conectar e importar dados' },
+  { rotulo: 'E-mail (SMTP)', para: '/configuracoes/smtp', descricao: 'Servidor de envio e teste', perfis: ['ADMIN'] },
+  { rotulo: 'Open Finance', para: '/configuracoes/open-finance', descricao: 'Credenciais Pluggy', perfis: ['ADMIN'] },
+  { rotulo: 'Migração do Bling', para: '/configuracoes/bling', descricao: 'Conectar e importar dados', perfis: ['ADMIN'] },
 ];
 
 export function podeVer(perfil: Perfil | undefined, perfis?: Perfil[]): boolean {

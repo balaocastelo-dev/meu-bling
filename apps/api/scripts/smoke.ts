@@ -25,6 +25,7 @@ async function req(metodo: string, rota: string, body?: any, esperado: number | 
   return json;
 }
 const hoje = new Date().toISOString().slice(0, 10);
+const SUF = String(Date.now()).slice(-6); // torna o teste repetível no mesmo banco
 
 async function main() {
   console.log('== Auth');
@@ -50,13 +51,13 @@ async function main() {
   const s = (lista: any[], nome: string) => lista.find((x) => x.nome === nome)?.id;
 
   console.log('== Contatos');
-  const cli = await req('POST', '/contatos', { nome: 'Cliente Smoke Teste', tipoPessoa: 'F', documento: '98765432100', celular: '19999998888', email: 'smoke@example.com', logradouro: 'Rua A', numero: '1', bairro: 'Centro', municipio: 'Campinas', codigoMunicipio: '3509502', uf: 'SP', cep: '13010000' }, 201);
+  const cli = await req('POST', '/contatos', { nome: `Cliente Smoke ${SUF}`, tipoPessoa: 'F', documento: `98765${SUF}`, celular: '19999998888', email: 'smoke@example.com', logradouro: 'Rua A', numero: '1', bairro: 'Centro', municipio: 'Campinas', codigoMunicipio: '3509502', uf: 'SP', cep: '13010000' }, 201);
   await req('GET', `/contatos/${cli.id}`);
   await req('GET', '/contatos?pesquisa=smoke');
-  const forn = await req('POST', '/contatos', { nome: 'Fornecedor Smoke', tipo: 'FORNECEDOR', tipoPessoa: 'J', documento: '11222333000181' }, 201);
+  const forn = await req('POST', '/contatos', { nome: `Fornecedor Smoke ${SUF}`, tipo: 'FORNECEDOR', tipoPessoa: 'J', documento: `11222333${SUF}` }, 201);
 
   console.log('== Produtos / estoque');
-  const prod = await req('POST', '/produtos', { nome: 'PRODUTO SMOKE SSD 480GB', codigo: 'SMK-480', preco: 300, precoCusto: 200, ncm: '84717012', csosn: '102', estoqueMinimo: 1 }, 201);
+  const prod = await req('POST', '/produtos', { nome: `PRODUTO SMOKE SSD ${SUF}`, codigo: `SMK-${SUF}`, preco: 300, precoCusto: 200, ncm: '84717012', csosn: '102', estoqueMinimo: 1 }, 201);
   const dep = depositos.find((d: any) => d.padrao)?.id ?? depositos[0].id;
   await req('POST', '/estoque/ajuste', { produtoId: prod.id, depositoId: dep, tipo: 'ENTRADA', quantidade: 10, custoUnitario: 200, observacao: 'smoke' }, [200, 201]);
   const p = await req('GET', `/produtos/${prod.id}`);

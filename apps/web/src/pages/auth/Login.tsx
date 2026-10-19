@@ -25,6 +25,7 @@ export default function Login() {
     try {
       const r = await api.post<LoginResposta>('/auth/login', { email, senha });
       login(r.token, r.usuario);
+      if (r.senhaFraca) toast.warning('Você está usando a senha padrão. Troque em "Minha conta / senha".', { duration: 8000 });
       const destino = (loc.state as { de?: string } | null)?.de || '/';
       nav(destino, { replace: true });
     } catch (err) {

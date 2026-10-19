@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { ChevronDown, LogOut, Menu, MessageCircle, Package, Plus, Search, ShoppingBag, ShoppingCart, UserPlus, Wrench } from 'lucide-react';
 import { useAuth } from '@/stores/auth';
+import { api } from '@/lib/api';
 import { useWhatsappStatus } from '@/hooks/useEmpresa';
 import { iniciais, rotulo } from '@/lib/format';
 
@@ -106,6 +107,7 @@ export function Topbar({ onAbrirMenu, onAbrirBusca }: { onAbrirMenu: () => void;
             </Link>
             <button
               onClick={() => {
+                void api.post('/auth/logout', {}).catch(() => undefined);
                 logout();
                 nav('/login');
               }}

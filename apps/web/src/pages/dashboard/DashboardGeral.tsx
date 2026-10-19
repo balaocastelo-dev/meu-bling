@@ -79,9 +79,9 @@ export default function DashboardGeral() {
         <StatCard rotulo="Vendas hoje" valor={inteiro(h?.vendas)} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={isLoading} onClick={() => nav('/vendas')} />
         <StatCard rotulo="Faturamento hoje" valor={moeda(h?.valorVendas)} icone={<CircleDollarSign className="h-4 w-4" />} tom="verde" carregando={isLoading} onClick={() => nav('/dashboard/vendas')} />
         <StatCard rotulo="OS abertas" valor={inteiro(h?.osAbertas)} sub={data ? `${inteiro(data.os.atrasadas)} atrasadas` : undefined} icone={<Wrench className="h-4 w-4" />} tom={data && data.os.atrasadas > 0 ? 'amarelo' : 'neutro'} carregando={isLoading} onClick={() => nav('/ordens-servico')} />
-        <StatCard rotulo="Saldo em contas" valor={moeda(f?.saldoTotal)} icone={<Wallet className="h-4 w-4" />} tom="neutro" carregando={isLoading} onClick={() => nav('/financeiro/bancos')} />
-        <StatCard rotulo="A receber hoje" valor={moeda(f?.receberHoje)} sub={f ? `a pagar ${moeda(f.pagarHoje)}` : undefined} icone={<Clock className="h-4 w-4" />} tom="azul" carregando={isLoading} onClick={() => nav('/financeiro/receber')} />
-        <StatCard rotulo="Receber atrasado" valor={moeda(f?.receberAtrasado)} sub={f ? `a pagar ${moeda(f.pagarAtrasado)}` : undefined} icone={<TriangleAlert className="h-4 w-4" />} tom={f && f.receberAtrasado > 0 ? 'vermelho' : 'neutro'} carregando={isLoading} onClick={() => nav('/financeiro/receber?situacao=ATRASADO')} />
+        {(isLoading || f) && <StatCard rotulo="Saldo em contas" valor={moeda(f?.saldoTotal)} icone={<Wallet className="h-4 w-4" />} tom="neutro" carregando={isLoading} onClick={() => nav('/financeiro/bancos')} />}
+        {(isLoading || f) && <StatCard rotulo="A receber hoje" valor={moeda(f?.receberHoje)} sub={f ? `a pagar ${moeda(f.pagarHoje)}` : undefined} icone={<Clock className="h-4 w-4" />} tom="azul" carregando={isLoading} onClick={() => nav('/financeiro/receber')} />}
+        {(isLoading || f) && <StatCard rotulo="Receber atrasado" valor={moeda(f?.receberAtrasado)} sub={f ? `a pagar ${moeda(f.pagarAtrasado)}` : undefined} icone={<TriangleAlert className="h-4 w-4" />} tom={f && f.receberAtrasado > 0 ? 'vermelho' : 'neutro'} carregando={isLoading} onClick={() => nav('/financeiro/receber?situacao=ATRASADO')} />}
       </div>
 
       {/* Alertas */}
@@ -142,6 +142,7 @@ export default function DashboardGeral() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
+        {(isLoading || f) && (
         <Card titulo="Últimos movimentos" descricao="Entradas e saídas mais recentes" className="lg:col-span-2" semPadding acoes={<Link to="/financeiro/bancos?aba=extrato" className="text-xs text-brand-600 hover:underline">Ver extrato</Link>}>
           {isLoading ? (
             <div className="p-4">
@@ -184,6 +185,7 @@ export default function DashboardGeral() {
             <EmptyState compacto titulo="Nenhum movimento recente" />
           )}
         </Card>
+        )}
 
         <Card titulo="Pendências">
           <ul className="space-y-2 text-sm">
@@ -199,12 +201,14 @@ export default function DashboardGeral() {
               </Link>
               <span className={`num font-medium ${data && data.fiscal.rejeitadas > 0 ? 'text-red-600' : ''}`}>{isLoading ? '…' : inteiro(data?.fiscal.rejeitadas)}</span>
             </li>
-            <li className="flex items-center justify-between">
-              <Link to="/comissoes" className="text-slate-700 hover:text-brand-600">
-                Comissões pendentes
-              </Link>
-              <span className="num font-medium">{isLoading ? '…' : inteiro(data?.comissoes.pendentes)}</span>
-            </li>
+            {(isLoading || data?.comissoes) && (
+              <li className="flex items-center justify-between">
+                <Link to="/comissoes" className="text-slate-700 hover:text-brand-600">
+                  Comissões pendentes
+                </Link>
+                <span className="num font-medium">{isLoading ? '…' : inteiro(data?.comissoes?.pendentes)}</span>
+              </li>
+            )}
             <li className="flex items-center justify-between">
               <Link to="/ordens-servico" className="text-slate-700 hover:text-brand-600">
                 OS concluídas hoje

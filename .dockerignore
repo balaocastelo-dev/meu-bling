@@ -1,0 +1,8 @@
+node_modules
+apps/*/node_modules
+apps/web/dist
+apps/api/data
+apps/api/storage
+apps/api/.env
+.git
+*.zip

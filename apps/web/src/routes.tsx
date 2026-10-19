@@ -2,7 +2,10 @@
  * Rotas da aplicação. Páginas carregadas sob demanda (lazy) para manter o bundle leve.
  */
 import { lazy, Suspense, type ReactNode } from 'react';
+import { useAuth } from '@/stores/auth';
+import type { Perfil } from '@/types';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
+import ErroPagina from '@/components/layout/ErroPagina';
 import { AppShell } from '@/components/layout/AppShell';
 import { PaginaSkeleton } from '@/components/ui/Skeleton';
 
@@ -71,6 +74,23 @@ const NotFound = lazy(() => import('@/pages/NotFound'));
 
 const S = (el: ReactNode) => <Suspense fallback={<PaginaSkeleton />}>{el}</Suspense>;
 
+/** Protege uma rota por perfil (a API também valida; aqui só evitamos telas vazias). */
+function Somente({ perfis, children }: { perfis: Perfil[]; children: ReactNode }) {
+  const temPerfil = useAuth((s) => s.temPerfil);
+  if (!temPerfil(...perfis)) {
+    return (
+      <div className="mx-auto mt-16 max-w-md rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
+        <p className="text-base font-semibold text-amber-800">Sem permissão</p>
+        <p className="mt-1 text-sm text-amber-700">Seu perfil não tem acesso a esta área. Fale com o administrador.</p>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+const ADMIN = (el: ReactNode) => S(<Somente perfis={['ADMIN']}>{el}</Somente>);
+const GESTAO = (el: ReactNode) => S(<Somente perfis={['ADMIN', 'GERENTE']}>{el}</Somente>);
+const FIN = (el: ReactNode) => S(<Somente perfis={['ADMIN', 'GERENTE', 'FINANCEIRO']}>{el}</Somente>);
+
 export const router = createBrowserRouter([
   { path: '/login', element: S(<Login />) },
   { path: '/p/os/:token', element: S(<OsPublica />) },
@@ -78,6 +98,7 @@ export const router = createBrowserRouter([
   {
     path: '/',
     element: <AppShell />,
+    errorElement: <ErroPagina />,
     children: [
       { index: true, element: S(<DashboardGeral />) },
       { path: 'dashboard/vendas', element: S(<DashboardVendas />) },
@@ -88,10 +109,10 @@ export const router = createBrowserRouter([
       { path: 'vendas/:id', element: S(<VendaDetalhe />) },
       { path: 'vendas/:id/editar', element: S(<VendaForm />) },
 
-      { path: 'compras', element: S(<ComprasLista />) },
-      { path: 'compras/nova', element: S(<CompraForm />) },
-      { path: 'compras/:id', element: S(<CompraDetalhe />) },
-      { path: 'compras/:id/editar', element: S(<CompraForm />) },
+      { path: 'compras', element: FIN(<ComprasLista />) },
+      { path: 'compras/nova', element: FIN(<CompraForm />) },
+      { path: 'compras/:id', element: FIN(<CompraDetalhe />) },
+      { path: 'compras/:id/editar', element: FIN(<CompraForm />) },
 
       { path: 'ordens-servico', element: S(<OsLista />) },
       { path: 'ordens-servico/nova', element: S(<OsForm />) },
@@ -110,39 +131,39 @@ export const router = createBrowserRouter([
       { path: 'estoque', element: S(<Estoque />) },
 
       { path: 'financeiro', element: <Navigate to="/financeiro/receber" replace /> },
-      { path: 'financeiro/receber', element: S(<ContasReceber />) },
-      { path: 'financeiro/pagar', element: S(<ContasPagar />) },
-      { path: 'financeiro/bancos', element: S(<Bancos />) },
-      { path: 'financeiro/fluxo-caixa', element: S(<FluxoCaixa />) },
+      { path: 'financeiro/receber', element: FIN(<ContasReceber />) },
+      { path: 'financeiro/pagar', element: FIN(<ContasPagar />) },
+      { path: 'financeiro/bancos', element: FIN(<Bancos />) },
+      { path: 'financeiro/fluxo-caixa', element: FIN(<FluxoCaixa />) },
       { path: 'comissoes', element: S(<Comissoes />) },
 
       { path: 'notas-fiscais', element: S(<NotasLista />) },
       { path: 'notas-fiscais/nova', element: S(<NotaForm />) },
       { path: 'notas-fiscais/:id', element: S(<NotaDetalhe />) },
 
-      { path: 'relatorios', element: S(<Relatorios />) },
-      { path: 'relatorios/dre', element: S(<Dre />) },
+      { path: 'relatorios', element: FIN(<Relatorios />) },
+      { path: 'relatorios/dre', element: FIN(<Dre />) },
 
       { path: 'comunicacao', element: <Navigate to="/comunicacao/notificacoes" replace /> },
       { path: 'comunicacao/notificacoes', element: S(<Notificacoes />) },
       { path: 'comunicacao/whatsapp', element: S(<Whatsapp />) },
       { path: 'comunicacao/templates', element: S(<Templates />) },
 
-      { path: 'configuracoes', element: S(<ConfigIndex />) },
-      { path: 'configuracoes/empresa', element: S(<ConfigEmpresa />) },
-      { path: 'configuracoes/fiscal', element: S(<ConfigFiscal />) },
-      { path: 'configuracoes/usuarios', element: S(<ConfigUsuarios />) },
-      { path: 'configuracoes/vendedores', element: S(<ConfigVendedores />) },
-      { path: 'configuracoes/tecnicos', element: S(<ConfigTecnicos />) },
-      { path: 'configuracoes/situacoes', element: S(<ConfigSituacoes />) },
-      { path: 'configuracoes/formas-pagamento', element: S(<ConfigFormasPagamento />) },
-      { path: 'configuracoes/categorias-financeiras', element: S(<ConfigCategoriasFinanceiras />) },
-      { path: 'configuracoes/depositos', element: S(<ConfigDepositos />) },
-      { path: 'configuracoes/contas-financeiras', element: S(<ConfigContasFinanceiras />) },
-      { path: 'configuracoes/smtp', element: S(<ConfigSmtp />) },
-      { path: 'configuracoes/open-finance', element: S(<ConfigOpenFinance />) },
-      { path: 'configuracoes/bling', element: S(<ConfigBling />) },
-      { path: 'configuracoes/bling/callback', element: S(<BlingCallback />) },
+      { path: 'configuracoes', element: GESTAO(<ConfigIndex />) },
+      { path: 'configuracoes/empresa', element: GESTAO(<ConfigEmpresa />) },
+      { path: 'configuracoes/fiscal', element: ADMIN(<ConfigFiscal />) },
+      { path: 'configuracoes/usuarios', element: ADMIN(<ConfigUsuarios />) },
+      { path: 'configuracoes/vendedores', element: GESTAO(<ConfigVendedores />) },
+      { path: 'configuracoes/tecnicos', element: GESTAO(<ConfigTecnicos />) },
+      { path: 'configuracoes/situacoes', element: ADMIN(<ConfigSituacoes />) },
+      { path: 'configuracoes/formas-pagamento', element: GESTAO(<ConfigFormasPagamento />) },
+      { path: 'configuracoes/categorias-financeiras', element: GESTAO(<ConfigCategoriasFinanceiras />) },
+      { path: 'configuracoes/depositos', element: GESTAO(<ConfigDepositos />) },
+      { path: 'configuracoes/contas-financeiras', element: GESTAO(<ConfigContasFinanceiras />) },
+      { path: 'configuracoes/smtp', element: ADMIN(<ConfigSmtp />) },
+      { path: 'configuracoes/open-finance', element: ADMIN(<ConfigOpenFinance />) },
+      { path: 'configuracoes/bling', element: ADMIN(<ConfigBling />) },
+      { path: 'configuracoes/bling/callback', element: ADMIN(<BlingCallback />) },
 
       { path: '*', element: S(<NotFound />) },
     ],

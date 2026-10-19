@@ -4,6 +4,8 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
+import cookie from '@fastify/cookie';
+import { arquivosPlugin } from './plugins/arquivos.js';
 import autoload from '@fastify/autoload';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -26,22 +28,29 @@ export async function construirApp() {
   });
 
   await app.register(helmet, { contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'cross-origin' } });
-  await app.register(cors, { origin: true, credentials: true });
+  // CORS: em produção só a própria origem (APP_URL) + origens extras de CORS_ORIGENS; em dev libera localhost
+  const origensPermitidas = [env.APP_URL, ...(process.env.CORS_ORIGENS || '').split(',').map((s) => s.trim()).filter(Boolean)];
+  await app.register(cors, {
+    credentials: true,
+    origin: (origem, cb) => {
+      if (!origem) return cb(null, true); // mesma origem / curl
+      if (!env.isProd || origensPermitidas.includes(origem) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origem)) return cb(null, true);
+      cb(new Error('Origem não permitida pelo CORS'), false);
+    },
+  });
+  await app.register(cookie, { secret: env.APP_SECRET });
   await app.register(rateLimit, { max: 600, timeWindow: '1 minute' });
   await app.register(multipart, { limits: { fileSize: 30 * 1024 * 1024 } });
   await app.register(authPlugin);
 
-  // Arquivos públicos (logos, anexos de OS, DANFEs)
-  await app.register(fastifyStatic, {
-    root: env.STORAGE_DIR,
-    prefix: '/uploads/',
-    decorateReply: false,
-  });
+  // Arquivos do storage (/uploads/*): logos públicos; anexos/DANFE/XML exigem sessão (cookie ou Bearer).
+  // Pastas sensíveis (sessão do WhatsApp, temporários, importação) nunca são servidas.
+  await app.register(arquivosPlugin);
 
   // Frontend compilado (produção): apps/web/dist
   const webDist = path.resolve(__dirname, '../../web/dist');
   if (fs.existsSync(webDist)) {
-    await app.register(fastifyStatic, { root: webDist, prefix: '/', decorateReply: true, wildcard: false });
+    await app.register(fastifyStatic, { root: webDist, prefix: '/', decorateReply: true, wildcard: true, cacheControl: true, maxAge: '1h', immutable: false });
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api/') || req.url.startsWith('/uploads/')) {
         return reply.code(404).send({ erro: 'Rota não encontrada', code: 'NAO_ENCONTRADO' });

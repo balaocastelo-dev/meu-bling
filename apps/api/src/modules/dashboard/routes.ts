@@ -33,7 +33,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
   // =====================================================================
   // GERAL
   // =====================================================================
-  app.get('/api/v1/dashboard/geral', { preHandler: leitura }, async () => {
+  app.get('/api/v1/dashboard/geral', { preHandler: leitura }, async (req) => {
     const hoje = new Date();
     const ini = startOfDay(hoje);
     const fim = endOfDay(hoje);
@@ -92,7 +92,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     }
     if ((comissoesPendentes._count as number) > 0) alertas.push({ tipo: 'info', mensagem: `${comissoesPendentes._count} comiss${(comissoesPendentes._count as number) > 1 ? 'ões' : 'ão'} pendente${(comissoesPendentes._count as number) > 1 ? 's' : ''} de aprovação`, link: '/comissoes?status=PENDENTE' });
 
-    return {
+    const resposta = {
       hoje: {
         vendas: vendasHoje.length,
         valorVendas: arredondar(vendasHoje.reduce((s, v) => s + v.total, 0)),
@@ -123,12 +123,23 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       ultimosMovimentos,
       alertas,
     };
+    // VENDEDOR/TECNICO não veem dados financeiros da loja (saldos, contas, comissões de terceiros, extrato)
+    if (!['ADMIN', 'GERENTE', 'FINANCEIRO'].includes(req.user.perfil)) {
+      const r = resposta as any;
+      r.financeiro = null;
+      r.comissoes = null;
+      r.ultimosMovimentos = [];
+      r.alertas = alertas.filter((a) => !a.link.startsWith('/financeiro') && !a.link.startsWith('/comissoes'));
+    }
+    return resposta;
   });
 
   // =====================================================================
   // VENDAS
   // =====================================================================
-  app.get('/api/v1/dashboard/vendas', { preHandler: gestao }, async (req) => {
+  // VENDEDOR vê o dashboard restrito às próprias vendas
+  app.get('/api/v1/dashboard/vendas', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE', 'FINANCEIRO', 'VENDEDOR') }, async (req) => {
+    if (req.user.perfil === 'VENDEDOR') (req.query as any).vendedorId = String(req.user.vendedorId ?? 0);
     const q = z
       .object({
         dataInicial: dataSchema,

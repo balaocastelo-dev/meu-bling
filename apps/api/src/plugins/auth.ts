@@ -3,6 +3,7 @@ import jwt from '@fastify/jwt';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { env } from '../lib/env.js';
 import { Forbidden } from '../lib/errors.js';
+import { permitido, CAMPOS_EMPRESA_ADMIN } from './politicas.js';
 
 export type Perfil = 'ADMIN' | 'GERENTE' | 'VENDEDOR' | 'TECNICO' | 'FINANCEIRO';
 
@@ -61,7 +62,8 @@ export default fp(async function authPlugin(app: FastifyInstance) {
     };
   });
 
-  // Autenticação global: tudo em /api/* exige token, exceto rotas públicas
+  // Autenticação global: tudo em /api/* exige token, exceto rotas públicas.
+  // Em seguida, a política central por perfil (plugins/politicas.ts).
   app.addHook('onRequest', async (req, reply) => {
     const url = req.url.split('?')[0];
     if (!url.startsWith('/api/')) return;
@@ -69,7 +71,22 @@ export default fp(async function authPlugin(app: FastifyInstance) {
     try {
       await req.jwtVerify();
     } catch {
-      reply.code(401).send({ erro: 'Não autenticado. Faça login novamente.', code: 'NAO_AUTENTICADO' });
+      return reply.code(401).send({ erro: 'Não autenticado. Faça login novamente.', code: 'NAO_AUTENTICADO' });
+    }
+    const rota = url.replace(/^\/api\/v1/, '');
+    if (!permitido(req.user?.perfil, req.method, rota)) {
+      return reply.code(403).send({
+        erro: `Seu perfil (${req.user?.perfil}) não tem permissão para esta função. Peça ao administrador.`,
+        code: 'SEM_PERMISSAO',
+      });
+    }
+  });
+
+  // GERENTE pode editar dados básicos da empresa, mas não campos fiscais/segredos (somente ADMIN)
+  app.addHook('preHandler', async (req) => {
+    const url = req.url.split('?')[0];
+    if (req.method === 'PUT' && url === '/api/v1/empresa' && req.user && req.user.perfil !== 'ADMIN' && req.body && typeof req.body === 'object') {
+      for (const campo of CAMPOS_EMPRESA_ADMIN) delete (req.body as any)[campo];
     }
   });
 });

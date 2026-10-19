@@ -51,6 +51,9 @@ scripts/   instalar.ps1, iniciar.ps1, backup.ps1
 docs/      ANALISE-BLING.md (análise do Bling), API.md (contrato), DEV.md (guia do código), ROADMAP.md
 ```
 
+## Acesso pela internet e perfis
+Veja `docs/ONLINE.md`: Opção A (PC da loja + Cloudflare Tunnel, `scripts\publicar-online.ps1`) ou Opção B (VPS com `docker compose up -d`). Perfis: **ADMIN** (dono, acesso completo), **GERENTE** (administrativo, sem usuários/segredos), **VENDEDOR**, **TECNICO**, **FINANCEIRO** — criados em Configurações → Usuários pelo ADMIN. A API bloqueia cada função por perfil (`apps/api/src/plugins/politicas.ts`); teste: `npx tsx scripts/teste-perfis.ts`.
+
 ## Backup
 Atalho **MEU BLING - Backup** (ou `scripts\backup.ps1`) gera um .zip do banco + XMLs/anexos na Área de Trabalho. Agende diariamente no Agendador de Tarefas. Para PostgreSQL, troque `provider` em `apps/api/prisma/schema.prisma` e `DATABASE_URL`.
 

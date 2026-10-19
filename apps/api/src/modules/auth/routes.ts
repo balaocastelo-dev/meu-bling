@@ -4,6 +4,9 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../../lib/prisma.js';
 import { AppError, Forbidden, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
+import { env } from '../../lib/env.js';
+import { COOKIE_SESSAO } from '../../plugins/arquivos.js';
+import { DESCRICAO_PERFIS } from '../../plugins/politicas.js';
 
 const PERFIS = ['ADMIN', 'GERENTE', 'VENDEDOR', 'TECNICO', 'FINANCEIRO'] as const;
 
@@ -19,8 +22,17 @@ export default async function authRoutes(app: FastifyInstance) {
     const payload = { id: u.id, nome: u.nome, email: u.email, perfil: u.perfil as any, vendedorId: u.vendedorId, tecnicoId: u.tecnicoId };
     const token = app.jwt.sign(payload);
     await auditar(req, 'Usuario', u.id, 'LOGIN');
-    return reply.send({ token, usuario: payload });
+    // cookie usado apenas para servir arquivos (/uploads/*) em <img>/<a>; a API usa o Bearer
+    reply.setCookie(COOKIE_SESSAO, token, { path: '/uploads', httpOnly: true, sameSite: 'lax', secure: env.isProd && env.APP_URL.startsWith('https'), maxAge: 12 * 3600 });
+    return reply.send({ token, usuario: payload, senhaFraca: body.senha === 'admin123' });
   });
+
+  app.post('/api/v1/auth/logout', async (_req, reply) => {
+    reply.clearCookie(COOKIE_SESSAO, { path: '/uploads' });
+    return { ok: true };
+  });
+
+  app.get('/api/v1/auth/perfis', async () => DESCRICAO_PERFIS);
 
   // ---- Usuário atual
   app.get('/api/v1/auth/eu', async (req) => {
@@ -33,7 +45,7 @@ export default async function authRoutes(app: FastifyInstance) {
   });
 
   app.put('/api/v1/auth/senha', async (req) => {
-    const body = z.object({ senhaAtual: z.string(), novaSenha: z.string().min(6) }).parse(req.body);
+    const body = z.object({ senhaAtual: z.string(), novaSenha: z.string().min(8, 'A nova senha deve ter pelo menos 8 caracteres') }).parse(req.body);
     const u = await prisma.usuario.findUnique({ where: { id: req.user.id } });
     if (!u || !(await bcrypt.compare(body.senhaAtual, u.senhaHash))) throw new AppError('Senha atual incorreta.');
     await prisma.usuario.update({ where: { id: u.id }, data: { senhaHash: await bcrypt.hash(body.novaSenha, 10) } });
@@ -51,7 +63,7 @@ export default async function authRoutes(app: FastifyInstance) {
   const usuarioSchema = z.object({
     nome: z.string().min(2),
     email: z.string().email(),
-    senha: z.string().min(6).optional(),
+    senha: z.string().min(8, 'A senha deve ter pelo menos 8 caracteres').optional(),
     perfil: z.enum(PERFIS).default('VENDEDOR'),
     ativo: z.boolean().default(true),
     vendedorId: z.number().int().nullable().optional(),
