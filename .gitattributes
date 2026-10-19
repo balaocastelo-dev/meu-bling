@@ -1,0 +1,10 @@
+# Mantém LF em tudo (scripts de shell, Dockerfile e código quebram com CRLF na VPS/Docker),
+# exceto arquivos do Windows, que ficam em CRLF.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.png binary
+*.jpg binary
+*.pfx binary
+*.pdf binary
