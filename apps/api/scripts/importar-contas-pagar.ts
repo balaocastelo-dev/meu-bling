@@ -16,7 +16,7 @@ import { baixarContaPagar } from '../src/modules/financeiro/service.js';
 const args = process.argv.slice(2);
 const iSaida = args.indexOf('--saida');
 const saida = iSaida >= 0 ? args[iSaida + 1] : undefined;
-const arquivo = args.find((a, i) => !a.startsWith('--') && i !== iSaida + 1);
+const arquivo = args.find((a, i) => !a.startsWith('--') && i !== (iSaida >= 0 ? iSaida + 1 : -99));
 const simular = args.includes('--simular');
 if (!arquivo) throw new Error('Informe o JSON com as linhas.');
 
