@@ -41,7 +41,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
     const [vendasHoje, osAbertas, osConcluidasHoje, financeiro, sitOs, sitVendas, osAtrasadas, saldos, notasPendentes, notasRejeitadas, comissoesPendentes, ultimosMovimentos, notifErro, notifPendentes] =
       await Promise.all([
-        prisma.venda.findMany({ where: { data: { gte: ini, lte: fim }, situacaoId: { notIn: sitVendaCanc } }, select: { total: true } }),
+        prisma.venda.findMany({ where: { tipo: 'PEDIDO', data: { gte: ini, lte: fim }, situacaoId: { notIn: sitVendaCanc } }, select: { total: true } }),
         prisma.ordemServico.count({ where: { situacaoId: { notIn: [...sitOsOk, ...sitOsCanc] } } }),
         prisma.ordemServico.count({ where: { OR: [{ dataConclusao: { gte: ini, lte: fim } }, { situacaoId: { in: sitOsOk }, atualizadoEm: { gte: ini, lte: fim } }] } }),
         resumoFinanceiro(),
@@ -59,7 +59,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
     // contagem por situação (OS e vendas abertas) — agregação em JS
     const osPorSit = await prisma.ordemServico.groupBy({ by: ['situacaoId'], _count: { _all: true } });
-    const vendasPorSit = await prisma.venda.groupBy({ by: ['situacaoId'], _count: { _all: true }, where: { data: { gte: startOfDay(new Date(hoje.getFullYear(), hoje.getMonth(), 1)) } } });
+    const vendasPorSit = await prisma.venda.groupBy({ by: ['situacaoId'], _count: { _all: true }, where: { tipo: 'PEDIDO', data: { gte: startOfDay(new Date(hoje.getFullYear(), hoje.getMonth(), 1)) } } });
     const qtdOs = (id: number) => osPorSit.find((x) => x.situacaoId === id)?._count._all || 0;
     const qtdVenda = (id: number) => vendasPorSit.find((x) => x.situacaoId === id)?._count._all || 0;
 
@@ -158,7 +158,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
     const carregar = (de: Date, ate: Date) =>
       prisma.venda.findMany({
-        where: { data: { gte: de, lte: ate }, ...whereSit, ...(q.vendedorId ? { vendedorId: q.vendedorId } : {}) },
+        where: { tipo: 'PEDIDO', data: { gte: de, lte: ate }, ...whereSit, ...(q.vendedorId ? { vendedorId: q.vendedorId } : {}) },
         include: {
           itens: { select: { produtoId: true, descricao: true, quantidade: true, total: true, custoUnitario: true, comissaoValor: true, produto: { select: { categoriaId: true, categoria: { select: { nome: true } } } } } },
           parcelas: { select: { valor: true, formaPagamento: { select: { nome: true } } } },

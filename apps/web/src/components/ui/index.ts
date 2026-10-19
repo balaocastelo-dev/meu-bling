@@ -17,3 +17,4 @@ export * from './StatCard';
 export * from './SearchSelect';
 export * from './StatusChanger';
 export * from './Filtros';
+export * from './MenuAcoes';

@@ -19,7 +19,7 @@ const ACOES_PADRAO: AcaoSituacao[] = [
   { nome: 'lancarContas', descricao: 'Gera contas a receber/pagar das parcelas', modulos: ['VENDA', 'COMPRA', 'OS'] },
   { nome: 'estornarContas', descricao: 'Cancela as contas geradas', modulos: ['VENDA', 'COMPRA', 'OS'] },
   { nome: 'gerarNfe', descricao: 'Gera a NF-e pendente', modulos: ['VENDA', 'OS'] },
-  { nome: 'notificarCliente', descricao: 'Dispara templates genéricos de notificação', modulos: ['VENDA', 'COMPRA', 'OS'] },
+  { nome: 'notificarCliente', descricao: 'Dispara templates genéricos de notificação', modulos: ['VENDA', 'COMPRA', 'OS', 'ORCAMENTO'] },
 ];
 
 type FormSit = Partial<Situacao>;
@@ -64,7 +64,7 @@ export default function Situacoes() {
         descricao="Status de vendas, compras e OS — com ações automáticas ao entrar na situação e matriz de transições permitidas."
         acoes={
           <>
-            <Segmentado valor={modulo} onMudar={setModulo} opcoes={[{ valor: 'VENDA', rotulo: 'Vendas' }, { valor: 'COMPRA', rotulo: 'Compras' }, { valor: 'OS', rotulo: 'Ordens de serviço' }]} />
+            <Segmentado valor={modulo} onMudar={setModulo} opcoes={[{ valor: 'VENDA', rotulo: 'Vendas' }, { valor: 'ORCAMENTO', rotulo: 'Orçamentos' }, { valor: 'COMPRA', rotulo: 'Compras' }, { valor: 'OS', rotulo: 'Ordens de serviço' }]} />
             <Button variante="primario" icone={<Plus className="h-4 w-4" />} onClick={() => setEditando({ nome: '', cor: CORES_SUGERIDAS[lista.length % CORES_SUGERIDAS.length], ordem: lista.length + 1, acoes: [], inicial: false, final: false, cancelamento: false, ativo: true })}>Nova situação</Button>
           </>
         }

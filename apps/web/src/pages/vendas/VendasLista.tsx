@@ -1,21 +1,24 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { FileText, Plus, ShoppingCart } from 'lucide-react';
+import { CheckCircle2, FileSignature, FileText, Plus, ShoppingCart } from 'lucide-react';
 import { api } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, StatusBadge, Table, type Coluna } from '@/components/ui';
+import { VendaAcoes, rotaDe } from '@/components/compartilhados/VendaAcoes';
 import { data, moeda, rotulo } from '@/lib/format';
-import type { Paginado, VendaResumo } from '@/types';
+import type { Paginado, TipoVenda, VendaResumo } from '@/types';
 
-/** Lista de pedidos de venda */
-export default function VendasLista() {
+/** Lista de pedidos de venda (tipo PEDIDO) ou de orçamentos (tipo ORCAMENTO) */
+export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
   const nav = useNavigate();
   const pg = usePaginacao();
-  const { data: situacoes } = useSituacoes('VENDA');
+  const orcamento = tipo === 'ORCAMENTO';
+  const base = rotaDe(tipo);
+  const { data: situacoes } = useSituacoes(orcamento ? 'ORCAMENTO' : 'VENDA');
   const { data: vendedores } = useVendedores();
 
-  const params = { ...pg.filtros, pagina: pg.pagina, limite: pg.limite };
+  const params = { ...pg.filtros, tipo, pagina: pg.pagina, limite: pg.limite };
   const { data: resp, isLoading } = useQuery({
     queryKey: ['vendas', params],
     queryFn: () => api.get<Paginado<VendaResumo>>('/vendas', params),
@@ -25,10 +28,51 @@ export default function VendasLista() {
   const colunas: Coluna<VendaResumo>[] = [
     { chave: 'numero', titulo: 'Nº', largura: '80px', render: (v) => <span className="font-medium text-slate-900">{v.numero}</span> },
     { chave: 'data', titulo: 'Data', largura: '100px', render: (v) => <span className="text-slate-600">{data(v.data)}</span> },
+    ...(orcamento
+      ? [
+          {
+            chave: 'validade',
+            titulo: 'Validade',
+            largura: '100px',
+            ocultarMobile: true,
+            render: (v: VendaResumo) => {
+              const vencido = !v.vendaGerada && !!v.validade && new Date(v.validade).getTime() < Date.now() - 86400000;
+              return <span className={vencido ? 'font-medium text-red-600' : 'text-slate-600'} title={vencido ? 'Orçamento vencido' : undefined}>{v.validade ? data(v.validade) : '—'}</span>;
+            },
+          } as Coluna<VendaResumo>,
+        ]
+      : []),
     { chave: 'contato', titulo: 'Cliente', render: (v) => <span className="block max-w-[320px] truncate">{v.contato?.nome}</span> },
     { chave: 'vendedor', titulo: 'Vendedor', ocultarMobile: true, render: (v) => <span className="text-slate-500">{v.vendedor?.nome ?? '—'}</span> },
     { chave: 'origem', titulo: 'Origem', ocultarMobile: true, render: (v) => <span className="text-xs text-slate-500">{v.origem ? rotulo(v.origem) : '—'}</span> },
-    { chave: 'situacao', titulo: 'Situação', render: (v) => <StatusBadge situacao={v.situacao} /> },
+    {
+      chave: 'situacao',
+      titulo: 'Situação',
+      render: (v) => (
+        <span className="inline-flex items-center gap-1.5">
+          <StatusBadge situacao={v.situacao} />
+          {orcamento && v.aprovadoEm && !v.vendaGerada && <span title="Aprovado pelo cliente"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /></span>}
+        </span>
+      ),
+    },
+    ...(orcamento
+      ? [
+          {
+            chave: 'vendaGerada',
+            titulo: 'Venda',
+            ocultarMobile: true,
+            largura: '90px',
+            render: (v: VendaResumo) =>
+              v.vendaGerada ? (
+                <Link to={`/vendas/${v.vendaGerada.id}`} onClick={(e) => e.stopPropagation()} className="text-xs font-medium text-brand-600 hover:underline">
+                  nº {v.vendaGerada.numero}
+                </Link>
+              ) : (
+                <span className="text-xs text-slate-300">—</span>
+              ),
+          } as Coluna<VendaResumo>,
+        ]
+      : []),
     {
       chave: 'flags',
       titulo: 'Lanç.',
@@ -50,19 +94,44 @@ export default function VendasLista() {
       ),
     },
     { chave: 'total', titulo: 'Total', direita: true, largura: '120px', render: (v) => <span className="font-medium">{moeda(v.total)}</span> },
+    {
+      chave: 'acoes',
+      titulo: <span className="sr-only">Ações</span>,
+      largura: '44px',
+      direita: true,
+      render: (v) => (
+        // portais (menu e modais) propagam o clique pela árvore do React: segura aqui para não abrir a linha
+        <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
+          <VendaAcoes venda={v} />
+        </div>
+      ),
+    },
   ];
+  // orçamento não lança estoque/contas: sem a coluna "Lanç."
+  const colunasVisiveis = orcamento ? colunas.filter((c) => c.chave !== 'flags') : colunas;
+  const titulo = orcamento ? 'Orçamentos' : 'Pedidos de venda';
+  const novo = orcamento ? 'Novo orçamento' : 'Nova venda';
 
   return (
     <div>
       <PageHeader
-        titulo="Pedidos de venda"
-        descricao={resp ? `${resp.meta.total} pedidos` : undefined}
+        titulo={titulo}
+        descricao={resp ? `${resp.meta.total} ${orcamento ? 'orçamentos' : 'pedidos'}${orcamento ? ' · envie por e-mail/WhatsApp e converta em venda quando o cliente aprovar' : ''}` : undefined}
         acoes={
-          <Link to="/vendas/nova">
-            <Button variante="primario" icone={<Plus className="h-4 w-4" />}>
-              Nova venda
-            </Button>
-          </Link>
+          <>
+            {!orcamento && (
+              <Link to="/orcamentos/novo">
+                <Button variante="secundario" icone={<FileSignature className="h-4 w-4" />}>
+                  Novo orçamento
+                </Button>
+              </Link>
+            )}
+            <Link to={`${base}/${orcamento ? 'novo' : 'nova'}`}>
+              <Button variante="primario" icone={<Plus className="h-4 w-4" />}>
+                {novo}
+              </Button>
+            </Link>
+          </>
         }
       />
       <Card semPadding>
@@ -89,20 +158,20 @@ export default function VendasLista() {
           <ChipsSituacao situacoes={situacoes ?? []} valor={pg.getFiltro('situacoes')} onChange={(v) => pg.setFiltro('situacoes', v)} />
         </div>
         <Table
-          colunas={colunas}
+          colunas={colunasVisiveis}
           dados={resp?.data}
           carregando={isLoading}
           chave={(v) => v.id}
-          onClickLinha={(v) => nav(`/vendas/${v.id}`)}
+          onClickLinha={(v) => nav(`${base}/${v.id}`)}
           vazio={
             <EmptyState
-              icone={<ShoppingCart className="h-5 w-5" />}
-              titulo="Nenhuma venda encontrada"
-              descricao="Ajuste os filtros ou registre a primeira venda."
+              icone={orcamento ? <FileSignature className="h-5 w-5" /> : <ShoppingCart className="h-5 w-5" />}
+              titulo={orcamento ? 'Nenhum orçamento encontrado' : 'Nenhuma venda encontrada'}
+              descricao={orcamento ? 'Monte um orçamento, envie ao cliente e converta em venda quando ele aprovar.' : 'Ajuste os filtros ou registre a primeira venda.'}
               acao={
-                <Link to="/vendas/nova">
+                <Link to={`${base}/${orcamento ? 'novo' : 'nova'}`}>
                   <Button variante="primario" icone={<Plus className="h-4 w-4" />}>
-                    Nova venda
+                    {novo}
                   </Button>
                 </Link>
               }

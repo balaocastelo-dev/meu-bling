@@ -257,14 +257,44 @@ export async function enviarTexto(numero: string, texto: string): Promise<{ id: 
   }
 }
 
+/** Envia um arquivo (PDF do orçamento/pedido, DANFE...) como documento. */
+export async function enviarDocumento(numero: string, caminho: string, nomeArquivo?: string, legenda?: string): Promise<{ id: string | null; jid: string }> {
+  if (estado.status !== 'CONECTADO' || !sock) throw new AppError('WhatsApp desconectado', 422, 'WHATSAPP_DESCONECTADO');
+  if (!fs.existsSync(caminho)) throw new AppError('Arquivo do anexo não encontrado.', 422, 'ANEXO');
+  const jid = jidDe(numero);
+  const nome = nomeArquivo || path.basename(caminho);
+  const mimetype = /\.pdf$/i.test(nome) ? 'application/pdf' : /\.xml$/i.test(nome) ? 'application/xml' : /\.(jpe?g)$/i.test(nome) ? 'image/jpeg' : /\.png$/i.test(nome) ? 'image/png' : 'application/octet-stream';
+  try {
+    const r = await sock.sendMessage(jid, { document: fs.readFileSync(caminho), mimetype, fileName: nome, caption: legenda || undefined });
+    return { id: r?.key?.id ?? null, jid };
+  } catch (e: any) {
+    throw new AppError('Falha ao enviar documento pelo WhatsApp: ' + (e?.message || e), 502, 'WHATSAPP_ERRO');
+  }
+}
+
 // ---------------------------------------------------------------------
-// Recebimento: "APROVAR" em OS aguardando aprovação
+// Recebimento: "APROVAR" em OS aguardando aprovação / orçamento de venda enviado
 // ---------------------------------------------------------------------
 async function tratarMensagemRecebida(numero: string, texto: string) {
   if (!/\bAPROV(AR|O|ADO)\b/i.test(texto.normalize('NFD').replace(/[̀-ͯ]/g, ''))) return;
   const variantes = [...new Set([numero, numero.replace(/^55/, ''), '55' + numero.replace(/^55/, '')])];
   const contatos = await prisma.contato.findMany({ where: { celular: { in: variantes } }, select: { id: true } });
   if (!contatos.length) return;
+  // orçamentos de venda enviados e ainda não aprovados (o mais recente primeiro)
+  const orcamentos = await prisma.venda.findMany({
+    where: { tipo: 'ORCAMENTO', contatoId: { in: contatos.map((c) => c.id) }, aprovadoEm: null, orcamentoId: null, situacao: { nome: { in: ['Enviado', 'Em aberto'] } } },
+    orderBy: { id: 'desc' },
+    take: 1,
+  });
+  for (const o of orcamentos) {
+    try {
+      const svc = await import('../../modules/vendas/service.js');
+      await svc.aprovarOrcamento(o.id, { aprovadoPor: `WhatsApp ${numero}`, usuarioId: null });
+      await enviarTexto(numero, `✅ Recebemos a aprovação do orçamento nº ${o.numero}. Já vamos preparar o seu pedido!`).catch(() => undefined);
+    } catch (e: any) {
+      whatsappEventos.emit('estado', { ...estado, ultimoErro: 'Aprovação de orçamento: ' + (e?.message || e) });
+    }
+  }
   const sitAguardando = await prisma.situacao.findFirst({ where: { modulo: 'OS', nome: { contains: 'Aguardando aprova' } } });
   if (!sitAguardando) return;
   const ordens = await prisma.ordemServico.findMany({

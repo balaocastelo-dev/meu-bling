@@ -17,7 +17,7 @@ export default function OsPublica() {
   const { data: resp, isLoading, error } = useQuery({ queryKey: ['publico-os', token], queryFn: () => api.get<OsPublicaResposta>(`/publico/os/${token}`), retry: 0, refetchInterval: 60_000 });
 
   const aprovar = useMutation({
-    mutationFn: () => api.post(`/publico/os/${token}/aprovar`, { aprovadoPor: nome.trim() || 'Cliente (link)' }),
+    mutationFn: () => api.post(`/publico/os/${token}/aprovar`, { nome: nome.trim() || 'Cliente (link)' }),
     onSuccess: () => {
       toast.success('Orçamento aprovado. Obrigado!');
       qc.invalidateQueries({ queryKey: ['publico-os', token] });

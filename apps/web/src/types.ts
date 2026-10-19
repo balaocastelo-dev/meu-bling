@@ -19,7 +19,7 @@ export interface ErroApi {
 }
 
 export type Perfil = 'ADMIN' | 'GERENTE' | 'VENDEDOR' | 'TECNICO' | 'FINANCEIRO';
-export type Modulo = 'VENDA' | 'COMPRA' | 'OS';
+export type Modulo = 'VENDA' | 'COMPRA' | 'OS' | 'ORCAMENTO';
 
 export interface Ref {
   id: number;
@@ -238,7 +238,7 @@ export interface Contato {
 }
 
 export interface HistoricoContato {
-  vendas: { id: number; numero: number; data: string; total: number; situacao: SituacaoRef }[];
+  vendas: { id: number; tipo?: TipoVenda; numero: number; data: string; total: number; situacao: SituacaoRef }[];
   ordens: { id: number; numero: number; dataEntrada: string; equipamento: string | null; total: number; situacao: SituacaoRef }[];
   contasReceber: ContaReceber[];
   notificacoes: Notificacao[];
@@ -362,9 +362,19 @@ export interface NotaRef {
   chave?: string | null;
 }
 
+/** PEDIDO = venda; ORCAMENTO = proposta (não movimenta estoque/financeiro; vira venda ao converter) */
+export type TipoVenda = 'PEDIDO' | 'ORCAMENTO';
+
 export interface VendaResumo {
   id: number;
+  tipo: TipoVenda;
   numero: number;
+  validade?: string | null;
+  aprovadoEm?: string | null;
+  aprovadoPor?: string | null;
+  vendedorId?: number | null;
+  orcamento?: { id: number; numero: number } | null;
+  vendaGerada?: { id: number; numero: number } | null;
   data: string;
   dataPrevista?: string | null;
   contato: Ref;
@@ -430,9 +440,13 @@ export interface Venda extends VendaResumo {
   historico: HistoricoSituacao[];
   situacoesPermitidas: SituacaoRef[];
   contato: Contato | Ref;
+  linkPublico?: string;
+  tokenPublico?: string;
 }
 
 export interface VendaPayload {
+  tipo?: TipoVenda;
+  validade?: string | null;
   contatoId: number | null;
   vendedorId: number | null;
   data: string;
@@ -1087,6 +1101,11 @@ export interface OsPublicaResposta {
 }
 
 export interface VendaPublica {
+  tipo?: TipoVenda;
+  validade?: string | null;
+  aprovadoEm?: string | null;
+  expirado?: boolean;
+  podeAprovar?: boolean;
   numero: number;
   cliente?: string | null;
   data: string;

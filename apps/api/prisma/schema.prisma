@@ -406,7 +406,7 @@ model ContaFinanceira {
 
 model Situacao {
   id           Int     @id @default(autoincrement())
-  /// VENDA | COMPRA | OS
+  /// VENDA | COMPRA | OS | ORCAMENTO
   modulo       String
   nome         String
   cor          String  @default("#64748b")
@@ -472,8 +472,20 @@ model HistoricoSituacao {
 
 model Venda {
   id                    Int                  @id @default(autoincrement())
-  numero                Int                  @unique
+  /// PEDIDO (venda) | ORCAMENTO (proposta: não movimenta estoque/financeiro; vira venda ao converter)
+  tipo                  String               @default("PEDIDO")
+  /// numeração separada por tipo (sequências VENDA e ORCAMENTO)
+  numero                Int
   data                  DateTime             @default(now())
+  /// orçamento: válido até
+  validade              DateTime?
+  /// orçamento: aprovação do cliente (pela tela, pelo link público ou pelo WhatsApp)
+  aprovadoEm            DateTime?
+  aprovadoPor           String?
+  /// venda gerada a partir deste orçamento / orçamento que originou esta venda
+  orcamento             Venda?               @relation("OrcamentoVenda", fields: [orcamentoId], references: [id])
+  orcamentoId           Int?                 @unique
+  vendaGerada           Venda?               @relation("OrcamentoVenda")
   dataPrevista          DateTime?
   dataSaida             DateTime?
   contato               Contato              @relation("VendaContato", fields: [contatoId], references: [id])
@@ -519,6 +531,7 @@ model Venda {
   parcelas  VendaParcela[]
   comissoes Comissao[]
 
+  @@unique([tipo, numero])
   @@index([data])
   @@index([contatoId])
   @@index([situacaoId])

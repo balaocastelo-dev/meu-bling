@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { ChevronDown, LogOut, Menu, MessageCircle, Package, Plus, Search, ShoppingBag, ShoppingCart, UserPlus, Wrench } from 'lucide-react';
+import { ChevronDown, LogOut, Menu, MessageCircle, Package, Plus, Search, ShoppingBag, ShoppingCart, UserPlus, Wrench, FileSignature } from 'lucide-react';
 import { useAuth } from '@/stores/auth';
 import { api } from '@/lib/api';
 import { useWhatsappStatus } from '@/hooks/useEmpresa';
@@ -35,6 +35,7 @@ export function Topbar({ onAbrirMenu, onAbrirBusca }: { onAbrirMenu: () => void;
   const ehMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
   const novos = [
     { rotulo: 'Pedido de venda', para: '/vendas/nova', icone: ShoppingCart },
+    { rotulo: 'Orçamento', para: '/orcamentos/novo', icone: FileSignature },
     { rotulo: 'Ordem de serviço', para: '/ordens-servico/nova', icone: Wrench },
     { rotulo: 'Pedido de compra', para: '/compras/nova', icone: ShoppingBag },
     { rotulo: 'Cliente', para: '/contatos/novo', icone: UserPlus },

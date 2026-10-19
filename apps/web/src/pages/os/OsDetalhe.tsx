@@ -370,7 +370,7 @@ export default function OsDetalhe() {
         </div>
       )}
 
-      <NotificarModal aberto={notificar} onFechar={() => setNotificar(false)} caminho={`/ordens-servico/${os.id}`} eventoTemplate="OS_SITUACAO" destinatarios={{ email: contato?.email, celular: contato?.celular }} />
+      <NotificarModal aberto={notificar} onFechar={() => setNotificar(false)} caminho={`/ordens-servico/${os.id}`} eventoTemplate="OS_SITUACAO" eventosExtras={["OS_CRIADA", "ORCAMENTO_OS"]} destinatarios={{ email: contato?.email, celular: contato?.celular }} />
       <ConfirmDialog aberto={excluir} onFechar={() => setExcluir(false)} titulo="Excluir OS?" descricao={`A OS nº ${os.numero} será removida.`} textoConfirmar="Excluir" onConfirmar={async () => { try { await api.del(`/ordens-servico/${id}`); toast.success('OS excluída.'); invalidar(); nav('/ordens-servico'); } catch (e) { toast.error(mensagemErro(e)); } }} />
     </div>
   );

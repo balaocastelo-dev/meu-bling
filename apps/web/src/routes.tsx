@@ -110,6 +110,10 @@ export const router = createBrowserRouter(
       { path: 'vendas/nova', element: S(<VendaForm />) },
       { path: 'vendas/:id', element: S(<VendaDetalhe />) },
       { path: 'vendas/:id/editar', element: S(<VendaForm />) },
+      { path: 'orcamentos', element: S(<VendasLista tipo="ORCAMENTO" />) },
+      { path: 'orcamentos/novo', element: S(<VendaForm tipo="ORCAMENTO" />) },
+      { path: 'orcamentos/:id', element: S(<VendaDetalhe />) },
+      { path: 'orcamentos/:id/editar', element: S(<VendaForm tipo="ORCAMENTO" />) },
 
       { path: 'compras', element: FIN(<ComprasLista />) },
       { path: 'compras/nova', element: FIN(<CompraForm />) },

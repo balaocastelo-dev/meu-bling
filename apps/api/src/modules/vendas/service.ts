@@ -4,16 +4,25 @@
  */
 import { prisma, type Tx } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
-import { arredondar, competenciaDe } from '../../lib/util.js';
-import { historico, situacoesPermitidas, type ContextoAcao } from '../../core/situacoes.js';
+import { arredondar, competenciaDe, proximoNumero } from '../../lib/util.js';
+import { historico, mudarSituacao, situacaoInicial, situacoesPermitidas, type ContextoAcao, type Modulo } from '../../core/situacoes.js';
 import { linkPublico, tokenPublico } from '../publico/token.js';
 import { depositoPadraoId, liberarReservas, movimentarEstoque, movimentaEstoque, reservarItens, reservasAtivas } from '../comum/estoque.js';
 import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, recriarComissoes } from '../comum/financeiro.js';
 import { criarNotaPendente } from '../comum/nfe.js';
 import { hojeMeioDia } from '../comum/datas.js';
-import type { ItemInput, ParcelaInput, VendaInput } from './schemas.js';
+import type { ItemInput, ParcelaInput, TipoVenda, VendaInput } from './schemas.js';
 
 type Db = Tx | typeof prisma;
+
+/** Módulo do motor de situações conforme o tipo do registro (orçamento tem situações próprias). */
+export function moduloDe(tipo: string): Modulo {
+  return tipo === 'ORCAMENTO' ? 'ORCAMENTO' : 'VENDA';
+}
+/** Nome da sequência de numeração por tipo. */
+export function sequenciaDe(tipo: TipoVenda | string) {
+  return tipo === 'ORCAMENTO' ? 'ORCAMENTO' : 'VENDA';
+}
 
 // ---------------------------------------------------------------- includes
 export const includeLista = {
@@ -38,6 +47,8 @@ export const includeCompleto = {
     },
   },
   comissoes: { include: { vendedor: { select: { id: true, nome: true } } } },
+  orcamento: { select: { id: true, numero: true } },
+  vendaGerada: { select: { id: true, numero: true } },
 } as const;
 
 export async function carregarVenda(db: Db, id: number) {
@@ -49,7 +60,8 @@ export async function carregarVenda(db: Db, id: number) {
 /** Venda completa + histórico + situações permitidas (resposta de GET /vendas/:id). */
 export async function vendaCompleta(id: number) {
   const v = await carregarVenda(prisma, id);
-  const [hist, permitidas] = await Promise.all([historico('VENDA', id), situacoesPermitidas('VENDA', v.situacaoId)]);
+  const modulo = moduloDe(v.tipo);
+  const [hist, permitidas] = await Promise.all([historico(modulo, id), situacoesPermitidas(modulo, v.situacaoId)]);
   return { ...v, historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
 }
 
@@ -176,6 +188,173 @@ export async function prepararVenda(db: Db, body: VendaInput) {
   const data = body.data || hojeMeioDia();
   const parcelas = await montarParcelas(db, body.parcelas, totais.total, data);
   return { contato, itens, totais, parcelas, data };
+}
+
+/** Orçamento não movimenta estoque/financeiro nem emite nota: lança 422 se tentarem. */
+export function exigirPedido(v: { tipo: string }, acao: string) {
+  if (v.tipo === 'ORCAMENTO') throw new AppError(`Orçamento não pode ${acao}. Converta em venda primeiro.`, 422, 'ORCAMENTO');
+}
+
+// ---------------------------------------------------------------- cópia (clonar / converter orçamento)
+/**
+ * Cria um novo registro copiando itens e parcelas de `orig` (custos atualizados pelo produto, vencimentos
+ * deslocados a partir de hoje). Usado por "Clonar" e por "Converter orçamento em venda".
+ */
+export async function copiarVenda(
+  tx: Tx,
+  orig: Awaited<ReturnType<typeof carregarVenda>>,
+  opts: { tipo: TipoVenda; situacaoId?: number | null; usuarioId: number | null; observacoesInternas: string; orcamentoId?: number | null; validade?: Date | null; historicoObs: string },
+) {
+  const modulo = moduloDe(opts.tipo);
+  const situacao = opts.situacaoId
+    ? await tx.situacao.findFirst({ where: { id: opts.situacaoId, modulo, ativo: true } })
+    : await situacaoInicial(modulo, tx);
+  if (!situacao) throw new AppError('Situação inválida.', 422, 'SITUACAO');
+  const numero = await proximoNumero(sequenciaDe(opts.tipo), tx);
+  const hoje = hojeMeioDia();
+  const produtos = await tx.produto.findMany({ where: { id: { in: orig.itens.map((i) => i.produtoId).filter((x): x is number => !!x) } } });
+  const custo = new Map(produtos.map((p) => [p.id, p.precoCusto]));
+  const itens = orig.itens.map((i) => ({
+    produtoId: i.produtoId,
+    codigo: i.codigo,
+    descricao: i.descricao,
+    unidade: i.unidade,
+    quantidade: i.quantidade,
+    valorUnitario: i.valorUnitario,
+    desconto: i.desconto,
+    total: i.total,
+    custoUnitario: i.produtoId ? custo.get(i.produtoId) ?? i.custoUnitario : i.custoUnitario,
+    comissaoPct: i.comissaoPct,
+    comissaoValor: i.comissaoValor,
+    ordem: i.ordem,
+  }));
+  const custoTotal = arredondar(itens.reduce((s, i) => s + i.custoUnitario * i.quantidade, 0));
+  const primeira = orig.parcelas[0]?.dataVencimento ? new Date(orig.parcelas[0].dataVencimento) : new Date(orig.data);
+  const parcelas = orig.parcelas.map((p) => {
+    const venc = new Date(hoje);
+    venc.setDate(venc.getDate() + Math.max(0, Math.round((new Date(p.dataVencimento).getTime() - primeira.getTime()) / 86400000)));
+    return { numero: p.numero, dataVencimento: venc, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes };
+  });
+  const v = await tx.venda.create({
+    data: {
+      tipo: opts.tipo,
+      numero,
+      data: hoje,
+      validade: opts.validade ?? null,
+      contatoId: orig.contatoId,
+      vendedorId: orig.vendedorId,
+      situacaoId: situacao.id,
+      depositoId: orig.depositoId,
+      categoriaFinanceiraId: orig.categoriaFinanceiraId,
+      origem: orig.origem,
+      totalProdutos: orig.totalProdutos,
+      descontoTipo: orig.descontoTipo,
+      descontoValor: orig.descontoValor,
+      frete: orig.frete,
+      outrasDespesas: orig.outrasDespesas,
+      total: orig.total,
+      custoTotal,
+      observacoes: orig.observacoes,
+      observacoesInternas: opts.observacoesInternas,
+      transportadoraId: orig.transportadoraId,
+      fretePorConta: orig.fretePorConta,
+      quantidadeVolumes: orig.quantidadeVolumes,
+      pesoBruto: orig.pesoBruto,
+      orcamentoId: opts.orcamentoId ?? null,
+      itens: { create: itens },
+      parcelas: { create: parcelas },
+    },
+  });
+  await tx.historicoSituacao.create({
+    data: { entidadeTipo: modulo, entidadeId: v.id, paraSituacaoId: situacao.id, paraSituacao: situacao.nome, usuarioId: opts.usuarioId, observacao: opts.historicoObs },
+  });
+  return { venda: v, situacao };
+}
+
+// ---------------------------------------------------------------- orçamento: aprovar / converter
+async function situacaoPorNome(modulo: Modulo, nome: string, db: Db = prisma) {
+  return db.situacao.findFirst({ where: { modulo, nome, ativo: true } });
+}
+
+/**
+ * Marca o orçamento como aprovado pelo cliente (tela, link público ou resposta "APROVAR" no WhatsApp)
+ * e move para a situação "Aprovado" (se existir). Idempotente.
+ */
+export async function aprovarOrcamento(id: number, p: { aprovadoPor?: string | null; observacao?: string | null; usuarioId: number | null }) {
+  const v = await prisma.venda.findUnique({ where: { id }, include: { situacao: true, vendaGerada: { select: { id: true, numero: true } } } });
+  if (!v) throw new NotFound('Orçamento');
+  if (v.tipo !== 'ORCAMENTO') throw new AppError('Este registro não é um orçamento.', 422, 'NAO_ORCAMENTO');
+  if (v.vendaGerada) return { jaAprovado: true, convertido: true, vendaGerada: v.vendaGerada, situacao: v.situacao };
+  if (v.situacao.cancelamento) throw new AppError(`Orçamento ${v.situacao.nome.toLowerCase()}: reabra-o antes de aprovar.`, 422, 'ORCAMENTO_FECHADO');
+  if (v.aprovadoEm) return { jaAprovado: true, convertido: false, vendaGerada: null, situacao: v.situacao };
+  await prisma.venda.update({ where: { id }, data: { aprovadoEm: new Date(), aprovadoPor: p.aprovadoPor || null } });
+  let situacao = v.situacao;
+  const aprovado = await situacaoPorNome('ORCAMENTO', 'Aprovado');
+  if (aprovado && aprovado.id !== v.situacaoId) {
+    const r = await mudarSituacao({ modulo: 'ORCAMENTO', entidadeId: id, situacaoDestinoId: aprovado.id, usuarioId: p.usuarioId, forcar: true, observacao: `Aprovado${p.aprovadoPor ? ' por ' + p.aprovadoPor : ''}${p.observacao ? ': ' + p.observacao : ''}` });
+    situacao = r.situacao;
+  }
+  return { jaAprovado: false, convertido: false, vendaGerada: null, situacao };
+}
+
+/**
+ * Converte o orçamento em pedido de venda: cria a venda (tipo PEDIDO) com os mesmos itens/parcelas,
+ * vincula (venda.orcamentoId) e move o orçamento para "Convertido em venda". Só uma vez por orçamento.
+ */
+export async function converterOrcamento(id: number, p: { usuarioId: number | null; situacaoId?: number | null }) {
+  const orig = await carregarVenda(prisma, id);
+  if (orig.tipo !== 'ORCAMENTO') throw new AppError('Este registro não é um orçamento.', 422, 'NAO_ORCAMENTO');
+  if (orig.vendaGerada) throw new AppError(`Este orçamento já virou a venda nº ${orig.vendaGerada.numero}.`, 422, 'JA_CONVERTIDO', { vendaId: orig.vendaGerada.id });
+  if (orig.situacao.cancelamento) throw new AppError(`Orçamento ${orig.situacao.nome.toLowerCase()}: reabra-o antes de converter.`, 422, 'ORCAMENTO_FECHADO');
+  const { venda, situacao } = await prisma.$transaction(async (tx) => {
+    const r = await copiarVenda(tx, orig, {
+      tipo: 'PEDIDO',
+      situacaoId: p.situacaoId,
+      usuarioId: p.usuarioId,
+      observacoesInternas: [orig.observacoesInternas, `Gerada do orçamento nº ${orig.numero}`].filter(Boolean).join('\n'),
+      orcamentoId: orig.id,
+      historicoObs: `Venda gerada do orçamento nº ${orig.numero}`,
+    });
+    if (!orig.aprovadoEm) await tx.venda.update({ where: { id }, data: { aprovadoEm: new Date(), aprovadoPor: 'Conversão em venda' } });
+    return r;
+  });
+  const convertido = await situacaoPorNome('ORCAMENTO', 'Convertido em venda');
+  if (convertido && convertido.id !== orig.situacaoId) {
+    await mudarSituacao({ modulo: 'ORCAMENTO', entidadeId: id, situacaoDestinoId: convertido.id, usuarioId: p.usuarioId, forcar: true, observacao: `Convertido na venda nº ${venda.numero}` });
+  }
+  return { venda, situacao };
+}
+
+// ---------------------------------------------------------------- transferir vendedor
+/**
+ * Troca o vendedor do pedido. Se as contas já foram lançadas, refaz as comissões pendentes para o novo
+ * vendedor (comissão já PAGA bloqueia) e atualiza o vendedor das contas a receber.
+ */
+export async function transferirVendedor(id: number, vendedorId: number | null, usuarioId: number | null) {
+  const v = await prisma.venda.findUnique({ where: { id }, include: { itens: true, vendedor: true, situacao: true } });
+  if (!v) throw new NotFound('Venda');
+  const novo = vendedorId ? await prisma.vendedor.findUnique({ where: { id: vendedorId } }) : null;
+  if (vendedorId && !novo) throw new AppError('Vendedor não encontrado.', 422, 'VENDEDOR');
+  if (v.vendedorId === vendedorId) return { venda: v, alterado: false };
+  await prisma.$transaction(async (tx) => {
+    await tx.venda.update({ where: { id }, data: { vendedorId } });
+    await tx.contaReceber.updateMany({ where: { origemTipo: 'VENDA', origemId: id }, data: { vendedorId } });
+    if (v.contasLancadas && v.tipo === 'PEDIDO') {
+      const competencia = competenciaDe(v.data);
+      const base = arredondar(v.itens.reduce((s, i) => s + (i.comissaoPct > 0 ? i.total : 0), 0));
+      const valor = arredondar(v.itens.reduce((s, i) => s + i.comissaoValor, 0));
+      const pct = base > 0 ? arredondar((valor / base) * 100, 4) : 0;
+      if (vendedorId) {
+        await recriarComissoes(tx, { origemTipo: 'VENDA', vendaId: id }, competencia, [{ tipo: 'VENDEDOR', vendedorId, descricao: `Venda nº ${v.numero}`, base, pct, valor }]);
+      } else {
+        await cancelarComissoes(tx, { origemTipo: 'VENDA', vendaId: id });
+      }
+    }
+    await tx.historicoSituacao.create({
+      data: { entidadeTipo: moduloDe(v.tipo), entidadeId: id, deSituacaoId: v.situacaoId, deSituacao: v.situacao.nome, paraSituacaoId: v.situacaoId, paraSituacao: v.situacao.nome, usuarioId, observacao: `Vendedor alterado: ${v.vendedor?.nome || 'nenhum'} → ${novo?.nome || 'nenhum'}` },
+    });
+  });
+  return { venda: await prisma.venda.findUnique({ where: { id } }), alterado: true };
 }
 
 // ---------------------------------------------------------------- AÇÕES (motor de situações)

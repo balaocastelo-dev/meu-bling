@@ -1,5 +1,7 @@
 /**
- * Vendas (pedidos) — módulo completo conforme docs/API.md.
+ * Vendas (pedidos) e orçamentos — módulo completo conforme docs/API.md.
+ * Orçamento = Venda com tipo ORCAMENTO: numeração e situações próprias (módulo ORCAMENTO do motor),
+ * nunca movimenta estoque/financeiro nem emite nota; "converter" gera a venda vinculada.
  */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -20,28 +22,39 @@ import {
   acaoLancarEstoque,
   acaoLiberarReserva,
   acaoReservarEstoque,
+  aprovarOrcamento,
   carregarVenda,
+  converterOrcamento,
+  copiarVenda,
+  exigirPedido,
   gerarNfeDaVenda,
   gerarParcelas,
   includeLista,
+  moduloDe,
   prepararVenda,
+  sequenciaDe,
   temReserva,
+  transferirVendedor,
   vendaCompleta,
 } from './service.js';
-import { acoesBody, CAMPOS_LIVRES, gerarNfeBody, gerarParcelasBody, listaQuery, notificarBody, situacaoBody, vendaSchema } from './schemas.js';
+import { acoesBody, aprovarBody, CAMPOS_LIVRES, converterBody, gerarNfeBody, gerarParcelasBody, listaQuery, notificarBody, situacaoBody, transferirVendedorBody, vendaSchema } from './schemas.js';
 import { htmlVenda } from './imprimir.js';
+import { gravarPdfVenda, nomeArquivoPdf, pdfVenda } from './pdf.js';
 
 // ---------------------------------------------------------------- motor de situações
-registrarModulo('VENDA', {
-  obterSituacaoId: async (id, tx) => {
+const adaptadorVenda = {
+  obterSituacaoId: async (id: number, tx: any) => {
     const v = await tx.venda.findUnique({ where: { id }, select: { situacaoId: true } });
     if (!v) throw new NotFound('Venda');
-    return v.situacaoId;
+    return v.situacaoId as number;
   },
-  gravarSituacao: async (id, situacaoId, tx) => {
+  gravarSituacao: async (id: number, situacaoId: number, tx: any) => {
     await tx.venda.update({ where: { id }, data: { situacaoId } });
   },
-});
+};
+registrarModulo('VENDA', adaptadorVenda);
+// orçamento: mesma tabela, situações próprias e nenhuma ação de estoque/financeiro registrada
+registrarModulo('ORCAMENTO', adaptadorVenda);
 registrarAcao('VENDA', 'lancarEstoque', acaoLancarEstoque);
 registrarAcao('VENDA', 'estornarEstoque', acaoEstornarEstoque);
 registrarAcao('VENDA', 'lancarContas', acaoLancarContas);
@@ -55,6 +68,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
   app.get('/api/v1/vendas', async (req) => {
     const q = listaQuery.parse(req.query);
     const where: any = {
+      tipo: q.tipo === 'TODOS' ? undefined : q.tipo,
       contatoId: q.contatoId,
       vendedorId: q.vendedorId,
       origem: q.origem,
@@ -78,8 +92,10 @@ export default async function vendasRoutes(app: FastifyInstance) {
         ...paginar(q),
         orderBy,
         select: {
-          id: true, numero: true, data: true, dataPrevista: true, origem: true, total: true, totalProdutos: true, notaId: true,
-          estoqueLancado: true, contasLancadas: true, numeroPedidoLoja: true, criadoEm: true,
+          id: true, tipo: true, numero: true, data: true, dataPrevista: true, validade: true, aprovadoEm: true, origem: true, total: true, totalProdutos: true, notaId: true,
+          estoqueLancado: true, contasLancadas: true, numeroPedidoLoja: true, criadoEm: true, vendedorId: true,
+          vendaGerada: { select: { id: true, numero: true } },
+          orcamento: { select: { id: true, numero: true } },
           ...includeLista,
         },
       }),
@@ -94,19 +110,28 @@ export default async function vendasRoutes(app: FastifyInstance) {
   // ---------------------------------------------------------------- criar
   app.post('/api/v1/vendas', async (req, reply) => {
     const body = vendaSchema.parse(req.body);
+    const modulo = moduloDe(body.tipo);
     // vendedor padrão = vendedor vinculado ao usuário logado (define a comissão default dos itens)
     if (body.vendedorId === undefined && req.user.vendedorId) body.vendedorId = req.user.vendedorId;
     const venda = await prisma.$transaction(async (tx) => {
       const { itens, totais, parcelas, data } = await prepararVenda(tx, body);
       const situacao = body.situacaoId
-        ? await tx.situacao.findFirst({ where: { id: body.situacaoId, modulo: 'VENDA', ativo: true } })
-        : await situacaoInicial('VENDA', tx);
-      if (!situacao) throw new AppError('Situação inválida para vendas.', 422, 'SITUACAO');
-      const numero = await proximoNumero('VENDA', tx);
+        ? await tx.situacao.findFirst({ where: { id: body.situacaoId, modulo, ativo: true } })
+        : await situacaoInicial(modulo, tx);
+      if (!situacao) throw new AppError(`Situação inválida para ${body.tipo === 'ORCAMENTO' ? 'orçamentos' : 'vendas'}.`, 422, 'SITUACAO');
+      const numero = await proximoNumero(sequenciaDe(body.tipo), tx);
+      // orçamento sem validade informada: 7 dias a partir da data
+      let validade = body.validade ?? null;
+      if (body.tipo === 'ORCAMENTO' && !validade) {
+        validade = new Date(data);
+        validade.setDate(validade.getDate() + 7);
+      }
       const v = await tx.venda.create({
         data: {
+          tipo: body.tipo,
           numero,
           data,
+          validade: body.tipo === 'ORCAMENTO' ? validade : null,
           dataPrevista: body.dataPrevista,
           dataSaida: body.dataSaida,
           contatoId: body.contatoId,
@@ -134,18 +159,20 @@ export default async function vendasRoutes(app: FastifyInstance) {
         },
       });
       await tx.historicoSituacao.create({
-        data: { entidadeTipo: 'VENDA', entidadeId: v.id, paraSituacaoId: situacao.id, paraSituacao: situacao.nome, usuarioId: req.user.id, observacao: 'Venda criada' },
+        data: { entidadeTipo: modulo, entidadeId: v.id, paraSituacaoId: situacao.id, paraSituacao: situacao.nome, usuarioId: req.user.id, observacao: body.tipo === 'ORCAMENTO' ? 'Orçamento criado' : 'Venda criada' },
       });
       return v;
     });
 
-    // ações da situação inicial escolhida (ex.: criar já "Em aberto" reserva estoque)
-    const sit = await prisma.situacao.findUnique({ where: { id: venda.situacaoId } });
-    const acoesIniciais = sit ? (JSON.parse(sit.acoes || '[]') as Acao[]).filter((a) => a !== 'notificarCliente') : [];
-    if (acoesIniciais.length) await executarAcoes('VENDA', venda.id, acoesIniciais, req.user.id);
+    // ações da situação inicial escolhida (ex.: criar já "Em aberto" reserva estoque) — orçamento não tem ações
+    if (body.tipo === 'PEDIDO') {
+      const sit = await prisma.situacao.findUnique({ where: { id: venda.situacaoId } });
+      const acoesIniciais = sit ? (JSON.parse(sit.acoes || '[]') as Acao[]).filter((a) => a !== 'notificarCliente') : [];
+      if (acoesIniciais.length) await executarAcoes('VENDA', venda.id, acoesIniciais, req.user.id);
+      eventos.emitir('venda.criada', { vendaId: venda.id, usuarioId: req.user.id });
+    }
 
-    await auditar(req, 'Venda', venda.id, 'CRIAR', { numero: venda.numero, total: venda.total });
-    eventos.emitir('venda.criada', { vendaId: venda.id, usuarioId: req.user.id });
+    await auditar(req, body.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', venda.id, 'CRIAR', { numero: venda.numero, total: venda.total });
     return reply.code(201).send(await vendaCompleta(venda.id));
   });
 
@@ -210,6 +237,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
         where: { id },
         data: {
           data,
+          validade: atual.tipo === 'ORCAMENTO' ? body.validade ?? atual.validade : null,
           dataPrevista: body.dataPrevista,
           dataSaida: body.dataSaida,
           contatoId: body.contatoId,
@@ -256,14 +284,16 @@ export default async function vendasRoutes(app: FastifyInstance) {
     await prisma.$transaction(async (tx) => {
       await acaoLiberarReserva({ modulo: 'VENDA', entidadeId: id, tx, usuarioId: req.user.id, situacaoOrigemId: v.situacaoId, situacaoDestinoId: v.situacaoId });
       await tx.comissao.deleteMany({ where: { vendaId: id, status: { not: 'PAGA' } } });
-      await tx.historicoSituacao.deleteMany({ where: { entidadeTipo: 'VENDA', entidadeId: id } });
+      await tx.historicoSituacao.deleteMany({ where: { entidadeTipo: moduloDe(v.tipo), entidadeId: id } });
+      // venda gerada de um orçamento: desvincula (o orçamento fica no histórico)
+      await tx.venda.updateMany({ where: { orcamentoId: id }, data: { orcamentoId: null } });
       if (v.notaId) {
         await tx.venda.update({ where: { id }, data: { notaId: null } });
         if (v.nota && v.nota.situacao === 'PENDENTE') await tx.notaFiscal.delete({ where: { id: v.notaId } });
       }
       await tx.venda.delete({ where: { id } });
     });
-    await auditar(req, 'Venda', id, 'EXCLUIR', { numero: v.numero });
+    await auditar(req, v.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', id, 'EXCLUIR', { numero: v.numero });
     return { ok: true };
   });
 
@@ -272,7 +302,9 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const id = idDe(req);
     const body = situacaoBody.parse(req.body);
     if (body.forcar && req.user.perfil !== 'ADMIN' && req.user.perfil !== 'GERENTE') throw new AppError('Somente ADMIN/GERENTE pode forçar transições.', 403, 'SEM_PERMISSAO');
-    const r = await mudarSituacao({ modulo: 'VENDA', entidadeId: id, situacaoDestinoId: body.situacaoId, usuarioId: req.user.id, observacao: body.observacao, forcar: body.forcar });
+    const atual = await prisma.venda.findUnique({ where: { id }, select: { tipo: true } });
+    if (!atual) throw new NotFound('Venda');
+    const r = await mudarSituacao({ modulo: moduloDe(atual.tipo), entidadeId: id, situacaoDestinoId: body.situacaoId, usuarioId: req.user.id, observacao: body.observacao, forcar: body.forcar });
     await auditar(req, 'Venda', id, 'SITUACAO', { para: r.situacao.nome, acoes: r.acoes });
     return { situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor }, acoesExecutadas: r.acoes, alterado: r.alterado };
   });
@@ -280,6 +312,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
   app.post('/api/v1/vendas/:id/acoes', async (req) => {
     const id = idDe(req);
     const body = acoesBody.parse(req.body);
+    exigirPedido(await carregarVenda(prisma, id), 'lançar estoque/contas');
     await executarAcoes('VENDA', id, body.acoes as Acao[], req.user.id);
     await auditar(req, 'Venda', id, 'ACAO', { acoes: body.acoes });
     const v = await vendaCompleta(id);
@@ -290,6 +323,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
   app.post('/api/v1/vendas/:id/gerar-nfe', async (req, reply) => {
     const id = idDe(req);
     const body = gerarNfeBody.parse(req.body || {});
+    exigirPedido(await carregarVenda(prisma, id), 'emitir nota fiscal');
     const nota = await prisma.$transaction((tx) => gerarNfeDaVenda(tx, id, body.modelo as 55 | 65, body.informacoesComplementares));
     await auditar(req, 'Venda', id, 'ACAO', { acao: 'gerarNfe', notaId: nota.id, modelo: body.modelo });
     return reply.code(201).send({ notaId: nota.id, numero: nota.numero, serie: nota.serie, modelo: nota.modelo, situacao: nota.situacao });
@@ -310,7 +344,13 @@ export default async function vendasRoutes(app: FastifyInstance) {
       contato: v.contato,
       itens: v.itens.map((i) => ({ descricao: i.descricao, quantidade: i.quantidade, total: i.total })),
       vendedor: v.vendedor?.nome,
+      validade: v.validade,
+      tipoDocumento: v.tipo === 'ORCAMENTO' ? 'Orçamento' : 'Pedido',
     });
+    // anexo: pedido pelo usuário ou pelo template (anexarPdf) → gera/atualiza o PDF em storage/pedidos
+    let anexoPath: string | null = null;
+    const template = body.templateId ? await prisma.templateNotificacao.findUnique({ where: { id: body.templateId } }) : null;
+    if (body.anexarPdf || template?.anexarPdf) anexoPath = await gravarPdfVenda(v);
     const n = await enfileirarNotificacao({
       canal: body.canal,
       templateId: body.templateId,
@@ -321,8 +361,14 @@ export default async function vendasRoutes(app: FastifyInstance) {
       contatoId: v.contatoId,
       contato: v.contato,
       vars,
+      anexoPath,
     });
-    await auditar(req, 'Venda', id, 'ACAO', { acao: 'notificar', canal: body.canal, notificacaoId: n.id });
+    // orçamento "Em aberto" enviado ao cliente → situação "Enviado" (quando a transição existe)
+    if (v.tipo === 'ORCAMENTO' && v.situacao.nome === 'Em aberto') {
+      const enviado = await prisma.situacao.findFirst({ where: { modulo: 'ORCAMENTO', nome: 'Enviado', ativo: true } });
+      if (enviado) await mudarSituacao({ modulo: 'ORCAMENTO', entidadeId: id, situacaoDestinoId: enviado.id, usuarioId: req.user.id, forcar: true, observacao: `Enviado por ${body.canal === 'EMAIL' ? 'e-mail' : 'WhatsApp'}` }).catch(() => undefined);
+    }
+    await auditar(req, v.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', id, 'ACAO', { acao: 'notificar', canal: body.canal, notificacaoId: n.id, anexo: !!anexoPath });
     return reply.code(201).send(n);
   });
 
@@ -332,73 +378,64 @@ export default async function vendasRoutes(app: FastifyInstance) {
     return reply.type('text/html; charset=utf-8').send(await htmlVenda(v));
   });
 
-  // ---------------------------------------------------------------- duplicar
+  // PDF do pedido/orçamento (mesmo conteúdo da impressão) — ?download=1 força o download
+  app.get('/api/v1/vendas/:id/pdf', async (req, reply) => {
+    const v = await carregarVenda(prisma, idDe(req));
+    const download = String((req.query as any)?.download || '') === '1';
+    const buf = await pdfVenda(v);
+    return reply
+      .type('application/pdf')
+      .header('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename="${nomeArquivoPdf(v)}"`)
+      .send(buf);
+  });
+
+  // ---------------------------------------------------------------- orçamento: aprovar / converter em venda
+  app.post('/api/v1/vendas/:id/aprovar', async (req) => {
+    const id = idDe(req);
+    const body = aprovarBody.parse(req.body || {});
+    const r = await aprovarOrcamento(id, { aprovadoPor: body.aprovadoPor || req.user.nome, observacao: body.observacao, usuarioId: req.user.id });
+    await auditar(req, 'Orcamento', id, 'ACAO', { acao: 'aprovar', aprovadoPor: body.aprovadoPor || req.user.nome });
+    return { ok: true, ...r, orcamento: await vendaCompleta(id) };
+  });
+
+  app.post('/api/v1/vendas/:id/converter', async (req, reply) => {
+    const id = idDe(req);
+    const body = converterBody.parse(req.body || {});
+    const { venda, situacao } = await converterOrcamento(id, { usuarioId: req.user.id, situacaoId: body.situacaoId });
+    // ações da situação inicial da venda gerada (ex.: "Em aberto" reserva estoque)
+    const acoesIniciais = (JSON.parse(situacao.acoes || '[]') as Acao[]).filter((a) => a !== 'notificarCliente');
+    if (acoesIniciais.length) await executarAcoes('VENDA', venda.id, acoesIniciais, req.user.id);
+    await auditar(req, 'Orcamento', id, 'ACAO', { acao: 'converter', vendaId: venda.id, numeroVenda: venda.numero });
+    eventos.emitir('venda.criada', { vendaId: venda.id, usuarioId: req.user.id });
+    return reply.code(201).send(await vendaCompleta(venda.id));
+  });
+
+  // ---------------------------------------------------------------- transferir para outro vendedor
+  app.post('/api/v1/vendas/:id/transferir-vendedor', async (req) => {
+    const id = idDe(req);
+    const body = transferirVendedorBody.parse(req.body);
+    // vendedor só repassa as próprias vendas (ou as sem vendedor); gestão transfere qualquer uma
+    if (req.user.perfil === 'VENDEDOR' || req.user.perfil === 'TECNICO') {
+      const v = await prisma.venda.findUnique({ where: { id }, select: { vendedorId: true } });
+      if (v && v.vendedorId && v.vendedorId !== req.user.vendedorId) throw new AppError('Você só pode transferir as suas próprias vendas.', 403, 'SEM_PERMISSAO');
+    }
+    const r = await transferirVendedor(id, body.vendedorId, req.user.id);
+    await auditar(req, 'Venda', id, 'ACAO', { acao: 'transferirVendedor', vendedorId: body.vendedorId, observacao: body.observacao });
+    return { ok: true, alterado: r.alterado, venda: await vendaCompleta(id) };
+  });
+
+  // ---------------------------------------------------------------- duplicar (clonar)
   app.post('/api/v1/vendas/:id/duplicar', async (req, reply) => {
     const id = idDe(req);
     const orig = await carregarVenda(prisma, id);
-    const nova = await prisma.$transaction(async (tx) => {
-      const situacao = await situacaoInicial('VENDA', tx);
-      const numero = await proximoNumero('VENDA', tx);
-      const hoje = hojeMeioDia();
-      // reaproveita preços da venda original, mas atualiza o custo pelo produto atual
-      const produtos = await tx.produto.findMany({ where: { id: { in: orig.itens.map((i) => i.produtoId).filter((x): x is number => !!x) } } });
-      const custo = new Map(produtos.map((p) => [p.id, p.precoCusto]));
-      const itens = orig.itens.map((i) => ({
-        produtoId: i.produtoId,
-        codigo: i.codigo,
-        descricao: i.descricao,
-        unidade: i.unidade,
-        quantidade: i.quantidade,
-        valorUnitario: i.valorUnitario,
-        desconto: i.desconto,
-        total: i.total,
-        custoUnitario: i.produtoId ? custo.get(i.produtoId) ?? i.custoUnitario : i.custoUnitario,
-        comissaoPct: i.comissaoPct,
-        comissaoValor: i.comissaoValor,
-        ordem: i.ordem,
-      }));
-      const custoTotal = itens.reduce((s, i) => s + i.custoUnitario * i.quantidade, 0);
-      // parcelas: mantém a estrutura, deslocando vencimentos a partir de hoje
-      const primeira = orig.parcelas[0]?.dataVencimento ? new Date(orig.parcelas[0].dataVencimento) : new Date(orig.data);
-      const parcelas = orig.parcelas.map((p) => {
-        const venc = new Date(hoje);
-        venc.setDate(venc.getDate() + Math.max(0, Math.round((new Date(p.dataVencimento).getTime() - primeira.getTime()) / 86400000)));
-        return { numero: p.numero, dataVencimento: venc, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes };
-      });
-      const v = await tx.venda.create({
-        data: {
-          numero,
-          data: hoje,
-          contatoId: orig.contatoId,
-          vendedorId: orig.vendedorId,
-          situacaoId: situacao.id,
-          depositoId: orig.depositoId,
-          categoriaFinanceiraId: orig.categoriaFinanceiraId,
-          origem: orig.origem,
-          totalProdutos: orig.totalProdutos,
-          descontoTipo: orig.descontoTipo,
-          descontoValor: orig.descontoValor,
-          frete: orig.frete,
-          outrasDespesas: orig.outrasDespesas,
-          total: orig.total,
-          custoTotal,
-          observacoes: orig.observacoes,
-          observacoesInternas: `Duplicada da venda nº ${orig.numero}`,
-          transportadoraId: orig.transportadoraId,
-          fretePorConta: orig.fretePorConta,
-          quantidadeVolumes: orig.quantidadeVolumes,
-          pesoBruto: orig.pesoBruto,
-          itens: { create: itens },
-          parcelas: { create: parcelas },
-        },
-      });
-      await tx.historicoSituacao.create({
-        data: { entidadeTipo: 'VENDA', entidadeId: v.id, paraSituacaoId: situacao.id, paraSituacao: situacao.nome, usuarioId: req.user.id, observacao: `Duplicada da venda nº ${orig.numero}` },
-      });
-      return v;
-    });
-    await auditar(req, 'Venda', nova.id, 'CRIAR', { duplicadaDe: orig.numero, numero: nova.numero });
-    eventos.emitir('venda.criada', { vendaId: nova.id, usuarioId: req.user.id });
+    const tipo = orig.tipo === 'ORCAMENTO' ? 'ORCAMENTO' : 'PEDIDO';
+    const rotulo = tipo === 'ORCAMENTO' ? 'orçamento' : 'venda';
+    const validade = tipo === 'ORCAMENTO' ? new Date(hojeMeioDia().getTime() + 7 * 86400000) : null;
+    const { venda: nova } = await prisma.$transaction((tx) =>
+      copiarVenda(tx, orig, { tipo, usuarioId: req.user.id, observacoesInternas: `Clonada do ${rotulo} nº ${orig.numero}`, validade, historicoObs: `Clonada do ${rotulo} nº ${orig.numero}` }),
+    );
+    await auditar(req, tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', nova.id, 'CRIAR', { duplicadaDe: orig.numero, numero: nova.numero });
+    if (tipo === 'PEDIDO') eventos.emitir('venda.criada', { vendaId: nova.id, usuarioId: req.user.id });
     return reply.code(201).send(await vendaCompleta(nova.id));
   });
 
@@ -431,6 +468,7 @@ function mesclarComAtual(atual: Awaited<ReturnType<typeof carregarVenda>>, body:
     data: atual.data,
     dataPrevista: atual.dataPrevista,
     dataSaida: atual.dataSaida,
+    validade: atual.validade,
     depositoId: atual.depositoId,
     origem: atual.origem,
     numeroPedidoLoja: atual.numeroPedidoLoja,
@@ -448,7 +486,7 @@ function mesclarComAtual(atual: Awaited<ReturnType<typeof carregarVenda>>, body:
     itens: atual.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct })),
     parcelas: atual.parcelas.map((p) => ({ dataVencimento: p.dataVencimento, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes })),
   };
-  const { situacaoId: _s, ...resto } = body;
+  const { situacaoId: _s, tipo: _t, ...resto } = body;
   for (const [k, v] of Object.entries(resto)) if (v !== undefined) base[k] = v;
   // se o total muda e as parcelas não foram enviadas, descarta as parcelas antigas (serão regeradas à vista)
   const mudaTotal = ['itens', 'descontoValor', 'descontoTipo', 'frete', 'outrasDespesas'].some((k) => resto[k] !== undefined);

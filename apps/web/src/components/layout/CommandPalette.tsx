@@ -65,8 +65,8 @@ export function CommandPalette({ aberto, onFechar }: { aberto: boolean; onFechar
         .then((r) => r.data.map((p) => ({ grupo: 'Produtos', id: 'p' + p.id, titulo: p.nome, sub: [p.codigo, moeda(p.preco), p.estoqueTotal !== undefined ? `estoque ${p.estoqueTotal}` : ''].filter(Boolean).join(' · '), para: `/produtos/${p.id}`, icone: <Package className="h-4 w-4" /> })))
         .catch(() => []),
       api
-        .get<Paginado<VendaResumo>>('/vendas', { pesquisa: t, limite: 5 })
-        .then((r) => r.data.map((v) => ({ grupo: 'Vendas', id: 'v' + v.id, titulo: `Venda nº ${v.numero}`, sub: `${v.contato?.nome ?? ''} · ${moeda(v.total)} · ${v.situacao?.nome ?? ''}`, para: `/vendas/${v.id}`, icone: <ShoppingCart className="h-4 w-4" /> })))
+        .get<Paginado<VendaResumo>>('/vendas', { pesquisa: t, limite: 6, tipo: 'TODOS' })
+        .then((r) => r.data.map((v) => ({ grupo: 'Vendas', id: 'v' + v.id, titulo: `${v.tipo === 'ORCAMENTO' ? 'Orçamento' : 'Venda'} nº ${v.numero}`, sub: `${v.contato?.nome ?? ''} · ${moeda(v.total)} · ${v.situacao?.nome ?? ''}`, para: `${v.tipo === 'ORCAMENTO' ? '/orcamentos' : '/vendas'}/${v.id}`, icone: <ShoppingCart className="h-4 w-4" /> })))
         .catch(() => []),
       api
         .get<Paginado<OsResumo>>('/ordens-servico', { pesquisa: t, limite: 5 })

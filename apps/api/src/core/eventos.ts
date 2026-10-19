@@ -6,7 +6,7 @@ import { EventEmitter } from 'node:events';
  */
 export interface EventosSistema {
   'situacao.alterada': {
-    modulo: 'VENDA' | 'COMPRA' | 'OS';
+    modulo: 'VENDA' | 'COMPRA' | 'OS' | 'ORCAMENTO';
     entidadeId: number;
     deSituacaoId: number | null;
     paraSituacaoId: number;

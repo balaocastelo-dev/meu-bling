@@ -1,5 +1,5 @@
 /**
- * HTML imprimível do pedido de venda (A4).
+ * HTML imprimível do pedido de venda / orçamento (A4).
  */
 import { cabecalhoEmpresa, dadosEmpresa, data, enderecoLinha, esc, formatarDocumento, formatarTelefone, moeda, paginaHtml, qtd } from '../comum/html.js';
 import { arredondar } from '../../lib/util.js';
@@ -10,6 +10,7 @@ type Venda = Awaited<ReturnType<typeof carregarVenda>>;
 export async function htmlVenda(v: Venda): Promise<string> {
   const emp = await dadosEmpresa();
   const c = v.contato;
+  const orcamento = v.tipo === 'ORCAMENTO';
   const descontoCalc = v.descontoTipo === 'PERCENTUAL' ? arredondar(v.totalProdutos * (v.descontoValor / 100)) : v.descontoValor;
 
   const itens = v.itens
@@ -35,7 +36,7 @@ export async function htmlVenda(v: Venda): Promise<string> {
         <td>${data(p.dataVencimento)}</td>
         <td>${esc(p.formaPagamento?.nome || '-')}</td>
         <td class="num">${moeda(p.valor)}</td>
-        <td>${p.contaReceber ? esc(p.contaReceber.situacao) : ''}</td>
+        <td>${p.contaReceber && v.tipo !== 'ORCAMENTO' ? esc(p.contaReceber.situacao) : ''}</td>
       </tr>`,
     )
     .join('');
@@ -44,9 +45,9 @@ export async function htmlVenda(v: Venda): Promise<string> {
   <div class="cabecalho">
     ${cabecalhoEmpresa(emp)}
     <div class="doc">
-      <div class="muted">PEDIDO DE VENDA</div>
+      <div class="muted">${orcamento ? 'ORÇAMENTO' : 'PEDIDO DE VENDA'}</div>
       <div class="numero">Nº ${v.numero}</div>
-      <div>Data: ${data(v.data)}${v.dataPrevista ? ' · Previsão: ' + data(v.dataPrevista) : ''}</div>
+      <div>Data: ${data(v.data)}${orcamento && v.validade ? ' · Válido até: ' + data(v.validade) : ''}${!orcamento && v.dataPrevista ? ' · Previsão: ' + data(v.dataPrevista) : ''}</div>
       <span class="sit" style="background:${esc(v.situacao.cor)}">${esc(v.situacao.nome)}</span>
       ${v.nota ? `<div class="muted" style="margin-top:4px">NF-e ${v.nota.numero}/${v.nota.serie} — ${esc(v.nota.situacao)}</div>` : ''}
     </div>
@@ -77,9 +78,9 @@ export async function htmlVenda(v: Venda): Promise<string> {
     <tr class="total"><td>TOTAL</td><td class="num">${moeda(v.total)}</td></tr>
   </table>
 
-  <h2>Pagamento</h2>
+  <h2>${orcamento ? 'Condições de pagamento' : 'Pagamento'}</h2>
   <table>
-    <thead><tr><th>Parcela</th><th>Vencimento</th><th>Forma</th><th class="num">Valor</th><th>Situação</th></tr></thead>
+    <thead><tr><th>Parcela</th><th>Vencimento</th><th>Forma</th><th class="num">Valor</th><th>${orcamento ? '' : 'Situação'}</th></tr></thead>
     <tbody>${parcelas}</tbody>
   </table>
 
@@ -97,13 +98,21 @@ export async function htmlVenda(v: Venda): Promise<string> {
 
   ${v.observacoes ? `<h2>Observações</h2><div class="obs">${esc(v.observacoes)}</div>` : ''}
 
+  ${
+    orcamento
+      ? `<p class="muted" style="margin-top:14px">Orçamento sem valor fiscal${v.validade ? `, válido até <b>${data(v.validade)}</b>` : ''}. Preços sujeitos à disponibilidade de estoque. Para aprovar, responda este orçamento ou use o link enviado por e-mail/WhatsApp.</p>
   <div class="assinatura">
+    <div style="flex:0 0 40%;border:none"></div>
+    <div>${esc(c.nome)}<br><span class="muted">De acordo (aprovação do orçamento)</span></div>
+  </div>`
+      : `<div class="assinatura">
     <div>${esc(emp.nome)}</div>
     <div>${esc(c.nome)}<br><span class="muted">Recebi os produtos acima descritos</span></div>
-  </div>
+  </div>`
+  }
   <div class="rodape">Documento sem valor fiscal. Emitido em ${data(new Date())} ${new Date().toLocaleTimeString('pt-BR')} — ${esc(emp.nome)}</div>`;
 
-  return paginaHtml(`Pedido de venda nº ${v.numero}`, corpo);
+  return paginaHtml(`${orcamento ? 'Orçamento' : 'Pedido de venda'} nº ${v.numero}`, corpo);
 }
 
 function fretePorConta(v: number) {

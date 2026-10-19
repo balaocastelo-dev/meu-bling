@@ -7,6 +7,7 @@ interface DateInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'va
   label?: string;
   erro?: string;
   obrigatorio?: boolean;
+  ajuda?: string;
   className?: string;
 }
 

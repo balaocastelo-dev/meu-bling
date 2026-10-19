@@ -87,7 +87,7 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
     prisma.situacao.findMany({ where: { modulo: 'OS', final: true, cancelamento: false }, select: { id: true } }),
   ]);
   const vendas = await prisma.venda.findMany({
-    where: { data: { gte: ini, lte: fim }, situacaoId: { in: sitVenda.map((s) => s.id) } },
+    where: { tipo: 'PEDIDO', data: { gte: ini, lte: fim }, situacaoId: { in: sitVenda.map((s) => s.id) } },
     select: { total: true, custoTotal: true, itens: { select: { custoUnitario: true, quantidade: true, produto: { select: { tipo: true } }, total: true } } },
   });
   for (const v of vendas) {

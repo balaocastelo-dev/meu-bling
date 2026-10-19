@@ -32,6 +32,8 @@ export async function variaveisTemplate(p: {
   defeito?: string | null;
   diagnostico?: string | null;
   garantiaDias?: number | null;
+  validade?: Date | null;
+  tipoDocumento?: string;
 }) {
   const emp = await prisma.empresa.findUnique({ where: { id: 1 } });
   return {
@@ -60,6 +62,8 @@ export async function variaveisTemplate(p: {
       email: emp?.email || '',
     },
     chave: '',
+    validade: p.validade ? formatarData(p.validade) : '',
+    tipoDocumento: p.tipoDocumento || (p.tipo === 'OS' ? 'Ordem de Serviço' : 'Pedido'),
     link: linkPublico(p.tipo === 'OS' ? 'os' : 'venda', p.id),
   };
 }
@@ -74,6 +78,8 @@ export async function enfileirarNotificacao(p: {
   contatoId: number;
   contato: { nome: string; email?: string | null; celular?: string | null };
   vars: Record<string, unknown>;
+  /** arquivo anexado (PDF do pedido/orçamento): e-mail = attachment; WhatsApp = documento */
+  anexoPath?: string | null;
 }) {
   const destinatario = p.canal === 'WHATSAPP' ? p.contato.celular : p.contato.email;
   if (!destinatario) {
@@ -97,7 +103,7 @@ export async function enfileirarNotificacao(p: {
     if (assunto) assunto = renderTemplate(assunto, p.vars);
   }
   if (p.canal === 'EMAIL' && !assunto) {
-    assunto = `${p.origemTipo === 'OS' ? 'Ordem de Serviço' : 'Pedido'} nº ${String(p.vars.numero ?? '')} — ${String((p.vars.empresa as any)?.nome ?? '')}`;
+    assunto = `${p.origemTipo === 'OS' ? 'Ordem de Serviço' : String(p.vars.tipoDocumento || 'Pedido')} nº ${String(p.vars.numero ?? '')} — ${String((p.vars.empresa as any)?.nome ?? '')}`;
   }
 
   return prisma.notificacao.create({
@@ -110,6 +116,7 @@ export async function enfileirarNotificacao(p: {
       origemTipo: p.origemTipo,
       origemId: p.origemId,
       contatoId: p.contatoId,
+      anexoPath: p.anexoPath ?? null,
     },
   });
 }

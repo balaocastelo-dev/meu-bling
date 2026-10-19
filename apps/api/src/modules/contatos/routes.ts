@@ -144,13 +144,13 @@ export default async function contatosRoutes(app: FastifyInstance) {
 
     const [vendasAgg, qtdOs, emAberto, ultima] = await Promise.all([
       prisma.venda.aggregate({
-        where: { contatoId: id, situacao: { cancelamento: false } },
+        where: { contatoId: id, tipo: 'PEDIDO', situacao: { cancelamento: false } },
         _sum: { total: true },
         _count: { id: true },
       }),
       prisma.ordemServico.count({ where: { contatoId: id } }),
       prisma.contaReceber.aggregate({ where: { contatoId: id, situacao: { in: ['ABERTO', 'PARCIAL'] } }, _sum: { valor: true, valorRecebido: true } }),
-      prisma.venda.findFirst({ where: { contatoId: id, situacao: { cancelamento: false } }, orderBy: { data: 'desc' }, select: { data: true } }),
+      prisma.venda.findFirst({ where: { contatoId: id, tipo: 'PEDIDO', situacao: { cancelamento: false } }, orderBy: { data: 'desc' }, select: { data: true } }),
     ]);
     return {
       ...c,
@@ -176,7 +176,7 @@ export default async function contatosRoutes(app: FastifyInstance) {
         where: { contatoId: id },
         orderBy: { data: 'desc' },
         take: limite,
-        select: { id: true, numero: true, data: true, total: true, situacao: { select: { id: true, nome: true, cor: true } } },
+        select: { id: true, tipo: true, numero: true, data: true, total: true, situacao: { select: { id: true, nome: true, cor: true } } },
       }),
       prisma.ordemServico.findMany({
         where: { contatoId: id },

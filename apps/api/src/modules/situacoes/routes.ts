@@ -1,5 +1,5 @@
 /**
- * Situações (motor de status) e transições — configuração por módulo (VENDA/COMPRA/OS).
+ * Situações (motor de status) e transições — configuração por módulo (VENDA/COMPRA/OS/ORCAMENTO).
  * `acoes` é JSON string no banco; aqui entra/sai como array.
  */
 import type { FastifyInstance } from 'fastify';
@@ -11,7 +11,7 @@ import { parseJsonArray } from '../../lib/util.js';
 import { ACOES_DISPONIVEIS, situacoesPermitidas, type Acao, type Modulo } from '../../core/situacoes.js';
 import { idDe } from '../comum/zod.js';
 
-const MODULOS = ['VENDA', 'COMPRA', 'OS'] as const;
+const MODULOS = ['VENDA', 'COMPRA', 'OS', 'ORCAMENTO'] as const;
 const NOMES_ACOES = ACOES_DISPONIVEIS.map((a) => a.nome) as [Acao, ...Acao[]];
 
 const acoesSchema = z.array(z.enum(NOMES_ACOES)).default([]);

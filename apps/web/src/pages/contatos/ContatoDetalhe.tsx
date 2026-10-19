@@ -147,7 +147,7 @@ export default function ContatoDetalhe() {
                 <tbody>
                   {hist.vendas.length === 0 && <tr><td colSpan={4} className="py-4 text-center text-xs text-slate-400">Sem vendas.</td></tr>}
                   {hist.vendas.map((v) => (
-                    <tr key={v.id} className="clicavel" onClick={() => nav(`/vendas/${v.id}`)}><td className="font-medium">{v.numero}</td><td>{data(v.data)}</td><td><StatusBadge situacao={v.situacao} /></td><td className="num text-right">{moeda(v.total)}</td></tr>
+                    <tr key={v.id} className="clicavel" onClick={() => nav(`${v.tipo === 'ORCAMENTO' ? '/orcamentos' : '/vendas'}/${v.id}`)}><td className="font-medium">{v.numero}{v.tipo === 'ORCAMENTO' && <span className="ml-1.5 rounded bg-amber-50 px-1 text-[10px] font-semibold text-amber-700">ORÇ.</span>}</td><td>{data(v.data)}</td><td><StatusBadge situacao={v.situacao} /></td><td className="num text-right">{moeda(v.total)}</td></tr>
                   ))}
                 </tbody>
               </table>

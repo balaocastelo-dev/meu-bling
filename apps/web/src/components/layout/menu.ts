@@ -3,6 +3,7 @@
  */
 import type { LucideIcon } from 'lucide-react';
 import {
+  FileSignature,
   Banknote,
   Bell,
   Boxes,
@@ -58,6 +59,7 @@ export const MENU: GrupoMenu[] = [
     titulo: 'Vendas',
     itens: [
       { rotulo: 'Pedidos de venda', para: '/vendas', icone: ShoppingCart, perfis: [...GESTAO, 'VENDEDOR', 'FINANCEIRO'] },
+      { rotulo: 'Orçamentos', para: '/orcamentos', icone: FileSignature, perfis: [...GESTAO, 'VENDEDOR', 'FINANCEIRO'] },
       { rotulo: 'Clientes', para: '/contatos', icone: Users, alias: ['/contatos'] },
     ],
   },

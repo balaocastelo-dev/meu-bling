@@ -2,7 +2,7 @@
  * Servidor de arquivos do storage em /uploads/<pasta>/<arquivo>.
  *
  *  - logos/                       → público (aparece nas páginas públicas e no login)
- *  - anexos/, danfe/, nfe/        → exige sessão válida: cookie `mb_token` (definido no login)
+ *  - anexos/, danfe/, nfe/, pedidos/ → exige sessão válida: cookie `mb_token` (definido no login)
  *                                   ou cabeçalho Authorization: Bearer
  *  - whatsapp/, temp/, importacao/ e qualquer outra pasta → nunca servidos (404)
  *
@@ -15,7 +15,7 @@ import type { FastifyInstance } from 'fastify';
 import { env } from '../lib/env.js';
 
 const PUBLICAS = new Set(['logos']);
-const PROTEGIDAS = new Set(['anexos', 'danfe', 'nfe']);
+const PROTEGIDAS = new Set(['anexos', 'danfe', 'nfe', 'pedidos']);
 
 const MIME: Record<string, string> = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',

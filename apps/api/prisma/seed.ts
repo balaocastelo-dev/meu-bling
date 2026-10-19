@@ -7,6 +7,7 @@
  * As situações de VENDA replicam exatamente as da conta Bling do Balão
  * (Em digitação, Em aberto, Em andamento, Verificado, Atendido, Cancelado,
  *  Venda Agenciada, Aguardando Estorno, Estornado OK).
+ * ORCAMENTO (proposta comercial) tem situações próprias: Em aberto, Enviado, Aprovado, Convertido em venda, Reprovado, Expirado.
  */
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
@@ -17,7 +18,7 @@ const DEMO = process.argv.includes('--demo');
 
 type SitSeed = { nome: string; cor: string; acoes?: string[]; inicial?: boolean; final?: boolean; cancelamento?: boolean };
 
-const SITUACOES: Record<'VENDA' | 'COMPRA' | 'OS', SitSeed[]> = {
+const SITUACOES: Record<'VENDA' | 'COMPRA' | 'OS' | 'ORCAMENTO', SitSeed[]> = {
   VENDA: [
     { nome: 'Em digitação', cor: '#94a3b8', inicial: true },
     { nome: 'Em aberto', cor: '#3b82f6', acoes: ['reservarEstoque'] },
@@ -48,10 +49,19 @@ const SITUACOES: Record<'VENDA' | 'COMPRA' | 'OS', SitSeed[]> = {
     { nome: 'Sem reparo', cor: '#64748b', acoes: ['liberarReserva'], final: true },
     { nome: 'Cancelada', cor: '#ef4444', acoes: ['estornarEstoque', 'estornarContas', 'liberarReserva'], cancelamento: true },
   ],
+  // Orçamento de venda (proposta comercial): não mexe em estoque nem financeiro; "Convertido" é a situação final ao virar venda
+  ORCAMENTO: [
+    { nome: 'Em aberto', cor: '#3b82f6', inicial: true },
+    { nome: 'Enviado', cor: '#f59e0b' },
+    { nome: 'Aprovado', cor: '#22c55e' },
+    { nome: 'Convertido em venda', cor: '#16a34a', final: true },
+    { nome: 'Reprovado', cor: '#ef4444', cancelamento: true },
+    { nome: 'Expirado', cor: '#64748b', cancelamento: true },
+  ],
 };
 
 // Transições da conta Bling do Balão (vendas) + fluxos padrão para compras e OS
-const TRANSICOES: Record<'VENDA' | 'COMPRA' | 'OS', [string, string][]> = {
+const TRANSICOES: Record<'VENDA' | 'COMPRA' | 'OS' | 'ORCAMENTO', [string, string][]> = {
   VENDA: [
     ['Em digitação', 'Em aberto'], ['Em digitação', 'Verificado'], ['Em digitação', 'Em andamento'], ['Em digitação', 'Atendido'], ['Em digitação', 'Cancelado'], ['Em digitação', 'Venda Agenciada'],
     ['Em aberto', 'Em andamento'], ['Em aberto', 'Atendido'], ['Em aberto', 'Verificado'], ['Em aberto', 'Cancelado'], ['Em aberto', 'Em digitação'], ['Em aberto', 'Venda Agenciada'], ['Em aberto', 'Aguardando Estorno'],
@@ -79,6 +89,12 @@ const TRANSICOES: Record<'VENDA' | 'COMPRA' | 'OS', [string, string][]> = {
     ['Entregue', 'Em andamento'], ['Entregue', 'Cancelada'],
     ['Sem reparo', 'Entregue'], ['Sem reparo', 'Em andamento'],
     ['Cancelada', 'Aberta'], ['Cancelada', 'Em andamento'],
+  ],
+  ORCAMENTO: [
+    ['Em aberto', 'Enviado'], ['Em aberto', 'Aprovado'], ['Em aberto', 'Reprovado'], ['Em aberto', 'Expirado'], ['Em aberto', 'Convertido em venda'],
+    ['Enviado', 'Em aberto'], ['Enviado', 'Aprovado'], ['Enviado', 'Reprovado'], ['Enviado', 'Expirado'], ['Enviado', 'Convertido em venda'],
+    ['Aprovado', 'Convertido em venda'], ['Aprovado', 'Em aberto'], ['Aprovado', 'Reprovado'],
+    ['Reprovado', 'Em aberto'], ['Expirado', 'Em aberto'],
   ],
 };
 
@@ -170,6 +186,14 @@ const TEMPLATES = (sit: Record<string, number>) => [
     corpo: 'Olá {{cliente.nome}}! Atualização da OS nº *{{numero}}* ({{equipamento}}): *{{situacao}}*. — {{empresa.nome}}',
   },
   {
+    nome: 'WhatsApp — Orçamento de venda', evento: 'ORCAMENTO_VENDA', canal: 'WHATSAPP', situacaoId: null, anexarPdf: true,
+    corpo: 'Olá {{cliente.nome}}! 👋\nSegue o orçamento nº *{{numero}}* da *{{empresa.nome}}*:\n{{itens}}\n*Total: {{total}}*\nVálido até {{validade}}.\n\nVeja os detalhes e aprove por aqui: {{link}}\nOu responda *APROVAR* para fecharmos o pedido. 😊',
+  },
+  {
+    nome: 'WhatsApp — Orçamento aprovado / virou pedido', evento: 'ORCAMENTO_SITUACAO', canal: 'WHATSAPP', situacaoId: sit['ORCAMENTO:Convertido em venda'],
+    corpo: 'Olá {{cliente.nome}}! O orçamento nº *{{numero}}* foi aprovado e virou pedido na *{{empresa.nome}}*. Em breve avisamos os próximos passos. Obrigado! ✅',
+  },
+  {
     nome: 'WhatsApp — Compra: mudança de situação (fornecedor)', evento: 'COMPRA_SITUACAO', canal: 'WHATSAPP', situacaoId: null,
     corpo: 'Olá {{cliente.nome}}, o pedido de compra nº *{{numero}}* da {{empresa.nome}} está agora em *{{situacao}}*.',
   },
@@ -193,6 +217,10 @@ const TEMPLATES = (sit: Record<string, number>) => [
   {
     nome: 'E-mail — OS: mudança de situação (genérico)', evento: 'OS_SITUACAO', canal: 'EMAIL', situacaoId: null, assunto: 'OS {{numero}}: {{situacao}} — {{empresa.nome}}',
     corpo: '<p>Olá <b>{{cliente.nome}}</b>,</p><p>A OS nº <b>{{numero}}</b> ({{equipamento}}) está agora em: <b>{{situacao}}</b>.</p><p>{{empresa.nome}}</p>',
+  },
+  {
+    nome: 'E-mail — Orçamento de venda', evento: 'ORCAMENTO_VENDA', canal: 'EMAIL', situacaoId: null, anexarPdf: true, assunto: 'Orçamento nº {{numero}} — {{empresa.nome}}',
+    corpo: '<p>Olá <b>{{cliente.nome}}</b>,</p><p>Conforme conversamos, segue o orçamento nº <b>{{numero}}</b> (em anexo em PDF):</p><p>{{itens}}</p><p>Total: <b>{{total}}</b><br>Válido até <b>{{validade}}</b>.</p><p><a href="{{link}}">Clique aqui para ver os detalhes e aprovar o orçamento</a>.</p><p>Ficamos à disposição.<br>{{empresa.nome}} — {{empresa.telefone}}</p>',
   },
   {
     nome: 'E-mail — Compra: mudança de situação (fornecedor)', evento: 'COMPRA_SITUACAO', canal: 'EMAIL', situacaoId: null, assunto: 'Pedido de compra {{numero}}: {{situacao}} — {{empresa.nome}}',
@@ -247,7 +275,7 @@ async function base() {
 
   console.log('→ Situações e transições');
   const sitIds: Record<string, number> = {};
-  for (const modulo of ['VENDA', 'COMPRA', 'OS'] as const) {
+  for (const modulo of ['VENDA', 'COMPRA', 'OS', 'ORCAMENTO'] as const) {
     let ordem = 0;
     for (const s of SITUACOES[modulo]) {
       const r = await prisma.situacao.upsert({
@@ -302,7 +330,7 @@ async function base() {
   }
 
   console.log('→ Sequências');
-  for (const [nome, valor] of [['VENDA', 24837], ['COMPRA', 0], ['OS', 0]] as const) {
+  for (const [nome, valor] of [['VENDA', 24837], ['ORCAMENTO', 0], ['COMPRA', 0], ['OS', 0]] as const) {
     await prisma.sequencia.upsert({ where: { nome }, create: { nome, valor }, update: {} });
   }
 

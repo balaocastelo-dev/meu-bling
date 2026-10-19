@@ -3,6 +3,9 @@ import { dataSchema, paginacaoSchema } from '../../lib/util.js';
 import { boolQuery, idsQuery } from '../comum/zod.js';
 
 export const ORIGENS = ['BALCAO', 'WHATSAPP', 'LOJA_VIRTUAL', 'TELEFONE', 'MARKETPLACE', 'OUTRO'] as const;
+/** PEDIDO = venda; ORCAMENTO = proposta (mesma tabela, numeração e situações próprias, sem estoque/financeiro). */
+export const TIPOS_VENDA = ['PEDIDO', 'ORCAMENTO'] as const;
+export type TipoVenda = (typeof TIPOS_VENDA)[number];
 
 const texto = z.string().trim().nullable().optional();
 
@@ -12,7 +15,8 @@ export const itemSchema = z.object({
   descricao: z.string().trim().optional(),
   unidade: z.string().trim().max(6).optional(),
   quantidade: z.coerce.number().positive('Quantidade deve ser maior que zero').default(1),
-  valorUnitario: z.coerce.number().min(0).default(0),
+  /** omitido = preço de venda do produto */
+  valorUnitario: z.coerce.number().min(0).optional(),
   desconto: z.coerce.number().min(0).default(0),
   comissaoPct: z.coerce.number().min(0).max(100).nullable().optional(),
 });
@@ -25,11 +29,15 @@ export const parcelaSchema = z.object({
 });
 
 export const vendaSchema = z.object({
+  /** só é lido na criação; no PUT o tipo não muda (converter usa a rota própria) */
+  tipo: z.enum(TIPOS_VENDA).default('PEDIDO'),
   contatoId: z.coerce.number().int().positive(),
   vendedorId: z.coerce.number().int().positive().nullable().optional(),
   data: dataSchema,
   dataPrevista: dataSchema,
   dataSaida: dataSchema,
+  /** orçamento: válido até (default = data + 7 dias) */
+  validade: dataSchema,
   depositoId: z.coerce.number().int().positive().nullable().optional(),
   situacaoId: z.coerce.number().int().positive().nullable().optional(),
   origem: z.enum(ORIGENS).default('BALCAO'),
@@ -50,9 +58,11 @@ export const vendaSchema = z.object({
 });
 
 /** Campos que podem ser editados mesmo com estoque/contas lançados. */
-export const CAMPOS_LIVRES = ['observacoes', 'observacoesInternas', 'transportadoraId', 'fretePorConta', 'quantidadeVolumes', 'pesoBruto', 'numeroPedidoLoja', 'dataPrevista', 'dataSaida'] as const;
+export const CAMPOS_LIVRES = ['observacoes', 'observacoesInternas', 'transportadoraId', 'fretePorConta', 'quantidadeVolumes', 'pesoBruto', 'numeroPedidoLoja', 'dataPrevista', 'dataSaida', 'validade'] as const;
 
 export const listaQuery = paginacaoSchema.extend({
+  /** PEDIDO (padrão) | ORCAMENTO | TODOS */
+  tipo: z.enum([...TIPOS_VENDA, 'TODOS']).default('PEDIDO'),
   pesquisa: z.string().trim().optional(),
   situacaoId: z.coerce.number().int().optional(),
   situacoes: idsQuery,
@@ -86,6 +96,23 @@ export const notificarBody = z.object({
   templateId: z.coerce.number().int().positive().nullable().optional(),
   mensagem: z.string().nullable().optional(),
   assunto: z.string().nullable().optional(),
+  /** anexa o PDF do pedido/orçamento (e-mail: attachment; WhatsApp: documento após o texto) */
+  anexarPdf: z.boolean().optional(),
+});
+
+export const transferirVendedorBody = z.object({
+  vendedorId: z.coerce.number().int().positive().nullable(),
+  observacao: z.string().trim().nullable().optional(),
+});
+
+export const aprovarBody = z.object({
+  aprovadoPor: z.string().trim().max(120).nullable().optional(),
+  observacao: z.string().trim().max(500).nullable().optional(),
+});
+
+export const converterBody = z.object({
+  /** situação inicial da venda gerada (default: inicial do módulo VENDA) */
+  situacaoId: z.coerce.number().int().positive().nullable().optional(),
 });
 
 export const gerarParcelasBody = z.object({

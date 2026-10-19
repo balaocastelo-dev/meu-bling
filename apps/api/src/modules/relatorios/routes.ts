@@ -63,7 +63,7 @@ export default async function relatoriosRoutes(app: FastifyInstance) {
     const agrupar: Agrupar = q.agrupar || agruparPadrao(ini, fim);
     const sit = await prisma.situacao.findMany({ where: { modulo: 'VENDA', ...(q.todas === 'true' ? { cancelamento: false } : { final: true, cancelamento: false }) }, select: { id: true } });
     const vendas = await prisma.venda.findMany({
-      where: { data: { gte: ini, lte: fim }, situacaoId: { in: sit.map((s) => s.id) }, ...(q.vendedorId ? { vendedorId: q.vendedorId } : {}) },
+      where: { tipo: 'PEDIDO', data: { gte: ini, lte: fim }, situacaoId: { in: sit.map((s) => s.id) }, ...(q.vendedorId ? { vendedorId: q.vendedorId } : {}) },
       select: { data: true, total: true, custoTotal: true, descontoValor: true, frete: true, itens: { select: { quantidade: true } } },
     });
     const mapa = new Map(listarPeriodos(ini, fim, agrupar).map((p) => [p, { periodo: p, qtdVendas: 0, itens: 0, faturamento: 0, descontos: 0, frete: 0, custo: 0, lucro: 0, ticketMedio: 0 }]));
@@ -92,7 +92,7 @@ export default async function relatoriosRoutes(app: FastifyInstance) {
     const { ini, fim } = resolverPeriodo(q, 'mes');
     const sitV = await prisma.situacao.findMany({ where: { modulo: 'VENDA', final: true, cancelamento: false }, select: { id: true } });
     const itens = await prisma.vendaItem.findMany({
-      where: { venda: { data: { gte: ini, lte: fim }, situacaoId: { in: sitV.map((s) => s.id) } }, ...(q.categoriaId ? { produto: { categoriaId: q.categoriaId } } : {}) },
+      where: { venda: { tipo: 'PEDIDO', data: { gte: ini, lte: fim }, situacaoId: { in: sitV.map((s) => s.id) } }, ...(q.categoriaId ? { produto: { categoriaId: q.categoriaId } } : {}) },
       select: { produtoId: true, descricao: true, codigo: true, quantidade: true, total: true, custoUnitario: true, produto: { select: { categoria: { select: { nome: true } } } } },
     });
     const mapa = new Map<string, { produtoId: number | null; codigo: string | null; nome: string; categoria: string; qtd: number; valor: number; custo: number; lucro: number; vendas: number; os: number }>();

@@ -186,6 +186,40 @@ async function main() {
   console.log('== Público');
   await req('GET', `/publico/os/${os2.tokenPublico || 'invalido'}`, undefined, [200, 404], true);
 
+  console.log('== Orçamento (proposta → envio com PDF → aprovação → venda) e ações do menu');
+  const verifica = (cond: boolean, msg: string) => { if (cond) ok++; else { falhas++; console.log('  ✖ ' + msg); } };
+  const orc = await req('POST', '/vendas', { tipo: 'ORCAMENTO', contatoId: cli.id, itens: [{ produtoId: prod.id, quantidade: 1 }] }, 201);
+  verifica(orc.tipo === 'ORCAMENTO' && !!orc.validade && orc.total === 300, `orçamento com validade e preço do produto (veio ${orc.tipo} ${orc.validade} ${orc.total})`);
+  const saldoAntes = (await req('GET', `/produtos/${prod.id}`, undefined, 200, true)).estoqueTotal;
+  await req('POST', `/vendas/${orc.id}/acoes`, { acoes: ['lancarEstoque'] }, 422);
+  await req('POST', `/vendas/${orc.id}/gerar-nfe`, {}, 422);
+  const listaOrc = await req('GET', '/vendas?tipo=ORCAMENTO&limite=200', undefined, 200, true);
+  verifica(listaOrc.data.some((v: any) => v.id === orc.id), 'orçamento aparece em ?tipo=ORCAMENTO');
+  const listaPed = await req('GET', '/vendas?limite=200', undefined, 200, true);
+  verifica(!listaPed.data.some((v: any) => v.id === orc.id), 'orçamento não aparece na lista de pedidos');
+  const pdf = await fetch(`${BASE}/vendas/${orc.id}/pdf`, { headers: { authorization: `Bearer ${token}` } });
+  verifica(pdf.status === 200 && (pdf.headers.get('content-type') || '').includes('pdf'), 'PDF do orçamento');
+  const notif = await req('POST', `/vendas/${orc.id}/notificar`, { canal: 'EMAIL', mensagem: 'Orçamento {{numero}} até {{validade}}', anexarPdf: true }, 201);
+  verifica(!!notif.anexoPath && /Orcamento-/.test(notif.anexoPath), 'notificação com PDF anexo');
+  verifica((await req('GET', `/vendas/${orc.id}`, undefined, 200, true)).situacao.nome === 'Enviado', 'orçamento enviado vai para "Enviado"');
+  await req('POST', `/vendas/${orc.id}/aprovar`, {});
+  const vendaOrc = await req('POST', `/vendas/${orc.id}/converter`, {}, 201);
+  verifica(vendaOrc.tipo === 'PEDIDO' && vendaOrc.orcamento?.id === orc.id && vendaOrc.total === 300, 'venda gerada do orçamento');
+  await req('POST', `/vendas/${orc.id}/converter`, {}, 422);
+  verifica((await req('GET', `/vendas/${orc.id}`, undefined, 200, true)).situacao.nome === 'Convertido em venda', 'orçamento fica "Convertido em venda"');
+  verifica((await req('GET', `/produtos/${prod.id}`, undefined, 200, true)).estoqueTotal === saldoAntes, 'orçamento não mexeu no estoque');
+  const clone = await req('POST', `/vendas/${vendaOrc.id}/duplicar`, undefined, 201);
+  verifica(clone.tipo === 'PEDIDO' && clone.numero !== vendaOrc.numero, 'clonar venda');
+  const outroVend = vendedores.find((v: any) => v.id !== vendaOrc.vendedorId) ?? vendedores[0];
+  const transf = await req('POST', `/vendas/${clone.id}/transferir-vendedor`, { vendedorId: outroVend.id });
+  verifica(transf.venda.vendedorId === outroVend.id, 'transferir para vendedor');
+  await req('POST', `/vendas/${clone.id}/situacao`, { situacaoId: s(sitV, 'Cancelado') });
+  const orcPub = await req('POST', '/vendas', { tipo: 'ORCAMENTO', contatoId: cli.id, itens: [{ produtoId: prod.id, quantidade: 1 }] }, 201);
+  const salvo = token; token = '';
+  await req('POST', `/publico/venda/${orcPub.tokenPublico}/aprovar`, { nome: 'Cliente Smoke' });
+  token = salvo;
+  verifica(!!(await req('GET', `/vendas/${orcPub.id}`, undefined, 200, true)).aprovadoEm, 'aprovação pelo link público');
+
   console.log(`\nResultado: ${ok} ok, ${falhas} falhas`);
   process.exit(falhas ? 1 : 0);
 }

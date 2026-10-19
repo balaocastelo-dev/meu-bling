@@ -65,12 +65,14 @@ Todas as rotas em `/api/*` exigem token, exceto `POST /auth/login`, `GET /saude`
 - `POST /estoque/transferencia` `{produtoId, origemId, destinoId, quantidade, observacao}`
 - `GET /estoque/movimentos?produtoId=&depositoId=&dataInicial=&dataFinal=&origemTipo=&pagina=&limite=`
 
-## Vendas
-- `GET /vendas?pesquisa=&situacaoId=&situacoes=1,2&contatoId=&vendedorId=&dataInicial=&dataFinal=&origem=&pagina=&limite=` → itens: `{id,numero,data,dataPrevista,contato:{id,nome},vendedor:{id,nome},situacao:{id,nome,cor},total,totalProdutos,notaId,nota:{id,numero,situacao}|null,estoqueLancado,contasLancadas}`
+## Vendas e orçamentos
+Orçamento = venda com `tipo: "ORCAMENTO"` (mesma tabela). Numeração própria (sequência `ORCAMENTO`), situações próprias (módulo `ORCAMENTO`: Em aberto, Enviado, Aprovado, Convertido em venda, Reprovado, Expirado), `validade` (padrão data + 7 dias), **nunca** lança estoque/contas nem emite nota (422 `ORCAMENTO`), não entra em dashboards/relatórios/DRE (todos filtram `tipo: PEDIDO`).
+
+- `GET /vendas?tipo=PEDIDO|ORCAMENTO|TODOS&pesquisa=&situacaoId=&situacoes=1,2&contatoId=&vendedorId=&dataInicial=&dataFinal=&origem=&pagina=&limite=` → itens: `{id,numero,data,dataPrevista,contato:{id,nome},vendedor:{id,nome},situacao:{id,nome,cor},total,totalProdutos,notaId,nota:{id,numero,situacao}|null,estoqueLancado,contasLancadas}`
 - `GET /vendas/:id` → venda completa: `itens[]`, `parcelas[]` (com `formaPagamento`, `contaReceber:{id,situacao,valorRecebido}`), `contato`, `vendedor`, `situacao`, `deposito`, `nota`, `comissoes[]`, `historico[]` (HistoricoSituacao), `situacoesPermitidas[]`
-- `POST /vendas` body:
+- `POST /vendas` body (`tipo` opcional, padrão `PEDIDO`; `validade` só no orçamento; item sem `valorUnitario` usa o preço do produto):
   ```json
-  { "contatoId":1, "vendedorId":1, "data":"2026-10-19", "dataPrevista":null, "depositoId":1, "situacaoId": null,
+  { "tipo":"PEDIDO", "validade":null, "contatoId":1, "vendedorId":1, "data":"2026-10-19", "dataPrevista":null, "depositoId":1, "situacaoId": null,
     "origem":"BALCAO", "categoriaFinanceiraId":1, "observacoes":"", "observacoesInternas":"",
     "descontoTipo":"REAL", "descontoValor":0, "frete":0, "outrasDespesas":0,
     "transportadoraId":null, "fretePorConta":9, "quantidadeVolumes":0, "pesoBruto":0,
@@ -83,9 +85,14 @@ Todas as rotas em `/api/*` exigem token, exceto `POST /auth/login`, `GET /saude`
 - `POST /vendas/:id/situacao` `{situacaoId, observacao?, forcar?}` → `{situacao, acoesExecutadas:[]}` (usa `mudarSituacao`; erro 422 `TRANSICAO_INVALIDA` com `detalhes.permitidas`)
 - `POST /vendas/:id/acoes` `{acoes:["lancarEstoque","lancarContas","estornarEstoque","estornarContas"]}` → executa ações avulsas
 - `POST /vendas/:id/gerar-nfe` `{modelo:55|65, informacoesComplementares?}` → cria NotaFiscal PENDENTE vinculada (não transmite) → `{notaId}`
-- `POST /vendas/:id/notificar` `{canal:'EMAIL'|'WHATSAPP', templateId?, mensagem?}` → enfileira notificação
-- `GET /vendas/:id/imprimir` → HTML do pedido (para impressão / PDF no navegador)
-- `POST /vendas/:id/duplicar` → nova venda em digitação
+- `POST /vendas/:id/notificar` `{canal:'EMAIL'|'WHATSAPP', templateId?, mensagem?, anexarPdf?}` → enfileira notificação; com `anexarPdf` (ou template com `anexarPdf`) gera `storage/pedidos/<Pedido|Orcamento>-<n>.pdf` — e-mail vai com anexo, WhatsApp manda o PDF como documento logo após o texto. Orçamento "Em aberto" enviado passa para "Enviado". Variáveis extras: `{{validade}}`, `{{tipoDocumento}}`, `{{link}}` (página pública com botão de aprovar)
+- `GET /vendas/:id/imprimir` → HTML do pedido/orçamento (para impressão)
+- `GET /vendas/:id/pdf?download=1` → PDF A4 do pedido/orçamento (pdfkit)
+- `POST /vendas/:id/duplicar` → clona (mesmo tipo) em situação inicial, vencimentos a partir de hoje
+- `POST /vendas/:id/transferir-vendedor` `{vendedorId|null, observacao?}` → troca o vendedor; se as contas já foram lançadas refaz a comissão pendente para o novo vendedor (comissão PAGA bloqueia) e atualiza o vendedor das contas a receber; VENDEDOR só transfere as próprias vendas
+- `POST /vendas/:id/aprovar` `{aprovadoPor?, observacao?}` → orçamento aprovado (situação "Aprovado")
+- `POST /vendas/:id/converter` `{situacaoId?}` → cria o pedido de venda com os mesmos itens/parcelas (`venda.orcamentoId` aponta o orçamento; `orcamento.vendaGerada`), orçamento vai para "Convertido em venda"; uma vez só (422 `JA_CONVERTIDO`) → 201 venda completa
+- Cancelar venda = `POST /vendas/:id/situacao` com a situação de cancelamento ("Cancelado"; no orçamento, "Reprovado")
 - `POST /vendas/:id/gerar-parcelas` `{quantidade, primeiroVencimento, formaPagamentoId, intervaloDias:30}` → devolve parcelas calculadas (não salva)
 
 ## Compras
@@ -204,7 +211,7 @@ Todas as rotas em `/api/*` exigem token, exceto `POST /auth/login`, `GET /saude`
 
 ## Público (sem token)
 - `GET /publico/os/:token` → acompanhamento da OS pelo cliente (status, itens, total) — token = hash da OS; `POST /publico/os/:token/aprovar`
-- `GET /publico/venda/:token` → resumo do pedido
+- `GET /publico/venda/:token` → resumo do pedido/orçamento (`tipo`, `validade`, `podeAprovar`, `expirado`); `POST /publico/venda/:token/aprovar` `{nome}` → cliente aprova o orçamento pelo link. Responder **APROVAR** no WhatsApp também aprova o último orçamento enviado ao número.
 
 ## Impressões (HTML prontos para `window.print()`)
-- `/vendas/:id/imprimir`, `/compras/:id/imprimir`, `/ordens-servico/:id/imprimir?via=`, `/notas-fiscais/:id/danfe` (PDF)
+- `/vendas/:id/imprimir` (e `/vendas/:id/pdf`), `/compras/:id/imprimir`, `/ordens-servico/:id/imprimir?via=`, `/notas-fiscais/:id/danfe` (PDF)

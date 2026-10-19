@@ -11,6 +11,7 @@ import { mudarSituacao } from '../../core/situacoes.js';
 import { enderecoLinha, formatarTelefone } from '../comum/html.js';
 import { calcularAtrasada } from '../ordens-servico/service.js';
 import { idPorToken } from './token.js';
+import { aprovarOrcamento } from '../vendas/service.js';
 
 export default async function publicoRoutes(app: FastifyInstance) {
   const limite = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } };
@@ -130,9 +131,15 @@ export default async function publicoRoutes(app: FastifyInstance) {
     if (!v) throw new NotFound('Pedido');
     const historicoSit = await prisma.historicoSituacao.findMany({ where: { entidadeTipo: 'VENDA', entidadeId: id }, orderBy: { data: 'asc' }, select: { paraSituacao: true, data: true } });
     const descontoCalc = v.descontoTipo === 'PERCENTUAL' ? Math.round(v.totalProdutos * v.descontoValor) / 100 : v.descontoValor;
+    const expirado = v.tipo === 'ORCAMENTO' && !!v.validade && v.validade.getTime() < Date.now() - 86400000;
     return {
       empresa: await empresaPublica(),
       venda: {
+        tipo: v.tipo,
+        validade: v.validade,
+        aprovadoEm: v.aprovadoEm,
+        expirado,
+        podeAprovar: v.tipo === 'ORCAMENTO' && !v.aprovadoEm && !expirado && !v.situacao.cancelamento && !v.situacao.final,
         numero: v.numero,
         cliente: primeiroNome(v.contato.nome),
         data: v.data,
@@ -151,5 +158,19 @@ export default async function publicoRoutes(app: FastifyInstance) {
         historico: historicoSit,
       },
     };
+  });
+
+  // ---- Orçamento de venda: aprovação pelo cliente no link
+  app.post('/api/v1/publico/venda/:token/aprovar', limite, async (req) => {
+    const token = String((req.params as any).token || '');
+    const id = await idPorToken('venda', token);
+    if (!id) throw new NotFound('Orçamento');
+    const body = z.object({ nome: z.string().trim().min(2, 'Informe seu nome').max(120), observacao: z.string().trim().max(500).nullable().optional() }).parse(req.body || {});
+    const v = await prisma.venda.findUnique({ where: { id }, select: { tipo: true, validade: true } });
+    if (!v || v.tipo !== 'ORCAMENTO') throw new AppError('Este pedido não é um orçamento para aprovação.', 422, 'NAO_ORCAMENTO');
+    if (v.validade && v.validade.getTime() < Date.now() - 86400000) throw new AppError('Este orçamento expirou. Fale com a loja para atualizar os valores.', 422, 'ORCAMENTO_EXPIRADO');
+    const r = await aprovarOrcamento(id, { aprovadoPor: `${body.nome} (aprovação online)`, observacao: body.observacao, usuarioId: null });
+    await auditar(req, 'Orcamento', id, 'ACAO', { acao: 'aprovarOrcamentoOnline', nome: body.nome, observacao: body.observacao });
+    return { ok: true, jaAprovado: r.jaAprovado, situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor } };
   });
 }

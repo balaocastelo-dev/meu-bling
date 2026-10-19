@@ -470,7 +470,7 @@ async function importarVendas(r: { importados: number; atualizados: number; erro
           parcelas.push({ numero: ++np, dataVencimento: dataDe(p.dataVencimento) || dados.data, valor: num(p.valor), formaPagamentoId: fp?.id ?? null, observacoes: p.observacoes || null });
         }
         const existente = await prisma.venda.findUnique({ where: { blingId } });
-        const conflitoNumero = await prisma.venda.findUnique({ where: { numero: dados.numero } });
+        const conflitoNumero = await prisma.venda.findUnique({ where: { tipo_numero: { tipo: 'PEDIDO', numero: dados.numero } } });
         if (conflitoNumero && conflitoNumero.blingId !== blingId) throw new Error(`número ${dados.numero} já existe (venda id ${conflitoNumero.id})`);
         if (existente) {
           await prisma.$transaction(async (tx) => {

@@ -13,12 +13,12 @@ import { renderTemplate, formatarMoeda, formatarData } from '../../lib/util.js';
 import { eventos } from '../../core/eventos.js';
 import { registrarServico } from '../../core/servicos.js';
 import { enviarEmail, smtpConfigurado } from '../../integracoes/email/servico.js';
-import { enviarTexto, status as statusWhatsApp } from '../../integracoes/whatsapp/servico.js';
+import { enviarDocumento, enviarTexto, status as statusWhatsApp } from '../../integracoes/whatsapp/servico.js';
 
 export type OrigemTipo = 'VENDA' | 'COMPRA' | 'OS' | 'NFE' | 'CONTA' | 'MANUAL';
 export type Canal = 'EMAIL' | 'WHATSAPP';
 
-export const EVENTOS_TEMPLATE = ['VENDA_SITUACAO', 'COMPRA_SITUACAO', 'OS_SITUACAO', 'VENDA_CRIADA', 'OS_CRIADA', 'NFE_AUTORIZADA', 'CONTA_VENCENDO', 'ORCAMENTO_OS'] as const;
+export const EVENTOS_TEMPLATE = ['VENDA_SITUACAO', 'COMPRA_SITUACAO', 'OS_SITUACAO', 'VENDA_CRIADA', 'OS_CRIADA', 'NFE_AUTORIZADA', 'CONTA_VENCENDO', 'ORCAMENTO_OS', 'ORCAMENTO_VENDA', 'ORCAMENTO_SITUACAO'] as const;
 
 /** Variáveis disponíveis por evento (documentação para a UI). */
 export const VARIAVEIS_POR_EVENTO: Record<string, { nome: string; descricao: string }[]> = (() => {
@@ -41,8 +41,10 @@ export const VARIAVEIS_POR_EVENTO: Record<string, { nome: string; descricao: str
     { nome: 'total', descricao: 'Total formatado (R$)' },
     { nome: 'itens', descricao: 'Lista de itens (qtd x descrição — R$ total)' },
     { nome: 'vendedor', descricao: 'Nome do vendedor' },
-    { nome: 'link', descricao: 'Link público de acompanhamento' },
+    { nome: 'link', descricao: 'Link público de acompanhamento (no orçamento, o cliente aprova por ele)' },
     { nome: 'observacoes', descricao: 'Observações do documento' },
+    { nome: 'validade', descricao: 'Validade do orçamento (dd/mm/aaaa)' },
+    { nome: 'tipoDocumento', descricao: '"Pedido" ou "Orçamento"' },
   ];
   const os = [
     { nome: 'equipamento', descricao: 'Equipamento (tipo marca modelo)' },
@@ -76,6 +78,8 @@ export const VARIAVEIS_POR_EVENTO: Record<string, { nome: string; descricao: str
   return {
     VENDA_SITUACAO: [...comuns, ...documento],
     VENDA_CRIADA: [...comuns, ...documento],
+    ORCAMENTO_VENDA: [...comuns, ...documento],
+    ORCAMENTO_SITUACAO: [...comuns, ...documento],
     COMPRA_SITUACAO: [...comuns, ...documento],
     OS_SITUACAO: [...comuns, ...documento, ...os],
     OS_CRIADA: [...comuns, ...documento, ...os],
@@ -168,6 +172,8 @@ export async function montarVariaveis(origemTipo: OrigemTipo, origemId: number):
         observacoes: v.observacoes || '',
         formaPagamento: v.parcelas[0]?.formaPagamento?.nome || '',
         parcelas: v.parcelas.length,
+        validade: v.validade ? formatarData(v.validade) : '',
+        tipoDocumento: v.tipo === 'ORCAMENTO' ? 'Orçamento' : 'Pedido',
         link: `${env.APP_URL.replace(/\/$/, '')}/p/venda/${tokenPublico(v.id)}`,
       },
     };
@@ -414,7 +420,9 @@ export function registrarListeners() {
 
   eventos.ouvir('situacao.alterada', async (d) => {
     const evento = `${d.modulo}_SITUACAO`;
-    await dispararTemplates(evento, d.modulo, d.entidadeId, { situacaoId: d.paraSituacaoId, incluirGenericos: d.notificarCliente });
+    // orçamento mora na tabela de vendas: as variáveis/links são os da venda
+    const origem: OrigemTipo = d.modulo === 'ORCAMENTO' ? 'VENDA' : d.modulo;
+    await dispararTemplates(evento, origem, d.entidadeId, { situacaoId: d.paraSituacaoId, incluirGenericos: d.notificarCliente });
   });
   eventos.ouvir('venda.criada', async (d) => {
     await dispararTemplates('VENDA_CRIADA', 'VENDA', d.vendaId);
@@ -460,6 +468,8 @@ export async function processarFila(limite = 10) {
           }
           await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIANDO' } });
           const r = await enviarTexto(n.destinatario, n.corpo);
+          // anexo (PDF do orçamento/pedido): vai como documento logo depois do texto
+          if (n.anexoPath && fs.existsSync(n.anexoPath)) await enviarDocumento(n.destinatario, n.anexoPath, path.basename(n.anexoPath));
           await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIADA', enviadaEm: new Date(), erro: null, externalId: r.id } });
         } else {
           if (!(await smtpConfigurado())) {

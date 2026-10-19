@@ -11,12 +11,21 @@ import { Button, DateInput, FormSkeleton, Input, MoneyInput, PageHeader, SearchS
 import { ParcelasEditor, parcelasValidas } from '@/components/compartilhados/ParcelasEditor';
 import { ContatoRapidoDrawer } from '@/components/compartilhados/ContatoRapidoDrawer';
 import { arred, dataIso, hoje, moeda, rotulo } from '@/lib/format';
-import type { Contato, Produto, Venda, VendaItem, VendaPayload } from '@/types';
+import type { Contato, Produto, TipoVenda, Venda, VendaItem, VendaPayload } from '@/types';
 
 const ORIGENS = ['BALCAO', 'WHATSAPP', 'LOJA_VIRTUAL', 'TELEFONE', 'MARKETPLACE', 'OUTRO'] as const;
 
-function vazio(vendedorId: number | null): VendaPayload {
+/** data (yyyy-mm-dd) + n dias */
+function maisDias(iso: string, n: number) {
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return dataIso(d.toISOString());
+}
+
+function vazio(vendedorId: number | null, tipo: TipoVenda): VendaPayload {
   return {
+    tipo,
+    validade: tipo === 'ORCAMENTO' ? maisDias(hoje(), 7) : null,
     contatoId: null,
     vendedorId,
     data: hoje(),
@@ -42,6 +51,7 @@ function vazio(vendedorId: number | null): VendaPayload {
 
 function deVenda(v: Venda): VendaPayload {
   return {
+    validade: v.validade ? dataIso(v.validade) : null,
     contatoId: v.contatoId,
     vendedorId: v.vendedorId,
     data: dataIso(v.data),
@@ -73,20 +83,23 @@ export function calcularTotais(f: { itens: { quantidade: number; valorUnitario: 
   return { totalProdutos, desconto, total };
 }
 
-/** Formulário de venda (novo e edição) */
-export default function VendaForm() {
+/** Formulário de venda / orçamento (novo e edição) */
+export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
   const { id } = useParams();
   const editando = !!id;
   const nav = useNavigate();
+  const orcamento = tipo === 'ORCAMENTO';
+  const base = orcamento ? '/orcamentos' : '/vendas';
+  const nomeDoc = orcamento ? 'orçamento' : 'venda';
   const qc = useQueryClient();
   const usuario = useAuth((s) => s.usuario);
 
   const { data: vendedores } = useVendedores();
   const { data: depositos } = useDepositos();
   const { data: categorias } = useCategoriasFinanceiras();
-  const { data: situacoes } = useSituacoes('VENDA');
+  const { data: situacoes } = useSituacoes(orcamento ? 'ORCAMENTO' : 'VENDA');
 
-  const [form, setForm] = useState<VendaPayload>(() => vazio(usuario?.vendedorId ?? null));
+  const [form, setForm] = useState<VendaPayload>(() => vazio(usuario?.vendedorId ?? null, tipo));
   const [clienteNome, setClienteNome] = useState<string | null>(null);
   const [cliente, setCliente] = useState<Contato | null>(null);
   const [drawerCliente, setDrawerCliente] = useState(false);
@@ -150,12 +163,13 @@ export default function VendaForm() {
 
   // ---- Salvar
   const salvar = useMutation({
-    mutationFn: (p: VendaPayload) => (editando ? api.put<Venda>(`/vendas/${id}`, p) : api.post<Venda>('/vendas', p)),
+    mutationFn: (p: VendaPayload) => (editando ? api.put<Venda>(`/vendas/${id}`, { ...p, tipo: undefined }) : api.post<Venda>('/vendas', { ...p, tipo })),
     onSuccess: (v) => {
-      toast.success(editando ? 'Venda atualizada.' : `Venda nº ${v.numero} criada.`);
+      const Nome = orcamento ? 'Orçamento' : 'Venda';
+      toast.success(editando ? `${Nome} atualizado.` : `${Nome} nº ${v.numero} criado.`, orcamento && !editando ? { description: 'Agora é só enviar por e-mail ou WhatsApp em "Mais ações".' } : undefined);
       qc.invalidateQueries({ queryKey: ['vendas'] });
       qc.invalidateQueries({ queryKey: ['venda', String(v.id)] });
-      nav(`/vendas/${v.id}`);
+      nav(`${base}/${v.id}`);
     },
     onError: (e) => toast.error(mensagemErro(e)),
   });
@@ -185,16 +199,22 @@ export default function VendaForm() {
   return (
     <div className="pb-24">
       <PageHeader
-        migalhas={[{ rotulo: 'Vendas', para: '/vendas' }, { rotulo: editando ? `Venda nº ${venda?.numero ?? ''}` : 'Nova venda' }]}
-        titulo={editando ? `Editar venda nº ${venda?.numero ?? ''}` : 'Nova venda'}
-        descricao={bloqueado ? 'Estoque/contas já lançados: somente observações e transporte podem ser alterados. Estorne antes para editar itens.' : 'Preencha cliente, itens e condições de pagamento.'}
+        migalhas={[{ rotulo: orcamento ? 'Orçamentos' : 'Vendas', para: base }, { rotulo: editando ? `${orcamento ? 'Orçamento' : 'Venda'} nº ${venda?.numero ?? ''}` : orcamento ? 'Novo orçamento' : 'Nova venda' }]}
+        titulo={editando ? `Editar ${nomeDoc} nº ${venda?.numero ?? ''}` : orcamento ? 'Novo orçamento' : 'Nova venda'}
+        descricao={
+          bloqueado
+            ? 'Estoque/contas já lançados: somente observações e transporte podem ser alterados. Estorne antes para editar itens.'
+            : orcamento
+              ? 'O orçamento não mexe no estoque nem no financeiro. Depois de salvar, envie ao cliente e converta em venda quando ele aprovar.'
+              : 'Preencha cliente, itens e condições de pagamento.'
+        }
         acoes={
           <>
-            <Button variante="secundario" icone={<X className="h-4 w-4" />} onClick={() => nav(editando ? `/vendas/${id}` : '/vendas')}>
+            <Button variante="secundario" icone={<X className="h-4 w-4" />} onClick={() => nav(editando ? `${base}/${id}` : base)}>
               Cancelar
             </Button>
             <Button variante="primario" icone={<Save className="h-4 w-4" />} carregando={salvar.isPending} onClick={submeter}>
-              {editando ? 'Salvar alterações' : 'Salvar venda'}
+              {editando ? 'Salvar alterações' : orcamento ? 'Salvar orçamento' : 'Salvar venda'}
             </Button>
           </>
         }
@@ -202,7 +222,7 @@ export default function VendaForm() {
 
       <div className="space-y-4">
         {/* Cabeçalho */}
-        <Secao titulo="Dados do pedido">
+        <Secao titulo={orcamento ? 'Dados do orçamento' : 'Dados do pedido'}>
           <div className="grid gap-3 md:grid-cols-12">
             <SearchSelect
               className="md:col-span-5"
@@ -226,12 +246,16 @@ export default function VendaForm() {
             />
             <Select className="md:col-span-3" label="Vendedor" value={form.vendedorId ?? ''} onChange={(e) => set('vendedorId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(vendedores)} placeholder="—" disabled={bloqueado} />
             <DateInput className="md:col-span-2" label="Data" obrigatorio erro={erros.data} value={form.data} onChange={(v) => set('data', v)} disabled={bloqueado} />
-            <DateInput className="md:col-span-2" label="Previsão de entrega" value={form.dataPrevista} onChange={(v) => set('dataPrevista', v || null)} />
+            {orcamento ? (
+              <DateInput className="md:col-span-2" label="Válido até" value={form.validade ?? null} onChange={(v) => set('validade', v || null)} ajuda="Padrão: 7 dias" />
+            ) : (
+              <DateInput className="md:col-span-2" label="Previsão de entrega" value={form.dataPrevista} onChange={(v) => set('dataPrevista', v || null)} />
+            )}
             <Select className="md:col-span-3" label="Depósito" value={form.depositoId ?? ''} onChange={(e) => set('depositoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(depositos)} placeholder="—" disabled={bloqueado} />
             <Select className="md:col-span-3" label="Origem" value={form.origem} onChange={(e) => set('origem', e.target.value as VendaPayload['origem'])} opcoes={ORIGENS.map((o) => ({ valor: o, rotulo: rotulo(o) }))} />
             <Select className="md:col-span-3" label="Categoria financeira" value={form.categoriaFinanceiraId ?? ''} onChange={(e) => set('categoriaFinanceiraId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(categorias?.filter((c) => c.tipo === 'RECEITA'))} placeholder="—" disabled={bloqueado} />
             {!editando && (
-              <Select className="md:col-span-3" label="Situação inicial" value={form.situacaoId ?? ''} onChange={(e) => set('situacaoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(situacoes)} placeholder="Padrão (inicial)" ajuda="Ações da situação (lançar estoque/contas) rodam ao salvar." />
+              <Select className="md:col-span-3" label="Situação inicial" value={form.situacaoId ?? ''} onChange={(e) => set('situacaoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(situacoes)} placeholder="Padrão (inicial)" ajuda={orcamento ? undefined : 'Ações da situação (lançar estoque/contas) rodam ao salvar.'} />
             )}
           </div>
           {cliente && (
@@ -380,7 +404,10 @@ export default function VendaForm() {
         </div>
 
         {/* Parcelas */}
-        <Secao titulo="Pagamento / parcelas" descricao="Sem parcelas a API gera uma à vista. Ao lançar contas, cada parcela vira uma conta a receber.">
+        <Secao
+          titulo={orcamento ? 'Condições de pagamento' : 'Pagamento / parcelas'}
+          descricao={orcamento ? 'Aparecem no PDF do orçamento e passam para a venda ao converter.' : 'Sem parcelas a API gera uma à vista. Ao lançar contas, cada parcela vira uma conta a receber.'}
+        >
           {erros.parcelas && <p className="mb-2 text-xs text-red-600">{erros.parcelas}</p>}
           <ParcelasEditor parcelas={form.parcelas} onChange={(p) => set('parcelas', p)} total={totais.total} disabled={bloqueado} />
         </Secao>
@@ -393,11 +420,11 @@ export default function VendaForm() {
             {form.itens.length} {form.itens.length === 1 ? 'item' : 'itens'} · Total <span className="num font-semibold text-slate-900">{moeda(totais.total)}</span>
           </div>
           <div className="flex gap-2">
-            <Button variante="secundario" onClick={() => nav(editando ? `/vendas/${id}` : '/vendas')}>
+            <Button variante="secundario" onClick={() => nav(editando ? `${base}/${id}` : base)}>
               Cancelar
             </Button>
             <Button variante="primario" icone={<Save className="h-4 w-4" />} carregando={salvar.isPending} onClick={submeter}>
-              {editando ? 'Salvar alterações' : 'Salvar venda'}
+              {editando ? 'Salvar alterações' : orcamento ? 'Salvar orçamento' : 'Salvar venda'}
             </Button>
           </div>
         </div>

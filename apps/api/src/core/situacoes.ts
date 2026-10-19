@@ -17,7 +17,8 @@ import { AppError, NotFound } from '../lib/errors.js';
 import { parseJsonArray } from '../lib/util.js';
 import { eventos } from './eventos.js';
 
-export type Modulo = 'VENDA' | 'COMPRA' | 'OS';
+/** ORCAMENTO usa a mesma tabela de vendas (Venda.tipo = ORCAMENTO), com situações próprias e sem ações de estoque/financeiro. */
+export type Modulo = 'VENDA' | 'COMPRA' | 'OS' | 'ORCAMENTO';
 export type Acao =
   | 'lancarEstoque'
   | 'estornarEstoque'
@@ -36,7 +37,7 @@ export const ACOES_DISPONIVEIS: { nome: Acao; descricao: string; modulos: Modulo
   { nome: 'reservarEstoque', descricao: 'Reservar estoque dos itens', modulos: ['VENDA', 'OS'] },
   { nome: 'liberarReserva', descricao: 'Liberar reserva de estoque', modulos: ['VENDA', 'OS'] },
   { nome: 'gerarNfe', descricao: 'Gerar NF-e automaticamente', modulos: ['VENDA', 'OS'] },
-  { nome: 'notificarCliente', descricao: 'Notificar cliente (e-mail/WhatsApp) com os templates sem situação fixa', modulos: ['VENDA', 'COMPRA', 'OS'] },
+  { nome: 'notificarCliente', descricao: 'Notificar cliente (e-mail/WhatsApp) com os templates sem situação fixa', modulos: ['VENDA', 'COMPRA', 'OS', 'ORCAMENTO'] },
 ];
 
 /** Ordem de execução para garantir consistência (estornos antes de lançamentos). */
