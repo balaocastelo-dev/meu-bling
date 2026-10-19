@@ -74,12 +74,14 @@ async function main() {
   await req('GET', `/vendas/${venda.id}`);
   await req('GET', '/vendas?pesquisa=smoke');
   await req('POST', `/vendas/${venda.id}/situacao`, { situacaoId: s(sitV, 'Em aberto') });
-  const atendida = await req('POST', `/vendas/${venda.id}/situacao`, { situacaoId: s(sitV, 'Atendido') });
+  const atendida = await req('POST', `/vendas/${venda.id}/situacao`, { situacaoId: s(sitV, 'Fechada') });
   const v2 = await req('GET', `/vendas/${venda.id}`);
   if (!v2.estoqueLancado || !v2.contasLancadas) { falhas++; console.log('  ✖ venda deveria ter estoque/contas lançados', atendida); }
   const p2 = await req('GET', `/produtos/${prod.id}`);
   if ((p2.estoqueTotal ?? 0) !== 8) { falhas++; console.log('  ✖ estoque após venda esperado 8, veio', p2.estoqueTotal); }
-  await req('POST', `/vendas/${venda.id}/situacao`, { situacaoId: s(sitV, 'Estornado OK') }, 422); // transição inválida (Atendido → Estornado OK não existe)
+  // situação de outro módulo (orçamento) não vale para a venda
+  const sitOrc = await req('GET', '/situacoes?modulo=ORCAMENTO', undefined, 200, true);
+  await req('POST', `/vendas/${venda.id}/situacao`, { situacaoId: s(sitOrc, 'Enviado') }, [404, 422]);
   await req('GET', `/vendas/${venda.id}/imprimir`, undefined, 200, true);
   const nf = await req('POST', `/vendas/${venda.id}/gerar-nfe`, { modelo: 55 }, [200, 201]);
   await req('POST', `/vendas/${venda.id}/notificar`, { canal: 'WHATSAPP', mensagem: 'Teste smoke {{numero}}' }, [200, 201]);
@@ -103,7 +105,7 @@ async function main() {
     itens: [{ produtoId: prod.id, descricao: prod.nome, quantidade: 5, valorUnitario: 190 }],
     parcelas: [{ dataVencimento: hoje, valor: 950, formaPagamentoId: formas[0].id }],
   }, 201);
-  await req('POST', `/compras/${compra.id}/situacao`, { situacaoId: s(sitC, 'Atendido') });
+  await req('POST', `/compras/${compra.id}/situacao`, { situacaoId: s(sitC, 'Fechado') });
   const p3 = await req('GET', `/produtos/${prod.id}`);
   if ((p3.estoqueTotal ?? 0) !== 13) { falhas++; console.log('  ✖ estoque após compra esperado 13, veio', p3.estoqueTotal); }
   await req('GET', `/compras/${compra.id}/imprimir`, undefined, 200, true);
@@ -213,7 +215,7 @@ async function main() {
   const outroVend = vendedores.find((v: any) => v.id !== vendaOrc.vendedorId) ?? vendedores[0];
   const transf = await req('POST', `/vendas/${clone.id}/transferir-vendedor`, { vendedorId: outroVend.id });
   verifica(transf.venda.vendedorId === outroVend.id, 'transferir para vendedor');
-  await req('POST', `/vendas/${clone.id}/situacao`, { situacaoId: s(sitV, 'Cancelado') });
+  await req('POST', `/vendas/${clone.id}/situacao`, { situacaoId: sitV.find((x: any) => x.cancelamento)?.id });
   const orcPub = await req('POST', '/vendas', { tipo: 'ORCAMENTO', contatoId: cli.id, itens: [{ produtoId: prod.id, quantidade: 1 }] }, 201);
   const salvo = token; token = '';
   await req('POST', `/publico/venda/${orcPub.tokenPublico}/aprovar`, { nome: 'Cliente Smoke' });

@@ -70,12 +70,18 @@ export default async function blingRoutes(app: FastifyInstance) {
       .object({
         entidades: z.array(z.enum(ENTIDADES as [EntidadeBling, ...EntidadeBling[]])).min(1),
         dataInicial: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        dataFinal: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         detalhesProdutos: z.boolean().optional(),
+        /** vendas "Em aberto/Em andamento/Verificado" do Bling entram como fechadas ("Fechada") */
+        fecharEmAberto: z.boolean().optional(),
+        /** vendas fechadas têm o valor lançado como recebido no Caixa na data da venda */
+        baixarNoCaixa: z.boolean().optional(),
       })
       .parse(req.body);
     if (estadoImportacao().emAndamento) throw new AppError('Já existe uma importação em andamento.', 409, 'IMPORTACAO_EM_ANDAMENTO');
-    const r = await iniciarImportacao(b.entidades, b.dataInicial, { detalhesProdutos: b.detalhesProdutos });
-    await auditar(req, 'Empresa', 1, 'ACAO', { acao: 'bling.importar', entidades: b.entidades, dataInicial: b.dataInicial });
+    const opcoes = { detalhesProdutos: b.detalhesProdutos, dataFinal: b.dataFinal, fecharEmAberto: b.fecharEmAberto, baixarNoCaixa: b.baixarNoCaixa };
+    const r = await iniciarImportacao(b.entidades, b.dataInicial, opcoes);
+    await auditar(req, 'Empresa', 1, 'ACAO', { acao: 'bling.importar', entidades: b.entidades, dataInicial: b.dataInicial, ...opcoes });
     return reply.code(202).send({ emAndamento: r.emAndamento, entidades: r.entidades, arquivoLog: r.arquivoLog });
   });
 

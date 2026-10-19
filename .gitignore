@@ -13,3 +13,6 @@ apps/web/dist/
 .DS_Store
 Thumbs.db
 *.tsbuildinfo
+
+# symlinks locais
+node_modules

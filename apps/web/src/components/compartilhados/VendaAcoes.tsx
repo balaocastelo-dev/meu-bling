@@ -159,7 +159,7 @@ export function VendaAcoes({ venda, contexto = 'lista' }: Props) {
   };
 
   // situação de cancelamento do módulo: "Cancelado" (venda) / "Reprovado" (orçamento)
-  const sitCancelar = (situacoes ?? []).find((s) => s.cancelamento && s.ativo && (orcamento ? s.nome === 'Reprovado' : s.nome === 'Cancelado')) ?? (situacoes ?? []).find((s) => s.cancelamento && s.ativo);
+  const sitCancelar = (situacoes ?? []).find((s) => s.cancelamento && s.ativo && (orcamento ? s.nome === 'Reprovado' : s.nome === 'Cancelada' || s.nome === 'Cancelado')) ?? (situacoes ?? []).find((s) => s.cancelamento && s.ativo);
   const jaCancelada = !!(venda.situacao as { cancelamento?: boolean }).cancelamento;
   const notaAtiva = venda.nota && !['CANCELADA', 'INUTILIZADA', 'DENEGADA'].includes(venda.nota.situacao);
   const podeExcluir = gestao && !venda.estoqueLancado && !venda.contasLancadas && !(venda.nota && venda.nota.situacao === 'AUTORIZADA');
@@ -279,7 +279,7 @@ export function VendaAcoes({ venda, contexto = 'lista' }: Props) {
         descricao={
           orcamento
             ? 'O orçamento vai para "Reprovado". Dá para reabrir depois mudando a situação.'
-            : `A venda vai para "${sitCancelar?.nome ?? 'Cancelado'}": o estoque e as contas lançados são estornados e as reservas liberadas.${notaAtiva ? ' A NF-e precisa ser cancelada à parte, na tela da nota.' : ''}`
+            : `A venda vai para "${sitCancelar?.nome ?? 'Cancelada'}": o estoque e as contas lançados são estornados e as reservas liberadas.${notaAtiva ? ' A NF-e precisa ser cancelada à parte, na tela da nota.' : ''}`
         }
         textoConfirmar={orcamento ? 'Reprovar' : 'Cancelar venda'}
         onConfirmar={async () => {

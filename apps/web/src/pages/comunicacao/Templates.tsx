@@ -120,7 +120,7 @@ export default function Templates() {
   };
 
   // Preview local simples (substitui variáveis por exemplos)
-  const exemplo: Record<string, string> = { 'cliente.nome': 'Maria Silva', 'cliente.primeiroNome': 'Maria', numero: '1234', situacao: 'Atendido', total: 'R$ 1.299,90', data: '19/10/2026', itens: '1x Notebook Dell', equipamento: 'Notebook Dell Inspiron', defeito: 'Não liga', diagnostico: 'Fonte queimada', tecnico: 'Jairlem', vendedor: 'Júlia', garantiaDias: '90', 'empresa.nome': 'Balão da Informática', 'empresa.telefone': '(19) 3255-0000', 'empresa.endereco': 'Av. Anchieta, 789 — Cambuí', chave: '3526…', link: 'https://balao.info/p/os/abc123' };
+  const exemplo: Record<string, string> = { 'cliente.nome': 'Maria Silva', 'cliente.primeiroNome': 'Maria', numero: '1234', situacao: 'Fechada', total: 'R$ 1.299,90', data: '19/10/2026', itens: '1x Notebook Dell', equipamento: 'Notebook Dell Inspiron', defeito: 'Não liga', diagnostico: 'Fonte queimada', tecnico: 'Jairlem', vendedor: 'Júlia', garantiaDias: '90', 'empresa.nome': 'Balão da Informática', 'empresa.telefone': '(19) 3255-0000', 'empresa.endereco': 'Av. Anchieta, 789 — Cambuí', chave: '3526…', link: 'https://balao.info/p/os/abc123' };
   const previewLocal = form.corpo.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, k) => exemplo[k] ?? `{{${k}}}`);
 
   return (

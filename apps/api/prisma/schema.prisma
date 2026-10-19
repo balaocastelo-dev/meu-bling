@@ -554,6 +554,8 @@ model VendaItem {
   comissaoPct   Float    @default(0)
   comissaoValor Float    @default(0)
   ordem         Int      @default(0)
+
+  alocacoesCompra AlocacaoCompra[]
 }
 
 model VendaParcela {
@@ -625,6 +627,24 @@ model CompraItem {
   ipiPct           Float    @default(0)
   total            Float    @default(0)
   ordem            Int      @default(0)
+  /// quantidade deste item já vendida (alocação automática venda → compra; compra vira "Vendido" quando tudo foi vendido)
+  quantidadeVendida Float   @default(0)
+
+  alocacoes AlocacaoCompra[]
+}
+
+/// Vínculo item de venda → item de compra de onde a mercadoria saiu (FIFO), usado para marcar a compra como "Vendido"
+model AlocacaoCompra {
+  id           Int        @id @default(autoincrement())
+  vendaItem    VendaItem  @relation(fields: [vendaItemId], references: [id], onDelete: Cascade)
+  vendaItemId  Int
+  compraItem   CompraItem @relation(fields: [compraItemId], references: [id], onDelete: Cascade)
+  compraItemId Int
+  quantidade   Float
+  criadoEm     DateTime   @default(now())
+
+  @@index([vendaItemId])
+  @@index([compraItemId])
 }
 
 model CompraParcela {

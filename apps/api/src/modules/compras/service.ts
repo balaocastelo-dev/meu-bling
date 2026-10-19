@@ -477,3 +477,98 @@ export async function importarXmlNfe(xml: string, usuarioId: number, opcoes: { d
     { timeout: 60000 },
   );
 }
+
+// ---------------------------------------------------------------- VENDIDO AUTOMÁTICO (venda → compra)
+
+/**
+ * Ao fechar uma venda (baixa de estoque), cada item é alocado FIFO nas compras que trouxeram aquele produto
+ * (compras com estoque lançado, não canceladas). Quando toda a mercadoria de uma compra foi vendida, a compra
+ * passa automaticamente para a situação "Vendido" (executando as ações dela, ex.: lançar contas a pagar de um
+ * consignado). Sem situação "Vendido" cadastrada, só registra a alocação.
+ */
+export async function alocarComprasParaVenda(tx: Tx, vendaId: number, usuarioId: number | null): Promise<number[]> {
+  const venda = await tx.venda.findUnique({ where: { id: vendaId }, include: { itens: { include: { produto: true, alocacoesCompra: true } } } });
+  if (!venda) throw new NotFound('Venda');
+  const comprasTocadas = new Set<number>();
+  for (const it of venda.itens) {
+    if (!it.produtoId || !movimentaEstoque(it.produto)) continue;
+    const jaAlocado = it.alocacoesCompra.reduce((s, a) => s + a.quantidade, 0);
+    let restante = arredondar(it.quantidade - jaAlocado, 4);
+    if (restante <= 0) continue;
+    const candidatos = await tx.compraItem.findMany({
+      where: { produtoId: it.produtoId, compra: { estoqueLancado: true, situacao: { cancelamento: false } } },
+      include: { compra: { select: { id: true, data: true } } },
+      orderBy: [{ compra: { data: 'asc' } }, { id: 'asc' }],
+    });
+    for (const ci of candidatos) {
+      if (restante <= 0) break;
+      const disponivel = arredondar(ci.quantidade - ci.quantidadeVendida, 4);
+      if (disponivel <= 0) continue;
+      const q = Math.min(disponivel, restante);
+      await tx.alocacaoCompra.create({ data: { vendaItemId: it.id, compraItemId: ci.id, quantidade: q } });
+      await tx.compraItem.update({ where: { id: ci.id }, data: { quantidadeVendida: { increment: q } } });
+      comprasTocadas.add(ci.compra.id);
+      restante = arredondar(restante - q, 4);
+    }
+  }
+  const vendidas: number[] = [];
+  for (const compraId of comprasTocadas) {
+    if (await marcarCompraVendida(tx, compraId, venda.numero, usuarioId)) vendidas.push(compraId);
+  }
+  return vendidas;
+}
+
+/** Compra com toda a mercadoria vendida → situação "Vendido" (se existir e ainda não estiver nela). */
+async function marcarCompraVendida(tx: Tx, compraId: number, vendaNumero: number, usuarioId: number | null) {
+  const compra = await tx.compra.findUnique({ where: { id: compraId }, include: { itens: { include: { produto: true } }, situacao: true } });
+  if (!compra || compra.situacao.cancelamento) return false;
+  const itensEstoque = compra.itens.filter((i) => i.produtoId && movimentaEstoque(i.produto));
+  if (!itensEstoque.length) return false;
+  if (itensEstoque.some((i) => i.quantidadeVendida + 0.0001 < i.quantidade)) return false;
+  const vendido = await tx.situacao.findFirst({ where: { modulo: 'COMPRA', nome: 'Vendido', ativo: true } });
+  if (!vendido || compra.situacaoId === vendido.id) return false;
+  const acoes = JSON.parse(vendido.acoes || '[]') as string[];
+  const ctx: ContextoAcao = { modulo: 'COMPRA', entidadeId: compraId, tx, usuarioId, situacaoOrigemId: compra.situacaoId, situacaoDestinoId: vendido.id };
+  if (acoes.includes('lancarEstoque')) await acaoLancarEstoque(ctx);
+  if (acoes.includes('lancarContas')) await acaoLancarContas(ctx);
+  await tx.compra.update({ where: { id: compraId }, data: { situacaoId: vendido.id } });
+  await tx.historicoSituacao.create({
+    data: { entidadeTipo: 'COMPRA', entidadeId: compraId, deSituacaoId: compra.situacaoId, deSituacao: compra.situacao.nome, paraSituacaoId: vendido.id, paraSituacao: vendido.nome, observacao: `Automático: mercadoria vendida na venda nº ${vendaNumero}`, usuarioId },
+  });
+  return true;
+}
+
+/**
+ * Estorno da venda: desfaz as alocações; compras que estavam em "Vendido" e voltam a ter mercadoria
+ * retornam à situação anterior (a do histórico; senão "Fechado"). Contas a pagar já pagas não são tocadas.
+ */
+export async function desalocarComprasDaVenda(tx: Tx, vendaId: number, usuarioId: number | null) {
+  const venda = await tx.venda.findUnique({ where: { id: vendaId }, select: { numero: true, itens: { select: { id: true } } } });
+  if (!venda) throw new NotFound('Venda');
+  const alocacoes = await tx.alocacaoCompra.findMany({ where: { vendaItemId: { in: venda.itens.map((i) => i.id) } }, include: { compraItem: { select: { compraId: true } } } });
+  const compras = new Set<number>();
+  for (const a of alocacoes) {
+    await tx.compraItem.update({ where: { id: a.compraItemId }, data: { quantidadeVendida: { decrement: a.quantidade } } });
+    await tx.alocacaoCompra.delete({ where: { id: a.id } });
+    compras.add(a.compraItem.compraId);
+  }
+  for (const compraId of compras) {
+    const compra = await tx.compra.findUnique({ where: { id: compraId }, include: { situacao: true } });
+    if (!compra || compra.situacao.nome !== 'Vendido') continue;
+    const ultimo = await tx.historicoSituacao.findFirst({ where: { entidadeTipo: 'COMPRA', entidadeId: compraId, paraSituacaoId: compra.situacaoId }, orderBy: { id: 'desc' } });
+    const anterior = (ultimo?.deSituacaoId ? await tx.situacao.findUnique({ where: { id: ultimo.deSituacaoId } }) : null) || (await tx.situacao.findFirst({ where: { modulo: 'COMPRA', nome: 'Fechado' } }));
+    if (!anterior || anterior.id === compra.situacaoId) continue;
+    // consignado voltando: estorna a conta a pagar lançada automaticamente (se ainda não paga)
+    if (anterior.nome === 'Consignado' && compra.contasLancadas) {
+      try {
+        await acaoEstornarContas({ modulo: 'COMPRA', entidadeId: compraId, tx, usuarioId, situacaoOrigemId: compra.situacaoId, situacaoDestinoId: anterior.id });
+      } catch {
+        /* conta já paga: mantém */
+      }
+    }
+    await tx.compra.update({ where: { id: compraId }, data: { situacaoId: anterior.id } });
+    await tx.historicoSituacao.create({
+      data: { entidadeTipo: 'COMPRA', entidadeId: compraId, deSituacaoId: compra.situacaoId, deSituacao: compra.situacao.nome, paraSituacaoId: anterior.id, paraSituacao: anterior.nome, observacao: `Automático: estorno da venda nº ${venda.numero}`, usuarioId },
+    });
+  }
+}
