@@ -65,4 +65,4 @@ Criação de usuários: Configurações → Usuários (somente ADMIN). Vincule c
 - [x] Arquivos sensíveis (sessão do WhatsApp, XMLs, DANFEs, anexos) só com sessão válida; logos públicos.
 - [x] CORS restrito à própria origem em produção.
 - [x] Limite de tentativas de login (20/min) e auditoria de ações.
-- [ ] Backup diário (`scripts\backup.ps1` ou volumes do Docker).
+- [x] Backup diário (`deploy/vps/backup.sh` no cron da VPS às 03:00; no PC, `scripts\backup.ps1`).
