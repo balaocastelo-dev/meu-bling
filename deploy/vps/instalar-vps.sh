@@ -64,7 +64,8 @@ msg "Construindo a imagem (base ${CAMINHO}/)"
 docker build --build-arg "VITE_BASE_PATH=${CAMINHO}/" -t "$CONTAINER" "$CODIGO"
 
 msg "Trocando o container"
-if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER"; then
+# (docker inspect em vez de "docker ps | grep -q": com pipefail o grep -q pode quebrar o pipe e dar falso negativo)
+if docker inspect "$CONTAINER" >/dev/null 2>&1; then
   docker stop -t 15 "$CONTAINER" >/dev/null 2>&1 || true
   docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
 fi
