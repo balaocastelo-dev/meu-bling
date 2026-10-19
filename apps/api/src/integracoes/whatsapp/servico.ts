@@ -210,8 +210,9 @@ export async function conectar(): Promise<EstadoWhatsApp> {
       logger,
       browser: ['MEU BLING', 'Chrome', '1.0'],
       markOnlineOnConnect: false,
+      // não desligar shouldSyncHistoryMessage: o sync inicial traz os mapeamentos LID↔telefone;
+      // sem eles a sessão volta a dar "Bad MAC" / "Aguardando mensagem". O padrão já pula o histórico completo.
       syncFullHistory: false,
-      shouldSyncHistoryMessage: () => false,
       generateHighQualityLinkPreview: false,
       connectTimeoutMs: 30000,
       keepAliveIntervalMs: 25000,
