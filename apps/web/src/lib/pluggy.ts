@@ -1,9 +1,12 @@
 /**
  * Carregamento dinâmico do widget Pluggy Connect (Open Finance).
- * Script: https://cdn.pluggy.ai/pluggy-connect/v2.9.1/pluggy-connect.js
+ *
+ * Script oficial (pacote `pluggy-connect-sdk`): https://cdn.pluggy.ai/pluggy-connect/latest/pluggy-connect.js
+ * Atenção: as URLs versionadas (ex.: /v2.9.1/) do CDN respondem 404 — só o caminho `latest` é publicado.
+ * O bundle registra o construtor em `window.PluggyConnect`.
  */
 
-const SCRIPT_URL = 'https://cdn.pluggy.ai/pluggy-connect/v2.9.1/pluggy-connect.js';
+const SCRIPT_URL = 'https://cdn.pluggy.ai/pluggy-connect/latest/pluggy-connect.js';
 
 export interface PluggyItem {
   id: string;
@@ -14,14 +17,17 @@ export interface PluggyItem {
 interface PluggyConnectOpcoes {
   connectToken: string;
   includeSandbox?: boolean;
-  onSuccess?: (data: { item: PluggyItem }) => void;
-  onError?: (err: unknown) => void;
-  onClose?: () => void;
+  countries?: string[];
   language?: string;
+  /** Pré-preenche CPF/CNPJ nos conectores Open Finance */
+  openFinanceParameters?: { cpf?: string; cnpj?: string };
+  onSuccess?: (data: { item: PluggyItem }) => void;
+  onError?: (err: { message?: string; data?: { item?: PluggyItem } } | Error) => void;
+  onClose?: () => void;
 }
 
 interface PluggyConnectInstancia {
-  init: () => void;
+  init: () => Promise<void> | void;
 }
 
 declare global {
@@ -43,24 +49,38 @@ export function carregarPluggy(): Promise<void> {
     s.onload = () => resolve();
     s.onerror = () => {
       carregando = null;
-      reject(new Error('Não foi possível carregar o widget do Open Finance (Pluggy).'));
+      s.remove();
+      reject(new Error('Não foi possível carregar o widget do Open Finance (Pluggy). Verifique a internet ou um bloqueador de anúncios.'));
     };
     document.head.appendChild(s);
   });
   return carregando;
 }
 
-/** Abre o widget e devolve o item conectado (ou null se o usuário fechar) */
-export async function abrirPluggyConnect(connectToken: string): Promise<PluggyItem | null> {
+/** Abre o widget e devolve o item conectado (ou null se o usuário fechar sem concluir) */
+export async function abrirPluggyConnect(connectToken: string, opcoes?: { cnpj?: string; includeSandbox?: boolean }): Promise<PluggyItem | null> {
   await carregarPluggy();
   if (!window.PluggyConnect) throw new Error('Widget Pluggy indisponível.');
   return new Promise((resolve, reject) => {
+    let concluido = false;
     const inst = new window.PluggyConnect!({
       connectToken,
       language: 'pt',
-      onSuccess: ({ item }) => resolve(item),
-      onError: (err) => reject(err instanceof Error ? err : new Error('Erro no widget Pluggy.')),
-      onClose: () => resolve(null),
+      countries: ['BR'],
+      includeSandbox: opcoes?.includeSandbox ?? false,
+      openFinanceParameters: opcoes?.cnpj ? { cnpj: opcoes.cnpj.replace(/\D/g, '') } : undefined,
+      onSuccess: ({ item }) => {
+        concluido = true;
+        resolve(item);
+      },
+      onError: (err) => {
+        concluido = true;
+        const msg = err instanceof Error ? err.message : err?.message;
+        reject(new Error(msg || 'Erro no widget Pluggy.'));
+      },
+      onClose: () => {
+        if (!concluido) resolve(null);
+      },
     });
     inst.init();
   });

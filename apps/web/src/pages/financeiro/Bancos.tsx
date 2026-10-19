@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { ArrowRightLeft, Ban, CircleCheck, FileUp, Landmark, Link2, Plus, PlugZap, RefreshCw, Unlink, Wallet } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { abrirPluggyConnect } from '@/lib/pluggy';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useCategoriasFinanceiras, useContasFinanceiras, opcoesDe } from '@/hooks/useListas';
 import { Badge, BarraFiltros, Button, Card, DateInput, EmptyState, Input, Modal, MoneyInput, PageHeader, Pagination, Select, SelectFiltro, Skeleton, Tabs, Textarea } from '@/components/ui';
@@ -19,8 +20,11 @@ export default function Bancos() {
   const aba = pg.getFiltro('aba') || 'contas';
   const { data: contas, isLoading } = useContasFinanceiras();
   const { data: of } = useQuery({ queryKey: ['open-finance-status'], queryFn: () => api.get<OpenFinanceStatus>('/open-finance/status').catch(() => null) });
+  const { data: emp } = useEmpresa();
   const ofxRef = useRef<HTMLInputElement>(null);
   const [ofxConta, setOfxConta] = useState<number | ''>('');
+  const [itemId, setItemId] = useState('');
+  const [itemConta, setItemConta] = useState<number | ''>('');
   const [transfAberta, setTransfAberta] = useState(false);
   const [lancAberto, setLancAberto] = useState(false);
 
@@ -30,17 +34,32 @@ export default function Bancos() {
     qc.invalidateQueries({ queryKey: ['financeiro-resumo'] });
   };
 
+  type Vinculada = { contaFinanceiraId: number; nome: string; saldo: number; nova: boolean };
+  const aoVincular = (r: Vinculada[] | null) => {
+    if (!r) return;
+    toast.success(`${r.length} conta(s) vinculada(s): ${r.map((c) => c.nome).join(', ')}`);
+    invalidar();
+  };
+
+  /** Fluxo padrão: widget Pluggy Connect → item → vincula as contas do item */
   const conectar = useMutation({
     mutationFn: async () => {
       const { accessToken } = await api.post<{ accessToken: string }>('/open-finance/connect-token');
-      const item = await abrirPluggyConnect(accessToken);
+      const item = await abrirPluggyConnect(accessToken, { cnpj: emp?.cnpj });
       if (!item) return null;
-      return api.post<{ contaFinanceiraId: number; nome: string; saldo: number }[]>('/open-finance/vincular', { itemId: item.id });
+      return api.post<Vinculada[]>('/open-finance/vincular', { itemId: item.id });
     },
+    onSuccess: aoVincular,
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
+
+  /** Fluxo alternativo (Meu Pluggy): o item já foi criado no app Demo da Pluggy; basta colar o Item ID */
+  const vincularItem = useMutation({
+    mutationFn: () => api.post<Vinculada[]>('/open-finance/vincular', { itemId: itemId.trim(), contaFinanceiraId: itemConta || undefined }),
     onSuccess: (r) => {
-      if (!r) return;
-      toast.success(`${r.length} conta(s) vinculada(s): ${r.map((c) => c.nome).join(', ')}`);
-      invalidar();
+      aoVincular(r);
+      setItemId('');
+      setItemConta('');
     },
     onError: (e) => toast.error(mensagemErro(e)),
   });
@@ -117,6 +136,16 @@ export default function Bancos() {
             )}
             {contas?.map((c) => <CardConta key={c.id} conta={c} onSincronizar={() => sincronizar.mutate(c.id)} sincronizando={sincronizar.isPending} onDesvincular={() => { if (confirm('Desvincular esta conta do Open Finance?')) desvincular.mutate(c.id); }} />)}
           </div>
+
+          {of?.configurado && (
+            <Card titulo="Vincular pelo Item ID (Meu Pluggy)" descricao="Caminho gratuito: conecte o banco em meu.pluggy.ai, autorize no app Demo da Pluggy e cole aqui o Item ID (menu ⋮ → “Copiar Item ID”). As contas do item são vinculadas na hora.">
+              <div className="flex flex-wrap items-end gap-2">
+                <Input label="Item ID" value={itemId} onChange={(e) => setItemId(e.target.value)} placeholder="ex.: 8a1b2c3d-…" className="w-80 font-mono" autoComplete="off" />
+                <Select label="Vincular a uma conta já cadastrada (opcional)" value={itemConta} onChange={(e) => setItemConta(e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe((contas ?? []).filter((c) => !c.openFinanceItemId))} placeholder="Criar automaticamente" className="w-72" />
+                <Button variante="secundario" icone={<Link2 className="h-4 w-4" />} disabled={itemId.trim().length < 8} carregando={vincularItem.isPending} onClick={() => vincularItem.mutate()}>Vincular</Button>
+              </div>
+            </Card>
+          )}
 
           <Card titulo="Importar extrato OFX" descricao="Alternativa sem Open Finance: exporte o OFX no internet banking e importe aqui para conciliar.">
             <div className="flex flex-wrap items-end gap-2">
