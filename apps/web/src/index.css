@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------
+   Tokens de design do MEU BLING
+   Paleta: app slate-50, cartões brancos, primária vermelha (marca Balão)
+   --------------------------------------------------------------------- */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --color-brand-50: #fef2f2;
+  --color-brand-100: #fee2e2;
+  --color-brand-500: #ef4444;
+  --color-brand-600: #dc2626;
+  --color-brand-700: #b91c1c;
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-pop: 0 10px 30px -10px rgb(15 23 42 / 0.25), 0 2px 6px -2px rgb(15 23 42 / 0.1);
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Números financeiros alinhados */
+.num {
+  @apply tabular-nums;
+}
+
+/* Scrollbar discreta */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(203 213 225) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(203 213 225);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Inputs base (usados pelos componentes ui) */
+.input-base {
+  @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-xs transition
+    focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20
+    disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500;
+}
+.input-erro {
+  @apply border-red-400 focus:border-red-500 focus:ring-red-500/20;
+}
+
+/* Tabela densa */
+.tbl {
+  @apply w-full text-sm;
+}
+.tbl thead th {
+  @apply sticky top-0 z-10 bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 border-b border-slate-200 whitespace-nowrap;
+}
+.tbl tbody td {
+  @apply px-3 py-2 border-b border-slate-100 align-middle;
+}
+.tbl tbody tr:last-child td {
+  @apply border-b-0;
+}
+.tbl tbody tr.clicavel {
+  @apply cursor-pointer transition-colors hover:bg-slate-50;
+}
+
+/* Skeleton */
+@keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+.skeleton {
+  @apply rounded bg-slate-200;
+  background-image: linear-gradient(90deg, rgb(226 232 240) 0px, rgb(241 245 249) 40px, rgb(226 232 240) 80px);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+/* Animações leves */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.anim-in {
+  animation: fadeIn 0.15s ease-out;
+}
+
+/* Impressão de páginas públicas */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
