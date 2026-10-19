@@ -25,6 +25,9 @@ export default function Bling() {
   const qc = useQueryClient();
   const [sel, setSel] = useState<Set<string>>(new Set(['contatos', 'produtos', 'estoque']));
   const [dataInicial, setDataInicial] = useState('');
+  const [dataFinal, setDataFinal] = useState('');
+  const [fecharEmAberto, setFecharEmAberto] = useState(false);
+  const [baixarNoCaixa, setBaixarNoCaixa] = useState(false);
   const [entCsv, setEntCsv] = useState('contatos');
   const csvRef = useRef<HTMLInputElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -66,7 +69,7 @@ export default function Bling() {
     onError: (e) => toast.error(mensagemErro(e)),
   });
   const importar = useMutation({
-    mutationFn: () => api.post('/bling/importar', { entidades: Array.from(sel), dataInicial: dataInicial || undefined }),
+    mutationFn: () => api.post('/bling/importar', { entidades: Array.from(sel), dataInicial: dataInicial || undefined, dataFinal: dataFinal || undefined, fecharEmAberto: sel.has('vendas') ? fecharEmAberto : undefined, baixarNoCaixa: sel.has('vendas') ? baixarNoCaixa : undefined }),
     onSuccess: () => {
       toast.success('Importação iniciada em segundo plano.');
       qc.invalidateQueries({ queryKey: ['bling-importar-status'] });
@@ -130,8 +133,17 @@ export default function Bling() {
                 <Checkbox key={e.id} label={e.rotulo} checked={sel.has(e.id)} disabled={imp?.emAndamento} onChange={(ev) => setSel((s) => { const n = new Set(s); if (ev.target.checked) n.add(e.id); else n.delete(e.id); return n; })} />
               ))}
             </div>
+            {sel.has('vendas') && (
+              <div className="mt-4 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-medium text-slate-600">Opções dos pedidos de venda</p>
+                <Checkbox label='Considerar fechadas as vendas que estão "Em aberto", "Em andamento" ou "Verificado" no Bling (entram como Atendido)' checked={fecharEmAberto} disabled={imp?.emAndamento} onChange={(ev) => setFecharEmAberto(ev.target.checked)} />
+                <Checkbox label="Lançar o valor das vendas fechadas como recebido no Caixa, na data de cada venda (gera contas a receber baixadas e o fluxo de caixa)" checked={baixarNoCaixa} disabled={imp?.emAndamento} onChange={(ev) => setBaixarNoCaixa(ev.target.checked)} />
+                <p className="text-[11px] text-slate-400">O resumo (quantidade de pedidos, total por mês/situação e valor lançado no caixa) aparece no log ao final.</p>
+              </div>
+            )}
             <div className="mt-4 flex flex-wrap items-end gap-2">
               <DateInput label="A partir de (vendas/compras/financeiro)" value={dataInicial} onChange={setDataInicial} className="w-64" />
+              <DateInput label="Até (padrão: hoje)" value={dataFinal} onChange={setDataFinal} className="w-48" />
               <Button variante="primario" icone={imp?.emAndamento ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} disabled={!status?.conectado || sel.size === 0 || imp?.emAndamento} carregando={importar.isPending} onClick={() => importar.mutate()}>{imp?.emAndamento ? 'Importando…' : 'Iniciar importação'}</Button>
             </div>
 

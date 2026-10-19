@@ -7,11 +7,34 @@ import path from 'node:path';
 import { format } from 'date-fns';
 import { prisma } from '../../lib/prisma.js';
 import { env } from '../../lib/env.js';
-import { somenteDigitos, competenciaDe, arredondar } from '../../lib/util.js';
+import { somenteDigitos, competenciaDe, arredondar, formatarMoeda } from '../../lib/util.js';
+import { baixarContaReceber } from '../../modules/financeiro/service.js';
 import { blingGet, blingPaginar } from './cliente.js';
 
 export type EntidadeBling = 'contatos' | 'produtos' | 'estoque' | 'vendas' | 'compras' | 'contasReceber' | 'contasPagar' | 'notas';
 export const ENTIDADES: EntidadeBling[] = ['contatos', 'produtos', 'estoque', 'vendas', 'compras', 'contasReceber', 'contasPagar', 'notas'];
+
+export interface OpcoesImportacao {
+  /** produtos: busca o detalhe de cada produto (NCM, custo, imagem). false = só a listagem (muito mais rápido) */
+  detalhesProdutos?: boolean;
+  /** vendas: pedidos "Em aberto", "Em andamento" e "Verificado" no Bling entram como "Atendido" (fechados) */
+  fecharEmAberto?: boolean;
+  /** vendas: lança o valor das vendas fechadas (situação final) como recebido no Caixa, na data da venda */
+  baixarNoCaixa?: boolean;
+  /** vendas/compras/financeiro: data final do período (padrão: hoje) */
+  dataFinal?: string;
+}
+
+/** Totais apurados na importação de vendas (para conferência com o Bling) */
+export interface ResumoVendas {
+  quantidade: number;
+  total: number;
+  fechadasNaMigracao: number;
+  caixaQuantidade: number;
+  caixaValor: number;
+  porSituacao: Record<string, { quantidade: number; total: number }>;
+  porMes: Record<string, { quantidade: number; total: number }>;
+}
 
 export interface EstadoImportacao {
   emAndamento: boolean;
@@ -19,7 +42,9 @@ export interface EstadoImportacao {
   finalizadoEm: Date | null;
   entidades: EntidadeBling[];
   progresso: { entidade: EntidadeBling | null; feitos: number; total: number | null };
-  resultado: Partial<Record<EntidadeBling, { importados: number; atualizados: number; erros: number }>>;
+  resultado: Partial<Record<EntidadeBling, { importados: number; atualizados: number; erros: number; ignorados?: number; resumo?: ResumoVendas }>>;
+  opcoes: OpcoesImportacao;
+  dataInicial: string | null;
   log: string[];
   erro: string | null;
   arquivoLog: string | null;
@@ -32,6 +57,8 @@ const estado: EstadoImportacao = {
   entidades: [],
   progresso: { entidade: null, feitos: 0, total: null },
   resultado: {},
+  opcoes: {},
+  dataInicial: null,
   log: [],
   erro: null,
   arquivoLog: null,
@@ -388,19 +415,93 @@ async function importarEstoque(r: { importados: number; atualizados: number; err
 // ---------------------------------------------------------------------
 // Vendas
 // ---------------------------------------------------------------------
-async function importarVendas(r: { importados: number; atualizados: number; erros: number }, dataInicial?: string) {
+
+/** Situações do Bling consideradas "em aberto" (pedido ainda não concluído) — ids padrão + nome como reserva. */
+const SIT_VENDA_ABERTA_IDS = new Set(['6', '15', '24']); // Em aberto, Em andamento, Verificado
+const SIT_VENDA_ABERTA_NOMES = /^(em aberto|em andamento|verificado)$/i;
+
+/**
+ * Lança as parcelas de uma venda fechada como RECEBIDAS no Caixa, na data da venda.
+ * Idempotente: parcelas já ligadas a uma conta recebida não são tocadas; sem parcelas, cria uma com o total.
+ */
+export async function lancarVendaNoCaixa(vendaId: number, caixaId: number, catVendaId: number | null) {
+  return prisma.$transaction(async (tx) => {
+    const venda = await tx.venda.findUnique({ where: { id: vendaId }, include: { parcelas: { orderBy: { numero: 'asc' } } } });
+    if (!venda) return { lancado: 0, contas: 0 };
+    const categoriaId = venda.categoriaFinanceiraId ?? catVendaId;
+    const competencia = competenciaDe(venda.data);
+    let lancado = 0;
+    let contas = 0;
+    const parcelas = [...venda.parcelas];
+    if (!parcelas.length && venda.total > 0) {
+      parcelas.push(await tx.vendaParcela.create({ data: { vendaId, numero: 1, dataVencimento: venda.data, valor: arredondar(venda.total) } }));
+    }
+    const n = parcelas.length;
+    for (const p of parcelas) {
+      let conta = p.contaReceberId ? await tx.contaReceber.findUnique({ where: { id: p.contaReceberId } }) : null;
+      if (!conta) {
+        if (p.valor <= 0) continue;
+        conta = await tx.contaReceber.create({
+          data: {
+            contatoId: venda.contatoId,
+            vendedorId: venda.vendedorId,
+            descricao: `Venda nº ${venda.numero} (${p.numero}/${n})`,
+            dataEmissao: venda.data,
+            vencimento: p.dataVencimento,
+            competencia,
+            valor: arredondar(p.valor),
+            situacao: 'ABERTO',
+            formaPagamentoId: p.formaPagamentoId,
+            categoriaId,
+            origemTipo: 'VENDA',
+            origemId: venda.id,
+            parcela: `${p.numero}/${n}`,
+            observacoes: p.observacoes,
+          },
+        });
+        await tx.vendaParcela.update({ where: { id: p.id }, data: { contaReceberId: conta.id } });
+        contas += 1;
+      }
+      if (conta.situacao === 'ABERTO' || conta.situacao === 'PARCIAL') {
+        const valor = arredondar(conta.valor - conta.valorRecebido - conta.desconto);
+        if (valor > 0) {
+          await baixarContaReceber({ id: conta.id, valor, data: venda.data, contaFinanceiraId: caixaId, formaPagamentoId: conta.formaPagamentoId, observacoes: 'Recebimento lançado na migração do Bling' }, tx);
+          lancado = arredondar(lancado + valor);
+        }
+      }
+    }
+    if (!venda.contasLancadas) await tx.venda.update({ where: { id: vendaId }, data: { contasLancadas: true } });
+    return { lancado, contas };
+  });
+}
+
+async function importarVendas(r: { importados: number; atualizados: number; erros: number; resumo?: ResumoVendas }, dataInicial?: string, op: OpcoesImportacao = {}) {
   const sitBling = await carregarSituacoesVendaBling();
   const depPadrao = await prisma.deposito.findFirst({ where: { padrao: true } });
   const catVenda = await prisma.categoriaFinanceira.findFirst({ where: { grupoDre: 'RECEITA_BRUTA', nome: { contains: 'produto' } } });
+  const sitAtendido = op.fecharEmAberto ? await situacaoPorNome('VENDA', 'Atendido') : null;
+  const caixa = op.baixarNoCaixa ? (await prisma.contaFinanceira.findFirst({ where: { tipo: 'CAIXA', ativo: true }, orderBy: [{ padrao: 'desc' }, { id: 'asc' }] })) || (await prisma.contaFinanceira.findFirst({ where: { padrao: true } })) : null;
+  if (op.baixarNoCaixa && !caixa) throw new Error('Nenhuma conta financeira do tipo Caixa encontrada para lançar os recebimentos.');
+  if (op.fecharEmAberto) log('Opção: vendas "Em aberto", "Em andamento" e "Verificado" serão gravadas como "Atendido".');
+  if (caixa) log(`Opção: vendas fechadas serão lançadas como recebidas na conta "${caixa.nome}" na data da venda.`);
+  const totais: ResumoVendas = { quantidade: 0, total: 0, fechadasNaMigracao: 0, caixaQuantidade: 0, caixaValor: 0, porSituacao: {}, porMes: {} };
+  r.resumo = totais;
+  const soma = (mapa: Record<string, { quantidade: number; total: number }>, chave: string, valor: number) => {
+    const m = (mapa[chave] ||= { quantidade: 0, total: 0 });
+    m.quantidade += 1;
+    m.total = arredondar(m.total + valor);
+  };
   let maiorNumero = 0;
-  for await (const pagina of blingPaginar<any>('/pedidos/vendas', { dataInicial, dataFinal: dataInicial ? format(new Date(), 'yyyy-MM-dd') : undefined })) {
+  for await (const pagina of blingPaginar<any>('/pedidos/vendas', { dataInicial, dataFinal: op.dataFinal || (dataInicial ? format(new Date(), 'yyyy-MM-dd') : undefined) })) {
     for (const resumo of pagina) {
       estado.progresso.feitos += 1;
       try {
         const v: any = (await blingGet<{ data: any }>(`/pedidos/vendas/${resumo.id}`)).data || resumo;
         const blingId = bid(v.id)!;
-        const nomeSit = sitBling.get(bid(v.situacao?.id) || '')?.nome || v.situacao?.valor || v.situacao?.nome || 'Em aberto';
-        const situacao = await situacaoPorNome('VENDA', String(nomeSit), bid(v.situacao?.id));
+        const nomeSitBling = String(sitBling.get(bid(v.situacao?.id) || '')?.nome || v.situacao?.valor || v.situacao?.nome || 'Em aberto').trim();
+        const estavaAberta = SIT_VENDA_ABERTA_IDS.has(bid(v.situacao?.id) || '') || SIT_VENDA_ABERTA_NOMES.test(nomeSitBling);
+        const fecharAgora = !!(sitAtendido && estavaAberta);
+        const situacao = fecharAgora ? sitAtendido! : await situacaoPorNome('VENDA', nomeSitBling, bid(v.situacao?.id));
         const contato = await contatoPorBling(bid(v.contato?.id), { nome: v.contato?.nome, numeroDocumento: v.contato?.numeroDocumento, tipoPessoa: v.contato?.tipoPessoa });
         if (!contato) throw new Error('venda sem contato');
         const vendedor = v.vendedor?.id ? await prisma.vendedor.findUnique({ where: { blingId: bid(v.vendedor.id)! } }) : null;
@@ -455,13 +556,17 @@ async function importarVendas(r: { importados: number; atualizados: number; erro
           total,
           custoTotal: arredondar(itens.reduce((s, i) => s + i.custoUnitario * i.quantidade, 0)),
           observacoes: v.observacoes || null,
-          observacoesInternas: v.observacoesInternas || null,
+          observacoesInternas: fecharAgora
+            ? [v.observacoesInternas, `[Migração do Bling] Estava "${nomeSitBling}" no Bling em ${format(new Date(), 'dd/MM/yyyy')}; considerada fechada (Atendido).`].filter(Boolean).join('\n')
+            : v.observacoesInternas || null,
           transportadoraId: transportadora?.id ?? null,
           fretePorConta: num(v.transporte?.fretePorConta, 9),
           quantidadeVolumes: num(v.transporte?.quantidadeVolumes),
           pesoBruto: num(v.transporte?.pesoBruto),
+          // vendas finais entram com estoque/contas "já lançados": o saldo de estoque vem do Bling (snapshot)
+          // e as contas são criadas pela opção baixarNoCaixa ou pela importação de contas a receber
           estoqueLancado: final,
-          contasLancadas: final,
+          contasLancadas: final && !caixa ? true : false,
         };
         const parcelas: any[] = [];
         let np = 0;
@@ -472,17 +577,40 @@ async function importarVendas(r: { importados: number; atualizados: number; erro
         const existente = await prisma.venda.findUnique({ where: { blingId } });
         const conflitoNumero = await prisma.venda.findUnique({ where: { numero: dados.numero } });
         if (conflitoNumero && conflitoNumero.blingId !== blingId) throw new Error(`número ${dados.numero} já existe (venda id ${conflitoNumero.id})`);
+        let vendaId: number;
         if (existente) {
+          // contas já lançadas/recebidas não são desfeitas numa reimportação
+          const contasLancadas = existente.contasLancadas || dados.contasLancadas;
           await prisma.$transaction(async (tx) => {
             await tx.vendaItem.deleteMany({ where: { vendaId: existente.id } });
             await tx.vendaParcela.deleteMany({ where: { vendaId: existente.id, contaReceberId: null } });
-            await tx.venda.update({ where: { id: existente.id }, data: { ...dados, itens: { create: itens }, parcelas: (await tx.vendaParcela.count({ where: { vendaId: existente.id } })) ? undefined : { create: parcelas } } });
+            await tx.venda.update({ where: { id: existente.id }, data: { ...dados, contasLancadas, itens: { create: itens }, parcelas: (await tx.vendaParcela.count({ where: { vendaId: existente.id } })) ? undefined : { create: parcelas } } });
           });
+          if (existente.situacaoId !== situacao.id) {
+            const de = await prisma.situacao.findUnique({ where: { id: existente.situacaoId } });
+            await prisma.historicoSituacao.create({ data: { entidadeTipo: 'VENDA', entidadeId: existente.id, deSituacaoId: existente.situacaoId, deSituacao: de?.nome, paraSituacaoId: situacao.id, paraSituacao: situacao.nome, observacao: fecharAgora ? `Fechada na migração (no Bling: "${nomeSitBling}")` : 'Atualizada pela importação do Bling', data: new Date() } });
+          }
+          vendaId = existente.id;
           r.atualizados += 1;
         } else {
           const nova = await prisma.venda.create({ data: { ...dados, blingId, itens: { create: itens }, parcelas: { create: parcelas } } });
-          await prisma.historicoSituacao.create({ data: { entidadeTipo: 'VENDA', entidadeId: nova.id, paraSituacaoId: situacao.id, paraSituacao: situacao.nome, observacao: 'Importada do Bling', data: dados.data } });
+          await prisma.historicoSituacao.create({ data: { entidadeTipo: 'VENDA', entidadeId: nova.id, paraSituacaoId: situacao.id, paraSituacao: situacao.nome, observacao: fecharAgora ? `Importada do Bling (lá estava "${nomeSitBling}"; fechada na migração)` : 'Importada do Bling', data: dados.data } });
+          vendaId = nova.id;
           r.importados += 1;
+        }
+        // ---- resumo para conferência
+        totais.quantidade += 1;
+        totais.total = arredondar(totais.total + total);
+        if (fecharAgora) totais.fechadasNaMigracao += 1;
+        soma(totais.porSituacao, fecharAgora ? `Atendido (era ${nomeSitBling})` : situacao.nome, total);
+        soma(totais.porMes, competenciaDe(dados.data), total);
+        // ---- caixa
+        if (caixa && final && total > 0) {
+          const lc = await lancarVendaNoCaixa(vendaId, caixa.id, catVenda?.id ?? null);
+          if (lc.lancado > 0) {
+            totais.caixaQuantidade += 1;
+            totais.caixaValor = arredondar(totais.caixaValor + lc.lancado);
+          }
         }
         maiorNumero = Math.max(maiorNumero, dados.numero);
       } catch (e: any) {
@@ -490,22 +618,28 @@ async function importarVendas(r: { importados: number; atualizados: number; erro
         log(`  ! venda ${resumo.numero ?? resumo.id}: ${e.message}`);
       }
     }
-    log(`Vendas processadas: ${estado.progresso.feitos}`);
+    log(`Vendas processadas: ${estado.progresso.feitos} (${totais.quantidade} gravadas, ${formatarMoeda(totais.total)})`);
   }
   if (maiorNumero) {
     const seq = await prisma.sequencia.findUnique({ where: { nome: 'VENDA' } });
     if (!seq || seq.valor < maiorNumero) await prisma.sequencia.upsert({ where: { nome: 'VENDA' }, create: { nome: 'VENDA', valor: maiorNumero }, update: { valor: maiorNumero } });
   }
+  // ---- resumo final (conferência com o Bling)
+  log(`RESUMO vendas${dataInicial ? ` desde ${dataInicial}` : ''}: ${totais.quantidade} pedidos, total ${formatarMoeda(totais.total)}`);
+  for (const [sit, m] of Object.entries(totais.porSituacao).sort((a, b) => b[1].total - a[1].total)) log(`  ${sit}: ${m.quantidade} pedidos, ${formatarMoeda(m.total)}`);
+  for (const [mes, m] of Object.entries(totais.porMes).sort()) log(`  ${mes}: ${m.quantidade} pedidos, ${formatarMoeda(m.total)}`);
+  if (sitAtendido) log(`  Fechadas na migração (estavam em aberto no Bling): ${totais.fechadasNaMigracao}`);
+  if (caixa) log(`  Lançado no caixa "${caixa.nome}": ${totais.caixaQuantidade} vendas, ${formatarMoeda(totais.caixaValor)}`);
 }
 
 // ---------------------------------------------------------------------
 // Compras
 // ---------------------------------------------------------------------
-async function importarCompras(r: { importados: number; atualizados: number; erros: number }, dataInicial?: string) {
+async function importarCompras(r: { importados: number; atualizados: number; erros: number }, dataInicial?: string, dataFinal?: string) {
   const depPadrao = await prisma.deposito.findFirst({ where: { padrao: true } });
   const catCmv = await prisma.categoriaFinanceira.findFirst({ where: { grupoDre: 'CMV' } });
   let maiorNumero = 0;
-  for await (const pagina of blingPaginar<any>('/pedidos/compras', { dataInicial, dataFinal: dataInicial ? format(new Date(), 'yyyy-MM-dd') : undefined })) {
+  for await (const pagina of blingPaginar<any>('/pedidos/compras', { dataInicial, dataFinal: dataFinal || (dataInicial ? format(new Date(), 'yyyy-MM-dd') : undefined) })) {
     for (const resumo of pagina) {
       estado.progresso.feitos += 1;
       try {
@@ -584,9 +718,9 @@ async function importarCompras(r: { importados: number; atualizados: number; err
 // ---------------------------------------------------------------------
 const SIT_CONTA: Record<number, string> = { 1: 'ABERTO', 2: 'RECEBIDO', 3: 'PARCIAL', 4: 'CANCELADO', 5: 'CANCELADO' };
 
-async function importarContas(tipo: 'receber' | 'pagar', r: { importados: number; atualizados: number; erros: number }, dataInicial?: string) {
+async function importarContas(tipo: 'receber' | 'pagar', r: { importados: number; atualizados: number; erros: number; ignorados?: number }, dataInicial?: string, dataFinal?: string) {
   const caminho = tipo === 'receber' ? '/contas/receber' : '/contas/pagar';
-  const params: Record<string, string | undefined> = dataInicial ? { dataEmissaoInicial: dataInicial, dataEmissaoFinal: format(new Date(), 'yyyy-MM-dd') } : {};
+  const params: Record<string, string | undefined> = dataInicial ? { dataEmissaoInicial: dataInicial, dataEmissaoFinal: dataFinal || format(new Date(), 'yyyy-MM-dd') } : {};
   for await (const pagina of blingPaginar<any>(caminho, params)) {
     for (const c of pagina) {
       estado.progresso.feitos += 1;
@@ -605,6 +739,11 @@ async function importarContas(tipo: 'receber' | 'pagar', r: { importados: number
         let origemId: number | null = null;
         if (/VENDA|PEDIDO/.test(origemTipo) && c.origem?.id) origemId = (await prisma.venda.findUnique({ where: { blingId: bid(c.origem.id)! } }))?.id ?? null;
         if (/COMPRA/.test(origemTipo) && c.origem?.id) origemId = (await prisma.compra.findUnique({ where: { blingId: bid(c.origem.id)! } }))?.id ?? null;
+        // venda cujas contas já foram geradas/baixadas pela importação de vendas (opção "lançar no caixa"): não duplica
+        if (tipo === 'receber' && origemId && !(await prisma.contaReceber.findUnique({ where: { blingId } })) && (await prisma.contaReceber.count({ where: { origemTipo: 'VENDA', origemId } }))) {
+          r.ignorados = (r.ignorados || 0) + 1;
+          continue;
+        }
         const descricao = c.historico || (origemNumero ? `${tipo === 'receber' ? 'Venda' : 'Compra'} nº ${origemNumero}` : `${tipo === 'receber' ? 'Conta a receber' : 'Conta a pagar'} Bling ${blingId}`);
         const comum = {
           contatoId: contato?.id ?? null,
@@ -649,6 +788,7 @@ async function importarContas(tipo: 'receber' | 'pagar', r: { importados: number
     }
     log(`Contas a ${tipo} processadas: ${estado.progresso.feitos}`);
   }
+  if (r.ignorados) log(`Contas a ${tipo} ignoradas por já existirem na venda (geradas pela importação de vendas): ${r.ignorados}`);
 }
 
 // ---------------------------------------------------------------------
@@ -656,9 +796,9 @@ async function importarContas(tipo: 'receber' | 'pagar', r: { importados: number
 // ---------------------------------------------------------------------
 const SIT_NFE: Record<number, string> = { 1: 'PENDENTE', 2: 'CANCELADA', 3: 'PROCESSANDO', 4: 'REJEITADA', 5: 'AUTORIZADA', 6: 'AUTORIZADA', 7: 'AUTORIZADA', 8: 'PROCESSANGO', 9: 'DENEGADA', 10: 'PROCESSANDO', 11: 'ERRO' };
 
-async function importarNotas(r: { importados: number; atualizados: number; erros: number }, dataInicial?: string) {
+async function importarNotas(r: { importados: number; atualizados: number; erros: number }, dataInicial?: string, dataFinal?: string) {
   const empresa = await prisma.empresa.findUnique({ where: { id: 1 }, select: { ambienteFiscal: true } });
-  const params: Record<string, string | undefined> = dataInicial ? { dataEmissaoInicial: dataInicial, dataEmissaoFinal: format(new Date(), 'yyyy-MM-dd') } : {};
+  const params: Record<string, string | undefined> = dataInicial ? { dataEmissaoInicial: dataInicial, dataEmissaoFinal: dataFinal || format(new Date(), 'yyyy-MM-dd') } : {};
   for await (const pagina of blingPaginar<any>('/nfe', params)) {
     for (const n of pagina) {
       estado.progresso.feitos += 1;
@@ -719,7 +859,7 @@ async function importarNotas(r: { importados: number; atualizados: number; erros
 // ---------------------------------------------------------------------
 // Orquestração (background)
 // ---------------------------------------------------------------------
-export async function iniciarImportacao(entidades: EntidadeBling[], dataInicial?: string, opcoes: { detalhesProdutos?: boolean } = {}) {
+export async function iniciarImportacao(entidades: EntidadeBling[], dataInicial?: string, opcoes: OpcoesImportacao = {}) {
   if (estado.emAndamento) throw new Error('Já existe uma importação em andamento.');
   const ordem = ENTIDADES.filter((e) => entidades.includes(e)); // respeita dependências
   estado.emAndamento = true;
@@ -728,12 +868,14 @@ export async function iniciarImportacao(entidades: EntidadeBling[], dataInicial?
   estado.entidades = ordem;
   estado.progresso = { entidade: null, feitos: 0, total: null };
   estado.resultado = {};
+  estado.opcoes = { ...opcoes };
+  estado.dataInicial = dataInicial || null;
   estado.log = [];
   estado.erro = null;
   const pasta = path.join(env.STORAGE_DIR, 'importacao');
   fs.mkdirSync(pasta, { recursive: true });
   estado.arquivoLog = path.join(pasta, `bling-${format(new Date(), 'yyyy-MM-dd-HHmmss')}.log`);
-  log(`Importação iniciada: ${ordem.join(', ')}${dataInicial ? ` (a partir de ${dataInicial})` : ''}`);
+  log(`Importação iniciada: ${ordem.join(', ')}${dataInicial ? ` (de ${dataInicial} até ${opcoes.dataFinal || 'hoje'})` : ''}`);
 
   setImmediate(async () => {
     try {
@@ -741,23 +883,23 @@ export async function iniciarImportacao(entidades: EntidadeBling[], dataInicial?
       await importarAuxiliares();
       for (const ent of ordem) {
         estado.progresso = { entidade: ent, feitos: 0, total: null };
-        const r = { importados: 0, atualizados: 0, erros: 0 };
+        const r: { importados: number; atualizados: number; erros: number; ignorados?: number; resumo?: ResumoVendas } = { importados: 0, atualizados: 0, erros: 0 };
         estado.resultado[ent] = r;
         log(`== ${ent} ==`);
         try {
           if (ent === 'contatos') await importarContatos(r);
           else if (ent === 'produtos') await importarProdutos(r, opcoes.detalhesProdutos !== false);
           else if (ent === 'estoque') await importarEstoque(r);
-          else if (ent === 'vendas') await importarVendas(r, dataInicial);
-          else if (ent === 'compras') await importarCompras(r, dataInicial);
-          else if (ent === 'contasReceber') await importarContas('receber', r, dataInicial);
-          else if (ent === 'contasPagar') await importarContas('pagar', r, dataInicial);
-          else if (ent === 'notas') await importarNotas(r, dataInicial);
+          else if (ent === 'vendas') await importarVendas(r, dataInicial, opcoes);
+          else if (ent === 'compras') await importarCompras(r, dataInicial, opcoes.dataFinal);
+          else if (ent === 'contasReceber') await importarContas('receber', r, dataInicial, opcoes.dataFinal);
+          else if (ent === 'contasPagar') await importarContas('pagar', r, dataInicial, opcoes.dataFinal);
+          else if (ent === 'notas') await importarNotas(r, dataInicial, opcoes.dataFinal);
         } catch (e: any) {
           r.erros += 1;
           log(`!! ${ent}: ${e.message}`);
         }
-        log(`${ent}: ${r.importados} novos, ${r.atualizados} atualizados, ${r.erros} erros`);
+        log(`${ent}: ${r.importados} novos, ${r.atualizados} atualizados, ${r.erros} erros${r.ignorados ? `, ${r.ignorados} ignorados` : ''}`);
       }
       await prisma.configuracao.upsert({ where: { chave: 'bling.ultimaImportacao' }, create: { chave: 'bling.ultimaImportacao', valor: new Date().toISOString() }, update: { valor: new Date().toISOString() } });
       log('Importação concluída.');

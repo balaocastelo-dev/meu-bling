@@ -198,7 +198,10 @@ Todas as rotas em `/api/*` exigem token, exceto `POST /auth/login`, `GET /saude`
 ## Migração do Bling
 - `GET /bling/status` → `{conectado, expira, ultimaImportacao}`
 - `GET /bling/auth-url` → URL OAuth (redirect `APP_URL/configuracoes/bling/callback`); `POST /bling/callback` `{code}` troca por token
-- `POST /bling/importar` `{entidades:['contatos','produtos','estoque','vendas','compras','contasReceber','contasPagar','notas'], dataInicial?}` → executa em background; `GET /bling/importar/status` → `{emAndamento, progresso:{entidade, feitos, total}, log:[...]}`
+- `POST /bling/importar` `{entidades:['contatos','produtos','estoque','vendas','compras','contasReceber','contasPagar','notas'], dataInicial?, dataFinal?, detalhesProdutos?, fecharEmAberto?, baixarNoCaixa?}` → executa em background; `GET /bling/importar/status` → `{emAndamento, progresso:{entidade, feitos, total}, resultado:{vendas:{importados, atualizados, erros, resumo}}, log:[...]}`
+  - `fecharEmAberto`: vendas "Em aberto", "Em andamento" e "Verificado" no Bling entram como **Atendido** (a situação original fica nas observações internas e no histórico).
+  - `baixarNoCaixa`: cada venda fechada (situação final, não cancelada) gera contas a receber por parcela (ou 1 pelo total, se o pedido não tem parcelas) **já recebidas na conta Caixa na data da venda** (`MovimentoFinanceiro` ENTRADA → fluxo de caixa/DRE caixa). Idempotente: reimportar não duplica nem relança.
+  - `resumo` (também no log): quantidade e total dos pedidos, por mês e por situação, quantas foram fechadas na migração e o valor lançado no caixa — para conferir com o Bling.
 - `POST /bling/importar-csv` multipart `{arquivo, entidade}` → importa planilha exportada do Bling (contatos/produtos)
 - Regras: usa `blingId` para idempotência (reimportar não duplica); vendas importadas mapeiam `situacao.blingId`; números preservados.
 
