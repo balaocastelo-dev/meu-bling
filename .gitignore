@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+apps/api/data/
+apps/api/uploads/
+apps/api/storage/
+apps/web/dist/
+.DS_Store
+Thumbs.db

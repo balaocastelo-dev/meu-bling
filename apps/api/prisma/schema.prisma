@@ -1,0 +1,1092 @@
+// =====================================================================
+//  MEU BLING — Modelo de dados do ERP (Balão da Informática)
+//  Banco padrão: SQLite (arquivo local, zero instalação).
+//  Para PostgreSQL: trocar provider para "postgresql" e DATABASE_URL.
+//  Observação: campos de "situação/tipo" são String para permitir
+//  situações customizáveis (igual aos módulos de situação do Bling).
+// =====================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------
+// NÚCLEO / CONFIGURAÇÃO
+// ---------------------------------------------------------------------
+
+/// Dados da empresa emitente (registro único, id = 1)
+model Empresa {
+  id              Int     @id @default(1)
+  razaoSocial     String
+  nomeFantasia    String?
+  cnpj            String
+  ie              String?
+  im              String?
+  /// 1 = Simples Nacional, 2 = Simples excesso sublimite, 3 = Regime normal
+  crt             Int     @default(1)
+  logradouro      String?
+  numero          String?
+  complemento     String?
+  bairro          String?
+  codigoMunicipio String? // IBGE (7 dígitos)
+  municipio       String?
+  uf              String?
+  cep             String?
+  telefone        String?
+  email           String?
+  site            String?
+  logoPath        String?
+
+  // ---- Fiscal
+  /// 1 = Produção, 2 = Homologação
+  ambienteFiscal         Int     @default(2)
+  serieNfe               Int     @default(1)
+  proximoNumeroNfe       Int     @default(1)
+  serieNfce              Int     @default(1)
+  proximoNumeroNfce      Int     @default(1)
+  cscId                  String?
+  cscToken               String? // criptografado
+  naturezaOperacaoPadrao String  @default("Venda de mercadoria")
+  cfopPadraoDentroUf     String  @default("5102")
+  cfopPadraoForaUf       String  @default("6102")
+  csosnPadrao            String  @default("102")
+  /// alíquota aproximada do Simples usada no DRE (deduções) — ex.: 6.0
+  aliquotaSimplesPct     Float   @default(6.0)
+  /// Provedor fiscal: "sefaz" (direto com certificado A1) | "mock" (simulado p/ testes)
+  provedorFiscal         String  @default("mock")
+
+  // ---- Certificado A1
+  certificadoPfx      Bytes?
+  certificadoSenha    String? // criptografado
+  certificadoNome     String?
+  certificadoValidade DateTime?
+
+  // ---- E-mail (SMTP)
+  smtpHost   String?
+  smtpPort   Int?    @default(587)
+  smtpSecure Boolean @default(false)
+  smtpUser   String?
+  smtpPass   String? // criptografado
+  smtpFrom   String?
+  smtpAtivo  Boolean @default(false)
+
+  // ---- WhatsApp (QR Code / Baileys)
+  whatsappAtivo Boolean @default(false)
+
+  // ---- Open Finance (Pluggy)
+  openFinanceProvedor     String? @default("pluggy")
+  openFinanceClientId     String?
+  openFinanceClientSecret String? // criptografado
+  openFinanceAtivo        Boolean @default(false)
+
+  // ---- Bling (migração)
+  blingClientId     String?
+  blingClientSecret String? // criptografado
+  blingAccessToken  String? // criptografado
+  blingRefreshToken String? // criptografado
+  blingTokenExpira  DateTime?
+
+  atualizadoEm DateTime @updatedAt
+}
+
+model Usuario {
+  id           Int       @id @default(autoincrement())
+  nome         String
+  email        String    @unique
+  senhaHash    String
+  /// ADMIN | GERENTE | VENDEDOR | TECNICO | FINANCEIRO
+  perfil       String    @default("VENDEDOR")
+  ativo        Boolean   @default(true)
+  vendedor     Vendedor? @relation(fields: [vendedorId], references: [id])
+  vendedorId   Int?      @unique
+  tecnico      Tecnico?  @relation(fields: [tecnicoId], references: [id])
+  tecnicoId    Int?      @unique
+  ultimoLogin  DateTime?
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  auditorias        Auditoria[]
+  historicos        HistoricoSituacao[]
+  movimentosEstoque MovimentoEstoque[]
+}
+
+model Vendedor {
+  id                Int      @id @default(autoincrement())
+  nome              String
+  email             String?
+  telefone          String?
+  /// comissão padrão (%) sobre o valor dos itens
+  comissaoPadraoPct Float    @default(0)
+  ativo             Boolean  @default(true)
+  blingId           String?  @unique
+  criadoEm          DateTime @default(now())
+  atualizadoEm      DateTime @updatedAt
+
+  usuario       Usuario?
+  contatos      Contato[]
+  vendas        Venda[]
+  ordens        OrdemServico[]
+  comissoes     Comissao[]
+  contasReceber ContaReceber[]
+}
+
+model Tecnico {
+  id                Int      @id @default(autoincrement())
+  nome              String
+  email             String?
+  telefone          String?
+  especialidade     String?
+  comissaoPadraoPct Float    @default(0)
+  ativo             Boolean  @default(true)
+  criadoEm          DateTime @default(now())
+  atualizadoEm      DateTime @updatedAt
+
+  usuario   Usuario?
+  ordens    OrdemServico[]
+  comissoes Comissao[]
+}
+
+/// Depósitos (inclui estoque de distribuidores, como no Bling)
+model Deposito {
+  id                 Int     @id @default(autoincrement())
+  nome               String
+  padrao             Boolean @default(false)
+  ativo              Boolean @default(true)
+  /// true = saldo não entra na soma do estoque disponível (ex.: distribuidor)
+  desconsiderarSaldo Boolean @default(false)
+  blingId            String? @unique
+
+  saldos     EstoqueSaldo[]
+  movimentos MovimentoEstoque[]
+  vendas     Venda[]
+  compras    Compra[]
+  ordens     OrdemServico[]
+  osItens    OrdemServicoItem[]
+}
+
+/// Numeração sequencial por entidade (VENDA, COMPRA, OS, ...)
+model Sequencia {
+  nome  String @id
+  valor Int    @default(0)
+}
+
+/// Configurações genéricas chave/valor
+model Configuracao {
+  chave String @id
+  valor String
+}
+
+// ---------------------------------------------------------------------
+// CADASTROS
+// ---------------------------------------------------------------------
+
+model Contato {
+  id              Int       @id @default(autoincrement())
+  /// CLIENTE | FORNECEDOR | TRANSPORTADORA | AMBOS
+  tipo            String    @default("CLIENTE")
+  /// F = física, J = jurídica, E = estrangeiro
+  tipoPessoa      String    @default("F")
+  nome            String
+  fantasia        String?
+  documento       String? // CPF/CNPJ só dígitos
+  ie              String?
+  ieIsento        Boolean   @default(false)
+  rg              String?
+  email           String?
+  telefone        String?
+  celular         String? // WhatsApp (DDI+DDD+número, só dígitos)
+  logradouro      String?
+  numero          String?
+  complemento     String?
+  bairro          String?
+  codigoMunicipio String?
+  municipio       String?
+  uf              String?
+  cep             String?
+  observacoes     String?
+  limiteCredito   Float     @default(0)
+  /// 0 = não contribuinte / 1 = contribuinte ICMS / 2 = isento
+  indicadorIe     Int       @default(9)
+  ativo           Boolean   @default(true)
+  blingId         String?   @unique
+  vendedor        Vendedor? @relation(fields: [vendedorId], references: [id])
+  vendedorId      Int?
+  criadoEm        DateTime  @default(now())
+  atualizadoEm    DateTime  @updatedAt
+
+  vendas           Venda[]        @relation("VendaContato")
+  compras          Compra[]
+  ordens           OrdemServico[]
+  contasReceber    ContaReceber[]
+  contasPagar      ContaPagar[]
+  notas            NotaFiscal[]
+  notificacoes     Notificacao[]
+  transportesVenda Venda[]        @relation("VendaTransportadora")
+
+  @@index([nome])
+  @@index([documento])
+}
+
+model CategoriaProduto {
+  id       Int                @id @default(autoincrement())
+  nome     String
+  pai      CategoriaProduto?  @relation("CategoriaPai", fields: [paiId], references: [id])
+  paiId    Int?
+  filhas   CategoriaProduto[] @relation("CategoriaPai")
+  blingId  String?            @unique
+  produtos Produto[]
+}
+
+model Produto {
+  id                 Int               @id @default(autoincrement())
+  /// P = produto, S = serviço
+  tipo               String            @default("P")
+  nome               String
+  codigo             String?           @unique // SKU
+  gtin               String?
+  unidade            String            @default("UN")
+  preco              Float             @default(0)
+  precoCusto         Float             @default(0)
+  descricaoCurta     String?
+  descricaoDetalhada String?
+  imagemUrl          String?
+  marca              String?
+  peso               Float?
+  estoqueMinimo      Float             @default(0)
+  controlaEstoque    Boolean           @default(true)
+  garantiaDias       Int               @default(90)
+  ativo              Boolean           @default(true)
+  // ---- Fiscal
+  ncm                String?
+  cest               String?
+  cfopPadrao         String?
+  /// origem da mercadoria (0 nacional, 1 estrangeira importação direta, 2 estrangeira adquirida no mercado interno...)
+  origem             Int               @default(0)
+  csosn              String? // Simples Nacional (102, 500, ...)
+  cst                String? // regime normal
+  icmsAliquota       Float             @default(0)
+  pisCst             String            @default("49")
+  cofinsCst          String            @default("49")
+  ipiCst             String?
+  codigoServico      String? // ISS (lista LC 116) p/ serviços
+  issAliquota        Float             @default(0)
+  blingId            String?           @unique
+  categoria          CategoriaProduto? @relation(fields: [categoriaId], references: [id])
+  categoriaId        Int?
+  criadoEm           DateTime          @default(now())
+  atualizadoEm       DateTime          @updatedAt
+
+  saldos      EstoqueSaldo[]
+  movimentos  MovimentoEstoque[]
+  vendaItens  VendaItem[]
+  compraItens CompraItem[]
+  osItens     OrdemServicoItem[]
+  nfItens     NotaFiscalItem[]
+
+  @@index([nome])
+}
+
+model EstoqueSaldo {
+  id           Int      @id @default(autoincrement())
+  produto      Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  produtoId    Int
+  deposito     Deposito @relation(fields: [depositoId], references: [id])
+  depositoId   Int
+  saldo        Float    @default(0)
+  reservado    Float    @default(0)
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([produtoId, depositoId])
+}
+
+model MovimentoEstoque {
+  id             Int      @id @default(autoincrement())
+  produto        Produto  @relation(fields: [produtoId], references: [id])
+  produtoId      Int
+  deposito       Deposito @relation(fields: [depositoId], references: [id])
+  depositoId     Int
+  /// ENTRADA | SAIDA | AJUSTE | TRANSFERENCIA
+  tipo           String
+  quantidade     Float
+  custoUnitario  Float    @default(0)
+  saldoAnterior  Float    @default(0)
+  saldoPosterior Float    @default(0)
+  /// VENDA | COMPRA | OS | AJUSTE | NFE | IMPORTACAO | TRANSFERENCIA
+  origemTipo     String
+  origemId       Int?
+  observacao     String?
+  usuario        Usuario? @relation(fields: [usuarioId], references: [id])
+  usuarioId      Int?
+  data           DateTime @default(now())
+
+  @@index([produtoId, data])
+  @@index([origemTipo, origemId])
+}
+
+model FormaPagamento {
+  id              Int     @id @default(autoincrement())
+  nome            String
+  /// DINHEIRO | PIX | CARTAO_CREDITO | CARTAO_DEBITO | BOLETO | TRANSFERENCIA | CREDIARIO | OUTRO
+  tipo            String  @default("OUTRO")
+  /// tPag da NF-e: 01 dinheiro, 02 cheque, 03 crédito, 04 débito, 15 boleto, 16 depósito, 17 PIX, 18 transferência, 90 sem pagamento, 99 outros
+  codigoFiscal    String  @default("99")
+  taxaPct         Float   @default(0)
+  diasRecebimento Int     @default(0)
+  maxParcelas     Int     @default(1)
+  ativo           Boolean @default(true)
+  blingId         String? @unique
+
+  vendaParcelas  VendaParcela[]
+  compraParcelas CompraParcela[]
+  osParcelas     OrdemServicoParcela[]
+  contasReceber  ContaReceber[]
+  contasPagar    ContaPagar[]
+}
+
+model CategoriaFinanceira {
+  id       Int                   @id @default(autoincrement())
+  nome     String
+  /// RECEITA | DESPESA
+  tipo     String
+  /// Grupo do DRE: RECEITA_BRUTA | DEDUCAO | CMV | DESPESA_OPERACIONAL | DESPESA_PESSOAL | DESPESA_FINANCEIRA | RECEITA_FINANCEIRA | OUTRAS
+  grupoDre String                @default("DESPESA_OPERACIONAL")
+  pai      CategoriaFinanceira?  @relation("CatFinPai", fields: [paiId], references: [id])
+  paiId    Int?
+  filhas   CategoriaFinanceira[] @relation("CatFinPai")
+  ativo    Boolean               @default(true)
+  blingId  String?               @unique
+
+  contasReceber ContaReceber[]
+  contasPagar   ContaPagar[]
+  movimentos    MovimentoFinanceiro[]
+  vendas        Venda[]
+  compras       Compra[]
+  ordens        OrdemServico[]
+  transacoes    TransacaoBancaria[]
+}
+
+/// Contas financeiras: caixa, bancos, cartões
+model ContaFinanceira {
+  id                   Int       @id @default(autoincrement())
+  nome                 String
+  /// CAIXA | BANCO | CARTAO | INVESTIMENTO | OUTRO
+  tipo                 String    @default("BANCO")
+  banco                String?
+  agencia              String?
+  conta                String?
+  saldoInicial         Float     @default(0)
+  saldoAtual           Float     @default(0)
+  /// saldo informado pelo banco via Open Finance (ao vivo)
+  saldoBanco           Float?
+  saldoBancoEm         DateTime?
+  padrao               Boolean   @default(false)
+  ativo                Boolean   @default(true)
+  cor                  String?   @default("#2563eb")
+  // ---- Open Finance
+  openFinanceItemId    String?
+  openFinanceAccountId String?
+  openFinanceStatus    String?
+  ultimaSincronizacao  DateTime?
+  blingId              String?   @unique
+
+  movimentos  ContaReceber[]
+  pagamentos  ContaPagar[]
+  lancamentos MovimentoFinanceiro[]
+  transacoes  TransacaoBancaria[]
+}
+
+// ---------------------------------------------------------------------
+// MOTOR DE SITUAÇÕES (igual aos "módulos de situação" do Bling)
+// ---------------------------------------------------------------------
+
+model Situacao {
+  id           Int     @id @default(autoincrement())
+  /// VENDA | COMPRA | OS
+  modulo       String
+  nome         String
+  cor          String  @default("#64748b")
+  ordem        Int     @default(0)
+  /// situação de sistema: não pode ser excluída
+  sistema      Boolean @default(false)
+  /// marca a situação como inicial do módulo
+  inicial      Boolean @default(false)
+  /// situação final (concluído) — usada em relatórios
+  final        Boolean @default(false)
+  /// situação de cancelamento
+  cancelamento Boolean @default(false)
+  /// Ações executadas ao ENTRAR na situação (JSON array):
+  /// ["lancarEstoque","estornarEstoque","lancarContas","estornarContas","gerarNfe","notificarCliente","reservarEstoque"]
+  acoes        String  @default("[]")
+  blingId      String?
+  ativo        Boolean @default(true)
+
+  transicoesOrigem  SituacaoTransicao[]   @relation("Origem")
+  transicoesDestino SituacaoTransicao[]   @relation("Destino")
+  vendas            Venda[]
+  compras           Compra[]
+  ordens            OrdemServico[]
+  templates         TemplateNotificacao[]
+
+  @@unique([modulo, nome])
+}
+
+model SituacaoTransicao {
+  id        Int      @id @default(autoincrement())
+  modulo    String
+  origem    Situacao @relation("Origem", fields: [origemId], references: [id], onDelete: Cascade)
+  origemId  Int
+  destino   Situacao @relation("Destino", fields: [destinoId], references: [id], onDelete: Cascade)
+  destinoId Int
+  ativo     Boolean  @default(true)
+  /// ações extras executadas nesta transição específica (JSON array)
+  acoes     String   @default("[]")
+
+  @@unique([origemId, destinoId])
+}
+
+model HistoricoSituacao {
+  id             Int      @id @default(autoincrement())
+  /// VENDA | COMPRA | OS
+  entidadeTipo   String
+  entidadeId     Int
+  deSituacaoId   Int?
+  deSituacao     String?
+  paraSituacaoId Int
+  paraSituacao   String
+  observacao     String?
+  usuario        Usuario? @relation(fields: [usuarioId], references: [id])
+  usuarioId      Int?
+  data           DateTime @default(now())
+
+  @@index([entidadeTipo, entidadeId])
+}
+
+// ---------------------------------------------------------------------
+// VENDAS
+// ---------------------------------------------------------------------
+
+model Venda {
+  id                    Int                  @id @default(autoincrement())
+  numero                Int                  @unique
+  data                  DateTime             @default(now())
+  dataPrevista          DateTime?
+  dataSaida             DateTime?
+  contato               Contato              @relation("VendaContato", fields: [contatoId], references: [id])
+  contatoId             Int
+  vendedor              Vendedor?            @relation(fields: [vendedorId], references: [id])
+  vendedorId            Int?
+  situacao              Situacao             @relation(fields: [situacaoId], references: [id])
+  situacaoId            Int
+  deposito              Deposito?            @relation(fields: [depositoId], references: [id])
+  depositoId            Int?
+  categoriaFinanceira   CategoriaFinanceira? @relation(fields: [categoriaFinanceiraId], references: [id])
+  categoriaFinanceiraId Int?
+  /// BALCAO | WHATSAPP | LOJA_VIRTUAL | TELEFONE | MARKETPLACE | OUTRO
+  origem                String               @default("BALCAO")
+  numeroPedidoLoja      String?
+  totalProdutos         Float                @default(0)
+  /// REAL | PERCENTUAL
+  descontoTipo          String               @default("REAL")
+  descontoValor         Float                @default(0)
+  frete                 Float                @default(0)
+  outrasDespesas        Float                @default(0)
+  total                 Float                @default(0)
+  custoTotal            Float                @default(0)
+  observacoes           String?
+  observacoesInternas   String?
+  // ---- transporte
+  transportadora        Contato?             @relation("VendaTransportadora", fields: [transportadoraId], references: [id])
+  transportadoraId      Int?
+  /// 0 emitente, 1 destinatário, 2 terceiros, 9 sem frete
+  fretePorConta         Int                  @default(9)
+  quantidadeVolumes     Int                  @default(0)
+  pesoBruto             Float                @default(0)
+  // ---- controle
+  estoqueLancado        Boolean              @default(false)
+  contasLancadas        Boolean              @default(false)
+  nota                  NotaFiscal?          @relation(fields: [notaId], references: [id])
+  notaId                Int?                 @unique
+  blingId               String?              @unique
+  criadoEm              DateTime             @default(now())
+  atualizadoEm          DateTime             @updatedAt
+
+  itens     VendaItem[]
+  parcelas  VendaParcela[]
+  comissoes Comissao[]
+
+  @@index([data])
+  @@index([contatoId])
+  @@index([situacaoId])
+}
+
+model VendaItem {
+  id            Int      @id @default(autoincrement())
+  venda         Venda    @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+  vendaId       Int
+  produto       Produto? @relation(fields: [produtoId], references: [id])
+  produtoId     Int?
+  codigo        String?
+  descricao     String
+  unidade       String   @default("UN")
+  quantidade    Float    @default(1)
+  valorUnitario Float    @default(0)
+  desconto      Float    @default(0)
+  total         Float    @default(0)
+  custoUnitario Float    @default(0)
+  comissaoPct   Float    @default(0)
+  comissaoValor Float    @default(0)
+  ordem         Int      @default(0)
+}
+
+model VendaParcela {
+  id               Int             @id @default(autoincrement())
+  venda            Venda           @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+  vendaId          Int
+  numero           Int             @default(1)
+  dataVencimento   DateTime
+  valor            Float
+  formaPagamento   FormaPagamento? @relation(fields: [formaPagamentoId], references: [id])
+  formaPagamentoId Int?
+  observacoes      String?
+  contaReceber     ContaReceber?   @relation(fields: [contaReceberId], references: [id])
+  contaReceberId   Int?            @unique
+}
+
+// ---------------------------------------------------------------------
+// COMPRAS
+// ---------------------------------------------------------------------
+
+model Compra {
+  id                    Int                  @id @default(autoincrement())
+  numero                Int                  @unique
+  data                  DateTime             @default(now())
+  dataPrevista          DateTime?
+  fornecedor            Contato              @relation(fields: [fornecedorId], references: [id])
+  fornecedorId          Int
+  situacao              Situacao             @relation(fields: [situacaoId], references: [id])
+  situacaoId            Int
+  deposito              Deposito?            @relation(fields: [depositoId], references: [id])
+  depositoId            Int?
+  categoriaFinanceira   CategoriaFinanceira? @relation(fields: [categoriaFinanceiraId], references: [id])
+  categoriaFinanceiraId Int?
+  /// nº do pedido no fornecedor
+  ordemCompra           String?
+  nfeChave              String?
+  nfeNumero             String?
+  totalProdutos         Float                @default(0)
+  descontoValor         Float                @default(0)
+  frete                 Float                @default(0)
+  outrasDespesas        Float                @default(0)
+  total                 Float                @default(0)
+  observacoes           String?
+  observacoesInternas   String?
+  estoqueLancado        Boolean              @default(false)
+  contasLancadas        Boolean              @default(false)
+  blingId               String?              @unique
+  criadoEm              DateTime             @default(now())
+  atualizadoEm          DateTime             @updatedAt
+
+  itens    CompraItem[]
+  parcelas CompraParcela[]
+
+  @@index([data])
+  @@index([fornecedorId])
+}
+
+model CompraItem {
+  id               Int      @id @default(autoincrement())
+  compra           Compra   @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  compraId         Int
+  produto          Produto? @relation(fields: [produtoId], references: [id])
+  produtoId        Int?
+  codigoFornecedor String?
+  descricao        String
+  unidade          String   @default("UN")
+  quantidade       Float    @default(1)
+  valorUnitario    Float    @default(0)
+  ipiPct           Float    @default(0)
+  total            Float    @default(0)
+  ordem            Int      @default(0)
+}
+
+model CompraParcela {
+  id               Int             @id @default(autoincrement())
+  compra           Compra          @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  compraId         Int
+  numero           Int             @default(1)
+  dataVencimento   DateTime
+  valor            Float
+  formaPagamento   FormaPagamento? @relation(fields: [formaPagamentoId], references: [id])
+  formaPagamentoId Int?
+  observacoes      String?
+  contaPagar       ContaPagar?     @relation(fields: [contaPagarId], references: [id])
+  contaPagarId     Int?            @unique
+}
+
+// ---------------------------------------------------------------------
+// ORDEM DE SERVIÇO (assistência técnica)
+// ---------------------------------------------------------------------
+
+model OrdemServico {
+  id                    Int                  @id @default(autoincrement())
+  numero                Int                  @unique
+  dataEntrada           DateTime             @default(now())
+  dataPrevista          DateTime?
+  dataConclusao         DateTime?
+  dataSaida             DateTime?
+  contato               Contato              @relation(fields: [contatoId], references: [id])
+  contatoId             Int
+  vendedor              Vendedor?            @relation(fields: [vendedorId], references: [id])
+  vendedorId            Int?
+  tecnico               Tecnico?             @relation(fields: [tecnicoId], references: [id])
+  tecnicoId             Int?
+  situacao              Situacao             @relation(fields: [situacaoId], references: [id])
+  situacaoId            Int
+  deposito              Deposito?            @relation(fields: [depositoId], references: [id])
+  depositoId            Int?
+  categoriaFinanceira   CategoriaFinanceira? @relation(fields: [categoriaFinanceiraId], references: [id])
+  categoriaFinanceiraId Int?
+  // ---- equipamento
+  equipamento           String? // ex.: Notebook, Desktop, Impressora
+  marca                 String?
+  modelo                String?
+  numeroSerie           String?
+  acessorios            String?
+  senhaEquipamento      String?
+  estadoFisico          String?
+  defeitoRelatado       String?
+  diagnostico           String?
+  servicoExecutado      String?
+  observacoes           String?
+  observacoesInternas   String?
+  /// BAIXA | NORMAL | ALTA | URGENTE
+  prioridade            String               @default("NORMAL")
+  // ---- orçamento (igual ao "Orçar"/"Orçado" do Bling)
+  orcar                 Boolean              @default(false)
+  orcamentoAprovado     Boolean              @default(false)
+  orcamentoAprovadoEm   DateTime?
+  orcamentoAprovadoPor  String?
+  // ---- totais
+  totalServicos         Float                @default(0)
+  totalPecas            Float                @default(0)
+  descontoValor         Float                @default(0)
+  total                 Float                @default(0)
+  custoTotal            Float                @default(0)
+  garantiaDias          Int                  @default(90)
+  // ---- controle
+  estoqueLancado        Boolean              @default(false)
+  contasLancadas        Boolean              @default(false)
+  nota                  NotaFiscal?          @relation(fields: [notaId], references: [id])
+  notaId                Int?                 @unique
+  blingId               String?              @unique
+  criadoEm              DateTime             @default(now())
+  atualizadoEm          DateTime             @updatedAt
+
+  itens     OrdemServicoItem[]
+  parcelas  OrdemServicoParcela[]
+  anexos    OrdemServicoAnexo[]
+  comissoes Comissao[]
+
+  @@index([dataEntrada])
+  @@index([contatoId])
+  @@index([situacaoId])
+  @@index([tecnicoId])
+}
+
+model OrdemServicoItem {
+  id                  Int          @id @default(autoincrement())
+  os                  OrdemServico @relation(fields: [osId], references: [id], onDelete: Cascade)
+  osId                Int
+  /// PECA | SERVICO
+  tipo                String       @default("SERVICO")
+  produto             Produto?     @relation(fields: [produtoId], references: [id])
+  produtoId           Int?
+  descricao           String
+  quantidade          Float        @default(1)
+  valorUnitario       Float        @default(0)
+  desconto            Float        @default(0)
+  total               Float        @default(0)
+  custoUnitario       Float        @default(0)
+  comissaoVendedorPct Float        @default(0)
+  comissaoTecnicoPct  Float        @default(0)
+  deposito            Deposito?    @relation(fields: [depositoId], references: [id])
+  depositoId          Int?
+  /// peça já baixada do estoque
+  estoqueBaixado      Boolean      @default(false)
+  ordem               Int          @default(0)
+}
+
+model OrdemServicoParcela {
+  id               Int             @id @default(autoincrement())
+  os               OrdemServico    @relation(fields: [osId], references: [id], onDelete: Cascade)
+  osId             Int
+  numero           Int             @default(1)
+  dataVencimento   DateTime
+  valor            Float
+  formaPagamento   FormaPagamento? @relation(fields: [formaPagamentoId], references: [id])
+  formaPagamentoId Int?
+  observacoes      String?
+  contaReceber     ContaReceber?   @relation(fields: [contaReceberId], references: [id])
+  contaReceberId   Int?            @unique
+}
+
+model OrdemServicoAnexo {
+  id       Int          @id @default(autoincrement())
+  os       OrdemServico @relation(fields: [osId], references: [id], onDelete: Cascade)
+  osId     Int
+  nome     String
+  caminho  String
+  mime     String?
+  tamanho  Int?
+  criadoEm DateTime     @default(now())
+}
+
+// ---------------------------------------------------------------------
+// COMISSÕES
+// ---------------------------------------------------------------------
+
+model Comissao {
+  id           Int           @id @default(autoincrement())
+  /// VENDEDOR | TECNICO
+  tipo         String
+  vendedor     Vendedor?     @relation(fields: [vendedorId], references: [id])
+  vendedorId   Int?
+  tecnico      Tecnico?      @relation(fields: [tecnicoId], references: [id])
+  tecnicoId    Int?
+  /// VENDA | OS
+  origemTipo   String
+  venda        Venda?        @relation(fields: [vendaId], references: [id])
+  vendaId      Int?
+  os           OrdemServico? @relation(fields: [osId], references: [id])
+  osId         Int?
+  descricao    String?
+  base         Float         @default(0)
+  pct          Float         @default(0)
+  valor        Float         @default(0)
+  /// PENDENTE | APROVADA | PAGA | CANCELADA
+  status       String        @default("PENDENTE")
+  /// competência AAAA-MM
+  competencia  String
+  pagoEm       DateTime?
+  contaPagar   ContaPagar?   @relation(fields: [contaPagarId], references: [id])
+  contaPagarId Int?
+  criadoEm     DateTime      @default(now())
+
+  @@index([competencia, status])
+}
+
+// ---------------------------------------------------------------------
+// FINANCEIRO
+// ---------------------------------------------------------------------
+
+model ContaReceber {
+  id                Int                  @id @default(autoincrement())
+  contato           Contato?             @relation(fields: [contatoId], references: [id])
+  contatoId         Int?
+  vendedor          Vendedor?            @relation(fields: [vendedorId], references: [id])
+  vendedorId        Int?
+  descricao         String
+  dataEmissao       DateTime             @default(now())
+  vencimento        DateTime
+  competencia       String? // AAAA-MM
+  valor             Float
+  valorRecebido     Float                @default(0)
+  juros             Float                @default(0)
+  desconto          Float                @default(0)
+  /// ABERTO | RECEBIDO | PARCIAL | CANCELADO
+  situacao          String               @default("ABERTO")
+  dataRecebimento   DateTime?
+  formaPagamento    FormaPagamento?      @relation(fields: [formaPagamentoId], references: [id])
+  formaPagamentoId  Int?
+  contaFinanceira   ContaFinanceira?     @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId Int?
+  categoria         CategoriaFinanceira? @relation(fields: [categoriaId], references: [id])
+  categoriaId       Int?
+  /// VENDA | OS | MANUAL | NFE
+  origemTipo        String               @default("MANUAL")
+  origemId          Int?
+  parcela           String? // ex.: 1/3
+  observacoes       String?
+  blingId           String?              @unique
+  criadoEm          DateTime             @default(now())
+  atualizadoEm      DateTime             @updatedAt
+
+  vendaParcela VendaParcela?
+  osParcela    OrdemServicoParcela?
+  lancamentos  MovimentoFinanceiro[]
+
+  @@index([vencimento, situacao])
+  @@index([origemTipo, origemId])
+}
+
+model ContaPagar {
+  id                Int                  @id @default(autoincrement())
+  contato           Contato?             @relation(fields: [contatoId], references: [id])
+  contatoId         Int?
+  descricao         String
+  dataEmissao       DateTime             @default(now())
+  vencimento        DateTime
+  competencia       String?
+  valor             Float
+  valorPago         Float                @default(0)
+  juros             Float                @default(0)
+  desconto          Float                @default(0)
+  /// ABERTO | PAGO | PARCIAL | CANCELADO
+  situacao          String               @default("ABERTO")
+  dataPagamento     DateTime?
+  formaPagamento    FormaPagamento?      @relation(fields: [formaPagamentoId], references: [id])
+  formaPagamentoId  Int?
+  contaFinanceira   ContaFinanceira?     @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId Int?
+  categoria         CategoriaFinanceira? @relation(fields: [categoriaId], references: [id])
+  categoriaId       Int?
+  /// COMPRA | COMISSAO | MANUAL | IMPOSTO
+  origemTipo        String               @default("MANUAL")
+  origemId          Int?
+  parcela           String?
+  observacoes       String?
+  recorrente        Boolean              @default(false)
+  blingId           String?              @unique
+  criadoEm          DateTime             @default(now())
+  atualizadoEm      DateTime             @updatedAt
+
+  compraParcela CompraParcela?
+  comissoes     Comissao[]
+  lancamentos   MovimentoFinanceiro[]
+
+  @@index([vencimento, situacao])
+}
+
+/// Lançamentos efetivos nas contas (caixa/banco) — base do fluxo de caixa
+model MovimentoFinanceiro {
+  id                Int                  @id @default(autoincrement())
+  contaFinanceira   ContaFinanceira      @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId Int
+  data              DateTime             @default(now())
+  /// ENTRADA | SAIDA | TRANSFERENCIA
+  tipo              String
+  valor             Float
+  descricao         String
+  categoria         CategoriaFinanceira? @relation(fields: [categoriaId], references: [id])
+  categoriaId       Int?
+  contaReceber      ContaReceber?        @relation(fields: [contaReceberId], references: [id])
+  contaReceberId    Int?
+  contaPagar        ContaPagar?          @relation(fields: [contaPagarId], references: [id])
+  contaPagarId      Int?
+  conciliado        Boolean              @default(false)
+  transacao         TransacaoBancaria?   @relation(fields: [transacaoId], references: [id])
+  transacaoId       Int?                 @unique
+  observacoes       String?
+  criadoEm          DateTime             @default(now())
+
+  @@index([contaFinanceiraId, data])
+}
+
+/// Transações importadas do banco (Open Finance ou OFX) para conciliação
+model TransacaoBancaria {
+  id                Int                  @id @default(autoincrement())
+  contaFinanceira   ContaFinanceira      @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId Int
+  externalId        String
+  data              DateTime
+  descricao         String
+  valor             Float // positivo = crédito, negativo = débito
+  tipo              String // CREDITO | DEBITO
+  categoriaSugerida String?
+  categoria         CategoriaFinanceira? @relation(fields: [categoriaId], references: [id])
+  categoriaId       Int?
+  conciliado        Boolean              @default(false)
+  /// OPEN_FINANCE | OFX | MANUAL
+  fonte             String               @default("OPEN_FINANCE")
+  dadosBrutos       String? // JSON original
+  importadoEm       DateTime             @default(now())
+
+  movimento MovimentoFinanceiro?
+
+  @@unique([contaFinanceiraId, externalId])
+  @@index([contaFinanceiraId, data])
+}
+
+// ---------------------------------------------------------------------
+// FISCAL (NF-e modelo 55 / NFC-e modelo 65)
+// ---------------------------------------------------------------------
+
+model NotaFiscal {
+  id                        Int       @id @default(autoincrement())
+  /// 0 = entrada, 1 = saída
+  tipo                      Int       @default(1)
+  /// 55 = NF-e, 65 = NFC-e
+  modelo                    Int       @default(55)
+  serie                     Int
+  numero                    Int
+  chave                     String?   @unique
+  /// PENDENTE | PROCESSANDO | AUTORIZADA | REJEITADA | CANCELADA | DENEGADA | INUTILIZADA | ERRO
+  situacao                  String    @default("PENDENTE")
+  /// 1 produção, 2 homologação
+  ambiente                  Int       @default(2)
+  dataEmissao               DateTime  @default(now())
+  dataSaida                 DateTime?
+  dataAutorizacao           DateTime?
+  contato                   Contato?  @relation(fields: [contatoId], references: [id])
+  contatoId                 Int?
+  naturezaOperacao          String    @default("Venda de mercadoria")
+  /// 1 normal, 2 complementar, 3 ajuste, 4 devolução
+  finalidade                Int       @default(1)
+  /// 0 não, 1 consumidor final
+  consumidorFinal           Int       @default(1)
+  /// 0 não se aplica, 1 presencial, 2 internet, 3 teleatendimento, 4 NFC-e entrega domicílio, 9 outros
+  indicadorPresenca         Int       @default(1)
+  valorProdutos             Float     @default(0)
+  valorFrete                Float     @default(0)
+  valorDesconto             Float     @default(0)
+  valorOutras               Float     @default(0)
+  valorIcms                 Float     @default(0)
+  valorTotal                Float     @default(0)
+  /// tPag
+  formaPagamentoFiscal      String    @default("99")
+  informacoesComplementares String?
+  /// 0 emitente, 1 destinatário, 2 terceiros, 9 sem frete
+  fretePorConta             Int       @default(9)
+  xml                       String? // XML assinado
+  xmlProtocolo              String? // procNFe (XML autorizado)
+  protocolo                 String?
+  cStat                     String?
+  motivo                    String?
+  recibo                    String?
+  qrCode                    String?
+  urlChave                  String?
+  danfePath                 String?
+  blingId                   String?   @unique
+  criadoEm                  DateTime  @default(now())
+  atualizadoEm              DateTime  @updatedAt
+
+  itens   NotaFiscalItem[]
+  eventos NotaFiscalEvento[]
+  venda   Venda?
+  os      OrdemServico?
+
+  @@unique([modelo, serie, numero])
+  @@index([dataEmissao])
+}
+
+model NotaFiscalItem {
+  id                    Int        @id @default(autoincrement())
+  nota                  NotaFiscal @relation(fields: [notaId], references: [id], onDelete: Cascade)
+  notaId                Int
+  numeroItem            Int
+  produto               Produto?   @relation(fields: [produtoId], references: [id])
+  produtoId             Int?
+  codigo                String
+  gtin                  String?
+  descricao             String
+  ncm                   String
+  cest                  String?
+  cfop                  String
+  unidade               String     @default("UN")
+  quantidade            Float
+  valorUnitario         Float
+  valorTotal            Float
+  desconto              Float      @default(0)
+  origem                Int        @default(0)
+  csosn                 String?
+  cst                   String?
+  icmsAliquota          Float      @default(0)
+  icmsBase              Float      @default(0)
+  icmsValor             Float      @default(0)
+  pisCst                String     @default("49")
+  cofinsCst             String     @default("49")
+  ipiCst                String?
+  valorTributosAprox    Float      @default(0)
+  informacoesAdicionais String?
+}
+
+model NotaFiscalEvento {
+  id            Int        @id @default(autoincrement())
+  nota          NotaFiscal @relation(fields: [notaId], references: [id], onDelete: Cascade)
+  notaId        Int
+  /// CANCELAMENTO | CARTA_CORRECAO | INUTILIZACAO
+  tipo          String
+  sequencia     Int        @default(1)
+  justificativa String?
+  protocolo     String?
+  cStat         String?
+  motivo        String?
+  xml           String?
+  /// PENDENTE | AUTORIZADO | REJEITADO | ERRO
+  status        String     @default("PENDENTE")
+  data          DateTime   @default(now())
+}
+
+// ---------------------------------------------------------------------
+// NOTIFICAÇÕES (E-mail SMTP + WhatsApp QR Code)
+// ---------------------------------------------------------------------
+
+model TemplateNotificacao {
+  id         Int       @id @default(autoincrement())
+  nome       String
+  /// VENDA_SITUACAO | COMPRA_SITUACAO | OS_SITUACAO | VENDA_CRIADA | OS_CRIADA | NFE_AUTORIZADA | CONTA_VENCENDO | ORCAMENTO_OS
+  evento     String
+  /// EMAIL | WHATSAPP
+  canal      String
+  /// se informado, só dispara quando a entidade entrar nesta situação
+  situacao   Situacao? @relation(fields: [situacaoId], references: [id])
+  situacaoId Int?
+  assunto    String?
+  /// corpo com variáveis: {{cliente.nome}} {{numero}} {{situacao}} {{total}} {{empresa.nome}} {{data}} {{itens}} {{tecnico}} {{vendedor}} {{link}}
+  corpo      String
+  /// anexar DANFE/PDF quando aplicável
+  anexarPdf  Boolean   @default(false)
+  ativo      Boolean   @default(true)
+
+  @@index([evento, canal])
+}
+
+model Notificacao {
+  id           Int       @id @default(autoincrement())
+  /// EMAIL | WHATSAPP
+  canal        String
+  destinatario String
+  assunto      String?
+  corpo        String
+  anexoPath    String?
+  /// PENDENTE | ENVIANDO | ENVIADA | ERRO | CANCELADA
+  status       String    @default("PENDENTE")
+  erro         String?
+  tentativas   Int       @default(0)
+  /// VENDA | COMPRA | OS | NFE | CONTA | MANUAL
+  origemTipo   String?
+  origemId     Int?
+  contato      Contato?  @relation(fields: [contatoId], references: [id])
+  contatoId    Int?
+  agendadaPara DateTime  @default(now())
+  enviadaEm    DateTime?
+  externalId   String?
+  criadoEm     DateTime  @default(now())
+
+  @@index([status, agendadaPara])
+  @@index([origemTipo, origemId])
+}
+
+// ---------------------------------------------------------------------
+// AUDITORIA
+// ---------------------------------------------------------------------
+
+model Auditoria {
+  id         Int      @id @default(autoincrement())
+  usuario    Usuario? @relation(fields: [usuarioId], references: [id])
+  usuarioId  Int?
+  entidade   String
+  entidadeId Int?
+  /// CRIAR | ALTERAR | EXCLUIR | SITUACAO | LOGIN | ACAO
+  acao       String
+  detalhes   String? // JSON
+  ip         String?
+  data       DateTime @default(now())
+
+  @@index([entidade, entidadeId])
+}
