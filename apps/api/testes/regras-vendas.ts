@@ -216,6 +216,11 @@ async function main() {
   const contas2 = ((await adm.get(`/contas-receber?origemTipo=VENDA&origemId=${ve.id}`)).data ?? []) as any[];
   verifica(contas2.every((c) => c.situacao === 'CANCELADO'), 'e cancela as contas a receber', contas2.map((c) => c.situacao));
 
+  secao('Linha livre com o nome exato de um produto vira o produto (baixa estoque e vai na NF)');
+  const vl = await A.post('/vendas', { contatoId: cli.id, data: hoje(), itens: [{ descricao: prod2.nome.toLowerCase(), quantidade: 1, valorUnitario: 45 }, { descricao: 'Serviço sem cadastro qualquer', quantidade: 1, valorUnitario: 10 }], parcelas: [] }, 201);
+  verifica(vl.itens[0].produtoId === prod2.id && vl.itens[0].valorUnitario === 45, 'nome igual ao do cadastro: vinculado ao produto, mantendo o preço digitado', vl.itens[0]);
+  verifica(vl.itens[1].produtoId === null, 'texto que não é produto continua linha livre', vl.itens[1]);
+
   secao('Valores da venda');
   const vt = await A.post('/vendas', { contatoId: cli.id, data: hoje(), descontoTipo: 'PERCENTUAL', descontoValor: 10, frete: 20, itens: [{ descricao: 'A', quantidade: 2, valorUnitario: 100 }, { descricao: 'B', quantidade: 1, valorUnitario: 50, desconto: 5 }], parcelas: [] }, 201);
   verifica(igual(vt.totalProdutos, 245), 'total dos produtos = Σ(qtd × preço − desconto do item)', vt.totalProdutos);

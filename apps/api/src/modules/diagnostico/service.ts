@@ -130,6 +130,19 @@ export async function diagnosticar(): Promise<{ geradoEm: Date; achados: Achado[
     itens: vendasAbertasAntigas.map((v) => ({ rotulo: `Venda nº ${v.numero} de ${v.data.toLocaleDateString('pt-BR')}`, link: `/vendas/${v.id}` })),
   });
 
+  const itensLivres = await prisma.vendaItem.findMany({
+    where: { produtoId: null, venda: { tipo: 'PEDIDO', blingId: null, situacaoId: { notIn: cancelVenda }, data: { gte: new Date(agora.getTime() - 14 * 86400000) } } },
+    select: { descricao: true, venda: { select: { id: true, numero: true } } },
+    orderBy: { id: 'desc' },
+  });
+  add({
+    id: 'item-sem-produto', nivel: 'aviso', area: 'Vendas',
+    titulo: 'Item vendido sem produto cadastrado (linha livre) nos últimos 14 dias',
+    explicacao: 'Linha digitada à mão: não baixa estoque, não tem custo (o lucro sai errado) e não pode ir na NF-e.',
+    comoResolver: 'Na venda, use a busca de produto em vez de "linha livre". Em venda em aberto, clique em "Escolher produto" no item.',
+    itens: itensLivres.map((i) => ({ rotulo: `Venda nº ${i.venda.numero}: ${i.descricao}`, link: `/vendas/${i.venda.id}` })),
+  });
+
   // ================================================================== comissões
   const comissoesOrfas = await prisma.comissao.findMany({
     where: { status: { in: ['PENDENTE', 'APROVADA'] }, origemTipo: 'VENDA', venda: { situacaoId: { in: cancelVenda } } },

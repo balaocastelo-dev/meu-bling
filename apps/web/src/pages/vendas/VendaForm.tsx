@@ -160,6 +160,12 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
   };
   const adicionarLinhaLivre = () => setForm((f) => ({ ...f, itens: [...f.itens, { produtoId: null, descricao: '', quantidade: 1, valorUnitario: 0, desconto: 0, comissaoPct: comissaoPadrao }] }));
   const atualizarItem = (i: number, patch: Partial<VendaItem>) => setForm((f) => ({ ...f, itens: f.itens.map((it, j) => (j === i ? { ...it, ...patch } : it)) }));
+  // linha livre → produto do cadastro (mantém quantidade e preço digitados)
+  const [vincular, setVincular] = useState<number | null>(null);
+  const vincularProduto = (i: number, p: Produto) => {
+    atualizarItem(i, { produtoId: p.id, codigo: p.codigo ?? null, descricao: p.nome, unidade: p.unidade, imagemUrl: p.imagemUrl ?? null, prontaEntrega: Boolean(p.prontaEntrega) });
+    setVincular(null);
+  };
   const removerItem = (i: number) => setForm((f) => ({ ...f, itens: f.itens.filter((_, j) => j !== i) }));
 
   // ---- Salvar
@@ -325,7 +331,24 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                           <span className="flex items-center gap-2">
                             {it.codigo && <span className="text-[10px] text-slate-400">cód. {it.codigo}</span>}
                             {it.prontaEntrega && <SeloProntaEntrega compacto />}
+                            {!it.produtoId && !bloqueado && (
+                              <span className="text-[11px] text-amber-700">
+                                Sem cadastro: não baixa estoque nem vai na NF ·{' '}
+                                <button type="button" className="font-semibold underline" onClick={() => setVincular(vincular === i ? null : i)}>Escolher produto</button>
+                              </span>
+                            )}
                           </span>
+                          {vincular === i && (
+                            <SearchSelect
+                              className="mt-1"
+                              tamanho="sm"
+                              autoFocus
+                              placeholder="Buscar o produto deste item…"
+                              valor={null}
+                              onChange={(_id, op) => op?.dados && vincularProduto(i, op.dados as Produto)}
+                              buscar={(t) => buscarProdutos(t || it.descricao)}
+                            />
+                          )}
                         </div>
                       </div>
                     </td>
