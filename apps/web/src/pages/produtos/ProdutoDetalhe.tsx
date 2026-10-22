@@ -3,13 +3,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { ArrowRightLeft, Package, Pencil, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { ArrowRightLeft, ExternalLink, Globe, Package, Pencil, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, PageHeader, Pagination, StatCard, Table, Tabs, type Coluna } from '@/components/ui';
 import { AjusteEstoqueModal, TransferenciaEstoqueModal } from '@/components/compartilhados/EstoqueModais';
 import { dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { MovimentoEstoque, Paginado, Produto } from '@/types';
+import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/ProdutoSite';
 
 /** Detalhe do produto: saldos por depósito, movimentos, fiscal */
 export default function ProdutoDetalhe() {
@@ -55,6 +56,8 @@ export default function ProdutoDetalhe() {
         extra={
           <>
             <Badge tom={p.tipo === 'S' ? 'roxo' : 'neutro'}>{p.tipo === 'S' ? 'Serviço' : 'Produto'}</Badge>
+            {p.prontaEntrega && <SeloProntaEntrega />}
+            {p.siteId && <Badge tom="azul">Do site</Badge>}
             {!p.ativo && <Badge tom="cinza">Inativo</Badge>}
           </>
         }
@@ -72,8 +75,36 @@ export default function ProdutoDetalhe() {
         }
       />
 
+      {(p.imagemUrl || p.siteId) && (
+        <Card>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <FotoProduto url={p.imagemUrl} alt={p.nome} tamanho="lg" />
+            <div className="space-y-1.5 text-sm">
+              {p.siteId ? (
+                <>
+                  <p className="flex items-center gap-2 font-medium text-slate-900">
+                    <Globe className="h-4 w-4 text-sky-500" /> Produto do site www.balao.info
+                  </p>
+                  <p className="text-slate-600">
+                    {p.prontaEntrega ? 'Pronta entrega: está na loja.' : `${p.disponibilidade || 'Disponível'}: sai do distribuidor${p.fornecedor ? ` (${p.fornecedor})` : ''}.`}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Nome, foto, preços e disponibilidade são atualizados pelo site{p.siteSincronizadoEm ? ` (última vez ${dataHora(p.siteSincronizadoEm)})` : ''}. Para mudar, mude no site. Fiscal e estoque são daqui.
+                  </p>
+                  <a href={`https://www.balao.info/product/${p.siteSlug || p.siteId}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
+                    Ver no site <ExternalLink className="h-3 w-3" />
+                  </a>
+                </>
+              ) : (
+                <p className="text-slate-500">Produto cadastrado no sistema (não está no site).</p>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard rotulo="Preço de venda" valor={moeda(p.preco)} tom="verde" />
+        <StatCard rotulo="Preço à vista" valor={moeda(p.preco)} sub={p.precoCartao && p.precoCartao !== p.preco ? `cartão ${moeda(p.precoCartao)}` : undefined} tom="verde" />
         <StatCard rotulo="Custo" valor={moeda(p.precoCusto)} sub={p.precoCusto > 0 ? `margem ${numero(((p.preco - p.precoCusto) / p.precoCusto) * 100, 1)}%` : undefined} />
         <StatCard rotulo="Estoque disponível" valor={p.tipo === 'S' ? '—' : numero(total - reservado)} sub={p.tipo === 'S' ? 'serviço' : `${numero(total)} total · ${numero(reservado)} reservado`} tom={p.tipo === 'P' && total <= p.estoqueMinimo ? 'vermelho' : 'azul'} icone={<Package className="h-4 w-4" />} />
         <StatCard rotulo="Estoque mínimo" valor={p.tipo === 'S' ? '—' : numero(p.estoqueMinimo)} sub={p.controlaEstoque ? undefined : 'não controla estoque'} />

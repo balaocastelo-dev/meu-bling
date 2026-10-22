@@ -38,6 +38,8 @@ const ROTAS_PUBLICAS = [
   /^\/api\/v1\/saude$/,
   /^\/api\/v1\/publico\//,
   /^\/api\/v1\/webhooks\//,
+  // porta do site (PDV): não usa login, exige a chave do site (modules/site/routes.ts)
+  /^\/api\/v1\/integracoes\/site\//,
   /^\/uploads\//,
   /^\/$/,
 ];

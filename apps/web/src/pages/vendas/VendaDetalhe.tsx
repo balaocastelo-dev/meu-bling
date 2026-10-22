@@ -12,6 +12,7 @@ import { EmitirNfModal } from '@/components/compartilhados/EmitirNfModal';
 import { NotificacoesLista } from '@/components/compartilhados/NotificacoesLista';
 import { data, dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { Contato, Venda } from '@/types';
+import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/ProdutoSite';
 
 /** Detalhe do pedido de venda com abas e ações */
 export default function VendaDetalhe() {
@@ -225,8 +226,16 @@ export default function VendaDetalhe() {
                   <tr key={it.id ?? i}>
                     <td className="text-slate-400">{i + 1}</td>
                     <td>
-                      {it.produtoId ? <Link to={`/produtos/${it.produtoId}`} className="hover:text-brand-600">{it.descricao}</Link> : it.descricao}
-                      {it.codigo && <span className="ml-2 text-xs text-slate-400">{it.codigo}</span>}
+                      <div className="flex items-center gap-2">
+                        {it.produtoId && <FotoProduto url={it.produto?.imagemUrl} tamanho="sm" />}
+                        <div className="min-w-0">
+                          {it.produtoId ? <Link to={`/produtos/${it.produtoId}`} className="hover:text-brand-600">{it.descricao}</Link> : it.descricao}
+                          <span className="flex items-center gap-2">
+                            {it.codigo && <span className="text-xs text-slate-400">{it.codigo}</span>}
+                            {it.produto?.prontaEntrega && <SeloProntaEntrega compacto />}
+                          </span>
+                        </div>
+                      </div>
                     </td>
                     <td className="num text-right">{numero(it.quantidade)} {it.unidade}</td>
                     <td className="num text-right">{moeda(it.valorUnitario)}</td>

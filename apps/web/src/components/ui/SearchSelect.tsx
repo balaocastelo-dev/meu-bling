@@ -13,6 +13,10 @@ export interface OpcaoBusca {
   direita?: ReactNode;
   /** objeto original para quem precisar */
   dados?: unknown;
+  /** miniatura à esquerda (foto do produto); null = mostra o espaço vazio */
+  imagem?: ReactNode;
+  /** selo ao lado do rótulo (ex.: "Pronta entrega") */
+  selo?: ReactNode;
 }
 
 interface SearchSelectProps {
@@ -207,8 +211,12 @@ export function SearchSelect({
                 onClick={() => escolher(o)}
                 className={clsx('flex w-full items-center gap-3 px-3 py-2 text-left text-sm', i === ativo ? 'bg-brand-50 text-slate-900' : 'text-slate-700')}
               >
+                {o.imagem}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">{o.rotulo}</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-medium">{o.rotulo}</span>
+                    {o.selo}
+                  </span>
                   {o.sub && <span className="block truncate text-xs text-slate-400">{o.sub}</span>}
                 </span>
                 {o.direita && <span className="shrink-0 text-xs text-slate-500 num">{o.direita}</span>}

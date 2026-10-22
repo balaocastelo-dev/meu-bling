@@ -63,10 +63,19 @@ export default async function produtosRoutes(app: FastifyInstance) {
         ativo: boolQuery,
         estoque: z.enum(['zerado', 'positivo', 'negativo', 'abaixoMinimo']).optional(),
         marca: z.string().trim().optional(),
+        /** só os de pronta entrega (true) ou só os do distribuidor (false) */
+        prontaEntrega: boolQuery,
+        /** site = vieram do site www.balao.info; fora = Bling/cadastro manual */
+        origem: z.enum(['site', 'fora']).optional(),
+        /** pronta = pronta entrega primeiro (busca da venda) */
+        ordem: z.enum(['nome', 'pronta']).default('nome'),
       })
       .parse(req.query);
 
-    const where: any = { tipo: q.tipo, categoriaId: q.categoriaId, ativo: q.ativo, marca: q.marca || undefined };
+    const where: any = { tipo: q.tipo, categoriaId: q.categoriaId, ativo: q.ativo, marca: q.marca || undefined, prontaEntrega: q.prontaEntrega };
+    if (q.origem === 'site') where.siteId = { not: null };
+    if (q.origem === 'fora') where.siteId = null;
+    const orderBy: any = q.ordem === 'pronta' ? [{ prontaEntrega: 'desc' }, { nome: 'asc' }] : { nome: 'asc' };
     if (q.pesquisa) {
       const p = q.pesquisa;
       const variantes = [...new Set([p, p.toLowerCase(), p.toUpperCase()])];
@@ -98,7 +107,7 @@ export default async function produtosRoutes(app: FastifyInstance) {
 
     const [total, data] = await Promise.all([
       prisma.produto.count({ where }),
-      prisma.produto.findMany({ where, ...paginar(q), orderBy: { nome: 'asc' }, include: { categoria: { select: { id: true, nome: true } } } }),
+      prisma.produto.findMany({ where, ...paginar(q), orderBy, include: { categoria: { select: { id: true, nome: true } } } }),
     ]);
     const mapa = await mapaEstoque(prisma, data.map((p) => p.id));
     return respostaPaginada(

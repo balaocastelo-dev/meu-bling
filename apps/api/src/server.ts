@@ -1,8 +1,10 @@
 import { construirApp } from './app.js';
 import { env } from './lib/env.js';
 import { iniciarServicos } from './core/servicos.js';
+import { prepararBanco } from './lib/prisma.js';
 
 async function main() {
+  await prepararBanco();
   const app = await construirApp();
   await app.listen({ port: env.PORT, host: env.HOST });
   await iniciarServicos(app);

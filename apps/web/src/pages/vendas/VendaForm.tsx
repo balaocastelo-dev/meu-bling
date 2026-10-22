@@ -6,6 +6,7 @@ import { Plus, Save, Trash2, UserPlus, X } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { useCategoriasFinanceiras, useDepositos, useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { useAuth } from '@/stores/auth';
+import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/ProdutoSite';
 import { buscarContatos, buscarProdutos } from '@/lib/buscas';
 import { Button, DateInput, FormSkeleton, Input, MoneyInput, PageHeader, SearchSelect, Secao, Select, Textarea } from '@/components/ui';
 import { ParcelasEditor, parcelasValidas } from '@/components/compartilhados/ParcelasEditor';
@@ -70,7 +71,7 @@ function deVenda(v: Venda): VendaPayload {
     fretePorConta: v.fretePorConta,
     quantidadeVolumes: v.quantidadeVolumes,
     pesoBruto: v.pesoBruto,
-    itens: v.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct })),
+    itens: v.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct, imagemUrl: i.produto?.imagemUrl ?? null, prontaEntrega: Boolean(i.produto?.prontaEntrega) })),
     parcelas: v.parcelas.map((p) => ({ dataVencimento: dataIso(p.dataVencimento), valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes ?? '' })),
   };
 }
@@ -152,7 +153,7 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
         const itens = f.itens.map((i, idx) => (idx === existente ? { ...i, quantidade: i.quantidade + 1 } : i));
         return { ...f, itens };
       }
-      const novo: VendaItem = { produtoId: p.id, codigo: p.codigo ?? null, descricao: p.nome, unidade: p.unidade, quantidade: 1, valorUnitario: p.preco, desconto: 0, comissaoPct: comissaoPadrao };
+      const novo: VendaItem = { produtoId: p.id, codigo: p.codigo ?? null, descricao: p.nome, unidade: p.unidade, quantidade: 1, valorUnitario: p.preco, desconto: 0, comissaoPct: comissaoPadrao, imagemUrl: p.imagemUrl ?? null, prontaEntrega: Boolean(p.prontaEntrega) };
       return { ...f, itens: [...f.itens, novo] };
     });
     setProdutoSel(null);
@@ -317,8 +318,16 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                   <tr key={i}>
                     <td className="text-slate-400">{i + 1}</td>
                     <td>
-                      <input disabled={bloqueado} value={it.descricao} onChange={(e) => atualizarItem(i, { descricao: e.target.value })} className={`input-base h-8 py-0 ${erros[`item${i}`] ? 'input-erro' : ''}`} placeholder="Descrição do item" />
-                      {it.codigo && <span className="text-[10px] text-slate-400">cód. {it.codigo}</span>}
+                      <div className="flex items-start gap-2">
+                        {it.produtoId && <FotoProduto url={it.imagemUrl} tamanho="sm" />}
+                        <div className="min-w-0 flex-1">
+                          <input disabled={bloqueado} value={it.descricao} onChange={(e) => atualizarItem(i, { descricao: e.target.value })} className={`input-base h-8 py-0 ${erros[`item${i}`] ? 'input-erro' : ''}`} placeholder="Descrição do item" />
+                          <span className="flex items-center gap-2">
+                            {it.codigo && <span className="text-[10px] text-slate-400">cód. {it.codigo}</span>}
+                            {it.prontaEntrega && <SeloProntaEntrega compacto />}
+                          </span>
+                        </div>
+                      </div>
                     </td>
                     <td>
                       <MoneyInput value={it.quantidade} onChange={(v) => atualizarItem(i, { quantidade: v })} prefixo="" casas={2} disabled={bloqueado} inputClassName="h-8 py-0" />

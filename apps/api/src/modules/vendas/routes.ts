@@ -26,6 +26,7 @@ import {
   carregarVenda,
   converterOrcamento,
   copiarVenda,
+  criarVenda,
   exigirPedido,
   gerarNfeDaVenda,
   verificarNfeDaVenda,
@@ -124,68 +125,9 @@ export default async function vendasRoutes(app: FastifyInstance) {
   // ---------------------------------------------------------------- criar
   app.post('/api/v1/vendas', async (req, reply) => {
     const body = vendaSchema.parse(req.body);
-    const modulo = moduloDe(body.tipo);
     // vendedor padrão = vendedor vinculado ao usuário logado (define a comissão default dos itens)
     if (body.vendedorId === undefined && req.user.vendedorId) body.vendedorId = req.user.vendedorId;
-    const venda = await prisma.$transaction(async (tx) => {
-      const { itens, totais, parcelas, data } = await prepararVenda(tx, body);
-      const situacao = body.situacaoId
-        ? await tx.situacao.findFirst({ where: { id: body.situacaoId, modulo, ativo: true } })
-        : await situacaoInicial(modulo, tx);
-      if (!situacao) throw new AppError(`Situação inválida para ${body.tipo === 'ORCAMENTO' ? 'orçamentos' : 'vendas'}.`, 422, 'SITUACAO');
-      const numero = await proximoNumero(sequenciaDe(body.tipo), tx);
-      // orçamento sem validade informada: 7 dias a partir da data
-      let validade = body.validade ?? null;
-      if (body.tipo === 'ORCAMENTO' && !validade) {
-        validade = new Date(data);
-        validade.setDate(validade.getDate() + 7);
-      }
-      const v = await tx.venda.create({
-        data: {
-          tipo: body.tipo,
-          numero,
-          data,
-          validade: body.tipo === 'ORCAMENTO' ? validade : null,
-          dataPrevista: body.dataPrevista,
-          dataSaida: body.dataSaida,
-          contatoId: body.contatoId,
-          vendedorId: body.vendedorId ?? null,
-          situacaoId: situacao.id,
-          depositoId: body.depositoId ?? null,
-          categoriaFinanceiraId: body.categoriaFinanceiraId ?? null,
-          origem: body.origem,
-          numeroPedidoLoja: body.numeroPedidoLoja ?? null,
-          totalProdutos: totais.totalProdutos,
-          descontoTipo: body.descontoTipo,
-          descontoValor: body.descontoValor,
-          frete: body.frete,
-          outrasDespesas: body.outrasDespesas,
-          total: totais.total,
-          custoTotal: totais.custoTotal,
-          observacoes: body.observacoes ?? null,
-          observacoesInternas: body.observacoesInternas ?? null,
-          transportadoraId: body.transportadoraId ?? null,
-          fretePorConta: body.fretePorConta,
-          quantidadeVolumes: body.quantidadeVolumes,
-          pesoBruto: body.pesoBruto,
-          itens: { create: itens },
-          parcelas: { create: parcelas },
-        },
-      });
-      await tx.historicoSituacao.create({
-        data: { entidadeTipo: modulo, entidadeId: v.id, paraSituacaoId: situacao.id, paraSituacao: situacao.nome, usuarioId: req.user.id, observacao: body.tipo === 'ORCAMENTO' ? 'Orçamento criado' : 'Venda criada' },
-      });
-      return v;
-    });
-
-    // ações da situação inicial escolhida (ex.: criar já "Em aberto" reserva estoque) — orçamento não tem ações
-    if (body.tipo === 'PEDIDO') {
-      const sit = await prisma.situacao.findUnique({ where: { id: venda.situacaoId } });
-      const acoesIniciais = sit ? (JSON.parse(sit.acoes || '[]') as Acao[]).filter((a) => a !== 'notificarCliente') : [];
-      if (acoesIniciais.length) await executarAcoes('VENDA', venda.id, acoesIniciais, req.user.id);
-      eventos.emitir('venda.criada', { vendaId: venda.id, usuarioId: req.user.id });
-    }
-
+    const venda = await criarVenda(body, req.user.id);
     await auditar(req, body.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', venda.id, 'CRIAR', { numero: venda.numero, total: venda.total });
     return reply.code(201).send(await vendaCompleta(venda.id));
   });
