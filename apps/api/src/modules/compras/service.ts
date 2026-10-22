@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { XMLParser } from 'fast-xml-parser';
 import { prisma, type Tx } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
-import { arredondar, competenciaDe, dataSchema, somenteDigitos, toDate } from '../../lib/util.js';
+import { arredondar, proximoNumero, competenciaDe, dataSchema, somenteDigitos, toDate } from '../../lib/util.js';
 import { historico, situacoesPermitidas, type ContextoAcao } from '../../core/situacoes.js';
 import { depositoPadraoId, movimentarEstoque, movimentaEstoque } from '../comum/estoque.js';
 import { cancelarContasPagar, categoriaPadraoId } from '../comum/financeiro.js';
@@ -436,11 +436,11 @@ export async function importarXmlNfe(xml: string, usuarioId: number, opcoes: { d
         : (await tx.situacao.findFirst({ where: { modulo: 'COMPRA', inicial: true, ativo: true } })) || (await tx.situacao.findFirst({ where: { modulo: 'COMPRA', ativo: true }, orderBy: { ordem: 'asc' } }));
       if (!situacao) throw new AppError('Nenhuma situação de compra cadastrada.', 500);
       const categoriaId = await categoriaPadraoId(tx, 'Compra de mercadorias (CMV)', 'DESPESA', 'CMV');
-      const seq = await tx.sequencia.upsert({ where: { nome: 'COMPRA' }, create: { nome: 'COMPRA', valor: 1 }, update: { valor: { increment: 1 } } });
+      const numeroCompra = await proximoNumero('COMPRA', tx);
 
       const compra = await tx.compra.create({
         data: {
-          numero: seq.valor,
+          numero: numeroCompra,
           data: dEmi,
           dataPrevista: parcelas[0]?.dataVencimento ?? null,
           fornecedorId: fornecedor.id,
