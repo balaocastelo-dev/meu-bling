@@ -56,6 +56,11 @@ else
   grep -q '^APP_URL=' "$ENV_FILE" || echo "APP_URL=${URL_PUBLICA}" >> "$ENV_FILE"
   grep -q '^BASE_PATH=' "$ENV_FILE" || echo "BASE_PATH=${CAMINHO}" >> "$ENV_FILE"
 fi
+# chave da porta do site (PDV do www.balao.info -> /sistema). Criada uma vez; a mesma vai na Vercel como MEU_BLING_CHAVE.
+if ! grep -q '^SITE_CHAVE_INTEGRACAO=' "$ENV_FILE"; then
+  echo "SITE_CHAVE_INTEGRACAO=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48)" >> "$ENV_FILE"
+  echo "chave do PDV do site criada (SITE_CHAVE_INTEGRACAO)"
+fi
 
 msg "Pastas de dados em $DADOS"
 mkdir -p "$DADOS/data" "$DADOS/storage"
@@ -145,4 +150,5 @@ cat <<EOF
    Login inicial: admin@balao.info / admin123 — troque na primeira entrada.
    Dados: ${DADOS}   Segredos: ${ENV_FILE}   Logs: docker logs -f ${CONTAINER}
    Backup: todo dia às 03:00 em /root/backups/meu-bling (log em /var/log/meu-bling-backup.log)
+   PDV do site: chave SITE_CHAVE_INTEGRACAO em ${ENV_FILE} (a mesma vai na Vercel como MEU_BLING_CHAVE).
 EOF

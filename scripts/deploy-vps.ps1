@@ -34,4 +34,26 @@ Passo "Instalando na VPS (Docker + Caddy)"
 ssh "$Usuario@$Servidor" "bash /opt/meu-bling/deploy/vps/instalar-vps.sh"
 if ($LASTEXITCODE -ne 0) { throw "O instalador na VPS terminou com erro (exit $LASTEXITCODE)" }
 
+Passo "Ligação do PDV do site (www.balao.info/pdv -> /sistema)"
+# A chave fica só na VPS e na Vercel: vai direto para a área de transferência, nunca para a tela.
+$chave = (ssh "$Usuario@$Servidor" "grep -m1 '^SITE_CHAVE_INTEGRACAO=' /etc/meu-bling.env | cut -d= -f2-") | Select-Object -First 1
+if ($chave -and $chave.Trim().Length -ge 24) {
+  $marca = Join-Path $Raiz '.chave-site-enviada'
+  $sha = New-Object Security.Cryptography.SHA256Managed
+  $impressao = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($chave.Trim()))).Replace('-', '').Substring(0, 16)
+  if ((Test-Path $marca) -and ((Get-Content $marca -Raw).Trim() -eq $impressao)) {
+    Write-Host "A chave do PDV já está na Vercel (levada num deploy anterior). Nada a fazer." -ForegroundColor DarkGray
+  } else {
+    Set-Clipboard -Value $chave.Trim()
+    Write-Host "A chave do PDV foi COPIADA (é só dar Ctrl+V). Falta 1 passo, uma vez só:" -ForegroundColor Yellow
+    Write-Host "  Vercel -> projeto do site -> Settings -> Environment Variables -> Add" -ForegroundColor Yellow
+    Write-Host "  Nome: MEU_BLING_CHAVE   Valor: Ctrl+V   Ambiente: Production   -> Save -> Redeploy" -ForegroundColor Yellow
+    Start-Process "https://vercel.com/dashboard"
+    $ok = Read-Host "Digite S quando tiver salvo na Vercel (ou só Enter para fazer depois)"
+    if ($ok -match '^[sS]') { Set-Content -Path $marca -Value $impressao; Set-Clipboard -Value ' ' }
+  }
+} else {
+  Write-Host "Não consegui ler a chave do PDV na VPS (SITE_CHAVE_INTEGRACAO). Rode o deploy de novo." -ForegroundColor Red
+}
+
 Write-Host "`n✅ Pronto. Abra https://www.balao.info/sistema" -ForegroundColor Green

@@ -276,6 +276,18 @@ model Produto {
   codigoServico      String? // ISS (lista LC 116) p/ serviços
   issAliquota        Float             @default(0)
   blingId            String?           @unique
+  // ---- Catálogo do site (www.balao.info): os produtos do sistema são os do site
+  /// id do produto no site (ex.: "tob-8698"); preenchido pela sincronização
+  siteId             String?           @unique
+  siteSlug           String?
+  /// "Pronta entrega" no site (na loja agora); os demais saem do distribuidor
+  prontaEntrega      Boolean           @default(false)
+  /// texto de disponibilidade do site ("Pronta entrega", "Disponível")
+  disponibilidade    String?
+  /// preço no cartão do site (o `preco` é o à vista / Pix)
+  precoCartao        Float?
+  fornecedor         String?
+  siteSincronizadoEm DateTime?
   categoria          CategoriaProduto? @relation(fields: [categoriaId], references: [id])
   categoriaId        Int?
   criadoEm           DateTime          @default(now())
@@ -289,6 +301,7 @@ model Produto {
   nfItens     NotaFiscalItem[]
 
   @@index([nome])
+  @@index([prontaEntrega])
 }
 
 model EstoqueSaldo {
@@ -533,6 +546,7 @@ model Venda {
 
   @@unique([tipo, numero])
   @@index([data])
+  @@index([numeroPedidoLoja])
   @@index([contatoId])
   @@index([situacaoId])
 }

@@ -290,6 +290,14 @@ export interface Produto {
   estoqueTotal?: number;
   estoqueReservado?: number;
   saldos?: { depositoId: number; deposito: string; saldo: number; reservado: number }[];
+  // ---- vindos do site www.balao.info (sincronização)
+  siteId?: string | null;
+  siteSlug?: string | null;
+  prontaEntrega?: boolean;
+  disponibilidade?: string | null;
+  precoCartao?: number | null;
+  fornecedor?: string | null;
+  siteSincronizadoEm?: string | null;
 }
 
 export interface SaldoEstoque {
@@ -341,6 +349,11 @@ export interface VendaItem {
   custoUnitario?: number;
   comissaoPct?: number;
   comissaoValor?: number;
+  /** vindo da API (GET /vendas/:id) */
+  produto?: { id: number; nome: string; imagemUrl?: string | null; prontaEntrega?: boolean } | null;
+  /** só na tela do formulário (não vai para a API) */
+  imagemUrl?: string | null;
+  prontaEntrega?: boolean;
 }
 
 export interface Parcela {

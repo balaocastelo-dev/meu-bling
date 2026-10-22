@@ -222,3 +222,10 @@ Orçamento = venda com `tipo: "ORCAMENTO"` (mesma tabela). Numeração própria 
 
 ## Impressões (HTML prontos para `window.print()`)
 - `/vendas/:id/imprimir` (e `/vendas/:id/pdf`), `/compras/:id/imprimir`, `/ordens-servico/:id/imprimir?via=`, `/notas-fiscais/:id/danfe` (PDF)
+
+## Site www.balao.info: produtos e PDV (desde 22/10/2026)
+Detalhes em `docs/SITE-E-PDV.md`.
+- Tela (login): `GET /site/catalogo` (estado da sincronização) · `POST /site/catalogo/sincronizar` (ADMIN/GERENTE) · `POST /site/catalogo/desativar-fora-do-site` (ADMIN).
+- `GET /produtos` ganhou `prontaEntrega=true|false`, `origem=site|fora` e `ordem=pronta` (pronta entrega primeiro). Produto tem `siteId`, `siteSlug`, `prontaEntrega`, `disponibilidade`, `precoCartao`, `fornecedor`, `siteSincronizadoEm`.
+- Porta do PDV (sem login, `Authorization: Bearer <SITE_CHAVE_INTEGRACAO>`), prefixo `/integracoes/site`:
+  `GET /status` · `GET /vendedores` · `GET /clientes?documento=` · `POST /vendas` (idempotente por `pdvId`; entra "Fechada") · `GET /vendas?dia=AAAA-MM-DD` · `GET /vendas/:id` · `POST /vendas/:id/nfe` `{cliente?}` · `POST /notas/:id/consultar` · `GET /notas/:id/danfe`.

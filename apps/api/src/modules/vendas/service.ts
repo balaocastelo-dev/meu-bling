@@ -6,7 +6,8 @@ import { prisma, type Tx } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { mensagemPendencias, verificarNfe } from '../comum/nfe-checagem.js';
 import { arredondar, competenciaDe, proximoNumero } from '../../lib/util.js';
-import { historico, mudarSituacao, situacaoInicial, situacoesPermitidas, type ContextoAcao, type Modulo } from '../../core/situacoes.js';
+import { executarAcoes, historico, mudarSituacao, situacaoInicial, situacoesPermitidas, type Acao, type ContextoAcao, type Modulo } from '../../core/situacoes.js';
+import { eventos } from '../../core/eventos.js';
 import { linkPublico, tokenPublico } from '../publico/token.js';
 import { depositoPadraoId, liberarReservas, movimentarEstoque, movimentaEstoque, reservarItens, reservasAtivas } from '../comum/estoque.js';
 import { alocarComprasParaVenda, desalocarComprasDaVenda } from '../compras/service.js';
@@ -40,7 +41,7 @@ export const includeCompleto = {
   transportadora: { select: { id: true, nome: true, documento: true } },
   deposito: { select: { id: true, nome: true } },
   categoriaFinanceira: { select: { id: true, nome: true } },
-  itens: { orderBy: { ordem: 'asc' as const }, include: { produto: { select: { id: true, nome: true, codigo: true, tipo: true, controlaEstoque: true, unidade: true, ncm: true } } } },
+  itens: { orderBy: { ordem: 'asc' as const }, include: { produto: { select: { id: true, nome: true, codigo: true, tipo: true, controlaEstoque: true, unidade: true, ncm: true, imagemUrl: true, prontaEntrega: true } } } },
   parcelas: {
     orderBy: { numero: 'asc' as const },
     include: {
@@ -548,4 +549,73 @@ export async function verificarNfeDaVenda(db: Db, vendaId: number, modelo: 55 | 
 /** A venda tem reserva de estoque ativa? */
 export async function temReserva(id: number, db: Db = prisma) {
   return (await reservasAtivas(db, 'VENDA', id)).length > 0;
+}
+
+// ---------------------------------------------------------------- criação (tela e integrações)
+/**
+ * Cria a venda/orçamento a partir de um body validado e roda as ações da situação inicial.
+ * Usada pela tela (POST /vendas) e pela porta do PDV do site (modules/site).
+ */
+export async function criarVenda(body: VendaInput, usuarioId: number | null, observacaoHistorico?: string) {
+  const modulo = moduloDe(body.tipo);
+  const venda = await prisma.$transaction(async (tx) => {
+    const { itens, totais, parcelas, data } = await prepararVenda(tx, body);
+    const situacao = body.situacaoId
+      ? await tx.situacao.findFirst({ where: { id: body.situacaoId, modulo, ativo: true } })
+      : await situacaoInicial(modulo, tx);
+    if (!situacao) throw new AppError(`Situação inválida para ${body.tipo === 'ORCAMENTO' ? 'orçamentos' : 'vendas'}.`, 422, 'SITUACAO');
+    const numero = await proximoNumero(sequenciaDe(body.tipo), tx);
+    // orçamento sem validade informada: 7 dias a partir da data
+    let validade = body.validade ?? null;
+    if (body.tipo === 'ORCAMENTO' && !validade) {
+      validade = new Date(data);
+      validade.setDate(validade.getDate() + 7);
+    }
+    const v = await tx.venda.create({
+      data: {
+        tipo: body.tipo,
+        numero,
+        data,
+        validade: body.tipo === 'ORCAMENTO' ? validade : null,
+        dataPrevista: body.dataPrevista,
+        dataSaida: body.dataSaida,
+        contatoId: body.contatoId,
+        vendedorId: body.vendedorId ?? null,
+        situacaoId: situacao.id,
+        depositoId: body.depositoId ?? null,
+        categoriaFinanceiraId: body.categoriaFinanceiraId ?? null,
+        origem: body.origem,
+        numeroPedidoLoja: body.numeroPedidoLoja ?? null,
+        totalProdutos: totais.totalProdutos,
+        descontoTipo: body.descontoTipo,
+        descontoValor: body.descontoValor,
+        frete: body.frete,
+        outrasDespesas: body.outrasDespesas,
+        total: totais.total,
+        custoTotal: totais.custoTotal,
+        observacoes: body.observacoes ?? null,
+        observacoesInternas: body.observacoesInternas ?? null,
+        transportadoraId: body.transportadoraId ?? null,
+        fretePorConta: body.fretePorConta,
+        quantidadeVolumes: body.quantidadeVolumes,
+        pesoBruto: body.pesoBruto,
+        itens: { create: itens },
+        parcelas: { create: parcelas },
+      },
+    });
+    await tx.historicoSituacao.create({
+      data: { entidadeTipo: modulo, entidadeId: v.id, paraSituacaoId: situacao.id, paraSituacao: situacao.nome, usuarioId, observacao: observacaoHistorico ?? (body.tipo === 'ORCAMENTO' ? 'Orçamento criado' : 'Venda criada') },
+    });
+    return v;
+  });
+
+  // ações da situação inicial escolhida (ex.: criar já "Em aberto" reserva estoque) — orçamento não tem ações
+  if (body.tipo === 'PEDIDO') {
+    const sit = await prisma.situacao.findUnique({ where: { id: venda.situacaoId } });
+    const acoesIniciais = sit ? (JSON.parse(sit.acoes || '[]') as Acao[]).filter((a) => a !== 'notificarCliente') : [];
+    if (acoesIniciais.length) await executarAcoes('VENDA', venda.id, acoesIniciais, usuarioId);
+    eventos.emitir('venda.criada', { vendaId: venda.id, usuarioId });
+  }
+
+  return venda;
 }
