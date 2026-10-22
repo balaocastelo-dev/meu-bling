@@ -8,10 +8,14 @@
  *   GERENTE    → acesso administrativo operacional: tudo, exceto usuários,
  *                segredos/configuração fiscal e estrutural (certificado, SMTP,
  *                Open Finance, Bling, situações/transições, configurações).
- *   FINANCEIRO → financeiro, bancos, compras, comissões, relatórios, notas; leitura do resto.
+ *   FINANCEIRO → financeiro, bancos, comissões, relatórios, notas; leitura do resto.
  *   VENDEDOR   → vendas, clientes, OS, produtos/estoque (leitura), NF-e da venda,
- *                notificações; sem financeiro, compras, relatórios ou configurações.
- *   TECNICO    → ordens de serviço, clientes e produtos (leitura).
+ *                notificações; sem financeiro, relatórios ou configurações.
+ *   TECNICO    → igual ao VENDEDOR, exceto NF-e e painel do vendedor.
+ *
+ *   Pedidos de VENDA, de COMPRA e ORDENS DE SERVIÇO: todos os perfis veem, criam,
+ *   editam e mudam a situação (decisão do Thiago, 22/10/2026). Excluir e forçar
+ *   transição continuam só com ADMIN/GERENTE.
  */
 import type { Perfil } from './auth.js';
 
@@ -58,20 +62,20 @@ const REGRAS: Regra[] = [
   // ---- financeiro
   { teste: /^\/(financeiro|contas-pagar|bancos|open-finance)(\/|$)/, perfis: FIN },
   { metodos: MUT, teste: /^\/contas-receber(\/|$)/, perfis: FIN },
-  { teste: /^\/compras(\/|$)/, perfis: FIN },
   { metodos: MUT, teste: /^\/comissoes\/(aprovar|pagar|cancelar|recalcular)/, perfis: FIN },
   { teste: /^\/relatorios(\/|$)/, perfis: FIN },
   { teste: /^\/notas-fiscais\/\d+\/(cancelar|carta-correcao)/, perfis: FIN },
   { teste: /^\/webhooks\//, perfis: 'TODOS' },
 
   // ---- vendas
-  { metodos: MUT, teste: /^\/(vendas|notas-fiscais)(\/|$)/, perfis: VENDAS },
-  { metodos: MUT, teste: /^\/notificacoes(\/|$)/, perfis: VENDAS },
+  { metodos: MUT, teste: /^\/notas-fiscais(\/|$)/, perfis: VENDAS },
+  { metodos: MUT, teste: /^\/notificacoes(\/|$)/, perfis: OPERACAO },
   // dashboards (geral, vendas, OS): só o dono
   { teste: /^\/dashboard(\/|$)/, perfis: ['ADMIN'] },
 
   // ---- operação (todos os perfis autenticados)
-  { metodos: MUT, teste: /^\/(ordens-servico|contatos)(\/|$)/, perfis: OPERACAO },
+  // pedidos de venda, de compra e OS: todos os funcionários
+  { metodos: MUT, teste: /^\/(vendas|compras|ordens-servico|contatos)(\/|$)/, perfis: OPERACAO },
   { teste: /.*/, perfis: 'TODOS' },
 ];
 
@@ -91,7 +95,7 @@ export function permitido(perfil: Perfil | undefined, metodo: string, rota: stri
 export const DESCRICAO_PERFIS: Record<Perfil, string> = {
   ADMIN: 'Acesso completo (dono): usuários, configurações, fiscal, integrações e tudo o mais.',
   GERENTE: 'Acesso administrativo: vendas, compras, OS, estoque, financeiro, fiscal, relatórios, cadastros e WhatsApp. Não altera usuários, certificado, SMTP, Open Finance, Bling, situações.',
-  FINANCEIRO: 'Financeiro, bancos, compras, comissões, relatórios e notas fiscais; leitura do restante.',
-  VENDEDOR: 'Vendas, clientes, ordens de serviço, consulta de produtos/estoque, NF-e da venda e mensagens ao cliente.',
-  TECNICO: 'Ordens de serviço, clientes e consulta de produtos/estoque.',
+  FINANCEIRO: 'Pedidos de venda, compra e OS; financeiro, bancos, comissões, relatórios e notas fiscais.',
+  VENDEDOR: 'Pedidos de venda, compra e OS, clientes, consulta de produtos/estoque, NF-e da venda e mensagens ao cliente.',
+  TECNICO: 'Pedidos de venda, compra e OS, clientes e consulta de produtos/estoque.',
 };
