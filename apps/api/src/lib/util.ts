@@ -23,13 +23,41 @@ export function respostaPaginada<T>(data: T[], total: number, q: { pagina: numbe
   };
 }
 
-/** Próximo número sequencial (VENDA, COMPRA, OS). Executar dentro da transação. */
+/** Maior número já gravado na tabela dona da sequência (null = sequência sem tabela conhecida). */
+async function maiorNumeroGravado(nome: string, tx: Tx | typeof prisma): Promise<number | null> {
+  const db = tx as typeof prisma;
+  switch (nome) {
+    case 'VENDA':
+      return (await db.venda.aggregate({ where: { tipo: 'PEDIDO' }, _max: { numero: true } }))._max.numero ?? 0;
+    case 'ORCAMENTO':
+      return (await db.venda.aggregate({ where: { tipo: 'ORCAMENTO' }, _max: { numero: true } }))._max.numero ?? 0;
+    case 'COMPRA':
+      return (await db.compra.aggregate({ _max: { numero: true } }))._max.numero ?? 0;
+    case 'OS':
+      return (await db.ordemServico.aggregate({ _max: { numero: true } }))._max.numero ?? 0;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Próximo número sequencial (VENDA, ORCAMENTO, COMPRA, OS). Executar dentro da transação.
+ * Nunca devolve um número já usado: se a sequência ficou para trás (importação do Bling,
+ * restauração de backup, seed rodado de novo…), ela é avançada para depois do maior número gravado.
+ * Sem isso, cada "Salvar" batia no mesmo número, dava erro de valor único e a transação desfazia
+ * o incremento — o sistema ficava travado para sempre no mesmo número.
+ */
 export async function proximoNumero(nome: string, tx: Tx | typeof prisma = prisma): Promise<number> {
   const seq = await tx.sequencia.upsert({
     where: { nome },
     create: { nome, valor: 1 },
     update: { valor: { increment: 1 } },
   });
+  const maior = await maiorNumeroGravado(nome, tx);
+  if (maior !== null && seq.valor <= maior) {
+    const ajustado = await tx.sequencia.update({ where: { nome }, data: { valor: maior + 1 } });
+    return ajustado.valor;
+  }
   return seq.valor;
 }
 
