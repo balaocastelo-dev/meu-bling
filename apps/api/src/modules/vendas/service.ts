@@ -99,8 +99,16 @@ export async function montarItens(db: Db, itens: ItemInput[], comissaoPadraoPct:
   const ids = [...new Set(itens.map((i) => i.produtoId).filter((x): x is number => !!x))];
   const produtos = ids.length ? await db.produto.findMany({ where: { id: { in: ids } } }) : [];
   const mapa = new Map(produtos.map((p) => [p.id, p]));
+  // linha digitada com o nome exato de um produto ativo: vincula ao cadastro (senão não baixa estoque nem sai na NF)
+  const livres = [...new Set(itens.filter((i) => !i.produtoId && i.descricao?.trim()).map((i) => i.descricao!.trim()))];
+  const porNome = new Map<string, (typeof produtos)[number]>();
+  if (livres.length) {
+    const variantes = [...new Set(livres.flatMap((d) => [d, d.toUpperCase()]))];
+    const achados = await db.produto.findMany({ where: { ativo: true, nome: { in: variantes } } });
+    for (const p of achados) if (!porNome.has(p.nome.trim().toUpperCase())) porNome.set(p.nome.trim().toUpperCase(), p);
+  }
   return itens.map((i, idx) => {
-    const p = i.produtoId ? mapa.get(i.produtoId) : undefined;
+    const p = i.produtoId ? mapa.get(i.produtoId) : i.descricao?.trim() ? porNome.get(i.descricao.trim().toUpperCase()) : undefined;
     if (i.produtoId && !p) throw new AppError(`Produto ${i.produtoId} do item ${idx + 1} não encontrado.`, 422, 'PRODUTO');
     const descricao = (i.descricao || p?.nome || '').trim();
     if (!descricao) throw new AppError(`Item ${idx + 1}: informe a descrição ou o produto.`, 422, 'ITEM');
