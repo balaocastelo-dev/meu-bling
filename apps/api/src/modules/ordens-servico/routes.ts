@@ -27,6 +27,7 @@ import {
   CAMPOS_LIVRES_OS,
   carregarOs,
   gerarNfeDaOs,
+  verificarNfeDaOs,
   osCompleta,
   osSchema,
   prepararOs,
@@ -427,6 +428,11 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
   });
 
   // ---------------------------------------------------------------- NF-e das peças
+  app.get('/api/v1/ordens-servico/:id/nfe/verificar', async (req) => {
+    const modelo = Number((req.query as any)?.modelo) === 65 ? 65 : 55;
+    return verificarNfeDaOs(prisma, idDe(req), modelo);
+  });
+
   app.post('/api/v1/ordens-servico/:id/gerar-nfe', async (req, reply) => {
     const id = idDe(req);
     const body = z

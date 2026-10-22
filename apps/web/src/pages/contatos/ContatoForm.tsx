@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -62,6 +62,17 @@ export default function ContatoForm() {
   }, [contato]);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  // CEP completo (8 dígitos) → preenche rua, bairro, cidade, UF e código IBGE sozinho
+  const ultimoCep = useRef('');
+  useEffect(() => {
+    const c = somenteDigitos(form.cep);
+    if (c.length === 8 && c !== ultimoCep.current && (!form.codigoMunicipio || !form.logradouro)) {
+      ultimoCep.current = c;
+      buscarCep();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.cep]);
 
   const buscarCep = async () => {
     const c = somenteDigitos(form.cep);

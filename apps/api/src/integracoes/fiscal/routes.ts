@@ -8,6 +8,7 @@ import { encrypt } from '../../lib/crypto.js';
 import { paginacaoSchema, paginar, respostaPaginada, dataSchema, somenteDigitos } from '../../lib/util.js';
 import { lerPfx } from './certificado.js';
 import * as fiscal from './service.js';
+import { orientacaoNota } from './orientacao.js';
 import { caminhoXml } from './service.js';
 import { registrarServico } from '../../core/servicos.js';
 
@@ -136,7 +137,29 @@ export default async function fiscalRoutes(app: FastifyInstance) {
 
   app.get('/api/v1/notas-fiscais/:id', async (req) => {
     const nota = await fiscal.carregarNota(Number((req.params as any).id));
-    return { ...nota, xml: undefined, xmlProtocolo: undefined, temXml: !!nota.xml, temXmlProtocolo: !!nota.xmlProtocolo };
+    return { ...nota, xml: undefined, xmlProtocolo: undefined, temXml: !!nota.xml, temXmlProtocolo: !!nota.xmlProtocolo, orientacao: orientacaoNota(nota as any) };
+  });
+
+  // nota rejeitada por duplicidade (número já usado — ex.: emitido pelo Bling): pega o próximo número livre
+  app.post('/api/v1/notas-fiscais/:id/renumerar', async (req) => {
+    const id = Number((req.params as any).id);
+    const r = await prisma.$transaction(async (tx) => {
+      const nota = await tx.notaFiscal.findUnique({ where: { id } });
+      if (!nota) throw new AppError('Nota fiscal não encontrada.', 404, 'NAO_ENCONTRADO');
+      if (!['PENDENTE', 'REJEITADA', 'ERRO'].includes(nota.situacao)) throw new AppError(`Nota ${nota.situacao.toLowerCase()} não pode mudar de número.`, 422, 'NOTA_SITUACAO');
+      for (let tentativa = 0; tentativa < 50; tentativa++) {
+        const emp = await tx.empresa.update({ where: { id: 1 }, data: nota.modelo === 65 ? { proximoNumeroNfce: { increment: 1 } } : { proximoNumeroNfe: { increment: 1 } } });
+        const numero = (nota.modelo === 65 ? emp.proximoNumeroNfce : emp.proximoNumeroNfe) - 1;
+        const serie = nota.modelo === 65 ? emp.serieNfce : emp.serieNfe;
+        const ocupado = await tx.notaFiscal.findFirst({ where: { modelo: nota.modelo, serie, numero, NOT: { id } }, select: { id: true } });
+        if (ocupado || numero <= nota.numero) continue;
+        await tx.notaFiscal.update({ where: { id }, data: { numero, serie, chave: null, situacao: 'PENDENTE', cStat: null, motivo: null } });
+        return { de: nota.numero, para: numero, serie };
+      }
+      throw new AppError('Não achei número livre em 50 tentativas — confira a numeração em Configurações → Fiscal.', 422, 'NUMERACAO');
+    });
+    await auditar(req, 'NotaFiscal', id, 'ALTERAR', { renumerada: r });
+    return r;
   });
 
   app.post('/api/v1/notas-fiscais', async (req, reply) => {

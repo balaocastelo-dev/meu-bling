@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Save, X } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
@@ -50,7 +50,9 @@ export default function ProdutoForm() {
   const nav = useNavigate();
   const qc = useQueryClient();
   const { data: categorias } = useCategoriasProduto();
-  const [form, setForm] = useState<Form>(vazio);
+  const [sp] = useSearchParams();
+  // vindo do checklist da NF: "Cadastrar produto" já traz o nome da linha livre
+  const [form, setForm] = useState<Form>(() => (sp.get('nome') ? { ...vazio, nome: sp.get('nome') || '' } : vazio));
   const { data: produto, isLoading } = useQuery({ queryKey: ['produto', id], queryFn: () => api.get<Produto>(`/produtos/${id}`), enabled: editando });
 
   useEffect(() => {
