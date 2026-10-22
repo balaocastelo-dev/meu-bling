@@ -77,14 +77,14 @@ export default async function dashboardRoutes(app: FastifyInstance) {
 
     const alertas: { tipo: 'erro' | 'aviso' | 'info'; mensagem: string; link: string }[] = [];
     if (osAtrasadas) alertas.push({ tipo: 'aviso', mensagem: `${osAtrasadas} OS atrasada${osAtrasadas > 1 ? 's' : ''} (previsão vencida)`, link: '/ordens-servico?atrasadas=true' });
-    if (financeiro.receberAtrasado > 0) alertas.push({ tipo: 'aviso', mensagem: `Contas a receber vencidas: R$ ${financeiro.receberAtrasado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, link: '/financeiro/contas-receber?situacao=ATRASADO' });
-    if (financeiro.pagarAtrasado > 0) alertas.push({ tipo: 'erro', mensagem: `Contas a pagar vencidas: R$ ${financeiro.pagarAtrasado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, link: '/financeiro/contas-pagar?situacao=ATRASADO' });
-    if (financeiro.pagarHoje > 0) alertas.push({ tipo: 'info', mensagem: `Contas a pagar hoje: R$ ${financeiro.pagarHoje.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, link: '/financeiro/contas-pagar?situacao=ABERTO' });
+    if (financeiro.receberAtrasado > 0) alertas.push({ tipo: 'aviso', mensagem: `Contas a receber vencidas: R$ ${financeiro.receberAtrasado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, link: '/financeiro/receber?situacao=ATRASADO' });
+    if (financeiro.pagarAtrasado > 0) alertas.push({ tipo: 'erro', mensagem: `Contas a pagar vencidas: R$ ${financeiro.pagarAtrasado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, link: '/financeiro/pagar?situacao=ATRASADO' });
+    if (financeiro.pagarHoje > 0) alertas.push({ tipo: 'info', mensagem: `Contas a pagar hoje: R$ ${financeiro.pagarHoje.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, link: '/financeiro/pagar?situacao=ABERTO' });
     if (abaixoMinimo.length) alertas.push({ tipo: 'aviso', mensagem: `${abaixoMinimo.length} produto${abaixoMinimo.length > 1 ? 's' : ''} abaixo do estoque mínimo`, link: '/estoque?abaixoMinimo=true' });
     if (notasRejeitadas) alertas.push({ tipo: 'erro', mensagem: `${notasRejeitadas} NF-e rejeitada${notasRejeitadas > 1 ? 's' : ''}/com erro`, link: '/notas-fiscais?situacao=REJEITADA' });
     if (notasPendentes) alertas.push({ tipo: 'info', mensagem: `${notasPendentes} NF-e pendente${notasPendentes > 1 ? 's' : ''} de transmissão`, link: '/notas-fiscais?situacao=PENDENTE' });
-    if (wa.status !== 'CONECTADO' && (empresa?.whatsappAtivo || notifPendentes > 0)) alertas.push({ tipo: 'aviso', mensagem: 'WhatsApp desconectado', link: '/configuracoes/whatsapp' });
-    if (notifErro) alertas.push({ tipo: 'aviso', mensagem: `${notifErro} notificaç${notifErro > 1 ? 'ões' : 'ão'} com erro de envio`, link: '/notificacoes?status=ERRO' });
+    if (wa.status !== 'CONECTADO' && (empresa?.whatsappAtivo || notifPendentes > 0)) alertas.push({ tipo: 'aviso', mensagem: 'WhatsApp desconectado', link: '/comunicacao/whatsapp' });
+    if (notifErro) alertas.push({ tipo: 'aviso', mensagem: `${notifErro} notificaç${notifErro > 1 ? 'ões' : 'ão'} com erro de envio`, link: '/comunicacao/notificacoes?status=ERRO' });
     if (empresa?.certificadoValidade) {
       const dias = differenceInCalendarDays(empresa.certificadoValidade, hoje);
       if (dias < 0) alertas.push({ tipo: 'erro', mensagem: 'Certificado digital A1 vencido', link: '/configuracoes/fiscal' });
@@ -158,7 +158,8 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         vendedorId: z.coerce.number().int().optional(),
         agrupar: z.enum(['dia', 'semana', 'mes']).optional(),
         comparar: z.enum(['true', 'false']).default('true'),
-        todas: z.enum(['true', 'false']).default('false'),
+        // padrão: toda venda não cancelada (em aberto já conta), igual ao painel do vendedor; todas=false = só fechadas/NF
+        todas: z.enum(['true', 'false']).default('true'),
       })
       .parse(req.query);
     const { ini, fim } = resolverPeriodo(q, 'mes');

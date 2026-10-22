@@ -57,7 +57,7 @@ export default async function relatoriosRoutes(app: FastifyInstance) {
   // ---- Vendas por período
   app.get('/api/v1/relatorios/vendas-por-periodo', { preHandler: leitura }, async (req, reply) => {
     const q = z
-      .object({ dataInicial: dataSchema, dataFinal: dataSchema, agrupar: z.enum(['dia', 'semana', 'mes']).optional(), vendedorId: z.coerce.number().int().optional(), todas: z.enum(['true', 'false']).default('false'), formato: formatoSchema })
+      .object({ dataInicial: dataSchema, dataFinal: dataSchema, agrupar: z.enum(['dia', 'semana', 'mes']).optional(), vendedorId: z.coerce.number().int().optional(), todas: z.enum(['true', 'false']).default('true'), formato: formatoSchema })
       .parse(req.query);
     const { ini, fim } = resolverPeriodo(q, 'mes');
     const agrupar: Agrupar = q.agrupar || agruparPadrao(ini, fim);
@@ -90,7 +90,8 @@ export default async function relatoriosRoutes(app: FastifyInstance) {
   app.get('/api/v1/relatorios/produtos-mais-vendidos', { preHandler: leitura }, async (req, reply) => {
     const q = z.object({ dataInicial: dataSchema, dataFinal: dataSchema, limite: z.coerce.number().int().min(1).max(500).default(50), categoriaId: z.coerce.number().int().optional(), incluirOs: z.enum(['true', 'false']).default('true'), formato: formatoSchema }).parse(req.query);
     const { ini, fim } = resolverPeriodo(q, 'mes');
-    const sitV = await prisma.situacao.findMany({ where: { modulo: 'VENDA', final: true, cancelamento: false }, select: { id: true } });
+    // vendas não canceladas (em aberto já conta), igual ao painel e ao dashboard de vendas
+    const sitV = await prisma.situacao.findMany({ where: { modulo: 'VENDA', cancelamento: false }, select: { id: true } });
     const itens = await prisma.vendaItem.findMany({
       where: { venda: { tipo: 'PEDIDO', data: { gte: ini, lte: fim }, situacaoId: { in: sitV.map((s) => s.id) } }, ...(q.categoriaId ? { produto: { categoriaId: q.categoriaId } } : {}) },
       select: { produtoId: true, descricao: true, codigo: true, quantidade: true, total: true, custoUnitario: true, produto: { select: { categoria: { select: { nome: true } } } } },

@@ -59,6 +59,17 @@ async function main() {
   await A.post(`/vendas/${v1.id}/situacao`, { situacaoId: cancelada });
   verifica(igual(hojeDe(await painel(A)).faturamento, antes.faturamento), 'venda cancelada sai do painel');
 
+  secao('Dashboard de vendas e relatórios contam a venda em aberto (bug de 22/10: dashboard de hoje vazio)');
+  const dashAntes = await adm.get(`/dashboard/vendas?dataInicial=${hoje()}&dataFinal=${hoje()}&comparar=false`);
+  const vDash = await vender(A, 777);
+  const dashDepois = await adm.get(`/dashboard/vendas?dataInicial=${hoje()}&dataFinal=${hoje()}&comparar=false`);
+  verifica(igual(dashDepois.resumo.faturamento - dashAntes.resumo.faturamento, 777) && dashDepois.resumo.qtdVendas === dashAntes.resumo.qtdVendas + 1, 'dashboard de vendas de hoje soma a venda em aberto', { antes: dashAntes.resumo, depois: dashDepois.resumo });
+  const relHoje = await adm.get(`/relatorios/vendas-por-periodo?dataInicial=${hoje()}&dataFinal=${hoje()}`);
+  verifica(igual(relHoje.totais?.faturamento ?? relHoje.totais?.total ?? 0, dashDepois.resumo.faturamento), 'relatório de vendas por período bate com o dashboard', { rel: relHoje.totais, dash: dashDepois.resumo.faturamento });
+  await A.post(`/vendas/${vDash.id}/situacao`, { situacaoId: cancelada });
+  const dashCanc = await adm.get(`/dashboard/vendas?dataInicial=${hoje()}&dataFinal=${hoje()}&comparar=false`);
+  verifica(igual(dashCanc.resumo.faturamento, dashAntes.resumo.faturamento), 'cancelada sai do dashboard');
+
   secao('Transferir, editar e excluir refletem no painel');
   const v2 = await vender(A, 500);
   const bAntes = hojeDe(await painel(B)).faturamento;
