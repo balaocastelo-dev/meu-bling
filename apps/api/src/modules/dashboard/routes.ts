@@ -90,6 +90,17 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       if (dias < 0) alertas.push({ tipo: 'erro', mensagem: 'Certificado digital A1 vencido', link: '/configuracoes/fiscal' });
       else if (dias <= 30) alertas.push({ tipo: 'aviso', mensagem: `Certificado digital vence em ${dias} dia${dias === 1 ? '' : 's'}`, link: '/configuracoes/fiscal' });
     }
+    // resultado da última verificação de "Saúde do sistema" (roda sozinha a cada 6 h)
+    const diag = await prisma.configuracao.findUnique({ where: { chave: 'diagnostico.ultimo' } }).catch(() => null);
+    if (diag) {
+      try {
+        const d = JSON.parse(diag.valor);
+        if (d.erro > 0) alertas.push({ tipo: 'erro', mensagem: `Saúde do sistema: ${d.erro} problema${d.erro > 1 ? 's' : ''} nos dados para corrigir`, link: '/configuracoes/saude' });
+        else if (d.aviso > 0) alertas.push({ tipo: 'aviso', mensagem: `Saúde do sistema: ${d.aviso} ponto${d.aviso > 1 ? 's' : ''} de atenção`, link: '/configuracoes/saude' });
+      } catch {
+        /* ignora */
+      }
+    }
     if ((comissoesPendentes._count as number) > 0) alertas.push({ tipo: 'info', mensagem: `${comissoesPendentes._count} comiss${(comissoesPendentes._count as number) > 1 ? 'ões' : 'ão'} pendente${(comissoesPendentes._count as number) > 1 ? 's' : ''} de aprovação`, link: '/comissoes?status=PENDENTE' });
 
     const resposta = {

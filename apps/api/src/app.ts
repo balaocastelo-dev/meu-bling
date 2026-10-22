@@ -18,6 +18,9 @@ import { prisma } from './lib/prisma.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/** Todas as rotas registradas (método + caminho) — usado pelo teste de robustez, que chama uma por uma. */
+export const ROTAS_REGISTRADAS: { metodo: string; url: string }[] = [];
+
 export async function construirApp() {
   const app = Fastify({
     logger: env.isProd
@@ -25,6 +28,9 @@ export async function construirApp() {
       : { level: 'info', transport: { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } } },
     bodyLimit: 25 * 1024 * 1024,
     trustProxy: true,
+  });
+  app.addHook('onRoute', (r) => {
+    for (const m of [r.method].flat()) if (m !== 'HEAD' && m !== 'OPTIONS') ROTAS_REGISTRADAS.push({ metodo: m, url: r.url });
   });
 
   await app.register(helmet, { contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'cross-origin' } });
@@ -40,7 +46,24 @@ export async function construirApp() {
     },
   });
   await app.register(cookie, { secret: env.APP_SECRET });
-  await app.register(rateLimit, { max: 600, timeWindow: '1 minute' });
+  // Limite de requisições POR USUÁRIO logado (todos os PCs da loja saem pelo mesmo IP; contar por IP
+  // travaria a loja inteira num momento de movimento). Sem login, conta por IP.
+  await app.register(rateLimit, {
+    max: 1200,
+    timeWindow: '1 minute',
+    keyGenerator: (req) => {
+      const auth = req.headers.authorization || '';
+      if (auth.startsWith('Bearer ')) {
+        try {
+          const corpo = app.jwt.verify<{ id?: number }>(auth.slice(7));
+          if (corpo?.id) return `u:${corpo.id}`;
+        } catch {
+          /* token malformado: cai no IP */
+        }
+      }
+      return `ip:${req.ip}`;
+    },
+  });
   await app.register(multipart, { limits: { fileSize: 30 * 1024 * 1024 } });
   await app.register(authPlugin);
 
@@ -92,8 +115,24 @@ export async function construirApp() {
     if (err?.statusCode && err.statusCode < 500) {
       return reply.code(err.statusCode).send({ erro: err.message, code: err.code || 'ERRO' });
     }
+    // dado mal formado que escapou da validação (ex.: texto onde o banco espera número)
+    if (err?.name === 'PrismaClientValidationError') {
+      req.log.warn({ url: req.url, err: String(err.message).slice(-300) }, 'dado inválido chegou ao banco');
+      return reply.code(400).send({ erro: 'Dados inválidos: confira os campos e tente de novo.', code: 'VALIDACAO' });
+    }
     req.log.error(err);
     return reply.code(500).send({ erro: 'Erro interno: ' + (err?.message || 'desconhecido'), code: 'INTERNO' });
+  });
+
+  // Código na URL (/vendas/:id, /comissoes/recalcular/:origemTipo/:id…) tem que ser número inteiro positivo:
+  // "abc", "-1", "1.5" viram 400 com mensagem clara, em vez de estourar no banco.
+  app.addHook('preValidation', async (req, reply) => {
+    const params = (req.params || {}) as Record<string, string>;
+    for (const [nome, valor] of Object.entries(params)) {
+      if ((nome === 'id' || /Id$/.test(nome)) && !/^[1-9]\d{0,15}$/.test(String(valor))) {
+        return reply.code(400).send({ erro: `Código inválido na URL (${nome} = "${valor}").`, code: 'ID_INVALIDO' });
+      }
+    }
   });
 
   app.get('/api/v1/saude', async () => {

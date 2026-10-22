@@ -1,8 +1,8 @@
 /**
  * METAS E DESAFIOS DE VENDAS
  *
- * - Venda que conta: tipo PEDIDO numa situação "realizada" (final = true e cancelamento = false),
- *   ou seja, Fechada e NF emitida. Orçamentos, canceladas e em aberto ficam de fora.
+ * - Venda que conta: todo PEDIDO que não está numa situação de cancelamento (Em aberto, Em andamento,
+ *   Fechada, NF emitida…). Conta no painel assim que é salva; se for cancelada, sai. Orçamentos ficam de fora.
  * - Meta do mês: MetaVendedor(vendedor, AAAA-MM) ou, se não houver, Vendedor.metaMensal.
  * - Desafio: o progresso é calculado das vendas no período. Quando o vendedor bate o alvo,
  *   grava DesafioConquista + Comissao (origem DESAFIO, já APROVADA = liberada automaticamente).
@@ -20,10 +20,10 @@ export type TipoDesafio = (typeof TIPOS_DESAFIO)[number];
 
 // ---------------------------------------------------------------------------------- situações
 let cacheSituacoes: { ids: number[]; em: number } | null = null;
-/** ids das situações de venda que contam como venda realizada (cache de 1 min) */
+/** ids das situações de venda que contam (todas menos as de cancelamento; cache de 1 min) */
 export async function situacoesQueContam(): Promise<number[]> {
   if (cacheSituacoes && Date.now() - cacheSituacoes.em < 60_000) return cacheSituacoes.ids;
-  const s = await prisma.situacao.findMany({ where: { modulo: 'VENDA', final: true, cancelamento: false }, select: { id: true } });
+  const s = await prisma.situacao.findMany({ where: { modulo: 'VENDA', cancelamento: false }, select: { id: true } });
   cacheSituacoes = { ids: s.map((x) => x.id), em: Date.now() };
   return cacheSituacoes.ids;
 }

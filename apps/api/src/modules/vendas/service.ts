@@ -325,6 +325,7 @@ export async function converterOrcamento(id: number, p: { usuarioId: number | nu
   if (convertido && convertido.id !== orig.situacaoId) {
     await mudarSituacao({ modulo: 'ORCAMENTO', entidadeId: id, situacaoDestinoId: convertido.id, usuarioId: p.usuarioId, forcar: true, observacao: `Convertido na venda nº ${venda.numero}` });
   }
+  eventos.emitir('venda.alterada', { vendaId: venda.id, data: venda.data, tipo: venda.tipo });
   return { venda, situacao };
 }
 
@@ -357,6 +358,7 @@ export async function transferirVendedor(id: number, vendedorId: number | null, 
       data: { entidadeTipo: moduloDe(v.tipo), entidadeId: id, deSituacaoId: v.situacaoId, deSituacao: v.situacao.nome, paraSituacaoId: v.situacaoId, paraSituacao: v.situacao.nome, usuarioId, observacao: `Vendedor alterado: ${v.vendedor?.nome || 'nenhum'} → ${novo?.nome || 'nenhum'}` },
     });
   });
+  eventos.emitir('venda.alterada', { vendaId: id, data: v.data, tipo: v.tipo });
   return { venda: await prisma.venda.findUnique({ where: { id } }), alterado: true };
 }
 
@@ -616,6 +618,7 @@ export async function criarVenda(body: VendaInput, usuarioId: number | null, obs
     if (acoesIniciais.length) await executarAcoes('VENDA', venda.id, acoesIniciais, usuarioId);
     eventos.emitir('venda.criada', { vendaId: venda.id, usuarioId });
   }
+  eventos.emitir('venda.alterada', { vendaId: venda.id, data: venda.data, tipo: venda.tipo });
 
   return venda;
 }

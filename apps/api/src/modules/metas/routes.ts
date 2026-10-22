@@ -17,6 +17,7 @@ import { auditar } from '../../lib/auditoria.js';
 import { arredondar, competenciaDe, parseJsonArray, toDate } from '../../lib/util.js';
 import { eventos } from '../../core/eventos.js';
 import { registrarServico } from '../../core/servicos.js';
+import { vendedorDoUsuario } from '../comum/vendedores.js';
 import {
   TIPOS_DESAFIO,
   avaliarDesafio,
@@ -30,7 +31,7 @@ import {
   statusDesafio,
 } from './service.js';
 
-const competenciaSchema = z.string().regex(/^\d{4}-\d{2}$/, 'competência no formato AAAA-MM');
+const competenciaSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'competência no formato AAAA-MM');
 
 const desafioBody = z
   .object({
@@ -96,8 +97,7 @@ export default async function metasRoutes(app: FastifyInstance) {
     let vendedorId = q.vendedorId;
     if (req.user.perfil === 'VENDEDOR') {
       // relê do banco: o vínculo usuário→vendedor pode ter mudado depois do login
-      const u = await prisma.usuario.findUnique({ where: { id: req.user.id }, select: { vendedorId: true } });
-      vendedorId = u?.vendedorId ?? undefined;
+      vendedorId = (await vendedorDoUsuario(req.user.id)) ?? undefined;
       if (!vendedorId) throw new AppError('Seu usuário ainda não está vinculado a um cadastro de vendedor. Peça ao administrador para vincular em Configurações → Usuários.', 422, 'SEM_VENDEDOR');
     }
     if (!vendedorId) {
@@ -340,7 +340,13 @@ export default async function metasRoutes(app: FastifyInstance) {
   });
 }
 
-// ---- reavalia os desafios quando uma venda muda de situação (fechou, cancelou, voltou)
+// ---- reavalia os desafios quando uma venda é criada, editada, transferida ou excluída
+eventos.ouvir('venda.alterada', async (d) => {
+  if (d.tipo !== 'PEDIDO') return;
+  await avaliarDesafiosAbertos(d.data);
+});
+
+// ---- e quando muda de situação (fechou, cancelou, voltou)
 eventos.ouvir('situacao.alterada', async (d) => {
   if (d.modulo !== 'VENDA') return;
   const v = await prisma.venda.findUnique({ where: { id: d.entidadeId }, select: { data: true, tipo: true } });

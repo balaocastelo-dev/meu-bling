@@ -24,7 +24,7 @@ const includeComissao = {
   contaPagar: { select: { id: true, situacao: true, dataPagamento: true, valor: true } },
 } as const;
 
-const competenciaSchema = z.string().regex(/^\d{4}-\d{2}$/, 'competência no formato AAAA-MM').optional();
+const competenciaSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'competência no formato AAAA-MM').optional();
 
 export default async function comissoesRoutes(app: FastifyInstance) {
   const gestao = { preHandler: app.exigirPerfil(...PERFIS) };

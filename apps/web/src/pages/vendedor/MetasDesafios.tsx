@@ -231,7 +231,7 @@ function FormDesafio({ desafio, onFechar, onSalvo }: { desafio: Desafio | null; 
       onFechar={onFechar}
       tamanho="lg"
       titulo={desafio ? 'Editar desafio' : 'Novo desafio'}
-      descricao="O prêmio entra como comissão extra (já liberada) quando o vendedor bate o alvo. Contam só vendas Fechadas/NF emitida."
+      descricao="O prêmio entra como comissão extra (já liberada) quando o vendedor bate o alvo. Contam todas as vendas salvas, menos as canceladas."
       rodape={
         <>
           {erro && <span className="mr-auto text-xs text-slate-500">{erro}</span>}

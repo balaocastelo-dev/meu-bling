@@ -28,7 +28,10 @@ export default function PainelVendedor() {
   const { data: p, isLoading, error } = useQuery({
     queryKey: ['painel-vendedor', vendedorId],
     queryFn: () => api.get<Painel>('/painel-vendedor', { vendedorId }),
-    refetchInterval: 60_000,
+    // números ao vivo: atualiza a cada 20 s, ao voltar para a aba e após qualquer gravação
+    refetchInterval: 20_000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
   const semVinculo = error instanceof ApiError && error.code === 'SEM_VENDEDOR';
@@ -181,7 +184,7 @@ export default function PainelVendedor() {
               <EmptyState compacto titulo="Nenhuma venda ainda" />
             )}
           </Card>
-          <p className="text-center text-[11px] text-slate-400">Contam as vendas Fechadas e com NF emitida. Orçamentos, vendas em aberto e canceladas ficam de fora.</p>
+          <p className="text-center text-[11px] text-slate-400">Contam todas as vendas assim que são salvas (em aberto, fechadas, com NF). Cancelada sai da conta; orçamento não conta.</p>
         </div>
       )}
     </div>

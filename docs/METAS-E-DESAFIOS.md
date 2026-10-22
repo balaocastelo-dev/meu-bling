@@ -8,8 +8,8 @@ Endereços: **www.balao.info/sistema/meu-painel** (vendedor) e **www.balao.info/
 - **Meta do mês**: vendido / meta, %, quanto falta, quanto precisa por dia, dias restantes. Cor pelo ritmo: verde no ritmo, amarelo um pouco atrás (75–95% do esperado), vermelho bem atrás. A linha na barra marca o esperado até hoje.
 - **Ranking do mês**: posição e nomes de todos; o vendedor vê só o próprio valor e "faltam R$ X para passar Fulano". A gestão vê os valores de todos.
 - **Desafios** em cards (laranja em andamento, verde conquistado, cinza encerrado) e **últimas vendas**.
-- Conta como venda: pedido em situação **final e não cancelada** (Fechada, NF emitida). Orçamentos, em aberto e canceladas ficam de fora.
-- O usuário precisa estar vinculado ao cadastro de vendedor (Configurações → Usuários); sem vínculo o painel avisa.
+- Conta como venda: **todo pedido não cancelado**, assim que é salvo (Em aberto, Em andamento, Fechada, NF emitida). Cancelada sai; orçamento não conta. A tela se atualiza a cada 20 s e após qualquer gravação.
+- Usuário VENDEDOR sem cadastro de vendedor ganha um automaticamente (mesmo nome) no login, no painel ou na primeira venda.
 
 ## Metas
 - Metas e desafios → aba **Metas do mês**: **meta padrão** (vale todo mês) e, se quiser, **"Só neste mês"** com outro valor.
