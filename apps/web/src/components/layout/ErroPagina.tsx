@@ -1,8 +1,14 @@
+import { useEffect } from 'react';
 import { useRouteError, Link } from 'react-router-dom';
+import { ehErroDeVersaoAntiga, recarregarUmaVez } from '@/lib/versao';
 
 /** Tela amigável para erros inesperados de uma rota (substitui a tela padrão do React Router). */
 export default function ErroPagina() {
   const err = useRouteError() as { message?: string } | undefined;
+  // sistema atualizado com a aba aberta: os arquivos antigos sumiram — recarrega sozinho
+  useEffect(() => {
+    if (ehErroDeVersaoAntiga(err?.message)) recarregarUmaVez();
+  }, [err]);
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
       <div className="max-w-md rounded-xl border border-red-200 bg-white p-6 text-center shadow-sm">

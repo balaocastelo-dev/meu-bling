@@ -12,6 +12,7 @@ O teste **nunca toca o banco de verdade**: cria um banco novo numa pasta tempor�
 | Perfis de acesso | o que ADMIN, GERENTE, VENDEDOR, TÉCNICO e FINANCEIRO podem e não podem fazer |
 | Regras de vendas | painel do vendedor ao vivo (venda em aberto conta na hora, cancelada sai, transferir/editar/excluir), privacidade do ranking, períodos (hoje ⊂ semana ⊂ 7 dias…), metas, desafios (valor, nº de vendas, unidades, produto, categoria, "só o primeiro", agendado, encerrado, estorno do prêmio), vendedor sem cadastro, estoque e contas sem lançar em dobro, cálculo de totais e descontos |
 | Telas no navegador | abre **todas** as páginas (lidas do `routes.tsx`, página nova entra sozinha) com os 5 perfis: erro de JavaScript, tela "Ops, algo deu errado", chamada à API com erro, "Sem permissão" indevido, tela proibida que abre; e no celular, página que rola para o lado |
+| Links | todo link do código (API e telas) e todo link que o dashboard e a Saúde do sistema devolvem leva a uma tela que existe |
 | Integridade dos dados | roda a "Saúde do sistema" sobre o banco de teste: depois de tudo, saldos de contas, estoque, comissões e contas a receber têm que bater |
 | Robustez | chama **todas** as rotas da API (lidas do próprio app) sem login (tem que pedir login), com código inexistente, com lixo e com cada perfil: nunca pode dar erro interno (500) |
 | Log da API | nenhum erro interno registrado durante os testes |
