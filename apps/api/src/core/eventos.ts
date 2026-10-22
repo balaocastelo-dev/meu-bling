@@ -14,6 +14,8 @@ export interface EventosSistema {
     usuarioId: number | null;
   };
   'venda.criada': { vendaId: number; usuarioId: number | null };
+  /** qualquer mudança que afete os números de vendas: criada (inclusive PDV), editada, transferida, excluída */
+  'venda.alterada': { vendaId: number; data: Date; tipo: string };
   'compra.criada': { compraId: number; usuarioId: number | null };
   'os.criada': { osId: number; usuarioId: number | null };
   'os.orcamento': { osId: number; usuarioId: number | null };

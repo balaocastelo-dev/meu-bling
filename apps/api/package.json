@@ -14,7 +14,9 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test": "tsx testes/rodar.ts",
+    "test:rapido": "tsx testes/rodar.ts --rapido"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -55,6 +57,7 @@
     "@types/nodemailer": "^7.0.1",
     "@types/pdfkit": "^0.17.2",
     "@types/qrcode": "^1.5.5",
+    "playwright": "^1.64.1",
     "prisma": "6.19.3",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"

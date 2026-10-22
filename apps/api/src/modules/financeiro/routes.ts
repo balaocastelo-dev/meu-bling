@@ -46,7 +46,7 @@ const contaSchema = z.object({
   descricao: z.string().trim().min(1, 'Informe a descrição'),
   dataEmissao: dataSchema,
   vencimento: dataSchema,
-  competencia: z.string().regex(/^\d{4}-\d{2}$/).nullable().optional(),
+  competencia: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'competência no formato AAAA-MM').nullable().optional(),
   valor: z.number().positive('Valor deve ser maior que zero'),
   formaPagamentoId: z.number().int().nullable().optional(),
   contaFinanceiraId: z.number().int().nullable().optional(),

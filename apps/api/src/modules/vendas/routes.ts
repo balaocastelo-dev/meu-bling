@@ -10,6 +10,7 @@ import { AppError, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
 import { paginar, proximoNumero, respostaPaginada } from '../../lib/util.js';
 import { eventos } from '../../core/eventos.js';
+import { vendedorDoUsuario } from '../comum/vendedores.js';
 import { executarAcoes, mudarSituacao, registrarAcao, registrarModulo, situacaoInicial, type Acao } from '../../core/situacoes.js';
 import { idDe } from '../comum/zod.js';
 import { intervalo, hojeMeioDia } from '../comum/datas.js';
@@ -126,7 +127,11 @@ export default async function vendasRoutes(app: FastifyInstance) {
   app.post('/api/v1/vendas', async (req, reply) => {
     const body = vendaSchema.parse(req.body);
     // vendedor padrão = vendedor vinculado ao usuário logado (define a comissão default dos itens)
-    if (body.vendedorId === undefined && req.user.vendedorId) body.vendedorId = req.user.vendedorId;
+    if (body.vendedorId === undefined) {
+      // lido do banco (o vínculo pode ter mudado depois do login; vendedor sem cadastro ganha um)
+      const proprio = await vendedorDoUsuario(req.user.id);
+      if (proprio) body.vendedorId = proprio;
+    }
     const venda = await criarVenda(body, req.user.id);
     await auditar(req, body.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', venda.id, 'CRIAR', { numero: venda.numero, total: venda.total });
     return reply.code(201).send(await vendaCompleta(venda.id));
@@ -227,7 +232,11 @@ export default async function vendasRoutes(app: FastifyInstance) {
       }
     });
     await auditar(req, 'Venda', id, 'ALTERAR', { total: body.itens.length + ' itens' });
-    return vendaCompleta(id);
+    // a data pode ter mudado: reavalia o período antigo e o novo
+    const depois = await vendaCompleta(id);
+    eventos.emitir('venda.alterada', { vendaId: id, data: atual.data, tipo: atual.tipo });
+    if (+new Date(depois.data) !== +atual.data) eventos.emitir('venda.alterada', { vendaId: id, data: new Date(depois.data), tipo: atual.tipo });
+    return depois;
   });
 
   // ---------------------------------------------------------------- excluir
@@ -250,6 +259,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
       await tx.venda.delete({ where: { id } });
     });
     await auditar(req, v.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', id, 'EXCLUIR', { numero: v.numero });
+    eventos.emitir('venda.alterada', { vendaId: id, data: v.data, tipo: v.tipo });
     return { ok: true };
   });
 
@@ -398,6 +408,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     );
     await auditar(req, tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', nova.id, 'CRIAR', { duplicadaDe: orig.numero, numero: nova.numero });
     if (tipo === 'PEDIDO') eventos.emitir('venda.criada', { vendaId: nova.id, usuarioId: req.user.id });
+    eventos.emitir('venda.alterada', { vendaId: nova.id, data: nova.data, tipo: nova.tipo });
     return reply.code(201).send(await vendaCompleta(nova.id));
   });
 

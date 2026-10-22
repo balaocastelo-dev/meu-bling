@@ -170,7 +170,7 @@ export default async function relatoriosRoutes(app: FastifyInstance) {
 
   // ---- Comissões
   app.get('/api/v1/relatorios/comissoes', { preHandler: gestao }, async (req, reply) => {
-    const q = z.object({ competencia: z.string().regex(/^\d{4}-\d{2}$/).optional(), dataInicial: dataSchema, dataFinal: dataSchema, tipo: z.enum(['VENDEDOR', 'TECNICO']).optional(), status: z.string().optional(), formato: formatoSchema }).parse(req.query);
+    const q = z.object({ competencia: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'competência no formato AAAA-MM').optional(), dataInicial: dataSchema, dataFinal: dataSchema, tipo: z.enum(['VENDEDOR', 'TECNICO']).optional(), status: z.string().optional(), formato: formatoSchema }).parse(req.query);
     const where: any = {};
     if (q.competencia) where.competencia = q.competencia;
     else if (q.dataInicial || q.dataFinal) {

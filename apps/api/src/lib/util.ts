@@ -88,7 +88,12 @@ export function parseJsonArray(v: string | null | undefined): string[] {
 export function toDate(v: string | Date | null | undefined): Date | null {
   if (!v) return null;
   if (v instanceof Date) return v;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return new Date(v + 'T12:00:00');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    // data inexistente (31/02, mês 13) vira null em vez de "Invalid Date" ou de pular para o mês seguinte
+    const [a, m, dia] = v.split('-').map(Number);
+    const d = new Date(v + 'T12:00:00');
+    return isNaN(d.getTime()) || d.getFullYear() !== a || d.getMonth() + 1 !== m || d.getDate() !== dia ? null : d;
+  }
   const d = new Date(v);
   return isNaN(d.getTime()) ? null : d;
 }
@@ -97,7 +102,15 @@ export const dataSchema = z
   .union([z.string(), z.date()])
   .nullable()
   .optional()
-  .transform((v) => toDate(v as any));
+  .transform((v, ctx) => {
+    if (v === undefined || v === null || v === '') return null;
+    const d = toDate(v as any);
+    if (!d) {
+      ctx.addIssue({ code: 'custom', message: `data inválida: ${String(v)}` });
+      return z.NEVER;
+    }
+    return d;
+  });
 
 /** Substitui {{variaveis}} em templates ("{{cliente.nome}}"). */
 export function renderTemplate(texto: string, vars: Record<string, any>): string {

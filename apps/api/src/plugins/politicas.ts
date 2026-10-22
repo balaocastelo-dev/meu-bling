@@ -47,6 +47,7 @@ const REGRAS: Regra[] = [
   { teste: /^\/bling(\/|$)/, perfis: ['ADMIN'] },
   { metodos: MUT, teste: /^\/open-finance\/(connect-token|vincular|desvincular)/, perfis: ['ADMIN'] },
   { teste: /^\/auditoria(\/|$)/, perfis: GESTAO },
+  { teste: /^\/diagnostico(\/|$)/, perfis: ['ADMIN'] },
   { teste: /^\/notas-fiscais\/inutilizar/, perfis: GESTAO },
   { teste: /^\/whatsapp\/(conectar|desconectar)/, perfis: GESTAO },
   { metodos: MUT, teste: /^\/templates-notificacao(\/|$)/, perfis: GESTAO },
