@@ -8,6 +8,7 @@ import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleto
 import { VendaAcoes } from '@/components/compartilhados/VendaAcoes';
 import { HistoricoSituacoes } from '@/components/compartilhados/HistoricoSituacoes';
 import { NotificarModal } from '@/components/compartilhados/NotificarModal';
+import { EmitirNfModal } from '@/components/compartilhados/EmitirNfModal';
 import { NotificacoesLista } from '@/components/compartilhados/NotificacoesLista';
 import { data, dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { Contato, Venda } from '@/types';
@@ -59,16 +60,6 @@ export default function VendaDetalhe() {
     onError: (e) => toast.error(mensagemErro(e)),
   });
 
-  const gerarNfe = useMutation({
-    mutationFn: (p: { modelo: 55 | 65; informacoesComplementares?: string }) => api.post<{ notaId: number }>(`/vendas/${id}/gerar-nfe`, p),
-    onSuccess: (r) => {
-      toast.success('Nota fiscal gerada (pendente de transmissão).');
-      invalidar();
-      setNfe(null);
-      nav(`/notas-fiscais/${r.notaId}`);
-    },
-    onError: (e) => toast.error(mensagemErro(e)),
-  });
 
   const imprimir = async () => {
     try {
@@ -361,25 +352,18 @@ export default function VendaDetalhe() {
         onConfirmar={() => converterM.mutateAsync().then(() => undefined).catch(() => undefined)}
       />
 
-      <Modal
+      <EmitirNfModal
         aberto={!!nfe}
         onFechar={() => setNfe(null)}
-        titulo="Gerar nota fiscal"
-        descricao="A nota será criada como pendente; transmita na tela da nota."
-        rodape={
-          <>
-            <Button variante="secundario" onClick={() => setNfe(null)}>Cancelar</Button>
-            <Button variante="primario" carregando={gerarNfe.isPending} onClick={() => nfe && gerarNfe.mutate({ modelo: nfe.modelo, informacoesComplementares: nfe.info || undefined })}>Gerar</Button>
-          </>
-        }
-      >
-        {nfe && (
-          <div className="space-y-3">
-            <Select label="Modelo" value={nfe.modelo} onChange={(e) => setNfe({ ...nfe, modelo: Number(e.target.value) as 55 | 65 })} opcoes={[{ valor: 55, rotulo: 'NF-e (modelo 55)' }, { valor: 65, rotulo: 'NFC-e (modelo 65 — consumidor)' }]} />
-            <Textarea label="Informações complementares" value={nfe.info} onChange={(e) => setNfe({ ...nfe, info: e.target.value })} rows={3} />
-          </div>
-        )}
-      </Modal>
+        origem="vendas"
+        id={Number(id)}
+        numero={venda?.numero}
+        onGerada={(notaId) => {
+          invalidar();
+          setNfe(null);
+          nav(`/notas-fiscais/${notaId}`);
+        }}
+      />
 
     </div>
   );

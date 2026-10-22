@@ -11,6 +11,7 @@ import { linkPublico, tokenPublico } from '../publico/token.js';
 import { depositoPadraoId, liberarReservas, movimentarEstoque, movimentaEstoque, reservarItens } from '../comum/estoque.js';
 import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, recriarComissoes, type ComissaoNova } from '../comum/financeiro.js';
 import { criarNotaPendente } from '../comum/nfe.js';
+import { mensagemPendencias, verificarNfe } from '../comum/nfe-checagem.js';
 import { hojeMeioDia, inicioDia } from '../comum/datas.js';
 
 type Db = Tx | typeof prisma;
@@ -339,15 +340,35 @@ export async function acaoGerarNfe(ctx: ContextoAcao) {
 }
 
 /** NF-e só das peças (serviços ficam fora). */
+/** Checklist da NF das peças da OS (serviços não entram na NF-e de produto). */
+export async function verificarNfeDaOs(db: Db, osId: number, modelo: 55 | 65) {
+  const os = await db.ordemServico.findUnique({ where: { id: osId }, include: { nota: { select: { id: true, numero: true, situacao: true } }, itens: true } });
+  if (!os) throw new NotFound('Ordem de serviço');
+  const pecas = os.itens.filter((i) => i.tipo === 'PECA');
+  const r = await verificarNfe(db, {
+    modelo,
+    contatoId: os.contatoId,
+    itens: pecas.map((i) => ({ produtoId: i.produtoId, descricao: i.descricao })),
+    origem: { tipo: 'OS', id: os.id, numero: os.numero, notaExistente: os.nota },
+  });
+  if (!pecas.length) {
+    r.pendencias = r.pendencias.filter((x) => x.codigo !== 'SEM_ITENS');
+    r.pendencias.unshift({ nivel: 'erro', codigo: 'SEM_PECAS', grupo: 'ITENS', titulo: 'A OS não tem peças: NF-e de produto só leva peças; serviço é por nota de serviço (prefeitura).', acoes: [{ rotulo: 'Editar a OS', rota: `/ordens-servico/${os.id}/editar` }] });
+    r.erros = r.pendencias.filter((x) => x.nivel === 'erro').length;
+    r.avisos = r.pendencias.length - r.erros;
+    r.podeEmitir = r.erros === 0;
+  }
+  return r;
+}
+
 export async function gerarNfeDaOs(tx: Db, osId: number, modelo: 55 | 65, informacoesComplementares: string | null | undefined) {
   const os = await tx.ordemServico.findUnique({
     where: { id: osId },
     include: { nota: true, itens: { include: { produto: { select: { tipo: true } } } }, parcelas: { orderBy: { numero: 'asc' }, include: { formaPagamento: true } } },
   });
   if (!os) throw new NotFound('Ordem de serviço');
-  if (os.nota && !['CANCELADA', 'INUTILIZADA', 'DENEGADA'].includes(os.nota.situacao)) {
-    throw new AppError(`A OS já possui a nota fiscal nº ${os.nota.numero} (${os.nota.situacao}).`, 422, 'NOTA_EXISTENTE', { notaId: os.nota.id });
-  }
+  const checagem = await verificarNfeDaOs(tx, osId, modelo);
+  if (!checagem.podeEmitir) throw new AppError(mensagemPendencias(checagem), 422, 'NFE_PENDENCIAS', checagem);
   const pecas = os.itens.filter((i) => i.tipo === 'PECA' && i.produtoId && i.produto?.tipo === 'P');
   if (!pecas.length) throw new AppError('A OS não possui peças (produtos) para emitir NF-e. Serviços não entram na NF-e de produto.', 422, 'SEM_ITENS');
   const nota = await criarNotaPendente(tx, {

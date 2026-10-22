@@ -8,6 +8,7 @@ import { abrirEmNovaAba, api, mensagemErro, urlUpload, BASE_PATH } from '@/lib/a
 import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, PageHeader, StatusBadge, StatusChanger, Tabs, tomPorStatus } from '@/components/ui';
 import { HistoricoSituacoes } from '@/components/compartilhados/HistoricoSituacoes';
 import { NotificarModal } from '@/components/compartilhados/NotificarModal';
+import { EmitirNfModal } from '@/components/compartilhados/EmitirNfModal';
 import { NotificacoesLista } from '@/components/compartilhados/NotificacoesLista';
 import { data, dataHora, diasAtraso, moeda, numero, rotulo, tamanhoArquivo } from '@/lib/format';
 import type { Contato, OrdemServico, OsAnexo } from '@/types';
@@ -54,15 +55,7 @@ export default function OsDetalhe() {
     },
     onError: (e) => toast.error(mensagemErro(e)),
   });
-  const gerarNfe = useMutation({
-    mutationFn: () => api.post<{ notaId: number }>(`/ordens-servico/${id}/gerar-nfe`, { modelo: 55 }),
-    onSuccess: (r) => {
-      toast.success('NF-e das peças gerada (pendente).');
-      invalidar();
-      nav(`/notas-fiscais/${r.notaId}`);
-    },
-    onError: (e) => toast.error(mensagemErro(e)),
-  });
+  const [nfeAberto, setNfeAberto] = useState(false);
   const enviarAnexo = useMutation({
     mutationFn: (arquivos: FileList) => {
       const fd = new FormData();
@@ -269,7 +262,7 @@ export default function OsDetalhe() {
               </div>
               {pecas.some((p) => p.produtoId) && !os.nota && (
                 <div className="flex justify-end">
-                  <Button variante="secundario" icone={<FileText className="h-4 w-4" />} carregando={gerarNfe.isPending} onClick={() => gerarNfe.mutate()}>Gerar NF-e das peças</Button>
+                  <Button variante="secundario" icone={<FileText className="h-4 w-4" />} onClick={() => setNfeAberto(true)}>Gerar NF-e das peças</Button>
                 </div>
               )}
               {os.nota && <p className="text-xs text-slate-500">NF-e nº <Link to={`/notas-fiscais/${os.nota.id}`} className="text-brand-600 hover:underline">{os.nota.numero}</Link> · {rotulo(os.nota.situacao)}</p>}
@@ -372,6 +365,18 @@ export default function OsDetalhe() {
 
       <NotificarModal aberto={notificar} onFechar={() => setNotificar(false)} caminho={`/ordens-servico/${os.id}`} eventoTemplate="OS_SITUACAO" eventosExtras={["OS_CRIADA", "ORCAMENTO_OS"]} destinatarios={{ email: contato?.email, celular: contato?.celular }} />
       <ConfirmDialog aberto={excluir} onFechar={() => setExcluir(false)} titulo="Excluir OS?" descricao={`A OS nº ${os.numero} será removida.`} textoConfirmar="Excluir" onConfirmar={async () => { try { await api.del(`/ordens-servico/${id}`); toast.success('OS excluída.'); invalidar(); nav('/ordens-servico'); } catch (e) { toast.error(mensagemErro(e)); } }} />
+      <EmitirNfModal
+        aberto={nfeAberto}
+        onFechar={() => setNfeAberto(false)}
+        origem="ordens-servico"
+        id={Number(id)}
+        numero={os?.numero}
+        onGerada={(notaId) => {
+          invalidar();
+          setNfeAberto(false);
+          nav(`/notas-fiscais/${notaId}`);
+        }}
+      />
     </div>
   );
 }

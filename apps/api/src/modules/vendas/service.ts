@@ -4,6 +4,7 @@
  */
 import { prisma, type Tx } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
+import { mensagemPendencias, verificarNfe } from '../comum/nfe-checagem.js';
 import { arredondar, competenciaDe, proximoNumero } from '../../lib/util.js';
 import { historico, mudarSituacao, situacaoInicial, situacoesPermitidas, type ContextoAcao, type Modulo } from '../../core/situacoes.js';
 import { linkPublico, tokenPublico } from '../publico/token.js';
@@ -501,9 +502,9 @@ export async function gerarNfeDaVenda(tx: Db, vendaId: number, modelo: 55 | 65, 
     include: { nota: true, itens: { include: { produto: { select: { tipo: true } } } }, parcelas: { orderBy: { numero: 'asc' }, include: { formaPagamento: true } } },
   });
   if (!venda) throw new NotFound('Venda');
-  if (venda.nota && !['CANCELADA', 'INUTILIZADA', 'DENEGADA'].includes(venda.nota.situacao)) {
-    throw new AppError(`A venda já possui a nota fiscal nº ${venda.nota.numero} (${venda.nota.situacao}).`, 422, 'NOTA_EXISTENTE', { notaId: venda.nota.id });
-  }
+  // checklist completo: se falta algo, devolve TODAS as pendências com o link de onde corrigir
+  const checagem = await verificarNfeDaVenda(tx, vendaId, modelo);
+  if (!checagem.podeEmitir) throw new AppError(mensagemPendencias(checagem), 422, 'NFE_PENDENCIAS', checagem);
   const itensProduto = venda.itens.filter((i) => i.produtoId && i.produto?.tipo === 'P');
   if (!itensProduto.length) throw new AppError('A venda não possui itens de produto para emitir NF-e.', 422, 'SEM_ITENS');
   const descontoGeral = venda.descontoTipo === 'PERCENTUAL' ? arredondar(venda.totalProdutos * (venda.descontoValor / 100)) : venda.descontoValor;
@@ -529,6 +530,19 @@ export async function gerarNfeDaVenda(tx: Db, vendaId: number, modelo: 55 | 65, 
   });
   await tx.venda.update({ where: { id: vendaId }, data: { notaId: nota.id } });
   return nota;
+}
+
+/** Checklist da NF da venda (o que falta e onde corrigir). */
+export async function verificarNfeDaVenda(db: Db, vendaId: number, modelo: 55 | 65) {
+  const venda = await db.venda.findUnique({ where: { id: vendaId }, include: { nota: { select: { id: true, numero: true, situacao: true } }, itens: { orderBy: { ordem: 'asc' } } } });
+  if (!venda) throw new NotFound('Venda');
+  if (venda.tipo === 'ORCAMENTO') throw new AppError('Orçamento não emite nota fiscal. Converta em venda primeiro.', 422, 'ORCAMENTO');
+  return verificarNfe(db, {
+    modelo,
+    contatoId: venda.contatoId,
+    itens: venda.itens.map((i) => ({ produtoId: i.produtoId, descricao: i.descricao })),
+    origem: { tipo: 'VENDA', id: venda.id, numero: venda.numero, notaExistente: venda.nota },
+  });
 }
 
 /** A venda tem reserva de estoque ativa? */

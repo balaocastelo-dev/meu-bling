@@ -4,6 +4,18 @@
  * Exercita: login, cadastros, venda (situações/estoque/contas/comissão/NF-e mock), compra, OS (kanban→entregue),
  * financeiro (baixa/estorno/fluxo), bancos (mock + OFX + conciliação), notificações, dashboards, DRE, relatórios, fiscal.
  */
+/** CPF válido (dígitos verificadores corretos) a partir de um sufixo — o checklist da NF valida o CPF. */
+function cpfTeste(suf: string): string {
+  const base = `987${suf}`.replace(/\D/g, '').padEnd(9, '0').slice(0, 9);
+  const dv = (s: string, n: number) => {
+    let t = 0;
+    for (let i = 0; i < n; i++) t += Number(s[i]) * (n + 1 - i);
+    const r = (t * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  const d1 = dv(base, 9);
+  return base + d1 + dv(base + d1, 10);
+}
 const BASE = (process.argv[2] || 'http://localhost:3333') + '/api/v1';
 let token = '';
 let falhas = 0;
@@ -35,8 +47,9 @@ async function main() {
   await req('GET', '/saude');
 
   console.log('== Cadastros');
-  await req('GET', '/empresa');
-  await req('PUT', '/empresa', { telefone: '(19) 3233-0000' });
+  const emp = await req('GET', '/empresa');
+  // o checklist da NF exige IE do emitente; no banco de teste usa uma IE fictícia
+  await req('PUT', '/empresa', { telefone: '(19) 3233-0000', ...(emp?.ie ? {} : { ie: '244000000110' }) });
   const vendedores = await req('GET', '/vendedores');
   const tecnicos = await req('GET', '/tecnicos');
   const depositos = await req('GET', '/depositos');
@@ -51,7 +64,7 @@ async function main() {
   const s = (lista: any[], nome: string) => lista.find((x) => x.nome === nome)?.id;
 
   console.log('== Contatos');
-  const cli = await req('POST', '/contatos', { nome: `Cliente Smoke ${SUF}`, tipoPessoa: 'F', documento: `98765${SUF}`, celular: '19999998888', email: 'smoke@example.com', logradouro: 'Rua A', numero: '1', bairro: 'Centro', municipio: 'Campinas', codigoMunicipio: '3509502', uf: 'SP', cep: '13010000' }, 201);
+  const cli = await req('POST', '/contatos', { nome: `Cliente Smoke ${SUF}`, tipoPessoa: 'F', documento: cpfTeste(SUF), celular: '19999998888', email: 'smoke@example.com', logradouro: 'Rua A', numero: '1', bairro: 'Centro', municipio: 'Campinas', codigoMunicipio: '3509502', uf: 'SP', cep: '13010000' }, 201);
   await req('GET', `/contatos/${cli.id}`);
   await req('GET', '/contatos?pesquisa=smoke');
   const forn = await req('POST', '/contatos', { nome: `Fornecedor Smoke ${SUF}`, tipo: 'FORNECEDOR', tipoPessoa: 'J', documento: `11222333${SUF}` }, 201);

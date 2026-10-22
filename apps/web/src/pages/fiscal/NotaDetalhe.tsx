@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Ban, FileCode2, FileDown, Mail, Pencil, RefreshCw, Send, Trash2 } from 'lucide-react';
-import { abrirEmNovaAba, api, baixarArquivo, mensagemErro } from '@/lib/api';
+import { Ban, ExternalLink, FileCode2, FileDown, Mail, Pencil, RefreshCw, Send, Trash2 } from 'lucide-react';
+import { abrirEmNovaAba, api, baixarArquivo, BASE_PATH, mensagemErro } from '@/lib/api';
 import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, Input, Modal, PageHeader, Tabs, Textarea, tomPorStatus } from '@/components/ui';
 import { chaveNfe, dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { NotaFiscal } from '@/types';
@@ -32,6 +32,14 @@ export default function NotaDetalhe() {
     onSuccess: (r) => {
       if (r.situacao === 'AUTORIZADA') toast.success(`Nota autorizada. Protocolo ${r.protocolo ?? ''}`);
       else toast.warning(`Retorno SEFAZ: ${r.cStat ?? ''} ${r.motivo ?? r.situacao}`);
+      invalidar();
+    },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
+  const renumerar = useMutation({
+    mutationFn: () => api.post<{ de: number; para: number; serie: number }>(`/notas-fiscais/${id}/renumerar`),
+    onSuccess: (r) => {
+      toast.success(`A nota passou do nº ${r.de} para o nº ${r.para}. Agora clique em Transmitir à SEFAZ.`);
       invalidar();
     },
     onError: (e) => toast.error(mensagemErro(e)),
@@ -74,6 +82,7 @@ export default function NotaDetalhe() {
   if (isLoading) return <FormSkeleton />;
   if (error || !n) return <EmptyState titulo="Nota não encontrada" descricao={error ? mensagemErro(error) : undefined} acao={<Link to="/notas-fiscais"><Button>Voltar</Button></Link>} />;
 
+  const orientacao = (n as NotaFiscal & { orientacao?: { titulo: string; detalhe?: string; acoes: { rotulo: string; rota: string }[]; renumerar?: boolean } | null }).orientacao;
   const podeTransmitir = n.situacao === 'PENDENTE' || n.situacao === 'REJEITADA' || n.situacao === 'ERRO';
   const autorizada = n.situacao === 'AUTORIZADA';
   const rotuloModelo = n.modelo === 65 ? 'NFC-e' : 'NF-e';
@@ -110,7 +119,23 @@ export default function NotaDetalhe() {
 
       {n.motivo && n.situacao !== 'AUTORIZADA' && (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          <strong>cStat {n.cStat ?? '—'}:</strong> {n.motivo}
+          {orientacao && <p className="mb-1 text-base font-semibold text-red-900">{orientacao.titulo}</p>}
+          <p className={orientacao ? 'text-xs text-red-700' : ''}>
+            <strong>Resposta da SEFAZ (cStat {n.cStat ?? '—'}):</strong> {n.motivo}
+          </p>
+          {orientacao?.detalhe && <p className="mt-2 text-sm text-red-900">{orientacao.detalhe}</p>}
+          {orientacao && (orientacao.acoes.length > 0 || orientacao.renumerar) && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {orientacao.renumerar && (
+                <Button tamanho="sm" variante="primario" carregando={renumerar.isPending} onClick={() => renumerar.mutate()}>Usar o próximo número livre</Button>
+              )}
+              {orientacao.acoes.map((a) => (
+                <Button key={a.rota} tamanho="sm" variante={orientacao.renumerar ? 'secundario' : 'primario'} iconeDireita={<ExternalLink className="h-3.5 w-3.5" />} onClick={() => window.open(`${BASE_PATH}${a.rota}`, '_blank', 'noopener')}>
+                  {a.rotulo}
+                </Button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

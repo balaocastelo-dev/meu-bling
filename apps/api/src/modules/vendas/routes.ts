@@ -28,6 +28,7 @@ import {
   copiarVenda,
   exigirPedido,
   gerarNfeDaVenda,
+  verificarNfeDaVenda,
   gerarParcelas,
   includeLista,
   moduloDe,
@@ -333,6 +334,12 @@ export default async function vendasRoutes(app: FastifyInstance) {
   });
 
   // ---------------------------------------------------------------- NF-e
+  // checklist da NF: tudo o que falta, com o link de onde corrigir
+  app.get('/api/v1/vendas/:id/nfe/verificar', async (req) => {
+    const modelo = Number((req.query as any)?.modelo) === 65 ? 65 : 55;
+    return verificarNfeDaVenda(prisma, idDe(req), modelo);
+  });
+
   app.post('/api/v1/vendas/:id/gerar-nfe', async (req, reply) => {
     const id = idDe(req);
     const body = gerarNfeBody.parse(req.body || {});
