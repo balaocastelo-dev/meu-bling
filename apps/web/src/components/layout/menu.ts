@@ -8,6 +8,7 @@ import {
   Bell,
   Boxes,
   Building2,
+  Gauge,
   ChartLine,
   ChartPie,
   ClipboardList,
@@ -23,6 +24,7 @@ import {
   ShoppingBag,
   ShoppingCart,
   TrendingUp,
+  Trophy,
   Truck,
   Users,
   Wallet,
@@ -59,9 +61,11 @@ export const MENU: GrupoMenu[] = [
   {
     titulo: 'Vendas',
     itens: [
+      { rotulo: 'Meu painel', para: '/meu-painel', icone: Gauge, perfis: [...GESTAO, 'VENDEDOR'] },
       { rotulo: 'Pedidos de venda', para: '/vendas', icone: ShoppingCart, perfis: [...GESTAO, 'VENDEDOR', 'FINANCEIRO'] },
       { rotulo: 'Orçamentos', para: '/orcamentos', icone: FileSignature, perfis: [...GESTAO, 'VENDEDOR', 'FINANCEIRO'] },
       { rotulo: 'Clientes', para: '/contatos', icone: Users, alias: ['/contatos'] },
+      { rotulo: 'Metas e desafios', para: '/metas-desafios', icone: Trophy, perfis: GESTAO },
     ],
   },
   {

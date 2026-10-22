@@ -122,6 +122,8 @@ model Vendedor {
   telefone          String?
   /// comissão padrão (%) sobre o valor dos itens
   comissaoPadraoPct Float    @default(0)
+  /// meta de vendas padrão (R$ por mês); vale para todo mês sem meta específica em MetaVendedor
+  metaMensal        Float    @default(0)
   ativo             Boolean  @default(true)
   blingId           String?  @unique
   criadoEm          DateTime @default(now())
@@ -133,6 +135,72 @@ model Vendedor {
   ordens        OrdemServico[]
   comissoes     Comissao[]
   contasReceber ContaReceber[]
+  metas         MetaVendedor[]
+  conquistas    DesafioConquista[]
+}
+
+/// Meta de vendas de um vendedor num mês específico (sobrepõe Vendedor.metaMensal)
+model MetaVendedor {
+  id           Int      @id @default(autoincrement())
+  vendedor     Vendedor @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  vendedorId   Int
+  /// AAAA-MM
+  competencia  String
+  valor        Float    @default(0)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([vendedorId, competencia])
+}
+
+/// Desafio de vendas lançado pela gestão; aparece como card no painel do vendedor e paga prêmio como comissão extra
+model Desafio {
+  id              Int               @id @default(autoincrement())
+  titulo          String
+  descricao       String?
+  /// VALOR (R$ vendido) | QTD_VENDAS (nº de vendas) | QTD_ITENS (unidades vendidas)
+  tipo            String            @default("VALOR")
+  alvo            Float
+  /// filtro opcional: só conta itens deste produto / desta categoria
+  produto         Produto?          @relation(fields: [produtoId], references: [id])
+  produtoId       Int?
+  categoria       CategoriaProduto? @relation(fields: [categoriaId], references: [id])
+  categoriaId     Int?
+  inicio          DateTime
+  fim             DateTime
+  /// prêmio em R$ (lançado como comissão extra, já aprovada)
+  premio          Float
+  /// TODOS (todos que baterem ganham) | PRIMEIRO (só o primeiro a bater)
+  regra           String            @default("TODOS")
+  todosVendedores Boolean           @default(true)
+  /// ids dos vendedores participantes quando todosVendedores = false (JSON array)
+  vendedoresIds   String            @default("[]")
+  /// false = encerrado/cancelado pela gestão antes do fim
+  ativo           Boolean           @default(true)
+  criadoPorId     Int?
+  criadoEm        DateTime          @default(now())
+  atualizadoEm    DateTime          @updatedAt
+
+  conquistas DesafioConquista[]
+  comissoes  Comissao[]
+
+  @@index([inicio, fim])
+}
+
+/// Vendedor que bateu o alvo de um desafio (gera a comissão extra)
+model DesafioConquista {
+  id            Int       @id @default(autoincrement())
+  desafio       Desafio   @relation(fields: [desafioId], references: [id], onDelete: Cascade)
+  desafioId     Int
+  vendedor      Vendedor  @relation(fields: [vendedorId], references: [id])
+  vendedorId    Int
+  conquistadoEm DateTime  @default(now())
+  /// valor/quantidade atingido no momento da conquista
+  atingido      Float     @default(0)
+  comissao      Comissao? @relation(fields: [comissaoId], references: [id])
+  comissaoId    Int?      @unique
+
+  @@unique([desafioId, vendedorId])
 }
 
 model Tecnico {
@@ -240,6 +308,7 @@ model CategoriaProduto {
   filhas   CategoriaProduto[] @relation("CategoriaPai")
   blingId  String?            @unique
   produtos Produto[]
+  desafios Desafio[]
 }
 
 model Produto {
@@ -295,6 +364,7 @@ model Produto {
 
   saldos      EstoqueSaldo[]
   movimentos  MovimentoEstoque[]
+  desafios    Desafio[]
   vendaItens  VendaItem[]
   compraItens CompraItem[]
   osItens     OrdemServicoItem[]
@@ -628,21 +698,21 @@ model Compra {
 }
 
 model CompraItem {
-  id               Int      @id @default(autoincrement())
-  compra           Compra   @relation(fields: [compraId], references: [id], onDelete: Cascade)
-  compraId         Int
-  produto          Produto? @relation(fields: [produtoId], references: [id])
-  produtoId        Int?
-  codigoFornecedor String?
-  descricao        String
-  unidade          String   @default("UN")
-  quantidade       Float    @default(1)
-  valorUnitario    Float    @default(0)
-  ipiPct           Float    @default(0)
-  total            Float    @default(0)
-  ordem            Int      @default(0)
+  id                Int      @id @default(autoincrement())
+  compra            Compra   @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  compraId          Int
+  produto           Produto? @relation(fields: [produtoId], references: [id])
+  produtoId         Int?
+  codigoFornecedor  String?
+  descricao         String
+  unidade           String   @default("UN")
+  quantidade        Float    @default(1)
+  valorUnitario     Float    @default(0)
+  ipiPct            Float    @default(0)
+  total             Float    @default(0)
+  ordem             Int      @default(0)
   /// quantidade deste item já vendida (alocação automática venda → compra; compra vira "Vendido" quando tudo foi vendido)
-  quantidadeVendida Float   @default(0)
+  quantidadeVendida Float    @default(0)
 
   alocacoes AlocacaoCompra[]
 }
@@ -798,31 +868,34 @@ model OrdemServicoAnexo {
 // ---------------------------------------------------------------------
 
 model Comissao {
-  id           Int           @id @default(autoincrement())
+  id           Int               @id @default(autoincrement())
   /// VENDEDOR | TECNICO
   tipo         String
-  vendedor     Vendedor?     @relation(fields: [vendedorId], references: [id])
+  vendedor     Vendedor?         @relation(fields: [vendedorId], references: [id])
   vendedorId   Int?
-  tecnico      Tecnico?      @relation(fields: [tecnicoId], references: [id])
+  tecnico      Tecnico?          @relation(fields: [tecnicoId], references: [id])
   tecnicoId    Int?
-  /// VENDA | OS
+  /// VENDA | OS | DESAFIO (prêmio de desafio de vendas)
   origemTipo   String
-  venda        Venda?        @relation(fields: [vendaId], references: [id])
+  venda        Venda?            @relation(fields: [vendaId], references: [id])
   vendaId      Int?
-  os           OrdemServico? @relation(fields: [osId], references: [id])
+  os           OrdemServico?     @relation(fields: [osId], references: [id])
   osId         Int?
+  desafio      Desafio?          @relation(fields: [desafioId], references: [id])
+  desafioId    Int?
+  conquista    DesafioConquista?
   descricao    String?
-  base         Float         @default(0)
-  pct          Float         @default(0)
-  valor        Float         @default(0)
+  base         Float             @default(0)
+  pct          Float             @default(0)
+  valor        Float             @default(0)
   /// PENDENTE | APROVADA | PAGA | CANCELADA
-  status       String        @default("PENDENTE")
+  status       String            @default("PENDENTE")
   /// competência AAAA-MM
   competencia  String
   pagoEm       DateTime?
-  contaPagar   ContaPagar?   @relation(fields: [contaPagarId], references: [id])
+  contaPagar   ContaPagar?       @relation(fields: [contaPagarId], references: [id])
   contaPagarId Int?
-  criadoEm     DateTime      @default(now())
+  criadoEm     DateTime          @default(now())
 
   @@index([competencia, status])
 }

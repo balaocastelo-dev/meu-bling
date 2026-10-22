@@ -62,6 +62,7 @@ export default function Comissoes() {
       chave: 'origem',
       titulo: 'Origem',
       render: (c) => {
+        if (c.origemTipo === 'DESAFIO') return <span className="text-amber-700">🏆 Desafio{c.desafio ? `: ${c.desafio.titulo}` : ''}</span>;
         const l = c.origemTipo === 'VENDA' && (c.vendaId || c.venda?.id) ? `/vendas/${c.vendaId ?? c.venda?.id}` : c.osId || c.os?.id ? `/ordens-servico/${c.osId ?? c.os?.id}` : null;
         const t = `${rotulo(c.origemTipo)} nº ${c.venda?.numero ?? c.os?.numero ?? c.vendaId ?? c.osId ?? ''}`;
         return l ? <Link to={l} className="text-brand-600 hover:underline">{t}</Link> : t;

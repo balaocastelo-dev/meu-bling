@@ -37,6 +37,8 @@ async function main() {
 
   console.log('== GERENTE (administrativo, sem usuários/segredos)');
   await esperar(gerente, 'GET', '/usuarios', [403], undefined, 'GERENTE');
+  await esperar(gerente, 'GET', '/desafios', [200], undefined, 'GERENTE');
+  await esperar(gerente, 'GET', '/metas', [200], undefined, 'GERENTE');
   await esperar(gerente, 'POST', '/usuarios', [403], { nome: 'x', email: 'x@x.com', senha: 'Senha@12345', perfil: 'ADMIN' }, 'GERENTE');
   await esperar(gerente, 'DELETE', '/empresa/certificado', [403], undefined, 'GERENTE');
   await esperar(gerente, 'POST', '/situacoes', [403], { modulo: 'VENDA', nome: 'X' }, 'GERENTE');
@@ -77,11 +79,18 @@ async function main() {
   await esperar(vendedor, 'POST', '/comissoes/pagar', [403], { ids: [1], contaFinanceiraId: 1 }, 'VENDEDOR');
   await esperar(vendedor, 'POST', '/notas-fiscais/1/cancelar', [403], { justificativa: 'xxxxxxxxxxxxxxxxxxx' }, 'VENDEDOR');
   await esperar(vendedor, 'POST', '/whatsapp/conectar', [403], undefined, 'VENDEDOR');
+  // painel do vendedor: abre (200) ou pede o vínculo com o cadastro de vendedor (422); metas/desafios são da gestão
+  await esperar(vendedor, 'GET', '/painel-vendedor', [200, 422], undefined, 'VENDEDOR');
+  await esperar(vendedor, 'GET', '/metas', [403], undefined, 'VENDEDOR');
+  await esperar(vendedor, 'GET', '/desafios', [403], undefined, 'VENDEDOR');
+  await esperar(vendedor, 'POST', '/desafios', [403], { titulo: 'x' }, 'VENDEDOR');
+  await esperar(vendedor, 'PUT', '/metas', [403], { competencia: '2026-10', itens: [] }, 'VENDEDOR');
 
   console.log('== TECNICO');
   await esperar(tecnico, 'GET', '/ordens-servico', [200], undefined, 'TECNICO');
   await esperar(tecnico, 'POST', '/vendas', [403], { contatoId: 1, itens: [] }, 'TECNICO');
   await esperar(tecnico, 'GET', '/financeiro/resumo', [403], undefined, 'TECNICO');
+  await esperar(tecnico, 'GET', '/painel-vendedor', [403], undefined, 'TECNICO');
 
   console.log('== FINANCEIRO');
   await esperar(financeiro, 'GET', '/financeiro/resumo', [200], undefined, 'FINANCEIRO');

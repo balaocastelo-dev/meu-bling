@@ -14,6 +14,8 @@ const Login = lazy(() => import('@/pages/auth/Login'));
 const Perfil = lazy(() => import('@/pages/auth/Perfil'));
 const DashboardGeral = lazy(() => import('@/pages/dashboard/DashboardGeral'));
 const DashboardVendas = lazy(() => import('@/pages/dashboard/DashboardVendas'));
+const PainelVendedor = lazy(() => import('@/pages/vendedor/PainelVendedor'));
+const MetasDesafios = lazy(() => import('@/pages/vendedor/MetasDesafios'));
 
 const VendasLista = lazy(() => import('@/pages/vendas/VendasLista'));
 const VendaForm = lazy(() => import('@/pages/vendas/VendaForm'));
@@ -88,12 +90,13 @@ function Somente({ perfis, children }: { perfis: Perfil[]; children: ReactNode }
   }
   return <>{children}</>;
 }
-/** Tela inicial: ADMIN vê o dashboard; os demais perfis caem direto na sua área de trabalho. */
+/** Tela inicial: ADMIN vê o dashboard; o vendedor cai no painel dele; os demais na sua área de trabalho. */
 function Inicio() {
   const perfil = useAuth((s) => s.usuario?.perfil);
   if (perfil === 'ADMIN') return S(<DashboardGeral />);
   if (perfil === 'TECNICO') return <Navigate to="/ordens-servico" replace />;
   if (perfil === 'FINANCEIRO') return <Navigate to="/financeiro/receber" replace />;
+  if (perfil === 'VENDEDOR') return <Navigate to="/meu-painel" replace />;
   return <Navigate to="/vendas" replace />;
 }
 const ADMIN = (el: ReactNode) => S(<Somente perfis={['ADMIN']}>{el}</Somente>);
@@ -113,6 +116,8 @@ export const router = createBrowserRouter(
       { index: true, element: <Inicio /> },
       { path: 'dashboard/vendas', element: ADMIN(<DashboardVendas />) },
       { path: 'perfil', element: S(<Perfil />) },
+      { path: 'meu-painel', element: S(<Somente perfis={['ADMIN', 'GERENTE', 'VENDEDOR']}><PainelVendedor /></Somente>) },
+      { path: 'metas-desafios', element: GESTAO(<MetasDesafios />) },
 
       { path: 'vendas', element: S(<VendasLista />) },
       { path: 'vendas/nova', element: S(<VendaForm />) },
