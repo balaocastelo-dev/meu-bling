@@ -4,6 +4,7 @@
  */
 import { prisma } from '../../lib/prisma.js';
 import { formatarData, formatarMoeda } from '../../lib/util.js';
+import { logoParaHtml } from './logo.js';
 
 export function esc(v: unknown): string {
   if (v === null || v === undefined) return '';
@@ -63,6 +64,8 @@ export async function dadosEmpresa() {
     site: e?.site || '',
     endereco: e ? enderecoLinha(e) : '',
     logoPath: e?.logoPath || null,
+    /** logo embutido (data URI) para as impressões: não depende do endereço do sistema */
+    logoSrc: await logoParaHtml(e?.logoPath),
     uf: e?.uf || '',
   };
 }
@@ -105,7 +108,7 @@ export const CSS_BASE = `
 export function cabecalhoEmpresa(emp: Awaited<ReturnType<typeof dadosEmpresa>>): string {
   return `
   <div class="empresa">
-    ${emp.logoPath ? `<img src="${esc(emp.logoPath)}" alt="logo">` : ''}
+    ${emp.logoSrc ? `<img src="${esc(emp.logoSrc)}" alt="logo">` : ''}
     <div class="dados">
       <b>${esc(emp.nome)}</b><br>
       ${esc(emp.razaoSocial)}${emp.cnpj ? ' — CNPJ ' + esc(emp.cnpj) : ''}${emp.ie ? ' — IE ' + esc(emp.ie) : ''}<br>

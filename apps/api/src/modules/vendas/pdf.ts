@@ -8,6 +8,7 @@ import PDFDocument from 'pdfkit';
 import { env } from '../../lib/env.js';
 import { arredondar } from '../../lib/util.js';
 import { dadosEmpresa, enderecoLinha, formatarDocumento, formatarTelefone } from '../comum/html.js';
+import { logoParaPdf } from '../comum/logo.js';
 import type { carregarVenda } from './service.js';
 
 type Venda = Awaited<ReturnType<typeof carregarVenda>>;
@@ -52,15 +53,14 @@ export async function pdfVenda(v: Venda): Promise<Buffer> {
 
   // ---- Cabeçalho: logo + empresa à esquerda, documento à direita
   let xTexto = x0;
-  if (emp.logoPath?.startsWith('/uploads/')) {
-    const arq = path.join(env.STORAGE_DIR, emp.logoPath.replace(/^\/uploads\//, ''));
-    if (fs.existsSync(arq) && /\.(png|jpe?g)$/i.test(arq)) {
-      try {
-        doc.image(arq, x0, y, { fit: [110, 48] });
-        xTexto = x0 + 120;
-      } catch {
-        /* logo inválido: segue sem */
-      }
+  // logo em PNG/JPEG (WEBP, SVG e GIF são convertidos — o PDFKit só lê PNG e JPEG)
+  const logo = await logoParaPdf(emp.logoPath);
+  if (logo) {
+    try {
+      doc.image(logo, x0, y, { fit: [110, 48] });
+      xTexto = x0 + 120;
+    } catch {
+      /* logo inválido: segue sem */
     }
   }
   doc.font('Helvetica-Bold').fontSize(13).fillColor(preto).text(emp.nome, xTexto, y, { width: W * 0.6 - (xTexto - x0), lineBreak: false });
@@ -119,8 +119,8 @@ export async function pdfVenda(v: Venda): Promise<Buffer> {
   secao('Itens');
   const cols = [
     { t: '#', w: 18, al: 'right' as const },
-    { t: 'Código', w: 58, al: 'left' as const },
-    { t: 'Descrição', w: W - 18 - 58 - 62 - 70 - 60 - 72, al: 'left' as const },
+    { t: 'Código', w: 78, al: 'left' as const },
+    { t: 'Descrição', w: W - 18 - 78 - 62 - 70 - 60 - 72, al: 'left' as const },
     { t: 'Qtd', w: 62, al: 'right' as const },
     { t: 'Unitário', w: 70, al: 'right' as const },
     { t: 'Desc.', w: 60, al: 'right' as const },
@@ -140,18 +140,25 @@ export async function pdfVenda(v: Venda): Promise<Buffer> {
   doc.font('Helvetica').fontSize(8.5).fillColor(preto);
   v.itens.forEach((i, idx) => {
     const descW = cols[2].w - 6;
+    const codigo = i.codigo || i.produto?.codigo || '';
     const hDesc = doc.heightOfString(i.descricao, { width: descW });
-    const h = Math.max(14, hDesc + 5);
+    // código longo (ex.: SITE-tob-6042, dos produtos do site) quebra dentro da própria célula, em letra menor
+    doc.fontSize(7);
+    const hCod = codigo ? doc.heightOfString(codigo, { width: cols[1].w - 6 }) : 0;
+    doc.fontSize(8.5);
+    const h = Math.max(14, hDesc + 5, hCod + 5);
     if (y + h > 800) {
       doc.addPage();
       y = 36;
       cabecalhoItens();
       doc.font('Helvetica').fontSize(8.5).fillColor(preto);
     }
-    const valores = [String(idx + 1), i.codigo || i.produto?.codigo || '', i.descricao, `${qtd(i.quantidade)} ${i.unidade}`, moeda(i.valorUnitario), i.desconto ? moeda(i.desconto) : '-', moeda(i.total)];
+    const valores = [String(idx + 1), codigo, i.descricao, `${qtd(i.quantidade)} ${i.unidade}`, moeda(i.valorUnitario), i.desconto ? moeda(i.desconto) : '-', moeda(i.total)];
     let x = x0;
     cols.forEach((cl, k) => {
-      doc.text(valores[k], x + 3, y + 3, { width: cl.w - 6, align: cl.al, lineBreak: k === 2 });
+      if (k === 1) doc.fontSize(7).fillColor(cinza);
+      doc.text(valores[k], x + 3, y + 3, { width: cl.w - 6, align: cl.al, lineBreak: k === 1 || k === 2 });
+      if (k === 1) doc.fontSize(8.5).fillColor(preto);
       x += cl.w;
     });
     y += h;
