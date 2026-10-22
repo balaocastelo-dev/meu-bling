@@ -64,7 +64,8 @@ const REGRAS: Regra[] = [
   // ---- vendas
   { metodos: MUT, teste: /^\/(vendas|notas-fiscais)(\/|$)/, perfis: VENDAS },
   { metodos: MUT, teste: /^\/notificacoes(\/|$)/, perfis: VENDAS },
-  { teste: /^\/dashboard\/vendas/, perfis: VENDAS },
+  // dashboards (geral, vendas, OS): só o dono
+  { teste: /^\/dashboard(\/|$)/, perfis: ['ADMIN'] },
 
   // ---- operação (todos os perfis autenticados)
   { metodos: MUT, teste: /^\/(ordens-servico|contatos)(\/|$)/, perfis: OPERACAO },

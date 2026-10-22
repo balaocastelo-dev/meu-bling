@@ -51,8 +51,9 @@ export const MENU: GrupoMenu[] = [
   {
     titulo: 'Início',
     itens: [
-      { rotulo: 'Dashboard', para: '/', icone: LayoutDashboard },
-      { rotulo: 'Dashboard de vendas', para: '/dashboard/vendas', icone: TrendingUp, perfis: [...GESTAO, 'VENDEDOR', 'FINANCEIRO'] },
+      // dashboards: só o dono (ADMIN)
+      { rotulo: 'Dashboard', para: '/', icone: LayoutDashboard, perfis: ['ADMIN'] },
+      { rotulo: 'Dashboard de vendas', para: '/dashboard/vendas', icone: TrendingUp, perfis: ['ADMIN'] },
     ],
   },
   {

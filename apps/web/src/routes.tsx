@@ -88,6 +88,14 @@ function Somente({ perfis, children }: { perfis: Perfil[]; children: ReactNode }
   }
   return <>{children}</>;
 }
+/** Tela inicial: ADMIN vê o dashboard; os demais perfis caem direto na sua área de trabalho. */
+function Inicio() {
+  const perfil = useAuth((s) => s.usuario?.perfil);
+  if (perfil === 'ADMIN') return S(<DashboardGeral />);
+  if (perfil === 'TECNICO') return <Navigate to="/ordens-servico" replace />;
+  if (perfil === 'FINANCEIRO') return <Navigate to="/financeiro/receber" replace />;
+  return <Navigate to="/vendas" replace />;
+}
 const ADMIN = (el: ReactNode) => S(<Somente perfis={['ADMIN']}>{el}</Somente>);
 const GESTAO = (el: ReactNode) => S(<Somente perfis={['ADMIN', 'GERENTE']}>{el}</Somente>);
 const FIN = (el: ReactNode) => S(<Somente perfis={['ADMIN', 'GERENTE', 'FINANCEIRO']}>{el}</Somente>);
@@ -102,8 +110,8 @@ export const router = createBrowserRouter(
     element: <AppShell />,
     errorElement: <ErroPagina />,
     children: [
-      { index: true, element: S(<DashboardGeral />) },
-      { path: 'dashboard/vendas', element: S(<DashboardVendas />) },
+      { index: true, element: <Inicio /> },
+      { path: 'dashboard/vendas', element: ADMIN(<DashboardVendas />) },
       { path: 'perfil', element: S(<Perfil />) },
 
       { path: 'vendas', element: S(<VendasLista />) },
