@@ -68,7 +68,8 @@ async function main() {
   await esperar(vendedor, 'POST', '/contatos', [201], { nome: 'Cliente do vendedor', tipoPessoa: 'F' }, 'VENDEDOR');
   await esperar(vendedor, 'GET', '/financeiro/resumo', [403], undefined, 'VENDEDOR');
   await esperar(vendedor, 'GET', '/contas-pagar', [403], undefined, 'VENDEDOR');
-  await esperar(vendedor, 'GET', '/compras', [403], undefined, 'VENDEDOR');
+  await esperar(vendedor, 'GET', '/compras', [200], undefined, 'VENDEDOR');
+  await esperar(vendedor, 'DELETE', '/compras/1', [403], undefined, 'VENDEDOR');
   await esperar(vendedor, 'GET', '/relatorios/dre', [403], undefined, 'VENDEDOR');
   await esperar(vendedor, 'GET', '/bancos/transacoes', [403], undefined, 'VENDEDOR');
   await esperar(vendedor, 'POST', '/produtos', [403], { nome: 'x', preco: 1 }, 'VENDEDOR');
@@ -88,7 +89,11 @@ async function main() {
 
   console.log('== TECNICO');
   await esperar(tecnico, 'GET', '/ordens-servico', [200], undefined, 'TECNICO');
-  await esperar(tecnico, 'POST', '/vendas', [403], { contatoId: 1, itens: [] }, 'TECNICO');
+  await esperar(tecnico, 'GET', '/vendas', [200], undefined, 'TECNICO');
+  await esperar(tecnico, 'GET', '/compras', [200], undefined, 'TECNICO');
+  await esperar(tecnico, 'POST', '/vendas', [400, 422], { contatoId: 1, itens: [] }, 'TECNICO');
+  await esperar(tecnico, 'DELETE', '/vendas/1', [403], undefined, 'TECNICO');
+  await esperar(tecnico, 'DELETE', '/ordens-servico/1', [403], undefined, 'TECNICO');
   await esperar(tecnico, 'GET', '/financeiro/resumo', [403], undefined, 'TECNICO');
   await esperar(tecnico, 'GET', '/painel-vendedor', [403], undefined, 'TECNICO');
 

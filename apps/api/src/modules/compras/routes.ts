@@ -40,7 +40,8 @@ registrarAcao('COMPRA', 'estornarEstoque', acaoEstornarEstoque);
 registrarAcao('COMPRA', 'lancarContas', acaoLancarContas);
 registrarAcao('COMPRA', 'estornarContas', acaoEstornarContas);
 
-const PERFIS = ['ADMIN', 'GERENTE', 'FINANCEIRO'] as const;
+// todos os funcionários lançam e acompanham pedidos de compra (excluir/forçar: só gestão)
+const PERFIS = ['ADMIN', 'GERENTE', 'FINANCEIRO', 'VENDEDOR', 'TECNICO'] as const;
 
 export default async function comprasRoutes(app: FastifyInstance) {
   const edicao = { preHandler: app.exigirPerfil(...PERFIS) };

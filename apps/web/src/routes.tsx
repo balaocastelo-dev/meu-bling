@@ -128,10 +128,10 @@ export const router = createBrowserRouter(
       { path: 'orcamentos/:id', element: S(<VendaDetalhe />) },
       { path: 'orcamentos/:id/editar', element: S(<VendaForm tipo="ORCAMENTO" />) },
 
-      { path: 'compras', element: FIN(<ComprasLista />) },
-      { path: 'compras/nova', element: FIN(<CompraForm />) },
-      { path: 'compras/:id', element: FIN(<CompraDetalhe />) },
-      { path: 'compras/:id/editar', element: FIN(<CompraForm />) },
+      { path: 'compras', element: S(<ComprasLista />) },
+      { path: 'compras/nova', element: S(<CompraForm />) },
+      { path: 'compras/:id', element: S(<CompraDetalhe />) },
+      { path: 'compras/:id/editar', element: S(<CompraForm />) },
 
       { path: 'ordens-servico', element: S(<OsLista />) },
       { path: 'ordens-servico/nova', element: S(<OsForm />) },
