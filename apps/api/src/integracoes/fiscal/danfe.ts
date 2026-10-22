@@ -7,6 +7,7 @@ import QRCode from 'qrcode';
 import type { Empresa } from '@prisma/client';
 import type { NotaCompleta } from './xml.js';
 import { formatarChave } from './chave.js';
+import { logoParaPdf } from '../../modules/comum/logo.js';
 
 const moeda = (v: number) => (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const docFmt = (d?: string | null) => {
@@ -52,10 +53,22 @@ export async function gerarDanfe(emp: Empresa, nota: NotaCompleta): Promise<Buff
   const hCab = 78;
   const wEmit = W * 0.42, wDanfe = W * 0.16, wCod = W - wEmit - wDanfe;
   doc.rect(x0, y, wEmit, hCab).lineWidth(0.5).stroke();
-  doc.font('Helvetica-Bold').fontSize(10).fillColor('#000').text(emp.razaoSocial, x0 + 6, y + 8, { width: wEmit - 12, align: 'center' });
-  doc.font('Helvetica').fontSize(7).text(
+  // logo do emitente à esquerda do quadro (o cadastrado ou o oficial do Balão)
+  const logo = await logoParaPdf(emp.logoPath);
+  let xEmit = x0 + 6;
+  if (logo) {
+    try {
+      doc.image(logo, x0 + 5, y + 6, { fit: [74, hCab - 12], valign: 'center' });
+      xEmit = x0 + 84;
+    } catch {
+      /* logo inválido: segue sem */
+    }
+  }
+  const wTexto = x0 + wEmit - 6 - xEmit;
+  doc.font('Helvetica-Bold').fontSize(9).fillColor('#000').text(emp.razaoSocial, xEmit, y + 8, { width: wTexto, align: 'center' });
+  doc.font('Helvetica').fontSize(6.5).text(
     [`${emp.logradouro || ''}, ${emp.numero || ''} ${emp.complemento || ''}`.trim(), `${emp.bairro || ''} - ${emp.municipio || ''}/${emp.uf || ''} - CEP ${emp.cep || ''}`, `Fone: ${emp.telefone || ''}  ${emp.email || ''}`].join('\n'),
-    x0 + 6, y + 30, { width: wEmit - 12, align: 'center' },
+    xEmit, y + 32, { width: wTexto, align: 'center' },
   );
   doc.rect(x0 + wEmit, y, wDanfe, hCab).stroke();
   doc.font('Helvetica-Bold').fontSize(12).text('DANFE', x0 + wEmit, y + 5, { width: wDanfe, align: 'center' });
@@ -196,6 +209,15 @@ export async function gerarDanfeNfce(emp: Empresa, nota: NotaCompleta): Promise<
     y += 5;
   };
 
+  const logo = await logoParaPdf(emp.logoPath);
+  if (logo) {
+    try {
+      doc.image(logo, 8 + (W - 130) / 2, y, { fit: [130, 42], align: 'center', valign: 'center' });
+      y += 46;
+    } catch {
+      /* logo inválido: segue sem */
+    }
+  }
   texto(emp.nomeFantasia || emp.razaoSocial, { size: 9, bold: true });
   texto(`CNPJ ${docFmt(emp.cnpj)}   IE ${emp.ie || 'ISENTO'}`, { size: 6.5 });
   texto(`${emp.logradouro || ''}, ${emp.numero || ''} - ${emp.bairro || ''} - ${emp.municipio || ''}/${emp.uf || ''}`, { size: 6.5 });

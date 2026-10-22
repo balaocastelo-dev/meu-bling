@@ -10,11 +10,20 @@
  *
  * Agora o logo vai EMBUTIDO no documento (data URI no HTML; PNG no PDF): não
  * depende de endereço, de sessão nem de internet, e aparece igual em qualquer lugar.
+ *
+ * Pedido do Thiago: TODO documento sai com o logo do Balão da Informática. Se não
+ * houver logo cadastrado em Configurações → Empresa (ou o arquivo tiver sumido do
+ * servidor), vale o logo oficial que vem junto com o sistema (assets/logo-balao.png,
+ * o mesmo de www.balao.info). Logo cadastrado tem prioridade.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
+import { fileURLToPath } from 'node:url';
 import { env } from '../../lib/env.js';
+
+/** Logo oficial do Balão (o mesmo do site), embutido no sistema. */
+export const LOGO_PADRAO = fileURLToPath(new URL('../../../assets/logo-balao.png', import.meta.url));
 
 const MIME: Record<string, string> = {
   '.png': 'image/png',
@@ -43,7 +52,10 @@ export function urlComBase(caminho: string): string {
 const cache = new Map<string, { mtime: number; dataUri: string | null; png: Buffer | null }>();
 
 async function lerLogo(logoPath: string | null | undefined) {
-  const arq = arquivoDoLogo(logoPath);
+  return (await lerArquivo(arquivoDoLogo(logoPath))) ?? (await lerArquivo(LOGO_PADRAO));
+}
+
+async function lerArquivo(arq: string | null) {
   if (!arq) return null;
   let st;
   try {
@@ -68,12 +80,12 @@ async function lerLogo(logoPath: string | null | undefined) {
   return item;
 }
 
-/** `src` do logo para as impressões em HTML: embutido; se não der, o endereço com o caminho base. */
+/** `src` do logo para as impressões em HTML: sempre embutido (o cadastrado ou o oficial do Balão). */
 export async function logoParaHtml(logoPath: string | null | undefined): Promise<string | null> {
-  if (!logoPath) return null;
+  // logo cadastrado como endereço externo (http…): usa o endereço
+  if (logoPath && /^https?:\/\//i.test(logoPath)) return logoPath;
   const l = await lerLogo(logoPath).catch(() => null);
-  if (l?.dataUri) return l.dataUri;
-  return arquivoDoLogo(logoPath) ? null : urlComBase(logoPath); // arquivo nosso que sumiu: sem logo (melhor que quebrado)
+  return l?.dataUri ?? null;
 }
 
 /** Logo em PNG/JPEG para o PDFKit (ou null). */
