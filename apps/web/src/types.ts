@@ -108,6 +108,8 @@ export interface Vendedor {
   email?: string | null;
   telefone?: string | null;
   comissaoPadraoPct: number;
+  /** meta de vendas padrão (R$/mês) */
+  metaMensal?: number;
   ativo: boolean;
 }
 
@@ -411,11 +413,13 @@ export interface Comissao {
   vendedor?: Ref | null;
   tecnicoId?: number | null;
   tecnico?: Ref | null;
-  origemTipo: 'VENDA' | 'OS';
+  origemTipo: 'VENDA' | 'OS' | 'DESAFIO';
   vendaId?: number | null;
   osId?: number | null;
+  desafioId?: number | null;
   venda?: { id: number; numero: number } | null;
   os?: { id: number; numero: number } | null;
+  desafio?: { id: number; titulo: string } | null;
   descricao?: string | null;
   base: number;
   pct: number;
@@ -1139,4 +1143,103 @@ export interface VendaPublica {
 export interface VendaPublicaResposta {
   empresa: EmpresaPublica;
   venda: VendaPublica;
+}
+
+// ---------------------------------------------------------------- metas, desafios e painel do vendedor
+export type TipoDesafio = 'VALOR' | 'QTD_VENDAS' | 'QTD_ITENS';
+export type StatusDesafioCard = 'EM_ANDAMENTO' | 'AGENDADO' | 'CONQUISTADO' | 'GANHO_POR_OUTRO' | 'ENCERRADO';
+
+export interface PeriodoPainel {
+  chave: 'hoje' | 'semana' | 'ultimos7' | 'mes' | 'ultimos30' | 'sempre';
+  rotulo: string;
+  inicio: string | null;
+  fim: string | null;
+  faturamento: number;
+  qtd: number;
+  ticketMedio: number;
+  comissao: number;
+}
+
+export interface MetaPainel {
+  competencia: string;
+  valor: number;
+  origem: 'MES' | 'PADRAO';
+  vendido: number;
+  pct: number;
+  falta: number;
+  diasRestantes: number;
+  porDia: number;
+  esperadoAteHoje: number;
+  ritmo: 'sem-meta' | 'batida' | 'ok' | 'atencao' | 'atrasado';
+  bonusDesafios: number;
+}
+
+export interface DesafioCard {
+  id: number;
+  titulo: string;
+  descricao?: string | null;
+  tipo: TipoDesafio;
+  alvo: number;
+  premio: number;
+  regra: 'TODOS' | 'PRIMEIRO';
+  inicio: string;
+  fim: string;
+  produto?: { id: number; nome: string; codigo?: string | null } | null;
+  categoria?: Ref | null;
+  atingido: number;
+  pct: number;
+  falta: number;
+  status: StatusDesafioCard;
+  conquistadoEm?: string | null;
+  premioStatus?: Comissao['status'] | null;
+  ganhador?: string | null;
+  diasRestantes: number;
+}
+
+export interface PainelVendedor {
+  vendedor: Ref;
+  periodos: PeriodoPainel[];
+  meta: MetaPainel;
+  ranking: {
+    competencia: string;
+    posicao: number;
+    total: number;
+    lista: { posicao: number; vendedorId: number; nome: string; eu: boolean; faturamento: number | null }[];
+    paraPassar: { nome: string; falta: number } | null;
+  };
+  desafios: DesafioCard[];
+  ultimasVendas: { id: number; numero: number; data: string; total: number; contato: Ref; situacao: { id: number; nome: string; cor: string } }[];
+}
+
+export interface MetaLinha {
+  vendedorId: number;
+  nome: string;
+  metaPadrao: number;
+  metaMes: number | null;
+  meta: number;
+  vendido: number;
+  qtdVendas: number;
+  pct: number;
+}
+
+export interface Desafio {
+  id: number;
+  titulo: string;
+  descricao?: string | null;
+  tipo: TipoDesafio;
+  alvo: number;
+  produtoId?: number | null;
+  produto?: { id: number; nome: string; codigo?: string | null } | null;
+  categoriaId?: number | null;
+  categoria?: Ref | null;
+  inicio: string;
+  fim: string;
+  premio: number;
+  regra: 'TODOS' | 'PRIMEIRO';
+  todosVendedores: boolean;
+  vendedoresIds: number[];
+  ativo: boolean;
+  situacao: 'EM_ANDAMENTO' | 'AGENDADO' | 'FINALIZADO' | 'ENCERRADO';
+  participantes: { vendedorId: number; nome: string; atingido: number; pct: number; conquistou: boolean; conquistadoEm?: string | null; premioStatus?: Comissao['status'] | null }[];
+  totalPremios: number;
 }

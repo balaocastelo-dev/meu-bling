@@ -20,6 +20,7 @@ const includeComissao = {
   tecnico: { select: { id: true, nome: true } },
   venda: { select: { id: true, numero: true, data: true, total: true, contato: { select: { id: true, nome: true } } } },
   os: { select: { id: true, numero: true, dataEntrada: true, total: true, contato: { select: { id: true, nome: true } } } },
+  desafio: { select: { id: true, titulo: true } },
   contaPagar: { select: { id: true, situacao: true, dataPagamento: true, valor: true } },
 } as const;
 
@@ -36,7 +37,7 @@ export default async function comissoesRoutes(app: FastifyInstance) {
         vendedorId: z.coerce.number().int().optional(),
         tecnicoId: z.coerce.number().int().optional(),
         status: z.enum(STATUS).optional(),
-        origemTipo: z.enum(['VENDA', 'OS']).optional(),
+        origemTipo: z.enum(['VENDA', 'OS', 'DESAFIO']).optional(),
       })
       .parse(req.query);
     // vendedor/técnico logado sem perfil de gestão vê só as próprias

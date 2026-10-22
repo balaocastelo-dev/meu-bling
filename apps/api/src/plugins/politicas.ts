@@ -51,6 +51,9 @@ const REGRAS: Regra[] = [
   { metodos: M('DELETE'), teste: /^\/(vendas|compras|ordens-servico|contatos|produtos|notas-fiscais)\/\d+$/, perfis: GESTAO },
   { metodos: MUT, teste: /^\/estoque\/(ajuste|transferencia)/, perfis: GESTAO },
   { metodos: MUT, teste: /^\/produtos(\/|$)/, perfis: GESTAO },
+  // metas e desafios de vendas: só a gestão cria/vê o quadro geral (o vendedor vê o dele no painel)
+  { teste: /^\/(metas|desafios)(\/|$)/, perfis: GESTAO },
+  { teste: /^\/painel-vendedor(\/|$)/, perfis: ['ADMIN', 'GERENTE', 'VENDEDOR'] },
 
   // ---- financeiro
   { teste: /^\/(financeiro|contas-pagar|bancos|open-finance)(\/|$)/, perfis: FIN },

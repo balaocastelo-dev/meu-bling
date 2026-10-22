@@ -235,6 +235,44 @@ async function main() {
   token = salvo;
   verifica(!!(await req('GET', `/vendas/${orcPub.id}`, undefined, 200, true)).aprovadoEm, 'aprovação pelo link público');
 
+  console.log('== Metas, desafios e painel do vendedor');
+  const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const vd = await req('POST', '/vendedores', { nome: `Vendedor Smoke ${SUF}`, comissaoPadraoPct: 0, ativo: true }, [200, 201]);
+  const comp = hoje.slice(0, 7);
+  await req('PUT', '/metas', { competencia: comp, itens: [{ vendedorId: vd.id, metaPadrao: 1000, metaMes: 600 }] });
+  const metas = await req('GET', `/metas?competencia=${comp}`, undefined, 200, true);
+  verifica(metas.vendedores.find((m: any) => m.vendedorId === vd.id)?.meta === 600, 'meta do mês sobrepõe a padrão');
+  const desafio = await req('POST', '/desafios', { titulo: `Desafio smoke ${SUF}`, tipo: 'VALOR', alvo: 500, premio: 50, inicio: hoje, fim: hoje, regra: 'TODOS', todosVendedores: false, vendedoresIds: [vd.id] }, 201);
+  await req('POST', '/desafios', { titulo: 'x', tipo: 'VALOR', alvo: 1, premio: 1, inicio: hoje, fim: hoje }, 400);
+  const vendaVd = async () => {
+    const v = await req('POST', '/vendas', { contatoId: cli.id, vendedorId: vd.id, data: hoje, itens: [{ descricao: 'Item avulso smoke', quantidade: 1, valorUnitario: 300 }], parcelas: [{ dataVencimento: hoje, valor: 300, formaPagamentoId: formas[0].id }] }, 201);
+    await req('POST', `/vendas/${v.id}/situacao`, { situacaoId: s(sitV, 'Fechada') }, 200, true);
+    return v;
+  };
+  await vendaVd();
+  await espera(800);
+  let det = await req('GET', `/desafios/${desafio.id}`, undefined, 200, true);
+  verifica(det.participantes[0]?.atingido === 300 && !det.participantes[0]?.conquistou, `desafio em andamento com R$ 300 (veio ${JSON.stringify(det.participantes[0])})`);
+  const v2d = await vendaVd();
+  await espera(800);
+  det = await req('GET', `/desafios/${desafio.id}`, undefined, 200, true);
+  verifica(det.participantes[0]?.conquistou === true, 'desafio conquistado ao bater o alvo');
+  let premio = await req('GET', `/comissoes?origemTipo=DESAFIO&vendedorId=${vd.id}`, undefined, 200, true);
+  verifica(premio.data.length === 1 && premio.data[0].valor === 50 && premio.data[0].status === 'APROVADA', 'prêmio lançado como comissão extra aprovada');
+  const painel = await req('GET', `/painel-vendedor?vendedorId=${vd.id}`);
+  const pHoje = painel.periodos?.find((x: any) => x.chave === 'hoje');
+  verifica(pHoje?.faturamento === 600 && pHoje?.qtd === 2 && painel.periodos.length === 6, `painel: hoje R$ 600 em 2 vendas (veio ${JSON.stringify(pHoje)})`);
+  verifica(painel.meta?.valor === 600 && painel.meta?.ritmo === 'batida' && painel.meta?.bonusDesafios === 50, `painel: meta batida e bônus (veio ${JSON.stringify(painel.meta)})`);
+  verifica(painel.desafios?.[0]?.status === 'CONQUISTADO' && painel.ranking?.posicao >= 1, 'painel: card do desafio conquistado e posição no ranking');
+  await req('DELETE', `/desafios/${desafio.id}`, undefined, 422);
+  // cancelou uma venda: o alvo deixa de ser batido e o prêmio não pago é estornado
+  await req('POST', `/vendas/${v2d.id}/situacao`, { situacaoId: sitV.find((x: any) => x.cancelamento)?.id }, 200, true);
+  await espera(800);
+  premio = await req('GET', `/comissoes?origemTipo=DESAFIO&vendedorId=${vd.id}`, undefined, 200, true);
+  verifica(premio.data[0]?.status === 'CANCELADA', 'prêmio estornado quando a venda foi cancelada');
+  await req('POST', `/desafios/${desafio.id}/encerrar`, {});
+  await req('DELETE', `/desafios/${desafio.id}`);
+
   console.log(`\nResultado: ${ok} ok, ${falhas} falhas`);
   process.exit(falhas ? 1 : 0);
 }
