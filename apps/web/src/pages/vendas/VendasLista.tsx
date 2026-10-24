@@ -1,13 +1,68 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle2, FileSignature, FileText, Plus, ShoppingCart } from 'lucide-react';
+import { CheckCircle2, FileSignature, FileText, Plus, ShoppingCart, Trophy } from 'lucide-react';
 import { api } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
-import { BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, StatusBadge, Table, type Coluna } from '@/components/ui';
+import { BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, StatusBadge, Table, atalhosPeriodo, type Coluna } from '@/components/ui';
 import { VendaAcoes, rotaDe } from '@/components/compartilhados/VendaAcoes';
-import { data, moeda, rotulo } from '@/lib/format';
+import { data, inteiro, moeda, rotulo } from '@/lib/format';
 import type { Paginado, TipoVenda, VendaResumo } from '@/types';
+
+interface ResumoLista {
+  valor: number;
+  quantidade: number;
+  ticketMedio: number;
+  canceladasForaDoTotal: number;
+  destaque: { id: number; nome: string; valor: number | null; quantidade: number; participacaoPct: number | null } | null;
+}
+
+/** "Hoje", "Semana passada", "01/10 a 15/10", "Todo o período" */
+function nomePeriodo(i: string, f: string) {
+  const at = atalhosPeriodo().find((a) => a.i === i && a.f === f);
+  if (at) return at.nome;
+  const br = (x: string) => x.split('-').reverse().slice(0, 2).join('/');
+  if (i && f) return i === f ? br(i) : `${br(i)} a ${br(f)}`;
+  if (i) return `Desde ${br(i)}`;
+  if (f) return `Até ${br(f)}`;
+  return 'Todo o período';
+}
+
+/** Painel à direita do filtro: total, nº de vendas e vendedor destaque do que está filtrado */
+function PainelResumo({ r, periodo, orcamento, carregando }: { r?: ResumoLista; periodo: string; orcamento: boolean; carregando: boolean }) {
+  return (
+    <div className={`ml-auto flex flex-wrap items-stretch gap-2 transition-opacity ${carregando ? 'opacity-50' : ''}`} aria-live="polite">
+      <div className="min-w-[150px] rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5">
+        <div className="text-[11px] font-medium text-emerald-700">{orcamento ? 'Total orçado' : 'Total vendido'} · {periodo}</div>
+        <div className="num text-lg font-semibold leading-tight text-emerald-800">{r ? moeda(r.valor) : '—'}</div>
+      </div>
+      <div className="min-w-[110px] rounded-lg border border-slate-200 bg-white px-3 py-1.5">
+        <div className="text-[11px] font-medium text-slate-500">{orcamento ? 'Orçamentos' : 'Vendas'}</div>
+        <div className="num text-lg font-semibold leading-tight text-slate-900">{r ? inteiro(r.quantidade) : '—'}</div>
+        {r && r.quantidade > 0 && <div className="num text-[11px] text-slate-500">ticket {moeda(r.ticketMedio)}</div>}
+      </div>
+      <div className="min-w-[170px] max-w-[260px] rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5">
+        <div className="flex items-center gap-1 text-[11px] font-medium text-amber-700">
+          <Trophy className="h-3 w-3" /> Vendedor destaque
+        </div>
+        {r?.destaque ? (
+          <>
+            <div className="truncate text-sm font-semibold leading-tight text-slate-900" title={r.destaque.nome}>
+              {r.destaque.nome}
+            </div>
+            <div className="num text-[11px] text-amber-800">
+              {r.destaque.valor !== null ? `${moeda(r.destaque.valor)} · ` : ''}
+              {inteiro(r.destaque.quantidade)} {r.destaque.quantidade === 1 ? 'venda' : 'vendas'}
+              {r.destaque.participacaoPct !== null ? ` · ${r.destaque.participacaoPct.toLocaleString('pt-BR')}%` : ''}
+            </div>
+          </>
+        ) : (
+          <div className="text-sm text-slate-400">—</div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /** Lista de pedidos de venda (tipo PEDIDO) ou de orçamentos (tipo ORCAMENTO) */
 export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
@@ -19,9 +74,9 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
   const { data: vendedores } = useVendedores();
 
   const params = { ...pg.filtros, tipo, pagina: pg.pagina, limite: pg.limite };
-  const { data: resp, isLoading } = useQuery({
+  const { data: resp, isLoading, isFetching } = useQuery({
     queryKey: ['vendas', params],
-    queryFn: () => api.get<Paginado<VendaResumo>>('/vendas', params),
+    queryFn: () => api.get<Paginado<VendaResumo> & { resumo?: ResumoLista }>('/vendas', params),
     placeholderData: (prev) => prev,
   });
 
@@ -150,6 +205,7 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
             placeholder="Todas as origens"
             opcoes={['BALCAO', 'WHATSAPP', 'LOJA_VIRTUAL', 'TELEFONE', 'MARKETPLACE', 'OUTRO'].map((o) => ({ valor: o, rotulo: rotulo(o) }))}
           />
+          <PainelResumo r={resp?.resumo} periodo={nomePeriodo(pg.getFiltro('dataInicial'), pg.getFiltro('dataFinal'))} orcamento={orcamento} carregando={isFetching} />
         </BarraFiltros>
         <div className="border-b border-slate-100 px-3 py-2">
           <ChipsSituacao situacoes={situacoes ?? []} valor={pg.getFiltro('situacoes')} onChange={(v) => pg.setFiltro('situacoes', v)} />

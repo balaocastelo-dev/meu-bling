@@ -79,6 +79,44 @@ async function moverVendaPorNota(notaId: number, destinoNome: 'NF emitida' | 'Fe
 eventos.ouvir('nfe.autorizada', (d) => moverVendaPorNota(d.notaId, 'NF emitida', 'Automático: NF-e autorizada'));
 eventos.ouvir('nfe.cancelada', (d) => moverVendaPorNota(d.notaId, 'Fechada', 'Automático: NF-e cancelada'));
 
+/**
+ * Resumo do que a lista está mostrando (painel à direita do filtro): total vendido, nº de vendas,
+ * ticket médio e vendedor destaque. Canceladas ficam de fora, a menos que a pessoa tenha escolhido
+ * as situações no filtro (aí vale exatamente o que ela escolheu).
+ * VENDEDOR vê o nome do destaque, mas o valor dele só se o destaque for ele mesmo (mesma regra do ranking).
+ */
+async function resumoLista(where: any, filtrouSituacao: boolean, usuario: { perfil?: string; vendedorId?: number | null }) {
+  const w = { ...where };
+  let canceladas = 0;
+  if (!filtrouSituacao) {
+    const sitCanc = (await prisma.situacao.findMany({ where: { modulo: { in: ['VENDA', 'ORCAMENTO'] }, cancelamento: true }, select: { id: true } })).map((x) => x.id);
+    if (sitCanc.length) {
+      w.situacaoId = { notIn: sitCanc };
+      canceladas = await prisma.venda.count({ where: { ...where, situacaoId: { in: sitCanc } } });
+    }
+  }
+  const grupos = await prisma.venda.groupBy({ by: ['vendedorId'], where: w, _sum: { total: true }, _count: { _all: true } });
+  const valor = grupos.reduce((t, g) => t + (g._sum.total || 0), 0);
+  const quantidade = grupos.reduce((t, g) => t + g._count._all, 0);
+  const top = grupos.filter((g) => g.vendedorId).sort((a, b) => (b._sum.total || 0) - (a._sum.total || 0))[0];
+  let destaque: { id: number; nome: string; valor: number | null; quantidade: number; participacaoPct: number | null } | null = null;
+  if (top && (top._sum.total || 0) > 0) {
+    const v = await prisma.vendedor.findUnique({ where: { id: top.vendedorId! }, select: { id: true, nome: true } });
+    const podeVerValor = usuario.perfil !== 'VENDEDOR' || usuario.vendedorId === top.vendedorId;
+    const vTop = top._sum.total || 0;
+    destaque = v
+      ? { id: v.id, nome: v.nome, valor: podeVerValor ? Math.round(vTop * 100) / 100 : null, quantidade: top._count._all, participacaoPct: podeVerValor && valor ? Math.round((vTop / valor) * 1000) / 10 : null }
+      : null;
+  }
+  return {
+    valor: Math.round(valor * 100) / 100,
+    quantidade,
+    ticketMedio: quantidade ? Math.round((valor / quantidade) * 100) / 100 : 0,
+    canceladasForaDoTotal: canceladas,
+    destaque,
+  };
+}
+
 export default async function vendasRoutes(app: FastifyInstance) {
   // ---------------------------------------------------------------- listagem
   app.get('/api/v1/vendas', async (req) => {
@@ -117,7 +155,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
       }),
       prisma.venda.aggregate({ where, _sum: { total: true } }),
     ]);
-    return { ...respostaPaginada(data, total, q), totais: { valor: somaAgg._sum.total || 0 } };
+    return { ...respostaPaginada(data, total, q), totais: { valor: somaAgg._sum.total || 0 }, resumo: await resumoLista(where, !!(q.situacaoId || q.situacoes?.length), req.user) };
   });
 
   // ---------------------------------------------------------------- detalhe
