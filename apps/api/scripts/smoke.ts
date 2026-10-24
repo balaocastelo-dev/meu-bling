@@ -191,6 +191,16 @@ async function main() {
   await req('GET', '/dashboard/geral');
   await req('GET', `/dashboard/vendas?dataInicial=${hoje.slice(0, 8)}01&dataFinal=${hoje}&comparar=true`);
   await req('GET', '/dashboard/os');
+  const atv = await req('GET', '/dashboard/atividades?limite=80');
+  if (!atv.lancamentos?.length) throw new Error('dashboard/atividades: nenhum lançamento depois do fluxo');
+  if (process.env.DEBUG_ATV) console.log(atv.acontecimentos.map((x: any) => x.usuario + ' ' + x.texto).join('\n'));
+  if (!atv.acontecimentos?.some((x: any) => /criou a venda nº \d+/.test(x.texto) && x.link?.startsWith('/vendas/'))) throw new Error('dashboard/atividades: "criou a venda" não apareceu');
+  if (!atv.acontecimentos.some((x: any) => /^pagamento recebido/.test(x.texto))) throw new Error('dashboard/atividades: pagamento recebido não apareceu no feed');
+  if (!atv.acontecimentos.some((x: any) => /mudou a venda nº \d+ de "[^"]+" para "Fechada"/.test(x.texto))) throw new Error('dashboard/atividades: mudança de situação da venda não apareceu');
+  if (!atv.acontecimentos.some((x: any) => /abriu a OS nº \d+/.test(x.texto))) throw new Error('dashboard/atividades: entrada de OS não apareceu');
+  if (atv.acontecimentos.some((x: any) => x.categoria === 'acessos')) throw new Error('dashboard/atividades: login apareceu sem pedir a aba Acessos');
+  const acessos = await req('GET', '/dashboard/atividades?so=acontecimentos&categoria=acessos');
+  if (!acessos.acontecimentos.length || acessos.lancamentos.length) throw new Error('dashboard/atividades: filtro de acessos');
   await req('GET', `/relatorios/dre?dataInicial=${hoje.slice(0, 8)}01&dataFinal=${hoje}&regime=competencia&comparar=true`);
   await req('GET', `/relatorios/dre?dataInicial=${hoje.slice(0, 8)}01&dataFinal=${hoje}&regime=caixa`);
   await req('GET', '/relatorios/produtos-mais-vendidos?formato=csv', undefined, 200, true);

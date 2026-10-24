@@ -46,6 +46,9 @@ async function main() {
   await esperar(gerente, 'POST', '/empresa/smtp/testar', [403], { para: 'a@b.com' }, 'GERENTE');
   await esperar(admin, 'GET', '/dashboard/geral', [200], undefined, 'ADMIN');
   await esperar(admin, 'GET', '/dashboard/vendas', [200], undefined, 'ADMIN');
+  await esperar(admin, 'GET', '/dashboard/atividades', [200], undefined, 'ADMIN');
+  await esperar(gerente, 'GET', '/dashboard/atividades', [403], undefined, 'GERENTE');
+  await esperar(vendedor, 'GET', '/dashboard/atividades', [403], undefined, 'VENDEDOR');
   await esperar(gerente, 'GET', '/dashboard/geral', [403], undefined, 'GERENTE');
   await esperar(gerente, 'GET', '/dashboard/vendas', [403], undefined, 'GERENTE');
   await esperar(gerente, 'GET', '/dashboard/os', [403], undefined, 'GERENTE');
