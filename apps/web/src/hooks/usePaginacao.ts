@@ -48,6 +48,23 @@ export function usePaginacao(limitePadrao = 50) {
     [setSp],
   );
 
+  /** Define vários filtros numa só gravação (ex.: data inicial + final). Duas chamadas seguidas de
+   *  setFiltro se atropelam: a segunda parte da URL antiga e apaga a primeira. */
+  const setFiltros = useCallback(
+    (valores: Record<string, string | number | null | undefined>) => {
+      setSp((prev) => {
+        const n = new URLSearchParams(prev);
+        for (const [chave, valor] of Object.entries(valores)) {
+          if (valor === null || valor === undefined || valor === '') n.delete(chave);
+          else n.set(chave, String(valor));
+        }
+        n.set('pagina', '1');
+        return n;
+      });
+    },
+    [setSp],
+  );
+
   const getFiltro = useCallback((chave: string) => sp.get(chave) || '', [sp]);
 
   const limparFiltros = useCallback(() => setSp(new URLSearchParams()), [setSp]);
@@ -61,5 +78,5 @@ export function usePaginacao(limitePadrao = 50) {
     return o;
   }, [sp]);
 
-  return { pagina, limite, setPagina, setLimite, setFiltro, getFiltro, limparFiltros, filtros };
+  return { pagina, limite, setPagina, setLimite, setFiltro, setFiltros, getFiltro, limparFiltros, filtros };
 }

@@ -66,7 +66,7 @@ export default function DashboardVendas() {
                 { valor: 'custom', rotulo: 'Período' },
               ]}
             />
-            {periodo === 'custom' && <PeriodoFiltro inicial={custom.i} final={custom.f} onChange={(i, f) => setCustom({ i, f })} label="" />}
+            {periodo === 'custom' && <PeriodoFiltro inicial={custom.i} final={custom.f} onChange={(i, f) => setCustom({ i, f })} label="" atalhos={false} />}
             <SelectFiltro valor={vendedorId} onChange={setVendedorId} opcoes={opcoesDe(vendedores)} placeholder="Todos os vendedores" />
           </div>
         }

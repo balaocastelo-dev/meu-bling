@@ -88,15 +88,71 @@ export function SelectFiltro({ valor, onChange, opcoes, placeholder, className, 
   );
 }
 
-/** Período (data inicial/final) para filtros */
-export function PeriodoFiltro({ inicial, final, onChange, label = 'Período' }: { inicial: string; final: string; onChange: (i: string, f: string) => void; label?: string }) {
+/** AAAA-MM-DD no horário local (toISOString daria o dia seguinte depois das 21h) */
+function iso(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Atalhos de período. A semana começa na segunda-feira. */
+export function atalhosPeriodo(hoje = new Date()): { id: string; nome: string; i: string; f: string }[] {
+  const d = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  const diaSemana = (d.getDay() + 6) % 7; // 0 = segunda
+  const segunda = new Date(d);
+  segunda.setDate(d.getDate() - diaSemana);
+  const domingo = new Date(segunda);
+  domingo.setDate(segunda.getDate() + 6);
+  const segundaPassada = new Date(segunda);
+  segundaPassada.setDate(segunda.getDate() - 7);
+  const domingoPassado = new Date(segunda);
+  domingoPassado.setDate(segunda.getDate() - 1);
+  const ontem = new Date(d);
+  ontem.setDate(d.getDate() - 1);
+  return [
+    { id: 'hoje', nome: 'Hoje', i: iso(d), f: iso(d) },
+    { id: 'ontem', nome: 'Ontem', i: iso(ontem), f: iso(ontem) },
+    { id: 'semana', nome: 'Esta semana', i: iso(segunda), f: iso(domingo) },
+    { id: 'semana-passada', nome: 'Semana passada', i: iso(segundaPassada), f: iso(domingoPassado) },
+    { id: 'mes', nome: 'Este mês', i: iso(new Date(d.getFullYear(), d.getMonth(), 1)), f: iso(new Date(d.getFullYear(), d.getMonth() + 1, 0)) },
+    { id: 'mes-passado', nome: 'Mês passado', i: iso(new Date(d.getFullYear(), d.getMonth() - 1, 1)), f: iso(new Date(d.getFullYear(), d.getMonth(), 0)) },
+  ];
+}
+
+/** Período (data inicial/final) para filtros, com atalhos (hoje, semana, mês…) */
+export function PeriodoFiltro({ inicial, final, onChange, label = 'Período', atalhos = true, limpavel = true }: { inicial: string; final: string; onChange: (i: string, f: string) => void; label?: string; atalhos?: boolean; /** false onde o período é obrigatório (DRE, relatórios) */ limpavel?: boolean }) {
+  const opcoes = atalhos ? atalhosPeriodo() : [];
+  const ativo = opcoes.find((o) => o.i === inicial && o.f === final)?.id;
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[11px] font-medium text-slate-500">{label}</span>
-      <div className="flex items-center gap-1">
-        <input type="date" value={inicial} onChange={(e) => onChange(e.target.value, final)} className="input-base h-8 w-36 py-0 text-sm" />
-        <span className="text-xs text-slate-400">até</span>
-        <input type="date" value={final} onChange={(e) => onChange(inicial, e.target.value)} className="input-base h-8 w-36 py-0 text-sm" />
+    <div className="flex flex-col gap-1">
+      {label && <span className="text-[11px] font-medium text-slate-500">{label}</span>}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {opcoes.length > 0 && (
+          <div className="flex flex-wrap gap-1" role="group" aria-label="Atalhos de período">
+            {opcoes.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => (ativo === o.id && limpavel ? onChange('', '') : onChange(o.i, o.f))}
+                className={
+                  'h-8 whitespace-nowrap rounded-md border px-2.5 text-xs font-medium transition-colors ' +
+                  (ativo === o.id ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50')
+                }
+                aria-pressed={ativo === o.id}
+              >
+                {o.nome}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center gap-1">
+          <input type="date" aria-label="Data inicial" value={inicial} max={final || undefined} onChange={(e) => onChange(e.target.value, final)} className="input-base h-8 w-36 py-0 text-sm" />
+          <span className="text-xs text-slate-400">até</span>
+          <input type="date" aria-label="Data final" value={final} min={inicial || undefined} onChange={(e) => onChange(inicial, e.target.value)} className="input-base h-8 w-36 py-0 text-sm" />
+          {limpavel && (inicial || final) && (
+            <button type="button" onClick={() => onChange('', '')} title="Limpar período" className="h-8 rounded-md px-2 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+              ✕
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
