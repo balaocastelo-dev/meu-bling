@@ -81,7 +81,7 @@ export default function CompraDetalhe() {
               {compra.contasLancadas ? 'Estornar contas' : 'Lançar contas'}
             </Button>
           </div>
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <Badge tom={compra.estoqueLancado ? 'verde' : 'cinza'}>Estoque {compra.estoqueLancado ? 'lançado' : 'pendente'}</Badge>
             <Badge tom={compra.contasLancadas ? 'verde' : 'cinza'}>Contas {compra.contasLancadas ? 'lançadas' : 'pendentes'}</Badge>
           </div>
