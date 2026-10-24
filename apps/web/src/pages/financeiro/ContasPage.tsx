@@ -198,7 +198,7 @@ export function ContasPage({ tipo }: Props) {
             opcoes={[{ valor: 'ABERTO', rotulo: 'Em aberto' }, { valor: 'ATRASADO', rotulo: 'Atrasadas' }, { valor: 'PARCIAL', rotulo: 'Parciais' }, { valor: ehReceber ? 'RECEBIDO' : 'PAGO', rotulo: ehReceber ? 'Recebidas' : 'Pagas' }, { valor: 'CANCELADO', rotulo: 'Canceladas' }]}
           />
           <SelectFiltro valor={pg.getFiltro('tipoData') || 'V'} onChange={(v) => pg.setFiltro('tipoData', v)} placeholder="" opcoes={[{ valor: 'V', rotulo: 'Por vencimento' }, { valor: 'E', rotulo: 'Por emissão' }, { valor: 'R', rotulo: ehReceber ? 'Por recebimento' : 'Por pagamento' }]} />
-          <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => { pg.setFiltro('dataInicial', i); pg.setFiltro('dataFinal', f); }} label="" />
+          <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />
           {ehReceber && <SelectFiltro valor={pg.getFiltro('vendedorId')} onChange={(v) => pg.setFiltro('vendedorId', v)} opcoes={opcoesDe(vendedores)} placeholder="Todos vendedores" />}
         </BarraFiltros>
         <Table colunas={colunas} dados={resp?.data} carregando={isLoading} chave={(c) => c.id} vazio={<EmptyState icone={<Wallet className="h-5 w-5" />} titulo="Nenhuma conta encontrada" descricao="Ajuste os filtros ou lance uma nova conta." />} />

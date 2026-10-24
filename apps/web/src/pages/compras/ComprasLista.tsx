@@ -96,10 +96,7 @@ export default function ComprasLista() {
           <PeriodoFiltro
             inicial={pg.getFiltro('dataInicial')}
             final={pg.getFiltro('dataFinal')}
-            onChange={(i, f) => {
-              pg.setFiltro('dataInicial', i);
-              pg.setFiltro('dataFinal', f);
-            }}
+            onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })}
             label=""
           />
         </BarraFiltros>
