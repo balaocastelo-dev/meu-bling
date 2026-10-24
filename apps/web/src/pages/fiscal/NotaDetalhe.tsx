@@ -172,41 +172,45 @@ export default function NotaDetalhe() {
         <Tabs className="px-3" ativa={aba} onMudar={setAba} abas={[{ id: 'itens', rotulo: 'Itens', contador: n.itens.length }, { id: 'eventos', rotulo: 'Eventos', contador: n.eventos.length }]} />
         <div className="p-4">
           {aba === 'itens' && (
-            <table className="tbl">
+            <div className="overflow-x-auto">
+            <table className="tbl tbl-pilha">
               <thead><tr><th>#</th><th>Código</th><th>Descrição</th><th>NCM</th><th>CFOP</th><th>CSOSN/CST</th><th className="text-right">Qtd</th><th className="text-right">Unitário</th><th className="text-right">Total</th></tr></thead>
               <tbody>
                 {n.itens.map((it, i) => (
                   <tr key={it.id ?? i}>
-                    <td className="text-slate-400">{it.numeroItem ?? i + 1}</td>
-                    <td className="font-mono text-xs">{it.codigo}</td>
-                    <td>{it.descricao}</td>
-                    <td className="font-mono text-xs">{it.ncm}</td>
-                    <td className="font-mono text-xs">{it.cfop}</td>
-                    <td className="font-mono text-xs">{it.csosn ?? it.cst ?? '—'}</td>
-                    <td className="num text-right">{numero(it.quantidade)} {it.unidade}</td>
-                    <td className="num text-right">{moeda(it.valorUnitario)}</td>
-                    <td className="num text-right font-medium">{moeda(it.valorTotal ?? it.quantidade * it.valorUnitario)}</td>
+                    <td className="pilha-oculto text-slate-400">{it.numeroItem ?? i + 1}</td>
+                    <td className="font-mono text-xs" data-rotulo="Código">{it.codigo}</td>
+                    <td className="pilha-cheio">{it.descricao}</td>
+                    <td className="font-mono text-xs" data-rotulo="NCM">{it.ncm}</td>
+                    <td className="font-mono text-xs" data-rotulo="CFOP">{it.cfop}</td>
+                    <td className="font-mono text-xs" data-rotulo="CSOSN/CST">{it.csosn ?? it.cst ?? '—'}</td>
+                    <td className="num text-right" data-rotulo="Qtd">{numero(it.quantidade)} {it.unidade}</td>
+                    <td className="num text-right" data-rotulo="Unitário">{moeda(it.valorUnitario)}</td>
+                    <td className="num text-right font-medium" data-rotulo="Total">{moeda(it.valorTotal ?? it.quantidade * it.valorUnitario)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           )}
           {aba === 'eventos' &&
             (n.eventos.length ? (
-              <table className="tbl">
+              <div className="overflow-x-auto">
+              <table className="tbl tbl-pilha">
                 <thead><tr><th>Data</th><th>Evento</th><th>Status</th><th>Protocolo</th><th>Justificativa / retorno</th></tr></thead>
                 <tbody>
                   {n.eventos.map((e) => (
                     <tr key={e.id}>
-                      <td className="text-xs text-slate-500">{dataHora(e.data)}</td>
-                      <td>{rotulo(e.tipo)} {e.sequencia > 1 ? `#${e.sequencia}` : ''}</td>
-                      <td><Badge tom={tomPorStatus(e.status)}>{rotulo(e.status)}</Badge></td>
-                      <td className="font-mono text-xs">{e.protocolo ?? '—'}</td>
-                      <td className="text-xs text-slate-600">{e.justificativa}{e.motivo ? <span className="block text-slate-400">{e.cStat} {e.motivo}</span> : null}</td>
+                      <td className="text-xs text-slate-500" data-rotulo="Data">{dataHora(e.data)}</td>
+                      <td data-rotulo="Evento">{rotulo(e.tipo)} {e.sequencia > 1 ? `#${e.sequencia}` : ''}</td>
+                      <td data-rotulo="Status"><Badge tom={tomPorStatus(e.status)}>{rotulo(e.status)}</Badge></td>
+                      <td className="font-mono text-xs" data-rotulo="Protocolo">{e.protocolo ?? '—'}</td>
+                      <td className="text-xs text-slate-600" data-rotulo="Justificativa / retorno">{e.justificativa}{e.motivo ? <span className="block text-slate-400">{e.cStat} {e.motivo}</span> : null}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : (
               <EmptyState compacto titulo="Sem eventos" descricao="Cancelamentos e cartas de correção aparecem aqui." />
             ))}

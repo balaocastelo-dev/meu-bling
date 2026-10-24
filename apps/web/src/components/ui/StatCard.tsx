@@ -29,15 +29,15 @@ export function StatCard({ rotulo, valor, sub, icone, tom = 'neutro', carregando
     <div
       onClick={onClick}
       className={clsx(
-        'flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-card',
+        'flex min-w-0 items-start gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-card sm:gap-3 sm:p-4',
         onClick && 'cursor-pointer transition hover:border-slate-300 hover:shadow',
         className,
       )}
     >
-      {icone && <div className={clsx('flex h-9 w-9 shrink-0 items-center justify-center rounded-md', tons[tom])}>{icone}</div>}
+      {icone && <div className={clsx('hidden h-9 w-9 shrink-0 items-center justify-center rounded-md min-[420px]:flex', tons[tom])}>{icone}</div>}
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium text-slate-500" title={typeof rotulo === 'string' ? rotulo : undefined}>{rotulo}</p>
-        {carregando ? <Skeleton className="mt-1.5 h-6 w-24" /> : <p className="mt-0.5 text-lg font-semibold leading-tight tracking-tight text-slate-900 num xl:text-xl" title={typeof valor === 'string' ? valor : undefined}>{valor}</p>}
+        {carregando ? <Skeleton className="mt-1.5 h-6 w-24" /> : <p className="mt-0.5 break-words text-base font-semibold leading-tight tracking-tight text-slate-900 num sm:text-lg xl:text-xl" title={typeof valor === 'string' ? valor : undefined}>{valor}</p>}
         {sub && <p className="mt-0.5 truncate text-xs text-slate-400">{sub}</p>}
       </div>
     </div>
@@ -69,13 +69,13 @@ export function KpiCard({ rotulo, valor, anterior, atual, inverter, sub, carrega
   const neutra = variacao === null || Math.abs(variacao) < 0.05;
 
   return (
-    <div className={clsx('rounded-lg border border-slate-200 bg-white p-4 shadow-card', className)}>
+    <div className={clsx('min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-card sm:p-4', className)}>
       <p className="text-xs font-medium text-slate-500">{rotulo}</p>
       {carregando ? (
         <Skeleton className="mt-2 h-7 w-28" />
       ) : (
         <div className="mt-1 flex flex-wrap items-baseline gap-2">
-          <span className="text-2xl font-semibold tracking-tight text-slate-900 num">{valor}</span>
+          <span className="break-words text-xl font-semibold tracking-tight text-slate-900 num sm:text-2xl">{valor}</span>
           {variacao !== null && (
             <span
               className={clsx(

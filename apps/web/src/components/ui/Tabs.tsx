@@ -40,7 +40,7 @@ export function Tabs({ abas, ativa, onMudar, className }: { abas: Aba[]; ativa: 
 /** Grupo de botões segmentados (toggle) */
 export function Segmentado<T extends string>({ opcoes, valor, onMudar, className, tamanho = 'sm' }: { opcoes: { valor: T; rotulo: ReactNode; icone?: ReactNode }[]; valor: T; onMudar: (v: T) => void; className?: string; tamanho?: 'xs' | 'sm' }) {
   return (
-    <div className={clsx('inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5', className)}>
+    <div className={clsx('inline-flex max-w-full flex-wrap rounded-md border border-slate-200 bg-slate-50 p-0.5', className)}>
       {opcoes.map((o) => (
         <button
           key={o.valor}

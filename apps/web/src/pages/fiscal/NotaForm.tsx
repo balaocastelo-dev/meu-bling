@@ -117,22 +117,22 @@ export default function NotaForm() {
         <Secao titulo="Itens" acoes={<Button tamanho="sm" variante="fantasma" icone={<Plus className="h-4 w-4" />} onClick={() => set('itens', [...form.itens, { produtoId: null, codigo: '', descricao: '', ncm: '', cfop: cfopPadrao, unidade: 'UN', quantidade: 1, valorUnitario: 0, desconto: 0, origem: 0, csosn: empresa?.csosnPadrao ?? '102' }])}>Linha livre</Button>}>
           <SearchSelect placeholder="Buscar produto… (Enter adiciona)" valor={null} onChange={(_, op) => op?.dados && adicionarProduto(op.dados as Produto)} buscar={(t) => buscarProdutos(t, 'P')} limparAoSelecionar className="mb-3" />
           <div className="overflow-auto rounded-md border border-slate-200">
-            <table className="tbl">
+            <table className="tbl tbl-pilha">
               <thead><tr><th className="w-24">Código</th><th>Descrição</th><th className="w-28">NCM</th><th className="w-20">CFOP</th><th className="w-20">CSOSN</th><th className="w-20 text-right">Qtd</th><th className="w-28 text-right">Unitário</th><th className="w-24 text-right">Desc.</th><th className="w-28 text-right">Total</th><th className="w-10" /></tr></thead>
               <tbody>
                 {form.itens.length === 0 && <tr><td colSpan={10} className="py-6 text-center text-sm text-slate-400">Nenhum item.</td></tr>}
                 {form.itens.map((it, i) => (
                   <tr key={i}>
-                    <td><input value={it.codigo} onChange={(e) => atualizar(i, { codigo: e.target.value })} className="input-base h-8 py-0 font-mono text-xs" /></td>
-                    <td><input value={it.descricao} onChange={(e) => atualizar(i, { descricao: e.target.value })} className="input-base h-8 py-0" /></td>
-                    <td><input value={it.ncm} onChange={(e) => atualizar(i, { ncm: e.target.value })} className={`input-base h-8 py-0 font-mono text-xs ${it.ncm.replace(/\D/g, '').length < 8 ? 'input-erro' : ''}`} placeholder="00000000" /></td>
-                    <td><input value={it.cfop} onChange={(e) => atualizar(i, { cfop: e.target.value })} className="input-base h-8 py-0 font-mono text-xs" /></td>
-                    <td><input value={it.csosn ?? ''} onChange={(e) => atualizar(i, { csosn: e.target.value })} className="input-base h-8 py-0 font-mono text-xs" /></td>
-                    <td><MoneyInput value={it.quantidade} onChange={(v) => atualizar(i, { quantidade: v })} prefixo="" inputClassName="h-8 py-0" /></td>
-                    <td><MoneyInput value={it.valorUnitario} onChange={(v) => atualizar(i, { valorUnitario: v })} prefixo="" inputClassName="h-8 py-0" /></td>
-                    <td><MoneyInput value={it.desconto} onChange={(v) => atualizar(i, { desconto: v })} prefixo="" inputClassName="h-8 py-0" /></td>
-                    <td className="num text-right font-medium">{moeda(it.quantidade * it.valorUnitario - (it.desconto || 0))}</td>
-                    <td><button type="button" onClick={() => remover(i)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></td>
+                    <td data-rotulo="Código"><input value={it.codigo} onChange={(e) => atualizar(i, { codigo: e.target.value })} className="input-base h-8 py-0 font-mono text-xs" /></td>
+                    <td className="pilha-cheio"><input value={it.descricao} onChange={(e) => atualizar(i, { descricao: e.target.value })} className="input-base h-8 py-0" /></td>
+                    <td data-rotulo="NCM"><input value={it.ncm} onChange={(e) => atualizar(i, { ncm: e.target.value })} className={`input-base h-8 py-0 font-mono text-xs ${it.ncm.replace(/\D/g, '').length < 8 ? 'input-erro' : ''}`} placeholder="00000000" /></td>
+                    <td data-rotulo="CFOP"><input value={it.cfop} onChange={(e) => atualizar(i, { cfop: e.target.value })} className="input-base h-8 py-0 font-mono text-xs" /></td>
+                    <td data-rotulo="CSOSN"><input value={it.csosn ?? ''} onChange={(e) => atualizar(i, { csosn: e.target.value })} className="input-base h-8 py-0 font-mono text-xs" /></td>
+                    <td data-rotulo="Qtd"><MoneyInput value={it.quantidade} onChange={(v) => atualizar(i, { quantidade: v })} prefixo="" inputClassName="h-8 py-0" /></td>
+                    <td data-rotulo="Unitário"><MoneyInput value={it.valorUnitario} onChange={(v) => atualizar(i, { valorUnitario: v })} prefixo="" inputClassName="h-8 py-0" /></td>
+                    <td data-rotulo="Desc."><MoneyInput value={it.desconto} onChange={(v) => atualizar(i, { desconto: v })} prefixo="" inputClassName="h-8 py-0" /></td>
+                    <td className="num text-right font-medium" data-rotulo="Total">{moeda(it.quantidade * it.valorUnitario - (it.desconto || 0))}</td>
+                    <td className="pilha-canto"><button type="button" onClick={() => remover(i)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></td>
                   </tr>
                 ))}
               </tbody>

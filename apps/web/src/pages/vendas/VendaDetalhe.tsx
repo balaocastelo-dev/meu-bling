@@ -184,7 +184,7 @@ export default function VendaDetalhe() {
               {venda.contasLancadas ? 'Estornar contas' : 'Lançar contas'}
             </Button>
           </div>
-          <div className="mt-2 flex gap-2 text-[11px]">
+          <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
             <Badge tom={venda.estoqueLancado ? 'verde' : 'cinza'}>Estoque {venda.estoqueLancado ? 'lançado' : 'pendente'}</Badge>
             <Badge tom={venda.contasLancadas ? 'verde' : 'cinza'}>Contas {venda.contasLancadas ? 'lançadas' : 'pendentes'}</Badge>
           </div>
@@ -209,7 +209,8 @@ export default function VendaDetalhe() {
         />
         <div className="p-4">
           {aba === 'itens' && (
-            <table className="tbl">
+            <div className="overflow-x-auto">
+            <table className="tbl tbl-pilha">
               <thead>
                 <tr>
                   <th>#</th>
@@ -224,8 +225,8 @@ export default function VendaDetalhe() {
               <tbody>
                 {venda.itens.map((it, i) => (
                   <tr key={it.id ?? i}>
-                    <td className="text-slate-400">{i + 1}</td>
-                    <td>
+                    <td className="pilha-oculto text-slate-400">{i + 1}</td>
+                    <td className="pilha-cheio">
                       <div className="flex items-center gap-2">
                         {it.produtoId && <FotoProduto url={it.produto?.imagemUrl} tamanho="sm" />}
                         <div className="min-w-0">
@@ -237,18 +238,20 @@ export default function VendaDetalhe() {
                         </div>
                       </div>
                     </td>
-                    <td className="num text-right">{numero(it.quantidade)} {it.unidade}</td>
-                    <td className="num text-right">{moeda(it.valorUnitario)}</td>
-                    <td className="num text-right">{moeda(it.desconto)}</td>
-                    <td className="num text-right text-slate-500">{numero(it.comissaoPct ?? 0)}%</td>
-                    <td className="num text-right font-medium">{moeda(it.total ?? it.quantidade * it.valorUnitario - it.desconto)}</td>
+                    <td className="num text-right" data-rotulo="Qtd">{numero(it.quantidade)} {it.unidade}</td>
+                    <td className="num text-right" data-rotulo="Unitário">{moeda(it.valorUnitario)}</td>
+                    <td className="num text-right" data-rotulo="Desconto">{moeda(it.desconto)}</td>
+                    <td className="num text-right text-slate-500" data-rotulo="Com. %">{numero(it.comissaoPct ?? 0)}%</td>
+                    <td className="num text-right font-medium" data-rotulo="Total">{moeda(it.total ?? it.quantidade * it.valorUnitario - it.desconto)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           )}
           {aba === 'parcelas' && (
-            <table className="tbl">
+            <div className="overflow-x-auto">
+            <table className="tbl tbl-pilha">
               <thead>
                 <tr>
                   <th>#</th>
@@ -267,11 +270,11 @@ export default function VendaDetalhe() {
                 )}
                 {venda.parcelas.map((p, i) => (
                   <tr key={p.id ?? i}>
-                    <td className="text-slate-400">{p.numero ?? i + 1}</td>
-                    <td>{data(p.dataVencimento)}</td>
-                    <td>{p.formaPagamento?.nome ?? '—'}</td>
-                    <td className="num text-right">{moeda(p.valor)}</td>
-                    <td>
+                    <td className="pilha-oculto text-slate-400">{p.numero ?? i + 1}</td>
+                    <td data-rotulo="Vencimento">{data(p.dataVencimento)}</td>
+                    <td data-rotulo="Forma">{p.formaPagamento?.nome ?? '—'}</td>
+                    <td className="num text-right" data-rotulo="Valor">{moeda(p.valor)}</td>
+                    <td data-rotulo="Conta a receber">
                       {p.contaReceber ? (
                         <Link to={`/financeiro/receber?pesquisa=${venda.numero}`} className="inline-flex items-center gap-1.5 hover:underline">
                           #{p.contaReceber.id} <Badge tom={tomPorStatus(p.contaReceber.situacao)}>{rotulo(p.contaReceber.situacao)}</Badge>
@@ -280,15 +283,17 @@ export default function VendaDetalhe() {
                         <span className="text-xs text-slate-400">não lançada</span>
                       )}
                     </td>
-                    <td className="num text-right">{p.contaReceber ? moeda(p.contaReceber.valorRecebido) : '—'}</td>
+                    <td className="num text-right" data-rotulo="Recebido">{p.contaReceber ? moeda(p.contaReceber.valorRecebido) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           )}
           {aba === 'comissoes' &&
             (venda.comissoes?.length ? (
-              <table className="tbl">
+              <div className="overflow-x-auto">
+              <table className="tbl tbl-pilha">
                 <thead>
                   <tr>
                     <th>Tipo</th>
@@ -303,17 +308,18 @@ export default function VendaDetalhe() {
                 <tbody>
                   {venda.comissoes.map((c) => (
                     <tr key={c.id}>
-                      <td>{rotulo(c.tipo)}</td>
-                      <td>{c.vendedor?.nome ?? c.tecnico?.nome ?? '—'}</td>
-                      <td className="num text-right">{moeda(c.base)}</td>
-                      <td className="num text-right">{numero(c.pct)}%</td>
-                      <td className="num text-right font-medium">{moeda(c.valor)}</td>
-                      <td><Badge tom={tomPorStatus(c.status)}>{rotulo(c.status)}</Badge></td>
-                      <td>{c.competencia}</td>
+                      <td data-rotulo="Tipo">{rotulo(c.tipo)}</td>
+                      <td data-rotulo="Pessoa">{c.vendedor?.nome ?? c.tecnico?.nome ?? '—'}</td>
+                      <td className="num text-right" data-rotulo="Base">{moeda(c.base)}</td>
+                      <td className="num text-right" data-rotulo="%">{numero(c.pct)}%</td>
+                      <td className="num text-right font-medium" data-rotulo="Valor">{moeda(c.valor)}</td>
+                      <td data-rotulo="Status"><Badge tom={tomPorStatus(c.status)}>{rotulo(c.status)}</Badge></td>
+                      <td data-rotulo="Competência">{c.competencia}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : (
               <EmptyState compacto titulo="Sem comissões" descricao="Comissões são geradas ao lançar a venda com vendedor e % informados." />
             ))}

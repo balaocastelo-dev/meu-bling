@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
-import { Button, Card, ConfirmDialog, EmptyState, Modal, PageHeader, Skeleton } from '@/components/ui';
+import { Button, Card, ConfirmDialog, EmptyState, Modal, PageHeader, Skeleton, Table } from '@/components/ui';
 
 interface Props<T extends { id: number }> {
   titulo: string;
@@ -77,27 +77,25 @@ export function CrudSimples<T extends { id: number }>({ titulo, descricao, rota,
         ) : !data?.length ? (
           <EmptyState titulo="Nenhum registro" acao={<Button variante="primario" onClick={() => setEditando({ ...vazio })}>{rotuloNovo}</Button>} />
         ) : (
-          <table className="tbl">
-            <thead>
-              <tr>
-                {colunas.map((c, i) => <th key={i} className={c.className}>{c.titulo}</th>)}
-                <th className="w-24" />
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((item) => (
-                <tr key={item.id} className="clicavel" onClick={() => setEditando({ ...item })}>
-                  {colunas.map((c, i) => <td key={i} className={c.className}>{c.render(item)}</td>)}
-                  <td>
-                    <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                      <Button tamanho="xs" variante="fantasma" icone={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditando({ ...item })} />
-                      {(podeExcluir?.(item) ?? true) && <Button tamanho="xs" variante="fantasma" icone={<Trash2 className="h-3.5 w-3.5 text-red-500" />} onClick={() => setExcluir(item)} />}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Table
+            dados={data}
+            chave={(item) => item.id}
+            onClickLinha={(item) => setEditando({ ...item })}
+            colunas={[
+              ...colunas.map((c, i) => ({ chave: `c${i}`, titulo: c.titulo, className: c.className, render: (item: T) => c.render(item) })),
+              {
+                chave: 'acoes',
+                titulo: '',
+                largura: '96px',
+                render: (item: T) => (
+                  <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                    <Button tamanho="xs" variante="fantasma" aria-label="Editar" icone={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditando({ ...item })} />
+                    {(podeExcluir?.(item) ?? true) && <Button tamanho="xs" variante="fantasma" aria-label="Excluir" icone={<Trash2 className="h-3.5 w-3.5 text-red-500" />} onClick={() => setExcluir(item)} />}
+                  </div>
+                ),
+              },
+            ]}
+          />
         )}
       </Card>
 

@@ -12,7 +12,7 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 /** Cartão branco padrão com borda e sombra sutil */
 export function Card({ titulo, descricao, acoes, semPadding, rodape, className, children, ...rest }: CardProps) {
   return (
-    <div className={clsx('rounded-lg border border-slate-200 bg-white shadow-card', className)} {...rest}>
+    <div className={clsx('min-w-0 rounded-lg border border-slate-200 bg-white shadow-card', className)} {...rest}>
       {(titulo || acoes) && (
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
           <div className="min-w-0">
@@ -46,11 +46,11 @@ export function Secao({ titulo, descricao, children, className, acoes }: { titul
 
 /** Lista de pares rótulo/valor (ficha) */
 export function Definicoes({ itens, colunas = 2, className }: { itens: { rotulo: ReactNode; valor: ReactNode; largo?: boolean }[]; colunas?: 1 | 2 | 3 | 4; className?: string }) {
-  const grid = { 1: 'sm:grid-cols-1', 2: 'sm:grid-cols-2', 3: 'sm:grid-cols-3', 4: 'sm:grid-cols-4' }[colunas];
+  const grid = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-2 sm:grid-cols-3', 4: 'grid-cols-2 sm:grid-cols-4' }[colunas];
   return (
-    <dl className={clsx('grid grid-cols-1 gap-x-6 gap-y-3', grid, className)}>
+    <dl className={clsx('grid gap-x-4 gap-y-3 sm:gap-x-6', grid, className)}>
       {itens.map((it, i) => (
-        <div key={i} className={clsx('min-w-0', it.largo && 'sm:col-span-full')}>
+        <div key={i} className={clsx('min-w-0', it.largo && 'col-span-full')}>
           <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{it.rotulo}</dt>
           <dd className="mt-0.5 text-sm text-slate-800 break-words">{it.valor ?? '—'}</dd>
         </div>

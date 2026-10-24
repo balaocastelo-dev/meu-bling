@@ -89,7 +89,8 @@ export default function OsDetalhe() {
   const servicos = os.itens.filter((i) => i.tipo === 'SERVICO');
 
   const tabelaItens = (lista: typeof os.itens, mostrarDeposito: boolean) => (
-    <table className="tbl">
+    <div className="overflow-x-auto">
+    <table className="tbl tbl-pilha">
       <thead>
         <tr>
           <th>Descrição</th>
@@ -106,18 +107,19 @@ export default function OsDetalhe() {
         {lista.length === 0 && <tr><td colSpan={8} className="py-4 text-center text-xs text-slate-400">Nenhum item.</td></tr>}
         {lista.map((it, i) => (
           <tr key={it.id ?? i}>
-            <td>{it.produtoId ? <Link to={`/produtos/${it.produtoId}`} className="hover:text-brand-600">{it.descricao}</Link> : it.descricao}</td>
-            {mostrarDeposito && <td className="text-xs text-slate-500">{it.depositoId ? `#${it.depositoId}` : os.deposito?.nome ?? '—'}</td>}
-            <td className="num text-right">{numero(it.quantidade)}</td>
-            <td className="num text-right">{moeda(it.valorUnitario)}</td>
-            <td className="num text-right">{moeda(it.desconto)}</td>
-            <td className="num text-right text-slate-500">{numero(it.comissaoTecnicoPct)}%</td>
-            <td className="num text-right font-medium">{moeda(it.total ?? it.quantidade * it.valorUnitario - it.desconto)}</td>
-            {mostrarDeposito && <td><Badge tom={it.estoqueBaixado ? 'verde' : 'cinza'}>{it.estoqueBaixado ? 'baixado' : 'pendente'}</Badge></td>}
+            <td className="pilha-cheio">{it.produtoId ? <Link to={`/produtos/${it.produtoId}`} className="hover:text-brand-600">{it.descricao}</Link> : it.descricao}</td>
+            {mostrarDeposito && <td className="text-xs text-slate-500" data-rotulo="Depósito">{it.depositoId ? `#${it.depositoId}` : os.deposito?.nome ?? '—'}</td>}
+            <td className="num text-right" data-rotulo="Qtd">{numero(it.quantidade)}</td>
+            <td className="num text-right" data-rotulo="Unitário">{moeda(it.valorUnitario)}</td>
+            <td className="num text-right" data-rotulo="Desc.">{moeda(it.desconto)}</td>
+            <td className="num text-right text-slate-500" data-rotulo="Com. téc.">{numero(it.comissaoTecnicoPct)}%</td>
+            <td className="num text-right font-medium" data-rotulo="Total">{moeda(it.total ?? it.quantidade * it.valorUnitario - it.desconto)}</td>
+            {mostrarDeposito && <td data-rotulo="Estoque"><Badge tom={it.estoqueBaixado ? 'verde' : 'cinza'}>{it.estoqueBaixado ? 'baixado' : 'pendente'}</Badge></td>}
           </tr>
         ))}
       </tbody>
     </table>
+    </div>
   );
 
   return (
@@ -279,15 +281,17 @@ export default function OsDetalhe() {
                     {os.orcamentoAprovado && <span className="text-sm text-slate-500">por {os.orcamentoAprovadoPor ?? '—'} em {dataHora(os.orcamentoAprovadoEm)}</span>}
                     {!os.orcamentoAprovado && <Button tamanho="sm" variante="sucesso" carregando={aprovar.isPending} onClick={() => aprovar.mutate()}>Aprovar orçamento</Button>}
                   </div>
-                  <table className="tbl">
+                  <div className="overflow-x-auto">
+                  <table className="tbl tbl-pilha">
                     <thead><tr><th>Tipo</th><th>Descrição</th><th className="text-right">Qtd</th><th className="text-right">Unitário</th><th className="text-right">Total</th></tr></thead>
                     <tbody>
                       {os.itens.map((it, i) => (
-                        <tr key={it.id ?? i}><td><Badge>{rotulo(it.tipo)}</Badge></td><td>{it.descricao}</td><td className="num text-right">{numero(it.quantidade)}</td><td className="num text-right">{moeda(it.valorUnitario)}</td><td className="num text-right">{moeda(it.total ?? it.quantidade * it.valorUnitario - it.desconto)}</td></tr>
+                        <tr key={it.id ?? i}><td data-rotulo="Tipo"><Badge>{rotulo(it.tipo)}</Badge></td><td className="pilha-cheio">{it.descricao}</td><td className="num text-right" data-rotulo="Qtd">{numero(it.quantidade)}</td><td className="num text-right" data-rotulo="Unitário">{moeda(it.valorUnitario)}</td><td className="num text-right" data-rotulo="Total">{moeda(it.total ?? it.quantidade * it.valorUnitario - it.desconto)}</td></tr>
                       ))}
                       <tr className="font-semibold"><td colSpan={4} className="text-right">Total do orçamento</td><td className="num text-right">{moeda(os.total)}</td></tr>
                     </tbody>
                   </table>
+                  </div>
                   {linkPublico ? (
                     <div className="flex flex-wrap items-center gap-2 rounded-md bg-slate-50 p-3 text-sm">
                       <Link2 className="h-4 w-4 text-slate-400" />
@@ -303,22 +307,24 @@ export default function OsDetalhe() {
             </div>
           )}
           {aba === 'financeiro' && (
-            <table className="tbl">
+            <div className="overflow-x-auto">
+            <table className="tbl tbl-pilha">
               <thead><tr><th>#</th><th>Vencimento</th><th>Forma</th><th className="text-right">Valor</th><th>Conta a receber</th><th className="text-right">Recebido</th></tr></thead>
               <tbody>
                 {os.parcelas.length === 0 && <tr><td colSpan={6} className="py-4 text-center text-xs text-slate-400">Sem parcelas.</td></tr>}
                 {os.parcelas.map((p, i) => (
                   <tr key={p.id ?? i}>
-                    <td className="text-slate-400">{p.numero ?? i + 1}</td>
-                    <td>{data(p.dataVencimento)}</td>
-                    <td>{p.formaPagamento?.nome ?? '—'}</td>
-                    <td className="num text-right">{moeda(p.valor)}</td>
-                    <td>{p.contaReceber ? <span className="inline-flex items-center gap-1.5">#{p.contaReceber.id} <Badge tom={tomPorStatus(p.contaReceber.situacao)}>{rotulo(p.contaReceber.situacao)}</Badge></span> : <span className="text-xs text-slate-400">não lançada</span>}</td>
-                    <td className="num text-right">{p.contaReceber ? moeda(p.contaReceber.valorRecebido) : '—'}</td>
+                    <td className="pilha-oculto text-slate-400">{p.numero ?? i + 1}</td>
+                    <td data-rotulo="Vencimento">{data(p.dataVencimento)}</td>
+                    <td data-rotulo="Forma">{p.formaPagamento?.nome ?? '—'}</td>
+                    <td className="num text-right" data-rotulo="Valor">{moeda(p.valor)}</td>
+                    <td data-rotulo="Conta a receber">{p.contaReceber ? <span className="inline-flex items-center gap-1.5">#{p.contaReceber.id} <Badge tom={tomPorStatus(p.contaReceber.situacao)}>{rotulo(p.contaReceber.situacao)}</Badge></span> : <span className="text-xs text-slate-400">não lançada</span>}</td>
+                    <td className="num text-right" data-rotulo="Recebido">{p.contaReceber ? moeda(p.contaReceber.valorRecebido) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           )}
           {aba === 'anexos' && (
             <div className="space-y-3">

@@ -92,15 +92,15 @@ function GridItens({ tipo, itens, onChange, comissaoTecnico, comissaoVendedor, d
   return (
     <div>
       {!bloqueado && (
-        <div className="mb-3 flex gap-2">
-          <SearchSelect className="flex-1" placeholder={tipo === 'PECA' ? 'Buscar peça/produto… (Enter adiciona)' : 'Buscar serviço cadastrado… (Enter adiciona)'} valor={null} onChange={(_, op) => op?.dados && adicionarProduto(op.dados as Produto)} buscar={(t) => buscarProdutos(t, tipo === 'PECA' ? 'P' : 'S')} limparAoSelecionar />
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+          <SearchSelect className="min-w-0 flex-1" placeholder={tipo === 'PECA' ? 'Buscar peça/produto… (Enter adiciona)' : 'Buscar serviço cadastrado… (Enter adiciona)'} valor={null} onChange={(_, op) => op?.dados && adicionarProduto(op.dados as Produto)} buscar={(t) => buscarProdutos(t, tipo === 'PECA' ? 'P' : 'S')} limparAoSelecionar />
           <Button variante="secundario" icone={<Plus className="h-4 w-4" />} onClick={adicionarLivre}>
             Linha livre
           </Button>
         </div>
       )}
       <div className="overflow-auto rounded-md border border-slate-200">
-        <table className="tbl">
+        <table className="tbl tbl-pilha">
           <thead>
             <tr>
               <th>Descrição</th>
@@ -124,23 +124,23 @@ function GridItens({ tipo, itens, onChange, comissaoTecnico, comissaoVendedor, d
             )}
             {lista.map((it, i) => (
               <tr key={i}>
-                <td><input disabled={bloqueado} value={it.descricao} onChange={(e) => atualizar(i, { descricao: e.target.value })} className="input-base h-8 py-0" placeholder="Descrição" /></td>
+                <td className="pilha-cheio"><input disabled={bloqueado} value={it.descricao} onChange={(e) => atualizar(i, { descricao: e.target.value })} className="input-base h-8 py-0" placeholder="Descrição" /></td>
                 {tipo === 'PECA' && (
-                  <td>
+                  <td data-rotulo="Depósito">
                     <select disabled={bloqueado} value={it.depositoId ?? ''} onChange={(e) => atualizar(i, { depositoId: e.target.value ? Number(e.target.value) : null })} className="input-base h-8 py-0 text-xs">
                       <option value="">(da OS)</option>
                       {depositos.map((d) => <option key={d.id} value={d.id}>{d.nome}</option>)}
                     </select>
                   </td>
                 )}
-                <td><MoneyInput value={it.quantidade} onChange={(v) => atualizar(i, { quantidade: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
-                <td><MoneyInput value={it.valorUnitario} onChange={(v) => atualizar(i, { valorUnitario: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
-                <td><MoneyInput value={it.desconto} onChange={(v) => atualizar(i, { desconto: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
-                <td><MoneyInput value={it.comissaoTecnicoPct} onChange={(v) => atualizar(i, { comissaoTecnicoPct: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
-                <td><MoneyInput value={it.comissaoVendedorPct} onChange={(v) => atualizar(i, { comissaoVendedorPct: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
-                <td className="num text-right font-medium">{moeda(totalItem(it))}</td>
+                <td data-rotulo="Qtd"><MoneyInput value={it.quantidade} onChange={(v) => atualizar(i, { quantidade: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
+                <td data-rotulo="Unitário"><MoneyInput value={it.valorUnitario} onChange={(v) => atualizar(i, { valorUnitario: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
+                <td data-rotulo="Desc."><MoneyInput value={it.desconto} onChange={(v) => atualizar(i, { desconto: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
+                <td data-rotulo="Com. téc. %"><MoneyInput value={it.comissaoTecnicoPct} onChange={(v) => atualizar(i, { comissaoTecnicoPct: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
+                <td data-rotulo="Com. vend. %"><MoneyInput value={it.comissaoVendedorPct} onChange={(v) => atualizar(i, { comissaoVendedorPct: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
+                <td className="num text-right font-medium" data-rotulo="Total">{moeda(totalItem(it))}</td>
                 {!bloqueado && (
-                  <td><button type="button" onClick={() => remover(i)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></td>
+                  <td className="pilha-canto"><button type="button" onClick={() => remover(i)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></td>
                 )}
               </tr>
             ))}
@@ -252,9 +252,9 @@ export default function OsForm() {
 
       <div className="space-y-4">
         <Secao titulo="Cliente e responsáveis">
-          <div className="grid gap-3 md:grid-cols-12">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
             <SearchSelect
-              className="md:col-span-4"
+              className="sm:col-span-2 xl:col-span-4"
               label="Cliente"
               obrigatorio
               erro={erros.contatoId}
@@ -267,30 +267,30 @@ export default function OsForm() {
               }}
               rodape={<button type="button" onClick={() => setDrawer(true)} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-brand-600 hover:bg-brand-50"><UserPlus className="h-4 w-4" /> Cadastrar novo cliente</button>}
             />
-            <Select className="md:col-span-2" label="Atendente / vendedor" value={form.vendedorId ?? ''} onChange={(e) => set('vendedorId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(vendedores)} placeholder="—" />
-            <Select className="md:col-span-2" label="Técnico" value={form.tecnicoId ?? ''} onChange={(e) => set('tecnicoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(tecnicos)} placeholder="—" />
-            <Select className="md:col-span-2" label="Prioridade" value={form.prioridade} onChange={(e) => set('prioridade', e.target.value as OsPayload['prioridade'])} opcoes={['BAIXA', 'NORMAL', 'ALTA', 'URGENTE'].map((p) => ({ valor: p, rotulo: rotulo(p) }))} />
-            <DateInput className="md:col-span-2" label="Entrada" obrigatorio value={form.dataEntrada} onChange={(v) => set('dataEntrada', v)} />
-            <DateInput className="md:col-span-2" label="Previsão" value={form.dataPrevista} onChange={(v) => set('dataPrevista', v || null)} />
-            <Select className="md:col-span-3" label="Depósito (peças)" value={form.depositoId ?? ''} onChange={(e) => set('depositoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(depositos)} placeholder="—" />
-            <Select className="md:col-span-3" label="Categoria financeira" value={form.categoriaFinanceiraId ?? ''} onChange={(e) => set('categoriaFinanceiraId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(categorias?.filter((c) => c.tipo === 'RECEITA'))} placeholder="—" />
-            <Input className="md:col-span-2" label="Garantia (dias)" type="number" min={0} value={form.garantiaDias} onChange={(e) => set('garantiaDias', Number(e.target.value))} />
-            {!editando && <Select className="md:col-span-2" label="Situação inicial" value={form.situacaoId ?? ''} onChange={(e) => set('situacaoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(situacoes)} placeholder="Padrão (Aberta)" />}
+            <Select className="xl:col-span-2" label="Atendente / vendedor" value={form.vendedorId ?? ''} onChange={(e) => set('vendedorId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(vendedores)} placeholder="—" />
+            <Select className="xl:col-span-2" label="Técnico" value={form.tecnicoId ?? ''} onChange={(e) => set('tecnicoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(tecnicos)} placeholder="—" />
+            <Select className="xl:col-span-2" label="Prioridade" value={form.prioridade} onChange={(e) => set('prioridade', e.target.value as OsPayload['prioridade'])} opcoes={['BAIXA', 'NORMAL', 'ALTA', 'URGENTE'].map((p) => ({ valor: p, rotulo: rotulo(p) }))} />
+            <DateInput className="xl:col-span-2" label="Entrada" obrigatorio value={form.dataEntrada} onChange={(v) => set('dataEntrada', v)} />
+            <DateInput className="xl:col-span-2" label="Previsão" value={form.dataPrevista} onChange={(v) => set('dataPrevista', v || null)} />
+            <Select className="xl:col-span-3" label="Depósito (peças)" value={form.depositoId ?? ''} onChange={(e) => set('depositoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(depositos)} placeholder="—" />
+            <Select className="xl:col-span-3" label="Categoria financeira" value={form.categoriaFinanceiraId ?? ''} onChange={(e) => set('categoriaFinanceiraId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(categorias?.filter((c) => c.tipo === 'RECEITA'))} placeholder="—" />
+            <Input className="xl:col-span-2" label="Garantia (dias)" type="number" min={0} value={form.garantiaDias} onChange={(e) => set('garantiaDias', Number(e.target.value))} />
+            {!editando && <Select className="xl:col-span-2" label="Situação inicial" value={form.situacaoId ?? ''} onChange={(e) => set('situacaoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(situacoes)} placeholder="Padrão (Aberta)" />}
           </div>
         </Secao>
 
         <Secao titulo="Equipamento">
-          <div className="grid gap-3 md:grid-cols-12">
-            <div className="md:col-span-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
+            <div className="xl:col-span-3">
               <Input label="Tipo de equipamento" obrigatorio erro={erros.equipamento} list="equipamentos" value={form.equipamento} onChange={(e) => set('equipamento', e.target.value)} placeholder="Notebook, Desktop…" />
               <datalist id="equipamentos">{EQUIPAMENTOS.map((e) => <option key={e} value={e} />)}</datalist>
             </div>
-            <Input className="md:col-span-3" label="Marca" value={form.marca} onChange={(e) => set('marca', e.target.value)} />
-            <Input className="md:col-span-3" label="Modelo" value={form.modelo} onChange={(e) => set('modelo', e.target.value)} />
-            <Input className="md:col-span-3" label="Nº de série" value={form.numeroSerie} onChange={(e) => set('numeroSerie', e.target.value)} />
-            <Input className="md:col-span-4" label="Acessórios entregues" value={form.acessorios} onChange={(e) => set('acessorios', e.target.value)} placeholder="Fonte, bolsa, mouse…" />
-            <Input className="md:col-span-3" label="Senha do equipamento" value={form.senhaEquipamento} onChange={(e) => set('senhaEquipamento', e.target.value)} />
-            <Input className="md:col-span-5" label="Estado físico" value={form.estadoFisico} onChange={(e) => set('estadoFisico', e.target.value)} placeholder="Riscos, trincas, tampa solta…" />
+            <Input className="xl:col-span-3" label="Marca" value={form.marca} onChange={(e) => set('marca', e.target.value)} />
+            <Input className="xl:col-span-3" label="Modelo" value={form.modelo} onChange={(e) => set('modelo', e.target.value)} />
+            <Input className="xl:col-span-3" label="Nº de série" value={form.numeroSerie} onChange={(e) => set('numeroSerie', e.target.value)} />
+            <Input className="sm:col-span-2 xl:col-span-4" label="Acessórios entregues" value={form.acessorios} onChange={(e) => set('acessorios', e.target.value)} placeholder="Fonte, bolsa, mouse…" />
+            <Input className="xl:col-span-3" label="Senha do equipamento" value={form.senhaEquipamento} onChange={(e) => set('senhaEquipamento', e.target.value)} />
+            <Input className="sm:col-span-2 xl:col-span-5" label="Estado físico" value={form.estadoFisico} onChange={(e) => set('estadoFisico', e.target.value)} placeholder="Riscos, trincas, tampa solta…" />
           </div>
         </Secao>
 
@@ -313,8 +313,8 @@ export default function OsForm() {
           <GridItens tipo="PECA" itens={form.itens} onChange={(l) => set('itens', l)} comissaoTecnico={comissaoTec} comissaoVendedor={comissaoVend} depositos={depositos ?? []} bloqueado={bloqueado} />
         </Secao>
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Secao titulo="Observações" className="lg:col-span-2">
+        <div className="grid gap-4 xl:grid-cols-3">
+          <Secao titulo="Observações" className="xl:col-span-2">
             <div className="grid gap-3 sm:grid-cols-2">
               <Textarea label="Observações (visíveis ao cliente)" rows={3} value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} />
               <Textarea label="Observações internas" rows={3} value={form.observacoesInternas} onChange={(e) => set('observacoesInternas', e.target.value)} />
@@ -336,10 +336,10 @@ export default function OsForm() {
         </Secao>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:left-64">
-        <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-3">
-          <div className="text-sm text-slate-500">Total <span className="num font-semibold text-slate-900">{moeda(totais.total)}</span></div>
-          <div className="flex gap-2">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3 lg:left-64">
+        <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-2 sm:gap-3">
+          <div className="min-w-0 text-xs text-slate-500 sm:text-sm">Total <span className="num font-semibold text-slate-900">{moeda(totais.total)}</span></div>
+          <div className="flex shrink-0 gap-2">
             <Button variante="secundario" onClick={() => nav(editando ? `/ordens-servico/${id}` : '/ordens-servico')}>Cancelar</Button>
             <Button variante="primario" icone={<Save className="h-4 w-4" />} carregando={salvar.isPending} onClick={submeter}>Salvar OS</Button>
           </div>

@@ -182,7 +182,7 @@ export function ContasPage({ tipo }: Props) {
         }
       />
 
-      <div className="mb-4 grid grid-cols-3 gap-3">
+      <div className="mb-4 grid grid-cols-1 gap-3 min-[480px]:grid-cols-3">
         <StatCard rotulo="Em aberto" valor={moeda(t?.aberto)} icone={<Clock className="h-4 w-4" />} tom="azul" carregando={isLoading && !t} onClick={() => pg.setFiltro('situacao', 'ABERTO')} className={clsx(situacaoAtiva === 'ABERTO' && 'ring-2 ring-brand-500/30')} />
         <StatCard rotulo="Atrasadas" valor={moeda(t?.atrasado)} icone={<TriangleAlert className="h-4 w-4" />} tom={t && t.atrasado > 0 ? 'vermelho' : 'neutro'} carregando={isLoading && !t} onClick={() => pg.setFiltro('situacao', 'ATRASADO')} className={clsx(situacaoAtiva === 'ATRASADO' && 'ring-2 ring-brand-500/30')} />
         <StatCard rotulo={ehReceber ? 'Recebidas (período)' : 'Pagas (período)'} valor={moeda(ehReceber ? t?.recebido : t?.pago)} icone={<CircleDollarSign className="h-4 w-4" />} tom="verde" carregando={isLoading && !t} onClick={() => pg.setFiltro('situacao', ehReceber ? 'RECEBIDO' : 'PAGO')} className={clsx((situacaoAtiva === 'RECEBIDO' || situacaoAtiva === 'PAGO') && 'ring-2 ring-brand-500/30')} />
@@ -201,7 +201,44 @@ export function ContasPage({ tipo }: Props) {
           <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />
           {ehReceber && <SelectFiltro valor={pg.getFiltro('vendedorId')} onChange={(v) => pg.setFiltro('vendedorId', v)} opcoes={opcoesDe(vendedores)} placeholder="Todos vendedores" />}
         </BarraFiltros>
-        <Table colunas={colunas} dados={resp?.data} carregando={isLoading} chave={(c) => c.id} vazio={<EmptyState icone={<Wallet className="h-5 w-5" />} titulo="Nenhuma conta encontrada" descricao="Ajuste os filtros ou lance uma nova conta." />} />
+        <Table
+          colunas={colunas}
+          dados={resp?.data}
+          carregando={isLoading}
+          chave={(c) => c.id}
+          cartao={(c) => {
+            const atr = c.atrasada ?? ((c.situacao === 'ABERTO' || c.situacao === 'PARCIAL') && diasAtraso(c.vencimento) > 0);
+            const st = atr ? 'ATRASADO' : c.situacao;
+            const aberta = c.situacao === 'ABERTO' || c.situacao === 'PARCIAL';
+            const l = linkOrigem(c);
+            return (
+              <div className="flex min-w-0 items-start gap-2">
+                {aberta && (
+                  <span className="pt-0.5" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox checked={sel.has(c.id)} onChange={() => setSel((s) => { const n = new Set(s); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })} />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    {l ? (
+                      <Link to={l} className="min-w-0 break-words text-sm font-medium text-slate-900 hover:text-brand-600">{c.descricao}</Link>
+                    ) : (
+                      <p className="min-w-0 break-words text-sm font-medium text-slate-900">{c.descricao}</p>
+                    )}
+                    <span className="num shrink-0 text-sm font-semibold text-slate-900">{moeda(c.valor)}</span>
+                  </div>
+                  {(c.contato?.nome || c.categoria?.nome) && <p className="truncate text-xs text-slate-500">{[c.contato?.nome, c.categoria?.nome, c.parcela && `parc. ${c.parcela}`].filter(Boolean).join(' · ')}</p>}
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                    <Badge tom={tomPorStatus(st)}>{rotulo(st)}</Badge>
+                    <span className={clsx(atr && 'font-medium text-red-600')}>vence {data(c.vencimento)}{atr ? ` · ${diasAtraso(c.vencimento)} dias` : ''}</span>
+                    {c.formaPagamento?.nome && <span>· {c.formaPagamento.nome}</span>}
+                    {c.situacao !== 'CANCELADO' && valorPago(c) > 0 && c.valor - valorPago(c) > 0 && <span>· falta {moeda(c.valor - valorPago(c))}</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          }}
+          vazio={<EmptyState icone={<Wallet className="h-5 w-5" />} titulo="Nenhuma conta encontrada" descricao="Ajuste os filtros ou lance uma nova conta." />} />
         {resp && <Pagination pagina={resp.meta.pagina} totalPaginas={resp.meta.totalPaginas} total={resp.meta.total} limite={resp.meta.limite} onPagina={pg.setPagina} onLimite={pg.setLimite} />}
       </Card>
 

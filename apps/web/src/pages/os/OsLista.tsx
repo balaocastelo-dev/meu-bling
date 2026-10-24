@@ -72,7 +72,7 @@ function KanbanOs({ tecnicoId }: { tecnicoId: string }) {
   if (error || !colunas) return <EmptyState titulo="Não foi possível carregar o kanban" descricao={error ? mensagemErro(error) : undefined} />;
 
   return (
-    <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-3 md:-mx-6 md:px-6">
+    <div className="-mx-3 flex snap-x gap-3 overflow-x-auto px-3 pb-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6">
       {colunas.map((col) => (
         <div
           key={col.situacao.id}
@@ -88,7 +88,7 @@ function KanbanOs({ tecnicoId }: { tecnicoId: string }) {
             const origem = Number(e.dataTransfer.getData('text/situacao-id'));
             if (osId && origem !== col.situacao.id) mover.mutate({ osId, situacaoId: col.situacao.id });
           }}
-          className={clsx('flex w-72 shrink-0 flex-col rounded-lg border bg-slate-100/70 transition', sobre === col.situacao.id ? 'border-brand-400 bg-brand-50/60' : 'border-slate-200')}
+          className={clsx('flex w-[82vw] max-w-72 shrink-0 snap-start flex-col rounded-lg border bg-slate-100/70 transition sm:w-72', sobre === col.situacao.id ? 'border-brand-400 bg-brand-50/60' : 'border-slate-200')}
         >
           <div className="flex items-center gap-2 px-3 py-2.5">
             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: col.situacao.cor }} />
@@ -152,7 +152,27 @@ function ListaOs({ tecnicoId }: { tecnicoId: string }) {
       <div className="border-b border-slate-100 px-3 py-2">
         <ChipsSituacao situacoes={situacoes ?? []} valor={pg.getFiltro('situacoes')} onChange={(v) => pg.setFiltro('situacoes', v)} />
       </div>
-      <Table colunas={colunas} dados={resp?.data} carregando={isLoading} chave={(o) => o.id} onClickLinha={(o) => nav(`/ordens-servico/${o.id}`)} vazio={<EmptyState icone={<Wrench className="h-5 w-5" />} titulo="Nenhuma OS encontrada" acao={<Link to="/ordens-servico/nova"><Button variante="primario">Nova OS</Button></Link>} />} />
+      <Table
+        colunas={colunas}
+        dados={resp?.data}
+        carregando={isLoading}
+        chave={(o) => o.id}
+        onClickLinha={(o) => nav(`/ordens-servico/${o.id}`)}
+        cartao={(o) => (
+          <div className="min-w-0">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm font-semibold text-slate-900">OS {o.numero}</span>
+              <span className="num shrink-0 text-sm font-semibold text-slate-900">{moeda(o.total)}</span>
+            </div>
+            <div className="truncate text-sm text-slate-700">{o.contato?.nome}</div>
+            {(o.equipamento || o.marca || o.modelo) && <div className="truncate text-xs text-slate-500">{[o.equipamento, o.marca, o.modelo].filter(Boolean).join(' ')}</div>}
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+              <StatusBadge situacao={o.situacao} />
+              <span>entrada {data(o.dataEntrada)}</span>
+              {o.tecnico?.nome && <span>· {o.tecnico.nome}</span>}
+            </div>
+          </div>
+        )} vazio={<EmptyState icone={<Wrench className="h-5 w-5" />} titulo="Nenhuma OS encontrada" acao={<Link to="/ordens-servico/nova"><Button variante="primario">Nova OS</Button></Link>} />} />
       {resp && <Pagination pagina={resp.meta.pagina} totalPaginas={resp.meta.totalPaginas} total={resp.meta.total} limite={resp.meta.limite} onPagina={pg.setPagina} onLimite={pg.setLimite} />}
     </Card>
   );

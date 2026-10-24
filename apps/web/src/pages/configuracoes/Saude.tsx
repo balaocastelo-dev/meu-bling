@@ -47,7 +47,7 @@ export default function Saude() {
         <div className="space-y-3"><Skeleton className="h-20" /><Skeleton className="h-32" /><Skeleton className="h-32" /></div>
       ) : (
         <>
-          <div className="mb-4 grid grid-cols-3 gap-3">
+          <div className="mb-4 grid grid-cols-1 gap-3 min-[480px]:grid-cols-3">
             {(['erro', 'aviso', 'info'] as Nivel[]).map((n) => {
               const E = ESTILO[n];
               return (
@@ -86,7 +86,7 @@ export default function Saude() {
                         {a.exemplos.length > 0 && (
                           <ul className="mt-2 space-y-0.5 text-sm">
                             {a.exemplos.map((ex, i) => (
-                              <li key={i} className="truncate">
+                              <li key={i} className="break-words">
                                 {ex.link ? <Link to={ex.link} className="text-brand-600 hover:underline">{ex.rotulo}</Link> : ex.rotulo}
                               </li>
                             ))}

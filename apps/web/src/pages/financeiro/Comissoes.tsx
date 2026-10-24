@@ -96,14 +96,14 @@ export default function Comissoes() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-3 gap-3">
+      <div className="mb-4 grid grid-cols-1 gap-3 min-[480px]:grid-cols-3">
         <StatCard rotulo="Pendentes" valor={moeda(t?.pendente)} tom="amarelo" carregando={isLoading && !t} icone={<Percent className="h-4 w-4" />} />
         <StatCard rotulo="Aprovadas" valor={moeda(t?.aprovada)} tom="azul" carregando={isLoading && !t} />
         <StatCard rotulo="Pagas" valor={moeda(t?.paga)} tom="verde" carregando={isLoading && !t} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2" semPadding>
+      <div className="grid gap-4 2xl:grid-cols-3">
+        <Card className="2xl:col-span-2" semPadding>
           <BarraFiltros>
             <Input type="month" value={competencia} onChange={(e) => pg.setFiltro('competencia', e.target.value)} className="w-40" />
             <SelectFiltro valor={pg.getFiltro('tipo')} onChange={(v) => pg.setFiltro('tipo', v)} placeholder="Vendedores e técnicos" opcoes={[{ valor: 'VENDEDOR', rotulo: 'Vendedores' }, { valor: 'TECNICO', rotulo: 'Técnicos' }]} />
@@ -116,6 +116,7 @@ export default function Comissoes() {
         </Card>
         <Card titulo="Resumo por pessoa" semPadding>
           {resumo?.length ? (
+            <div className="overflow-x-auto">
             <table className="tbl">
               <thead><tr><th>Pessoa</th><th className="text-right">Qtd</th><th className="text-right">Pendente</th><th className="text-right">Paga</th></tr></thead>
               <tbody>
@@ -129,6 +130,7 @@ export default function Comissoes() {
                 ))}
               </tbody>
             </table>
+            </div>
           ) : (
             <EmptyState compacto titulo="Sem resumo" />
           )}

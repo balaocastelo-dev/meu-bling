@@ -351,6 +351,7 @@ function Extrato({ contas }: { contas: ContaFinanceira[] }) {
       ) : !resp?.data.length ? (
         <EmptyState titulo="Sem lançamentos no período" />
       ) : (
+        <div className="overflow-x-auto">
         <table className="tbl">
           <thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th>Categoria</th><th>Tipo</th><th className="text-right">Valor</th><th /></tr></thead>
           <tbody>
@@ -367,6 +368,7 @@ function Extrato({ contas }: { contas: ContaFinanceira[] }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
       {resp && <Pagination pagina={resp.meta.pagina} totalPaginas={resp.meta.totalPaginas} total={resp.meta.total} limite={resp.meta.limite} onPagina={pg.setPagina} />}
     </Card>

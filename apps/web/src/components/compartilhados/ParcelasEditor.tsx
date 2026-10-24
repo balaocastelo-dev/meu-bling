@@ -82,7 +82,7 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled }: Props) {
       )}
 
       <div className="overflow-auto rounded-md border border-slate-200">
-        <table className="tbl">
+        <table className="tbl tbl-pilha">
           <thead>
             <tr>
               <th className="w-12">#</th>
@@ -103,14 +103,14 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled }: Props) {
             )}
             {parcelas.map((p, i) => (
               <tr key={i}>
-                <td className="text-slate-500">{i + 1}</td>
-                <td>
+                <td className="pilha-oculto text-slate-500">{i + 1}</td>
+                <td data-rotulo="Vencimento">
                   <input type="date" disabled={disabled} value={p.dataVencimento?.slice(0, 10) ?? ''} onChange={(e) => atualizar(i, { dataVencimento: e.target.value })} className="input-base h-8 py-0" />
                 </td>
-                <td>
+                <td data-rotulo="Valor">
                   <MoneyInput value={p.valor} onChange={(v) => atualizar(i, { valor: v })} prefixo="" disabled={disabled} inputClassName="h-8 py-0" />
                 </td>
-                <td>
+                <td data-rotulo="Forma de pagamento">
                   <select disabled={disabled} value={p.formaPagamentoId ?? ''} onChange={(e) => atualizar(i, { formaPagamentoId: e.target.value ? Number(e.target.value) : null })} className="input-base h-8 py-0">
                     <option value="">—</option>
                     {formas?.map((f) => (
@@ -120,11 +120,11 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled }: Props) {
                     ))}
                   </select>
                 </td>
-                <td>
+                <td data-rotulo="Observações">
                   <input disabled={disabled} value={p.observacoes ?? ''} onChange={(e) => atualizar(i, { observacoes: e.target.value })} className="input-base h-8 py-0" placeholder="opcional" />
                 </td>
                 {!disabled && (
-                  <td>
+                  <td className="pilha-canto">
                     <button type="button" onClick={() => remover(i)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remover parcela">
                       <Trash2 className="h-4 w-4" />
                     </button>

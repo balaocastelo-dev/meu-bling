@@ -21,9 +21,9 @@ export function BuscaFiltro({ valor, onChange, placeholder = 'Buscar…', classN
     setTexto(valor);
   }, [valor]);
   return (
-    <div className={clsx('relative', className)}>
+    <div className={clsx('relative w-full sm:w-auto', className)}>
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-      <input autoFocus={autoFocus} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={placeholder} className="input-base h-8 w-56 pl-8 pr-7 text-sm md:w-72" />
+      <input autoFocus={autoFocus} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={placeholder} className="input-base h-9 w-full pl-8 pr-7 text-sm sm:h-8 sm:w-56 md:w-72" />
       {texto && (
         <button onClick={() => setTexto('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Limpar busca">
           <X className="h-3.5 w-3.5" />
@@ -74,9 +74,9 @@ export function ChipsSituacao({ situacoes, valor, onChange, contagens }: { situa
 /** Select pequeno para filtros */
 export function SelectFiltro({ valor, onChange, opcoes, placeholder, className, label }: { valor: string; onChange: (v: string) => void; opcoes: { valor: string | number; rotulo: string }[]; placeholder?: string; className?: string; label?: string }) {
   return (
-    <div className={clsx('flex flex-col gap-0.5', className)}>
+    <div className={clsx('flex min-w-0 flex-1 basis-[calc(50%-0.25rem)] flex-col gap-0.5 sm:flex-none sm:basis-auto', className)}>
       {label && <span className="text-[11px] font-medium text-slate-500">{label}</span>}
-      <select value={valor} onChange={(e) => onChange(e.target.value)} className="input-base h-8 w-auto min-w-[140px] py-0 pr-8 text-sm">
+      <select value={valor} onChange={(e) => onChange(e.target.value)} className="input-base h-9 w-full min-w-0 py-0 pr-8 text-sm sm:h-8 sm:w-auto sm:min-w-[140px]">
         <option value="">{placeholder ?? 'Todos'}</option>
         {opcoes.map((o) => (
           <option key={o.valor} value={o.valor}>
@@ -122,7 +122,7 @@ export function PeriodoFiltro({ inicial, final, onChange, label = 'Período', at
   const opcoes = atalhos ? atalhosPeriodo() : [];
   const ativo = opcoes.find((o) => o.i === inicial && o.f === final)?.id;
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex w-full flex-col gap-1 sm:w-auto">
       {label && <span className="text-[11px] font-medium text-slate-500">{label}</span>}
       <div className="flex flex-wrap items-center gap-1.5">
         {opcoes.length > 0 && (
@@ -143,10 +143,10 @@ export function PeriodoFiltro({ inicial, final, onChange, label = 'Período', at
             ))}
           </div>
         )}
-        <div className="flex items-center gap-1">
-          <input type="date" aria-label="Data inicial" value={inicial} max={final || undefined} onChange={(e) => onChange(e.target.value, final)} className="input-base h-8 w-36 py-0 text-sm" />
+        <div className="flex w-full min-w-0 items-center gap-1 sm:w-auto">
+          <input type="date" aria-label="Data inicial" value={inicial} max={final || undefined} onChange={(e) => onChange(e.target.value, final)} className="input-base h-9 min-w-0 flex-1 py-0 text-sm sm:h-8 sm:w-36 sm:flex-none" />
           <span className="text-xs text-slate-400">até</span>
-          <input type="date" aria-label="Data final" value={final} min={inicial || undefined} onChange={(e) => onChange(inicial, e.target.value)} className="input-base h-8 w-36 py-0 text-sm" />
+          <input type="date" aria-label="Data final" value={final} min={inicial || undefined} onChange={(e) => onChange(inicial, e.target.value)} className="input-base h-9 min-w-0 flex-1 py-0 text-sm sm:h-8 sm:w-36 sm:flex-none" />
           {limpavel && (inicial || final) && (
             <button type="button" onClick={() => onChange('', '')} title="Limpar período" className="h-8 rounded-md px-2 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600">
               ✕

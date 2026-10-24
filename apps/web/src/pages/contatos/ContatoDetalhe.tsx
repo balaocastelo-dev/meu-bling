@@ -142,35 +142,41 @@ export default function ContatoDetalhe() {
                 <EmptyState compacto titulo="Sem movimentações" descricao="Vendas, OS, contas e mensagens aparecerão aqui." />
               )
             ) : aba === 'vendas' ? (
-              <table className="tbl">
+              <div className="overflow-x-auto">
+              <table className="tbl tbl-pilha">
                 <thead><tr><th>Nº</th><th>Data</th><th>Situação</th><th className="text-right">Total</th></tr></thead>
                 <tbody>
                   {hist.vendas.length === 0 && <tr><td colSpan={4} className="py-4 text-center text-xs text-slate-400">Sem vendas.</td></tr>}
                   {hist.vendas.map((v) => (
-                    <tr key={v.id} className="clicavel" onClick={() => nav(`${v.tipo === 'ORCAMENTO' ? '/orcamentos' : '/vendas'}/${v.id}`)}><td className="font-medium">{v.numero}{v.tipo === 'ORCAMENTO' && <span className="ml-1.5 rounded bg-amber-50 px-1 text-[10px] font-semibold text-amber-700">ORÇ.</span>}</td><td>{data(v.data)}</td><td><StatusBadge situacao={v.situacao} /></td><td className="num text-right">{moeda(v.total)}</td></tr>
+                    <tr key={v.id} className="clicavel" onClick={() => nav(`${v.tipo === 'ORCAMENTO' ? '/orcamentos' : '/vendas'}/${v.id}`)}><td className="font-medium" data-rotulo="Nº">{v.numero}{v.tipo === 'ORCAMENTO' && <span className="ml-1.5 rounded bg-amber-50 px-1 text-[10px] font-semibold text-amber-700">ORÇ.</span>}</td><td data-rotulo="Data">{data(v.data)}</td><td data-rotulo="Situação"><StatusBadge situacao={v.situacao} /></td><td className="num text-right" data-rotulo="Total">{moeda(v.total)}</td></tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : aba === 'os' ? (
-              <table className="tbl">
+              <div className="overflow-x-auto">
+              <table className="tbl tbl-pilha">
                 <thead><tr><th>Nº</th><th>Entrada</th><th>Equipamento</th><th>Situação</th><th className="text-right">Total</th></tr></thead>
                 <tbody>
                   {hist.ordens.length === 0 && <tr><td colSpan={5} className="py-4 text-center text-xs text-slate-400">Sem ordens de serviço.</td></tr>}
                   {hist.ordens.map((o) => (
-                    <tr key={o.id} className="clicavel" onClick={() => nav(`/ordens-servico/${o.id}`)}><td className="font-medium">{o.numero}</td><td>{data(o.dataEntrada)}</td><td>{o.equipamento ?? '—'}</td><td><StatusBadge situacao={o.situacao} /></td><td className="num text-right">{moeda(o.total)}</td></tr>
+                    <tr key={o.id} className="clicavel" onClick={() => nav(`/ordens-servico/${o.id}`)}><td className="font-medium" data-rotulo="Nº">{o.numero}</td><td data-rotulo="Entrada">{data(o.dataEntrada)}</td><td data-rotulo="Equipamento">{o.equipamento ?? '—'}</td><td data-rotulo="Situação"><StatusBadge situacao={o.situacao} /></td><td className="num text-right" data-rotulo="Total">{moeda(o.total)}</td></tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : aba === 'contas' ? (
-              <table className="tbl">
+              <div className="overflow-x-auto">
+              <table className="tbl tbl-pilha">
                 <thead><tr><th>Descrição</th><th>Vencimento</th><th>Situação</th><th className="text-right">Valor</th><th className="text-right">Recebido</th></tr></thead>
                 <tbody>
                   {hist.contasReceber.length === 0 && <tr><td colSpan={5} className="py-4 text-center text-xs text-slate-400">Sem contas.</td></tr>}
                   {hist.contasReceber.map((x) => (
-                    <tr key={x.id}><td>{x.descricao}</td><td className={x.atrasada ? 'text-red-600' : ''}>{data(x.vencimento)}</td><td><Badge tom={tomPorStatus(x.atrasada ? 'ATRASADO' : x.situacao)}>{rotulo(x.atrasada ? 'ATRASADO' : x.situacao)}</Badge></td><td className="num text-right">{moeda(x.valor)}</td><td className="num text-right">{moeda(x.valorRecebido)}</td></tr>
+                    <tr key={x.id}><td className="pilha-cheio">{x.descricao}</td><td className={x.atrasada ? 'text-red-600' : ''} data-rotulo="Vencimento">{data(x.vencimento)}</td><td data-rotulo="Situação"><Badge tom={tomPorStatus(x.atrasada ? 'ATRASADO' : x.situacao)}>{rotulo(x.atrasada ? 'ATRASADO' : x.situacao)}</Badge></td><td className="num text-right" data-rotulo="Valor">{moeda(x.valor)}</td><td className="num text-right" data-rotulo="Recebido">{moeda(x.valorRecebido)}</td></tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : (
               <ul className="divide-y divide-slate-100">
                 {hist.notificacoes.length === 0 && <li className="py-4 text-center text-xs text-slate-400">Nenhuma mensagem enviada.</li>}

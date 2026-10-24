@@ -41,7 +41,29 @@ export default function NotasLista() {
           <SelectFiltro valor={pg.getFiltro('tipo')} onChange={(v) => pg.setFiltro('tipo', v)} placeholder="Entrada e saída" opcoes={[{ valor: 1, rotulo: 'Saída' }, { valor: 0, rotulo: 'Entrada' }]} />
           <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />
         </BarraFiltros>
-        <Table colunas={colunas} dados={resp?.data} carregando={isLoading} chave={(n) => n.id} onClickLinha={(n) => nav(`/notas-fiscais/${n.id}`)} vazio={<EmptyState icone={<FileText className="h-5 w-5" />} titulo="Nenhuma nota fiscal" descricao="Gere notas a partir de vendas ou crie uma nota manual." />} />
+        <Table
+          colunas={colunas}
+          dados={resp?.data}
+          carregando={isLoading}
+          chave={(n) => n.id}
+          onClickLinha={(n) => nav(`/notas-fiscais/${n.id}`)}
+          cartao={(n) => (
+            <div className="min-w-0">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold text-slate-900">
+                  {n.modelo === 65 ? 'NFC-e' : 'NF-e'} {n.numero} <span className="text-xs font-normal text-slate-400">série {n.serie}</span>
+                </span>
+                <span className="num shrink-0 text-sm font-semibold text-slate-900">{moeda(n.valorTotal)}</span>
+              </div>
+              <div className="truncate text-sm text-slate-700">{n.contato?.nome ?? 'Consumidor'}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                <Badge tom={tomPorStatus(n.situacao)}>{rotulo(n.situacao)}</Badge>
+                <span>{data(n.dataEmissao)}</span>
+                {n.venda && <span>· venda {n.venda.numero}</span>}
+              </div>
+              {n.motivo && n.situacao !== 'AUTORIZADA' && <p className="mt-1 break-words text-xs text-red-600">{n.motivo}</p>}
+            </div>
+          )} vazio={<EmptyState icone={<FileText className="h-5 w-5" />} titulo="Nenhuma nota fiscal" descricao="Gere notas a partir de vendas ou crie uma nota manual." />} />
         {resp && <Pagination pagina={resp.meta.pagina} totalPaginas={resp.meta.totalPaginas} total={resp.meta.total} limite={resp.meta.limite} onPagina={pg.setPagina} onLimite={pg.setLimite} />}
       </Card>
     </div>

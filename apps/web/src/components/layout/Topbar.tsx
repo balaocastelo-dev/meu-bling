@@ -46,17 +46,21 @@ export function Topbar({ onAbrirMenu, onAbrirBusca }: { onAbrirMenu: () => void;
   const waCor = waStatus === 'CONECTADO' ? 'bg-emerald-500' : waStatus === 'DESCONECTADO' ? 'bg-red-500' : 'bg-amber-400';
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-slate-200 bg-white px-3 md:px-4">
+    <header className="sticky top-0 z-30 flex h-14 min-w-0 items-center gap-2 border-b border-slate-200 bg-white px-3 md:px-4">
       <button className="rounded-md p-2 text-slate-500 hover:bg-slate-100 lg:hidden" onClick={onAbrirMenu} aria-label="Abrir menu">
         <Menu className="h-5 w-5" />
       </button>
 
       <button
         onClick={onAbrirBusca}
-        className="flex h-9 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-400 transition hover:border-slate-300 hover:bg-white md:max-w-md"
+        className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-400 transition hover:border-slate-300 hover:bg-white md:max-w-md"
+        aria-label="Buscar"
       >
         <Search className="h-4 w-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-left">Buscar clientes, produtos, vendas, OS…</span>
+        <span className="min-w-0 flex-1 truncate text-left">
+          <span className="sm:hidden">Buscar…</span>
+          <span className="hidden sm:inline">Buscar clientes, produtos, vendas, OS…</span>
+        </span>
         <kbd className="hidden rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-500 sm:inline">{ehMac ? '⌘' : 'Ctrl'} K</kbd>
       </button>
 

@@ -87,20 +87,20 @@ export default function FluxoCaixa() {
         )}
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card titulo="Detalhamento" className="lg:col-span-2" semPadding>
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Card titulo="Detalhamento" className="xl:col-span-2" semPadding>
           {series.length ? (
             <div className="max-h-[420px] overflow-auto">
-              <table className="tbl">
+              <table className="tbl tbl-pilha">
                 <thead><tr><th>Período</th><th className="text-right">Entradas</th><th className="text-right">Saídas</th><th className="text-right">Resultado</th><th className="text-right">Saldo</th></tr></thead>
                 <tbody>
                   {series.map((s) => (
                     <tr key={s.periodo}>
-                      <td>{s.rotulo}</td>
-                      <td className="num text-right text-emerald-700">{moeda(s.entradas)}</td>
-                      <td className="num text-right text-red-600">{moeda(s.saidas)}</td>
-                      <td className={clsx('num text-right font-medium', s.entradas - s.saidas < 0 ? 'text-red-600' : 'text-slate-800')}>{moeda(s.entradas - s.saidas)}</td>
-                      <td className={clsx('num text-right font-semibold', s.saldo < 0 ? 'text-red-600' : 'text-slate-900')}>{moeda(s.saldo)}</td>
+                      <td data-rotulo="Período">{s.rotulo}</td>
+                      <td className="num text-right text-emerald-700" data-rotulo="Entradas">{moeda(s.entradas)}</td>
+                      <td className="num text-right text-red-600" data-rotulo="Saídas">{moeda(s.saidas)}</td>
+                      <td className={clsx('num text-right font-medium', s.entradas - s.saidas < 0 ? 'text-red-600' : 'text-slate-800')} data-rotulo="Resultado">{moeda(s.entradas - s.saidas)}</td>
+                      <td className={clsx('num text-right font-semibold', s.saldo < 0 ? 'text-red-600' : 'text-slate-900')} data-rotulo="Saldo">{moeda(s.saldo)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -122,14 +122,16 @@ export default function FluxoCaixa() {
         <div className="space-y-4">
           <Card titulo="Previsto (títulos em aberto)" semPadding>
             {previsto.length ? (
-              <table className="tbl">
+              <div className="overflow-x-auto">
+              <table className="tbl tbl-pilha">
                 <thead><tr><th>Período</th><th className="text-right">A receber</th><th className="text-right">A pagar</th></tr></thead>
                 <tbody>
                   {previsto.map((p) => (
-                    <tr key={p.periodo}><td>{rotuloPeriodo(p.periodo)}</td><td className="num text-right text-emerald-700">{moeda(p.receber)}</td><td className="num text-right text-red-600">{moeda(p.pagar)}</td></tr>
+                    <tr key={p.periodo}><td data-rotulo="Período">{rotuloPeriodo(p.periodo)}</td><td className="num text-right text-emerald-700" data-rotulo="A receber">{moeda(p.receber)}</td><td className="num text-right text-red-600" data-rotulo="A pagar">{moeda(p.pagar)}</td></tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : (
               <EmptyState compacto titulo="Sem previsões" />
             )}

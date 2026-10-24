@@ -75,6 +75,7 @@ export default function OsPublica() {
 
         {itens.length > 0 && (
           <Card titulo={os.orcar ? 'Orçamento' : 'Itens'} semPadding>
+            <div className="overflow-x-auto">
             <table className="tbl">
               <thead><tr><th>Descrição</th><th className="text-right">Qtd</th><th className="text-right">Valor</th></tr></thead>
               <tbody>
@@ -84,6 +85,7 @@ export default function OsPublica() {
                 <tr className="bg-slate-50 font-semibold"><td colSpan={2} className="px-3 py-2 text-right">Total</td><td className="num px-3 py-2 text-right text-base">{moeda(os.total)}</td></tr>
               </tbody>
             </table>
+            </div>
           </Card>
         )}
 
@@ -106,6 +108,7 @@ export default function OsPublica() {
 
         {os.parcelas && os.parcelas.length > 0 && (
           <Card titulo="Pagamento" semPadding>
+            <div className="overflow-x-auto">
             <table className="tbl">
               <thead><tr><th>Parcela</th><th>Vencimento</th><th>Forma</th><th className="text-right">Valor</th><th /></tr></thead>
               <tbody>
@@ -114,6 +117,7 @@ export default function OsPublica() {
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
         )}
 
