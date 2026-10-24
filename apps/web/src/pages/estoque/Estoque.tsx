@@ -88,7 +88,7 @@ export default function Estoque() {
             </label>
           ) : (
             <>
-              <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => { pg.setFiltro('dataInicial', i); pg.setFiltro('dataFinal', f); }} label="" />
+              <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />
               <SelectFiltro valor={pg.getFiltro('origemTipo')} onChange={(v) => pg.setFiltro('origemTipo', v)} placeholder="Todas origens" opcoes={['VENDA', 'COMPRA', 'OS', 'AJUSTE', 'NFE', 'IMPORTACAO', 'TRANSFERENCIA'].map((o) => ({ valor: o, rotulo: rotulo(o) }))} />
             </>
           )}

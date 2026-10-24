@@ -143,7 +143,7 @@ export default function Relatorios() {
       <Card semPadding>
         <Tabs className="px-3" ativa={ativo} onMudar={setAtivo} abas={RELATORIOS.map((r) => ({ id: r.id, rotulo: r.rotulo }))} />
         <div className="flex flex-wrap items-end gap-2 border-b border-slate-100 px-3 py-2.5">
-          {rel.usaPeriodo && <PeriodoFiltro inicial={periodo.i} final={periodo.f} onChange={(i, f) => setPeriodo({ i, f })} label="" />}
+          {rel.usaPeriodo && <PeriodoFiltro inicial={periodo.i} final={periodo.f} onChange={(i, f) => setPeriodo({ i, f })} label="" limpavel={false} />}
           {rel.usaVendedor && <SelectFiltro valor={vendedorId} onChange={setVendedorId} opcoes={opcoesDe(vendedores)} placeholder="Todos vendedores" />}
           {rel.usaDeposito && <SelectFiltro valor={depositoId} onChange={setDepositoId} opcoes={opcoesDe(depositos)} placeholder="Todos depósitos" />}
         </div>

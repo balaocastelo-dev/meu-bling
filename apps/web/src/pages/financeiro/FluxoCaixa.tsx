@@ -48,7 +48,7 @@ export default function FluxoCaixa() {
               }}
               opcoes={[{ valor: '30d', rotulo: '30 dias' }, { valor: 'mes', rotulo: 'Este mês' }, { valor: '90d', rotulo: '90 dias' }, { valor: 'custom', rotulo: 'Período' }]}
             />
-            <PeriodoFiltro inicial={periodo.i} final={periodo.f} onChange={(i, f) => setPeriodo({ i, f })} label="" />
+            <PeriodoFiltro inicial={periodo.i} final={periodo.f} onChange={(i, f) => setPeriodo({ i, f })} label="" limpavel={false} />
             <SelectFiltro valor={agrupar} onChange={(v) => setAgrupar(v as typeof agrupar)} placeholder="" opcoes={[{ valor: 'dia', rotulo: 'Por dia' }, { valor: 'semana', rotulo: 'Por semana' }, { valor: 'mes', rotulo: 'Por mês' }]} />
             <SelectFiltro valor={contaId} onChange={setContaId} opcoes={opcoesDe(contas)} placeholder="Todas as contas" />
           </div>

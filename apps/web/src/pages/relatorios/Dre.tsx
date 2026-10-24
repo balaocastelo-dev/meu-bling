@@ -105,7 +105,7 @@ export default function Dre() {
               }}
               opcoes={[{ valor: 'mes', rotulo: 'Este mês' }, { valor: 'ano', rotulo: 'Este ano' }]}
             />
-            <PeriodoFiltro inicial={periodo.i} final={periodo.f} onChange={(i, f) => setPeriodo({ i, f })} label="" />
+            <PeriodoFiltro inicial={periodo.i} final={periodo.f} onChange={(i, f) => setPeriodo({ i, f })} label="" limpavel={false} />
             <Segmentado valor={regime} onMudar={setRegime} opcoes={[{ valor: 'competencia', rotulo: 'Competência' }, { valor: 'caixa', rotulo: 'Caixa' }]} />
             <label className="flex h-8 items-center"><Checkbox label="Comparar período anterior" checked={comparar} onChange={(e) => setComparar(e.target.checked)} /></label>
             <Button variante="secundario" icone={<Download className="h-4 w-4" />} onClick={exportarCsv} disabled={!data}>CSV</Button>

@@ -39,7 +39,7 @@ export default function NotasLista() {
           <SelectFiltro valor={pg.getFiltro('situacao')} onChange={(v) => pg.setFiltro('situacao', v)} placeholder="Todas situações" opcoes={['PENDENTE', 'PROCESSANDO', 'AUTORIZADA', 'REJEITADA', 'CANCELADA', 'DENEGADA', 'INUTILIZADA', 'ERRO'].map((s) => ({ valor: s, rotulo: rotulo(s) }))} />
           <SelectFiltro valor={pg.getFiltro('modelo')} onChange={(v) => pg.setFiltro('modelo', v)} placeholder="NF-e e NFC-e" opcoes={[{ valor: 55, rotulo: 'NF-e (55)' }, { valor: 65, rotulo: 'NFC-e (65)' }]} />
           <SelectFiltro valor={pg.getFiltro('tipo')} onChange={(v) => pg.setFiltro('tipo', v)} placeholder="Entrada e saída" opcoes={[{ valor: 1, rotulo: 'Saída' }, { valor: 0, rotulo: 'Entrada' }]} />
-          <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => { pg.setFiltro('dataInicial', i); pg.setFiltro('dataFinal', f); }} label="" />
+          <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />
         </BarraFiltros>
         <Table colunas={colunas} dados={resp?.data} carregando={isLoading} chave={(n) => n.id} onClickLinha={(n) => nav(`/notas-fiscais/${n.id}`)} vazio={<EmptyState icone={<FileText className="h-5 w-5" />} titulo="Nenhuma nota fiscal" descricao="Gere notas a partir de vendas ou crie uma nota manual." />} />
         {resp && <Pagination pagina={resp.meta.pagina} totalPaginas={resp.meta.totalPaginas} total={resp.meta.total} limite={resp.meta.limite} onPagina={pg.setPagina} onLimite={pg.setLimite} />}
