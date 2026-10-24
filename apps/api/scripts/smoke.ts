@@ -191,6 +191,11 @@ async function main() {
   await req('GET', '/dashboard/geral');
   await req('GET', `/dashboard/vendas?dataInicial=${hoje.slice(0, 8)}01&dataFinal=${hoje}&comparar=true`);
   await req('GET', '/dashboard/os');
+  const lista = await req('GET', `/vendas?dataInicial=${hoje}&dataFinal=${hoje}`);
+  if (!lista.resumo || lista.resumo.quantidade < 1 || !(lista.resumo.valor > 0)) throw new Error('vendas: resumo do período sem vendas de hoje');
+  if (!lista.resumo.destaque?.nome || lista.resumo.destaque.valor === null) throw new Error('vendas: vendedor destaque ausente para o ADMIN');
+  const soma = (await req('GET', `/vendas?dataInicial=${hoje}&dataFinal=${hoje}&limite=500`)).data.filter((v: any) => !v.situacao?.cancelamento).reduce((t: number, v: any) => t + v.total, 0);
+  if (Math.abs(soma - lista.resumo.valor) > 0.01) throw new Error(`vendas: resumo ${lista.resumo.valor} ≠ soma da lista ${soma}`);
   const atv = await req('GET', '/dashboard/atividades?limite=80');
   if (!atv.lancamentos?.length) throw new Error('dashboard/atividades: nenhum lançamento depois do fluxo');
   if (process.env.DEBUG_ATV) console.log(atv.acontecimentos.map((x: any) => x.usuario + ' ' + x.texto).join('\n'));
