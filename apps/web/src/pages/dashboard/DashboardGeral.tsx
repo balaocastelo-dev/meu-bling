@@ -6,6 +6,7 @@ import { Badge, Card, EmptyState, Skeleton, StatCard, tomPorStatus } from '@/com
 import { dataHora, inteiro, moeda, numero, rotulo } from '@/lib/format';
 import { useAuth } from '@/stores/auth';
 import type { DashboardGeral as Dados, StatusSefaz } from '@/types';
+import { UltimosAcontecimentos } from './UltimasAtividades';
 
 /** Barra horizontal simples (distribuição por situação) */
 function BarrasSituacao({ itens, total, onClick }: { itens: { id: number; nome: string; cor: string; qtd: number }[]; total: number; onClick?: (id: number) => void }) {
@@ -104,6 +105,42 @@ export default function DashboardGeral() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-3">
+        <UltimosAcontecimentos className="lg:col-span-2" />
+
+        <Card titulo="Pendências" className="self-start">
+          <ul className="space-y-2 text-sm">
+            <li className="flex items-center justify-between">
+              <Link to="/notas-fiscais?situacao=PENDENTE" className="text-slate-700 hover:text-brand-600">
+                NF-e pendentes
+              </Link>
+              <span className="num font-medium">{isLoading ? '…' : inteiro(data?.fiscal.pendentes)}</span>
+            </li>
+            <li className="flex items-center justify-between">
+              <Link to="/notas-fiscais?situacao=REJEITADA" className="text-slate-700 hover:text-brand-600">
+                NF-e rejeitadas
+              </Link>
+              <span className={`num font-medium ${data && data.fiscal.rejeitadas > 0 ? 'text-red-600' : ''}`}>{isLoading ? '…' : inteiro(data?.fiscal.rejeitadas)}</span>
+            </li>
+            {(isLoading || data?.comissoes) && (
+              <li className="flex items-center justify-between">
+                <Link to="/comissoes" className="text-slate-700 hover:text-brand-600">
+                  Comissões pendentes
+                </Link>
+                <span className="num font-medium">{isLoading ? '…' : inteiro(data?.comissoes?.pendentes)}</span>
+              </li>
+            )}
+            <li className="flex items-center justify-between">
+              <Link to="/ordens-servico" className="text-slate-700 hover:text-brand-600">
+                OS concluídas hoje
+              </Link>
+              <span className="num font-medium">{isLoading ? '…' : inteiro(h?.osConcluidasHoje)}</span>
+            </li>
+          </ul>
+        </Card>
+      </div>
+
+
+      <div className="grid gap-4 lg:grid-cols-3">
         <Card titulo="OS por situação" descricao={`${inteiro(totalOs)} ordens`} acoes={<Link to="/ordens-servico" className="text-xs text-brand-600 hover:underline">Ver kanban</Link>}>
           {isLoading ? <Skeleton className="h-40" /> : <BarrasSituacao itens={data?.os.porSituacao ?? []} total={totalOs} onClick={(id) => nav(`/ordens-servico?situacoes=${id}&visao=lista`)} />}
         </Card>
@@ -141,83 +178,6 @@ export default function DashboardGeral() {
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        {(isLoading || f) && (
-        <Card titulo="Últimos movimentos" descricao="Entradas e saídas mais recentes" className="lg:col-span-2" semPadding acoes={<Link to="/financeiro/bancos?aba=extrato" className="text-xs text-brand-600 hover:underline">Ver extrato</Link>}>
-          {isLoading ? (
-            <div className="p-4">
-              <Skeleton className="h-40" />
-            </div>
-          ) : data?.ultimosMovimentos.length ? (
-            <div className="overflow-auto">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Data</th>
-                    <th>Descrição</th>
-                    <th>Tipo</th>
-                    <th>Conta / origem</th>
-                    <th className="text-right">Valor</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.ultimosMovimentos.slice(0, 10).map((m) => {
-                    // A API pode devolver movimentos financeiros (valor/descricao) ou de estoque (quantidade/produto)
-                    const financeiro = typeof m.valor === 'number';
-                    return (
-                      <tr key={m.id}>
-                        <td className="whitespace-nowrap text-xs text-slate-500">{dataHora(m.data)}</td>
-                        <td className="max-w-[280px] truncate">{financeiro ? m.descricao : m.produto?.nome ?? `#${m.produtoId}`}</td>
-                        <td>
-                          <Badge tom={m.tipo === 'ENTRADA' ? 'verde' : m.tipo === 'SAIDA' ? 'vermelho' : 'neutro'}>{rotulo(m.tipo)}</Badge>
-                        </td>
-                        <td className="text-xs text-slate-500">{financeiro ? m.contaFinanceira?.nome ?? m.categoria?.nome ?? '—' : `${rotulo(m.origemTipo)}${m.origemId ? ` #${m.origemId}` : ''}`}</td>
-                        <td className={`num text-right font-medium ${m.tipo === 'SAIDA' ? 'text-red-600' : m.tipo === 'ENTRADA' ? 'text-emerald-700' : ''}`}>
-                          {financeiro ? `${m.tipo === 'SAIDA' ? '-' : '+'}${moeda(m.valor)}` : `${numero(m.quantidade)} (saldo ${numero(m.saldoPosterior)})`}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState compacto titulo="Nenhum movimento recente" />
-          )}
-        </Card>
-        )}
-
-        <Card titulo="Pendências">
-          <ul className="space-y-2 text-sm">
-            <li className="flex items-center justify-between">
-              <Link to="/notas-fiscais?situacao=PENDENTE" className="text-slate-700 hover:text-brand-600">
-                NF-e pendentes
-              </Link>
-              <span className="num font-medium">{isLoading ? '…' : inteiro(data?.fiscal.pendentes)}</span>
-            </li>
-            <li className="flex items-center justify-between">
-              <Link to="/notas-fiscais?situacao=REJEITADA" className="text-slate-700 hover:text-brand-600">
-                NF-e rejeitadas
-              </Link>
-              <span className={`num font-medium ${data && data.fiscal.rejeitadas > 0 ? 'text-red-600' : ''}`}>{isLoading ? '…' : inteiro(data?.fiscal.rejeitadas)}</span>
-            </li>
-            {(isLoading || data?.comissoes) && (
-              <li className="flex items-center justify-between">
-                <Link to="/comissoes" className="text-slate-700 hover:text-brand-600">
-                  Comissões pendentes
-                </Link>
-                <span className="num font-medium">{isLoading ? '…' : inteiro(data?.comissoes?.pendentes)}</span>
-              </li>
-            )}
-            <li className="flex items-center justify-between">
-              <Link to="/ordens-servico" className="text-slate-700 hover:text-brand-600">
-                OS concluídas hoje
-              </Link>
-              <span className="num font-medium">{isLoading ? '…' : inteiro(h?.osConcluidasHoje)}</span>
-            </li>
-          </ul>
-        </Card>
-      </div>
     </div>
   );
 }

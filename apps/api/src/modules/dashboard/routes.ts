@@ -11,6 +11,7 @@ import { dataSchema, arredondar } from '../../lib/util.js';
 import { resumoFinanceiro } from '../financeiro/service.js';
 import { chavePeriodo, listarPeriodos, resolverPeriodo, periodoAnterior, agruparPadrao, type Agrupar } from '../financeiro/periodos.js';
 import { status as statusWhatsApp } from '../../integracoes/whatsapp/servico.js';
+import { ultimosAcontecimentos, ultimosLancamentos } from './atividades.js';
 
 async function situacoesRealizadas(modulo: 'VENDA' | 'COMPRA' | 'OS') {
   const s = await prisma.situacao.findMany({ where: { modulo, final: true, cancelamento: false }, select: { id: true } });
@@ -143,6 +144,25 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       r.alertas = alertas.filter((a) => !a.link.startsWith('/financeiro') && !a.link.startsWith('/comissoes'));
     }
     return resposta;
+  });
+
+  // =====================================================================
+  // ÚLTIMOS LANÇAMENTOS E ACONTECIMENTOS (só o dono)
+  // =====================================================================
+  app.get('/api/v1/dashboard/atividades', { preHandler: app.exigirPerfil('ADMIN') }, async (req) => {
+    const q = z
+      .object({
+        limite: z.coerce.number().int().min(5).max(200).default(15),
+        categoria: z.enum(['vendas', 'os', 'compras', 'fiscal', 'financeiro', 'cadastros', 'sistema', 'acessos']).optional(),
+        /** só uma das listas (cada card da tela pede a sua) */
+        so: z.enum(['lancamentos', 'acontecimentos']).optional(),
+      })
+      .parse(req.query);
+    const [lancamentos, acontecimentos] = await Promise.all([
+      q.so === 'acontecimentos' ? [] : ultimosLancamentos(q.limite),
+      q.so === 'lancamentos' ? [] : ultimosAcontecimentos(q.limite, q.categoria),
+    ]);
+    return { lancamentos, acontecimentos };
   });
 
   // =====================================================================
