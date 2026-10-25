@@ -286,6 +286,11 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       }
     }
     const r2 = (o: any) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === 'number' ? arredondar(v) : v]));
+    // foto dos mais vendidos (produtos do site têm imagemUrl)
+    const top = [...topProdutos.values()].sort((a, b) => b.valor - a.valor).slice(0, 10);
+    const idsTop = top.map((t) => t.produtoId).filter((x): x is number => !!x);
+    const fotos = idsTop.length ? await prisma.produto.findMany({ where: { id: { in: idsTop } }, select: { id: true, imagemUrl: true } }) : [];
+    const fotoDe = new Map(fotos.map((f) => [f.id, f.imagemUrl]));
     return {
       periodo: { dataInicial: ini, dataFinal: fim, agrupar },
       resumo,
@@ -293,7 +298,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       porVendedor: [...porVendedor.values()].sort((a, b) => b.faturamento - a.faturamento).map(r2),
       porFormaPagamento: [...porForma.values()].sort((a, b) => b.valor - a.valor).map(r2),
       porOrigem: [...porOrigem.values()].sort((a, b) => b.valor - a.valor).map(r2),
-      topProdutos: [...topProdutos.values()].sort((a, b) => b.valor - a.valor).slice(0, 10).map(r2),
+      topProdutos: top.map((t) => ({ ...r2(t), imagemUrl: t.produtoId ? fotoDe.get(t.produtoId) ?? null : null })),
       topClientes: [...topClientes.values()].sort((a, b) => b.valor - a.valor).slice(0, 10).map(r2),
       porSituacao: [...porSituacao.values()].map(r2),
       porCategoria: [...porCategoria.values()].sort((a, b) => b.valor - a.valor).map(r2),
