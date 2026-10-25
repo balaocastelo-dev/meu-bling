@@ -13,16 +13,16 @@ export function urlBaseApi(): string {
 /** Endpoints que as permissões alcançam (null = sem restrição, usuário ADMIN logado). */
 export function endpointsPermitidos(perm: Permissoes | null): Endpoint[] {
   if (!perm) return ENDPOINTS;
-  return ENDPOINTS.filter((e) => podeNivel(perm, e.recurso, nivelExigido(e.metodo)));
+  return ENDPOINTS.filter((e) => podeNivel(perm, e.recurso, nivelExigido(e.metodo, e.caminho.replace(/\{[^}]+\}/g, '1'))));
 }
 
 export function montarOpenApi(perm: Permissoes | null) {
   const paths: Record<string, Record<string, unknown>> = {};
   for (const e of endpointsPermitidos(perm)) {
-    const rec = RECURSOS.find((r) => r.chave === e.recurso);
+    const rec = e.recurso === '*' ? { nome: 'API externa' } : RECURSOS.find((r) => r.chave === e.recurso);
     const parametros: unknown[] = [];
     for (const m of e.caminho.matchAll(/\{(\w+)\}/g)) {
-      parametros.push({ name: m[1], in: 'path', required: true, schema: { type: m[1] === 'cep' ? 'string' : 'integer' } });
+      parametros.push({ name: m[1], in: 'path', required: true, schema: { type: m[1] === 'cep' || m[1] === 'origemTipo' ? 'string' : 'integer' } });
     }
     for (const f of e.filtros || []) {
       const [nome, ...resto] = f.split(' ');

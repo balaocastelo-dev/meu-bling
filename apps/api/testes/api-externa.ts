@@ -168,6 +168,47 @@ async function main() {
   const resumo = await admin.get('/api-externa/resumo');
   verifica(resumo?.chamadas24h > 0 && /\/api\/v1\/mcp$/.test(resumo?.urlMcp || ''), 'resumo com chamadas e endereço do MCP', resumo);
 
+  // ---------------------------------------------------------------- chave com tudo liberado
+  secao('Chave "liberar tudo": busca, resumo, baixa de conta e ações sem volta');
+  const total = await admin.post('/api-externa/chaves', { nome: `Tudo ${SUF}`, permissoes: Object.fromEntries(recursos.recursos.map((r: any) => [r.chave, 'TOTAL'])) }, 201);
+  verifica(total?.permissoes?.sistema === 'LEITURA' && total?.permissoes?.financeiro === 'TOTAL', 'liberar tudo: total onde dá, leitura em relatórios e auditoria', total?.permissoes);
+  const kt: string = total.chave;
+  const busca = await comChave(kt, 'GET', '/externo/buscar?q=an');
+  verifica(busca.status === 200 && busca.json?.clientes && busca.json?.produtos && busca.json?.vendas, 'busca geral em clientes, produtos e vendas', Object.keys(busca.json || {}));
+  const bsf = await comChave(chave, 'GET', '/externo/buscar?q=an');
+  verifica(bsf.status === 200 && bsf.json?.notasFiscais === undefined && bsf.json?.clientes, 'busca geral respeita a permissão (sem fiscal, sem notas)');
+  verifica((await comChave(kt, 'GET', '/externo/buscar?q=')).status === 400, 'busca vazia → 400');
+  const resumoDia = await comChave(kt, 'GET', '/externo/resumo');
+  verifica(resumoDia.status === 200 && resumoDia.json?.vendas && resumoDia.json?.financeiro && resumoDia.json?.ordensServico, 'resumo do dia com vendas, OS e financeiro', Object.keys(resumoDia.json || {}));
+  verifica((await comChave(kt, 'GET', '/auditoria?limite=5')).status === 200, 'auditoria liberada na área "sistema"');
+  verifica((await comChave(chave, 'GET', '/auditoria')).status === 403, 'sem a área "sistema", auditoria fechada');
+  verifica((await comChave(kt, 'GET', '/open-finance/status')).status === 200, 'Open Finance: status liberado no financeiro');
+  verifica((await comChave(kt, 'POST', '/open-finance/vincular', { itemId: 'x' })).status === 403, 'Open Finance: vincular banco continua só na tela');
+  verifica((await comChave(kt, 'GET', '/usuarios')).status === 403, 'mesmo com tudo liberado, usuários continuam fechados');
+
+  const contas = await comChave(kt, 'GET', '/contas-financeiras?ativo=true');
+  const contaFin = (Array.isArray(contas.json) ? contas.json : contas.json?.data || [])[0]?.id;
+  const cr = await comChave(kt, 'POST', '/contas-receber', { descricao: `Conta API ${SUF}`, valor: 50, vencimento: hoje(), contatoId });
+  verifica(cr.status === 201 && contaFin, 'chave lança conta a receber', cr.json);
+  const baixa = await mcp(urlMcp, { 'x-api-key': kt }, { jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'baixar_conta', arguments: { tipo: 'RECEBER', id: cr.json?.id, contaFinanceiraId: contaFin } } });
+  verifica(baixa.json?.result?.isError !== true, 'agente dá baixa na conta pelo MCP (baixar_conta)', baixa.json?.result?.content?.[0]?.text?.slice(0, 200));
+  const depois = await comChave(kt, 'GET', `/contas-receber/${cr.json?.id}`);
+  verifica(depois.json?.situacao === 'RECEBIDO', 'conta ficou RECEBIDO', depois.json?.situacao);
+  verifica((await comChave(kt, 'POST', `/contas-receber/${cr.json?.id}/estornar`)).status < 300, 'estorno da baixa pela chave');
+
+  const soGravar = await admin.post('/api-externa/chaves', { nome: `Fiscal gravar ${SUF}`, permissoes: { fiscal: 'GRAVACAO', comissoes: 'GRAVACAO' } }, 201);
+  const canc = await comChave(soGravar.chave, 'POST', '/notas-fiscais/999999/cancelar', { justificativa: 'teste de permissão da chave' });
+  verifica(canc.status === 403 && canc.json?.detalhes?.exigido === 'TOTAL', 'cancelar NF exige nível total', canc.json);
+  verifica((await comChave(soGravar.chave, 'POST', '/comissoes/pagar', { ids: [999999], contaFinanceiraId: 1, data: hoje() })).status === 403, 'pagar comissões exige nível total');
+  verifica((await comChave(kt, 'POST', '/notas-fiscais/999999/cancelar', { justificativa: 'teste de permissão da chave' })).status === 404, 'com nível total passa da permissão (nota inexistente → 404)');
+  const ferr = await mcp(urlMcp, { 'x-api-key': kt }, { jsonrpc: '2.0', id: 10, method: 'tools/list' });
+  const nf: string[] = (ferr.json?.result?.tools || []).map((t: any) => t.name);
+  verifica(['buscar', 'resumo_do_dia', 'criar_venda', 'baixar_conta', 'mudar_situacao', 'abrir_ordem_servico', 'excluir'].every((n) => nf.includes(n)), 'com tudo liberado o agente recebe todas as ferramentas', nf.length);
+  const oaTudo = await comChave(kt, 'GET', '/externo/openapi.json');
+  verifica(Object.keys(oaTudo.json?.paths || {}).length > 120, 'OpenAPI com tudo liberado documenta todas as rotas', Object.keys(oaTudo.json?.paths || {}).length);
+  await admin.del(`/api-externa/chaves/${total.id}`);
+  await admin.del(`/api-externa/chaves/${soGravar.id}`);
+
   // ---------------------------------------------------------------- bloqueios
   secao('Desativar, vencer, IP, limite e regenerar');
   await admin.put(`/api-externa/chaves/${criada.id}`, { ativo: false });

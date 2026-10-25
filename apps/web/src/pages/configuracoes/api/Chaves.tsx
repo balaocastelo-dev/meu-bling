@@ -218,6 +218,7 @@ function ChaveModal({ form, setForm, recursos, salvando, onSalvar }: { form: For
             <div className="flex flex-wrap gap-1">
               <Button tamanho="xs" variante="secundario" onClick={() => preset('LEITURA')}>Ler tudo</Button>
               <Button tamanho="xs" variante="secundario" onClick={() => preset('GRAVACAO')}>Ler e gravar tudo</Button>
+              <Button tamanho="xs" variante="secundario" onClick={() => preset('TOTAL')}>Liberar tudo</Button>
               <Button tamanho="xs" variante="fantasma" onClick={() => preset('NENHUM')}>Limpar</Button>
             </div>
           </div>

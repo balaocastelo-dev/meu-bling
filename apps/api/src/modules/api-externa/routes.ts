@@ -23,6 +23,7 @@
  * Para quem chama com chave:
  *   GET    /externo/eu                               quem sou eu e o que posso
  *   GET    /externo/openapi.json                     documentação OpenAPI só com o que a chave pode
+ *   GET    /externo/buscar?q=  ·  /externo/resumo     busca geral e resumo do dia (externo.ts)
  *   POST   /mcp  ·  POST /mcp/:chave                 servidor MCP para agentes de IA
  */
 import type { FastifyInstance } from 'fastify';
@@ -37,6 +38,7 @@ import { montarOpenApi, urlBaseApi, endpointsPermitidos } from './openapi.js';
 import { tratarMcp, ferramentasMcp } from './mcp.js';
 import { cifrarSegredo, gerarSegredo, lerEventos, lerSegredo, limparEventos, postar, processarFila } from './webhooks.js';
 import { registrarServico } from '../../core/servicos.js';
+import { rotasExterno } from './externo.js';
 
 const ipsSchema = z
   .string()
@@ -330,6 +332,8 @@ export default async function apiExternaRoutes(app: FastifyInstance) {
       enderecos,
     };
   });
+
+  rotasExterno(app);
 
   app.get('/api/v1/externo/openapi.json', async (req) => montarOpenApi(req.chaveApi ? req.chaveApi.permissoes : null));
 
