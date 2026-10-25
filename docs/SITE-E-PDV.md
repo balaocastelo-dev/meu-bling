@@ -40,3 +40,15 @@ Desde esta mudança o PDV grava vendas enquanto a equipe usa o /sistema. Para is
 `lib/prisma.ts` usa **uma conexão** (`connection_limit=1`, o Prisma enfileira as consultas), espera até 20 s pelo
 arquivo (`socket_timeout=20`) e liga o modo **WAL** na subida. Antes, duas gravações ao mesmo tempo davam
 "Socket timeout" (reproduzido no teste de fumaça com gravações em paralelo).
+
+## Desde 25/10/2026: o Bling saiu de vez
+Tudo que antes falava com o Bling passa por esta mesma porta do site:
+
+| Quem | Rota | O que faz |
+|---|---|---|
+| PDV do site | `POST /integracoes/site/vendas` | venda do balcão, entra **Fechada** (já era assim) |
+| JUL.IA (vendedora de IA no WhatsApp) | `POST /integracoes/site/agente/documentos` | orçamento (`tipo: ORCAMENTO`) ou pedido (`tipo: PEDIDO`) **em aberto**, origem WhatsApp, sem duplicar pelo `idExterno` |
+| Arena (telão) e relatórios do PC | `GET /integracoes/site/vendas?de=AAAA-MM-DD&ate=AAAA-MM-DD` | vendas de um período (até 92 dias), cada uma com `data`, vendedor, total e situação |
+
+O PC da loja nunca recebe a chave do sistema: ele chama o site (`/api/pc/sistema/*`, com a chave do PC da loja) e o site chama aqui.
+Testes: `apps/api/testes/integracao-site.ts` (roda no `npm test`).
