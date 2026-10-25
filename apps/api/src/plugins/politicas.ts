@@ -40,6 +40,8 @@ export const CAMPOS_EMPRESA_ADMIN = [
 const REGRAS: Regra[] = [
   // ---- somente ADMIN
   { teste: /^\/usuarios(\/|$)/, perfis: ['ADMIN'] },
+  // API externa: chaves de acesso, webhooks e registro de chamadas (Configurações → API e integrações)
+  { teste: /^\/api-externa(\/|$)/, perfis: ['ADMIN'] },
   { teste: /^\/empresa\/certificado/, perfis: ['ADMIN'] },
   { teste: /^\/empresa\/smtp/, perfis: ['ADMIN'] },
   { metodos: MUT, teste: /^\/configuracoes(\/|$)/, perfis: ['ADMIN'] },

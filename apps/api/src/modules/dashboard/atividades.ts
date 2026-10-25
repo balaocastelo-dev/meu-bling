@@ -371,7 +371,7 @@ export async function ultimosAcontecimentos(limite: number, categoria?: Categori
   for (const r of auditoria) {
     const ref = r.entidadeId ? refs.get(`${r.entidade}:${r.entidadeId}`) : undefined;
     const { texto, tom, link } = descrever(r.entidade, r.acao, r.entidadeId, r.d, ref);
-    const usuario = r.usuario?.nome?.trim() || (r.d.origem === 'PDV do site' ? `PDV${r.d.operador ? ` (${r.d.operador})` : ''}` : 'Sistema');
+    const usuario = (typeof r.d.viaApi === 'string' && r.d.viaApi) || r.usuario?.nome?.trim() || (r.d.origem === 'PDV do site' ? `PDV${r.d.operador ? ` (${r.d.operador})` : ''}` : 'Sistema');
     itens.push({ id: `a${r.id}`, quando: r.data, usuario, categoria: categoriaDe(r.entidade, r.acao), texto, tom, link });
   }
 

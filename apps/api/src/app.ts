@@ -15,6 +15,7 @@ import { env } from './lib/env.js';
 import { AppError } from './lib/errors.js';
 import authPlugin from './plugins/auth.js';
 import { prisma } from './lib/prisma.js';
+import { chaveDoCabecalho, hashDaChave, limiteDaChaveEmCache } from './modules/api-externa/chaves.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -49,9 +50,18 @@ export async function construirApp() {
   // Limite de requisições POR USUÁRIO logado (todos os PCs da loja saem pelo mesmo IP; contar por IP
   // travaria a loja inteira num momento de movimento). Sem login, conta por IP.
   await app.register(rateLimit, {
-    max: 1200,
+    // chave de API: o limite é o da chave (Configurações → API e integrações); usuário logado: 1200/min
+    max: (_req, chave) => (chave.startsWith('k:') ? (limiteDaChaveEmCache(chave.slice(2)) ?? 120) : 1200),
     timeWindow: '1 minute',
+    errorResponseBuilder: (_req, ctx) => ({
+      statusCode: 429,
+      message: `Muitas requisições: o limite é ${ctx.max} por minuto. Tente de novo em ${ctx.after}.`,
+      erro: `Muitas requisições: o limite é ${ctx.max} por minuto. Tente de novo em ${ctx.after}.`,
+      code: 'LIMITE_REQUISICOES',
+    }),
     keyGenerator: (req) => {
+      const daChave = chaveDoCabecalho(req) ?? (/^\/api\/v1\/mcp\/(mb_[^/?#]+)/.exec(req.url)?.[1] || null);
+      if (daChave) return `k:${hashDaChave(daChave)}`;
       const auth = req.headers.authorization || '';
       if (auth.startsWith('Bearer ')) {
         try {

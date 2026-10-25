@@ -25,6 +25,9 @@ export async function auditar(
   acao: AcaoAuditoria,
   detalhes?: unknown,
 ) {
+  // gravação feita por outro sistema / agente com chave de API: fica marcado de onde veio
+  const viaApi = req?.chaveApi ? `${req.chaveApi.origem === 'MCP' ? 'Agente de IA (MCP)' : 'API'}: ${req.chaveApi.nome}` : null;
+  if (viaApi) detalhes = detalhes && typeof detalhes === 'object' && !Array.isArray(detalhes) ? { ...(detalhes as object), viaApi } : { viaApi, ...(detalhes === undefined ? {} : { detalhes }) };
   try {
     await prisma.auditoria.create({
       data: {

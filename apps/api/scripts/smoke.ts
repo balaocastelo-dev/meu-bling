@@ -36,7 +36,8 @@ async function req(metodo: string, rota: string, body?: any, esperado: number | 
   if (!raw && passou) console.log(`  ✔ ${metodo} ${rota} → ${r.status}`);
   return json;
 }
-const hoje = new Date().toISOString().slice(0, 10);
+// data de hoje no fuso da loja (com toISOString, depois das 21h já seria amanhã e o "hoje" do painel não batia)
+const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
 const SUF = String(Date.now()).slice(-6); // torna o teste repetível no mesmo banco
 
 async function main() {
