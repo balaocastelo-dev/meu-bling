@@ -14,7 +14,8 @@ export function AbaDocumentacao({ urlBase }: { urlBase: string }) {
 
   const grupos = useMemo(() => {
     const t = busca.trim().toLowerCase();
-    return (catalogo?.recursos ?? [])
+    const geral = { chave: '*', nome: 'Da própria API (qualquer chave)', descricao: 'Quem sou eu, documentação, busca geral e resumo do dia.', maximo: 'LEITURA' as const };
+    return [geral, ...(catalogo?.recursos ?? [])]
       .map((r) => ({ r, eps: (catalogo?.endpoints ?? []).filter((e) => e.recurso === r.chave && (!t || `${e.metodo} ${e.caminho} ${e.resumo}`.toLowerCase().includes(t))) }))
       .filter((g) => g.eps.length);
   }, [catalogo, busca]);
@@ -85,7 +86,7 @@ export function AbaDocumentacao({ urlBase }: { urlBase: string }) {
                   )}
                   {e.corpo !== undefined && <Codigo titulo="Exemplo de corpo (JSON)">{JSON.stringify(e.corpo, null, 2)}</Codigo>}
                   <Codigo titulo="curl">{`curl ${e.metodo !== 'GET' ? `-X ${e.metodo} ` : ''}-H "X-API-Key: SUA_CHAVE"${e.corpo !== undefined ? ` -H "Content-Type: application/json" -d '${JSON.stringify(e.corpo)}'` : ''} "${urlBase}${e.caminho.replace('{id}', '1').replace('{cep}', '13025000')}"`}</Codigo>
-                  {e.metodo === 'GET' && !e.caminho.includes('{') && (
+                  {e.metodo === 'GET' && !e.caminho.includes('{') && !e.caminho.includes('openapi') && !e.caminho.endsWith('/buscar') && (
                     <Button tamanho="xs" variante="secundario" icone={<Play className="h-3.5 w-3.5" />} carregando={rodando === e.caminho} onClick={() => experimentar(e)}>
                       Experimentar com o meu acesso
                     </Button>

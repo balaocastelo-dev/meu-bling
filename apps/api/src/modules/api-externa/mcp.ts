@@ -118,6 +118,95 @@ function ferramentas(perm: Permissoes | null): Ferramenta[] {
       executar: (a) => ({ metodo: 'GET', caminho: `/situacoes${q({ modulo: a.modulo })}` }),
     },
     {
+      name: 'buscar', title: 'Busca geral', recurso: '*', nivel: 'LEITURA',
+      description: 'Procura de uma vez em clientes, produtos, vendas, OS e notas (nome, CPF/CNPJ, telefone, número do pedido/OS/nota). Bom primeiro passo para achar o id de algo.',
+      inputSchema: obj({ q: str('Texto a procurar'), limite: int('Por grupo (padrão 5)') }, ['q']),
+      executar: (a) => ({ metodo: 'GET', caminho: `/externo/buscar${q({ q: a.q, limite: a.limite })}` }),
+    },
+    {
+      name: 'resumo_do_dia', title: 'Resumo do dia', recurso: '*', nivel: 'LEITURA',
+      description: 'Vendas e orçamentos do dia, OS em aberto e atrasadas, a receber/pagar e estoque baixo.',
+      inputSchema: obj({ data: str('AAAA-MM-DD (padrão hoje)') }),
+      executar: (a) => ({ metodo: 'GET', caminho: `/externo/resumo${q({ data: a.data })}` }),
+    },
+    {
+      name: 'criar_cliente', title: 'Cadastrar cliente', recurso: 'clientes', nivel: 'GRAVACAO',
+      description: 'Cadastra cliente. Antes, use buscar_clientes para não duplicar.',
+      inputSchema: obj({ nome: str('Nome completo'), documento: str('CPF/CNPJ (opcional)'), celular: str('Celular com DDD'), email: str('E-mail'), cep: str('CEP'), numero: str('Número do endereço') }, ['nome']),
+      executar: (a) => ({ metodo: 'POST', caminho: '/contatos', corpo: { tipo: 'CLIENTE', tipoPessoa: String(a.documento || '').replace(/\D/g, '').length === 14 ? 'J' : 'F', ...a } }),
+    },
+    {
+      name: 'estoque_do_produto', title: 'Estoque do produto', recurso: 'produtos', nivel: 'LEITURA',
+      description: 'Produto com preço e saldo em cada depósito (loja Castelo, Centro, distribuidores).',
+      inputSchema: obj({ id: int('Código interno do produto') }, ['id']),
+      executar: (a) => ({ metodo: 'GET', caminho: `/produtos/${Number(a.id)}` }),
+    },
+    {
+      name: 'criar_venda', title: 'Criar pedido ou orçamento', recurso: 'vendas', nivel: 'GRAVACAO',
+      description: 'Cria pedido de venda (ou orçamento com tipo=ORCAMENTO). Item sem valor usa o preço do produto; sem parcelas cria 1 à vista. Confirme itens e valores com o usuário antes.',
+      inputSchema: obj({
+        tipo: { type: 'string', enum: ['PEDIDO', 'ORCAMENTO'] },
+        contatoId: int('Cliente'),
+        vendedorId: int('Vendedor (opcional)'),
+        itens: { type: 'array', items: { type: 'object', properties: { produtoId: { type: 'integer' }, descricao: { type: 'string' }, quantidade: { type: 'number' }, valorUnitario: { type: 'number' }, desconto: { type: 'number' } }, required: ['quantidade'] } },
+        parcelas: { type: 'array', items: { type: 'object', properties: { dataVencimento: { type: 'string' }, valor: { type: 'number' }, formaPagamentoId: { type: 'integer' } } } },
+        origem: { type: 'string', enum: ['BALCAO', 'WHATSAPP', 'LOJA_VIRTUAL', 'TELEFONE', 'MARKETPLACE', 'OUTRO'], description: 'Por onde o cliente comprou (padrão OUTRO)' },
+        observacoes: str('Observações'),
+      }, ['contatoId', 'itens']),
+      executar: (a) => ({ metodo: 'POST', caminho: '/vendas', corpo: { origem: 'OUTRO', ...a } }),
+    },
+    {
+      name: 'mudar_situacao', title: 'Mudar situação', recurso: '*', nivel: 'GRAVACAO',
+      description: 'Muda a situação de uma venda, orçamento, compra ou OS (ex.: fechar venda lança estoque e contas; cancelar estorna). Use a ferramenta situacoes para achar o situacaoId.',
+      inputSchema: obj({ modulo: { type: 'string', enum: ['VENDA', 'COMPRA', 'OS'] }, id: int('Código interno do registro'), situacaoId: int('Nova situação'), observacao: str('Motivo (opcional)') }, ['modulo', 'id', 'situacaoId']),
+      executar: (a) => ({ metodo: 'POST', caminho: `/${a.modulo === 'COMPRA' ? 'compras' : a.modulo === 'OS' ? 'ordens-servico' : 'vendas'}/${Number(a.id)}/situacao`, corpo: { situacaoId: a.situacaoId, observacao: a.observacao ?? null } }),
+    },
+    {
+      name: 'abrir_ordem_servico', title: 'Abrir OS', recurso: 'os', nivel: 'GRAVACAO',
+      description: 'Abre ordem de serviço na assistência técnica.',
+      inputSchema: obj({ contatoId: int('Cliente'), equipamento: str('Ex.: Notebook'), marca: str('Marca'), modelo: str('Modelo'), defeitoRelatado: str('Defeito que o cliente relatou'), acessorios: str('Acessórios deixados'), tecnicoId: int('Técnico (opcional)'), orcar: { type: 'boolean', description: 'Precisa de orçamento antes' } }, ['contatoId', 'equipamento', 'defeitoRelatado']),
+      executar: (a) => ({ metodo: 'POST', caminho: '/ordens-servico', corpo: a }),
+    },
+    {
+      name: 'contas_a_receber', title: 'Contas a receber', recurso: 'financeiro', nivel: 'LEITURA',
+      description: 'Contas a receber (com totais). Use situacao=ATRASADO para cobranças.',
+      inputSchema: obj({ situacao: { type: 'string', enum: ['ABERTO', 'RECEBIDO', 'PARCIAL', 'CANCELADO', 'ATRASADO'] }, contatoId: int('Cliente'), dataInicial: str('Vencimento a partir de'), dataFinal: str('Vencimento até'), pesquisa: str('Texto'), limite: int('Máximo (padrão 50)') }),
+      executar: (a) => ({ metodo: 'GET', caminho: `/contas-receber${q({ ...a, limite: a.limite ?? 50 })}` }),
+    },
+    {
+      name: 'contas_a_pagar', title: 'Contas a pagar', recurso: 'financeiro', nivel: 'LEITURA',
+      description: 'Contas a pagar (com totais).',
+      inputSchema: obj({ situacao: { type: 'string', enum: ['ABERTO', 'PAGO', 'PARCIAL', 'CANCELADO', 'ATRASADO'] }, contatoId: int('Fornecedor'), dataInicial: str('Vencimento a partir de'), dataFinal: str('Vencimento até'), pesquisa: str('Texto'), limite: int('Máximo (padrão 50)') }),
+      executar: (a) => ({ metodo: 'GET', caminho: `/contas-pagar${q({ ...a, limite: a.limite ?? 50 })}` }),
+    },
+    {
+      name: 'contas_financeiras', title: 'Caixa e bancos', recurso: 'financeiro', nivel: 'LEITURA',
+      description: 'Contas financeiras (caixa, bancos, cartões) com saldo — o contaFinanceiraId usado nas baixas.',
+      inputSchema: obj({}),
+      executar: () => ({ metodo: 'GET', caminho: '/contas-financeiras?ativo=true' }),
+    },
+    {
+      name: 'baixar_conta', title: 'Receber ou pagar uma conta', recurso: 'financeiro', nivel: 'GRAVACAO',
+      description: 'Dá baixa numa conta a receber (RECEBER) ou a pagar (PAGAR): total, ou parcial informando o valor. Confirme com o usuário antes.',
+      inputSchema: obj({ tipo: { type: 'string', enum: ['RECEBER', 'PAGAR'] }, id: int('Código da conta'), contaFinanceiraId: int('Caixa/banco onde entrou ou saiu o dinheiro'), data: str('AAAA-MM-DD (padrão hoje)'), valor: { type: 'number', description: 'Opcional: valor parcial' }, formaPagamentoId: int('Opcional'), juros: { type: 'number' }, desconto: { type: 'number' }, observacoes: str('Opcional') }, ['tipo', 'id', 'contaFinanceiraId']),
+      executar: (a) => {
+        const { tipo, id, ...corpo } = a;
+        return { metodo: 'POST', caminho: `/contas-${tipo === 'PAGAR' ? 'pagar' : 'receber'}/${Number(id)}/baixar`, corpo: { data: new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }), ...corpo } };
+      },
+    },
+    {
+      name: 'formas_pagamento', title: 'Formas de pagamento', recurso: 'cadastros', nivel: 'LEITURA',
+      description: 'Formas de pagamento (Pix, dinheiro, cartão…) com o id para parcelas e baixas.',
+      inputSchema: obj({}),
+      executar: () => ({ metodo: 'GET', caminho: '/formas-pagamento?ativo=true' }),
+    },
+    {
+      name: 'vendedores_e_tecnicos', title: 'Vendedores e técnicos', recurso: 'cadastros', nivel: 'LEITURA',
+      description: 'Lista vendedores ou técnicos ativos com o id.',
+      inputSchema: obj({ quem: { type: 'string', enum: ['vendedores', 'tecnicos'] } }, ['quem']),
+      executar: (a) => ({ metodo: 'GET', caminho: `/${a.quem === 'tecnicos' ? 'tecnicos' : 'vendedores'}?ativo=true` }),
+    },
+    {
       name: 'enviar_whatsapp', title: 'Enviar WhatsApp', recurso: 'comunicacao', nivel: 'GRAVACAO',
       description: 'Envia uma mensagem de WhatsApp pelo número da loja (entra na fila). Confirme o texto com o usuário antes.',
       inputSchema: obj({ numero: str('Celular com DDD, ex.: 19999990000'), mensagem: str('Texto'), contatoId: int('Opcional: cliente') }, ['numero', 'mensagem']),

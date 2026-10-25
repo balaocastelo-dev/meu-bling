@@ -33,12 +33,13 @@ export const RECURSOS: Recurso[] = [
   { chave: 'vendas', nome: 'Pedidos de venda e orçamentos', descricao: 'Criar, editar, mudar situação, aprovar/converter orçamento, PDF, enviar ao cliente.', rotas: [/^\/vendas(\/|$)/] },
   { chave: 'compras', nome: 'Pedidos de compra', descricao: 'Pedidos de compra, entrada de estoque, importação de XML.', rotas: [/^\/compras(\/|$)/] },
   { chave: 'os', nome: 'Ordens de serviço', descricao: 'Assistência técnica: OS, kanban, peças, orçamento, situação, impressão.', rotas: [/^\/ordens-servico(\/|$)/] },
-  { chave: 'financeiro', nome: 'Financeiro', descricao: 'Contas a receber e a pagar, baixas, caixa e bancos, extrato, conciliação, categorias e contas financeiras.', rotas: [/^\/contas-receber(\/|$)/, /^\/contas-pagar(\/|$)/, /^\/financeiro(\/|$)/, /^\/bancos(\/|$)/, /^\/contas-financeiras(\/|$)/, /^\/categorias-financeiras(\/|$)/] },
-  { chave: 'fiscal', nome: 'Notas fiscais', descricao: 'NF-e/NFC-e: listar, gerar, transmitir, consultar, cancelar, XML e DANFE.', rotas: [/^\/notas-fiscais(\/|$)/, /^\/fiscal(\/|$)/] },
-  { chave: 'comissoes', nome: 'Comissões, metas e desafios', descricao: 'Comissões de vendedores e técnicos, metas do mês, desafios e painel do vendedor.', rotas: [/^\/comissoes(\/|$)/, /^\/metas(\/|$)/, /^\/desafios(\/|$)/, /^\/painel-vendedor(\/|$)/] },
-  { chave: 'relatorios', nome: 'Relatórios e dashboards', descricao: 'Dashboards, DRE, vendas por período, produtos mais vendidos, contas, estoque.', rotas: [/^\/relatorios(\/|$)/, /^\/dashboard(\/|$)/], maximo: 'LEITURA' },
-  { chave: 'comunicacao', nome: 'Mensagens (WhatsApp e e-mail)', descricao: 'Fila de mensagens, enviar WhatsApp/e-mail a clientes, modelos de mensagem, status do WhatsApp.', rotas: [/^\/notificacoes(\/|$)/, /^\/templates-notificacao(\/|$)/, /^\/whatsapp\/(status|enviar-teste)$/] },
-  { chave: 'cadastros', nome: 'Cadastros auxiliares', descricao: 'Vendedores, técnicos, depósitos, formas de pagamento, situações (consulta) e dados da empresa (consulta).', rotas: [/^\/vendedores(\/|$)/, /^\/tecnicos(\/|$)/, /^\/depositos(\/|$)/, /^\/formas-pagamento(\/|$)/, /^\/situacoes(\/|$)/, /^\/empresa$/] },
+  { chave: 'financeiro', nome: 'Financeiro', descricao: 'Contas a receber e a pagar, baixas e estornos, caixa e bancos, extrato, transferências, conciliação bancária, Open Finance (sincronizar), categorias e contas financeiras.', rotas: [/^\/contas-receber(\/|$)/, /^\/contas-pagar(\/|$)/, /^\/financeiro(\/|$)/, /^\/bancos(\/|$)/, /^\/contas-financeiras(\/|$)/, /^\/categorias-financeiras(\/|$)/, /^\/open-finance\/(status|sincronizar)/] },
+  { chave: 'fiscal', nome: 'Notas fiscais', descricao: 'NF-e/NFC-e: listar, criar, transmitir, consultar, carta de correção, XML, DANFE, e-mail; cancelar e inutilizar exigem nível total.', rotas: [/^\/notas-fiscais(\/|$)/, /^\/fiscal(\/|$)/] },
+  { chave: 'comissoes', nome: 'Comissões, metas e desafios', descricao: 'Comissões de vendedores e técnicos (aprovar, pagar, cancelar), metas do mês, desafios e painel do vendedor.', rotas: [/^\/comissoes(\/|$)/, /^\/metas(\/|$)/, /^\/desafios(\/|$)/, /^\/painel-vendedor(\/|$)/] },
+  { chave: 'relatorios', nome: 'Relatórios e dashboards', descricao: 'Dashboards, últimos acontecimentos, DRE, vendas por período, produtos mais vendidos, contas, estoque, comissões.', rotas: [/^\/relatorios(\/|$)/, /^\/dashboard(\/|$)/], maximo: 'LEITURA' },
+  { chave: 'comunicacao', nome: 'Mensagens (WhatsApp e e-mail)', descricao: 'Fila de mensagens, enviar WhatsApp/e-mail a clientes, reenviar, modelos de mensagem, status e reconexão do WhatsApp.', rotas: [/^\/notificacoes(\/|$)/, /^\/templates-notificacao(\/|$)/, /^\/whatsapp\/(status|enviar-teste|reconectar)$/] },
+  { chave: 'cadastros', nome: 'Cadastros auxiliares', descricao: 'Vendedores, técnicos, depósitos, formas de pagamento, situações e transições (consulta) e dados da empresa (consulta).', rotas: [/^\/vendedores(\/|$)/, /^\/tecnicos(\/|$)/, /^\/depositos(\/|$)/, /^\/formas-pagamento(\/|$)/, /^\/situacoes(\/|$)/, /^\/empresa$/] },
+  { chave: 'sistema', nome: 'Auditoria e saúde do sistema', descricao: 'Trilha de auditoria (quem fez o quê) e a conferência de Saúde do sistema.', rotas: [/^\/auditoria(\/|$)/, /^\/diagnostico(\/|$)/], maximo: 'LEITURA' },
 ];
 
 /** Nunca abrem para chave de API, qualquer que seja a permissão. */
@@ -51,21 +52,31 @@ const BLOQUEADAS: { teste: RegExp; metodos?: string[] }[] = [
   { teste: /^\/situacoes(\/|$)/, metodos: ['POST', 'PUT', 'PATCH', 'DELETE'] },
   { teste: /^\/configuracoes(\/|$)/ },
   { teste: /^\/bling(\/|$)/ },
-  { teste: /^\/diagnostico(\/|$)/ },
-  { teste: /^\/auditoria(\/|$)/ },
-  { teste: /^\/open-finance(\/|$)/ },
-  { teste: /^\/whatsapp\/(conectar|desconectar|reconectar|eventos)/ },
+  { teste: /^\/open-finance\/(connect-token|vincular|desvincular)/ },
+  { teste: /^\/whatsapp\/(conectar|desconectar|eventos)/ },
   { teste: /^\/site\/catalogo/ },
-  { teste: /^\/notas-fiscais\/inutilizar/ },
 ];
 
-/** Rotas da própria API externa que qualquer chave válida usa (quem sou eu, documentação, MCP). */
+/**
+ * Ações sem volta que pedem nível TOTAL mesmo sendo POST (além de todo DELETE):
+ * cancelar/inutilizar nota na SEFAZ e pagar comissões.
+ */
+const EXIGEM_TOTAL: { teste: RegExp; metodos?: string[] }[] = [
+  { teste: /^\/notas-fiscais\/[^/]+\/cancelar$/ },
+  { teste: /^\/notas-fiscais\/inutilizar$/ },
+  { teste: /^\/comissoes\/pagar$/ },
+];
+
+/** Rotas da própria API externa que qualquer chave válida usa (quem sou eu, documentação, busca, MCP). */
 const SEMPRE_LIBERADAS = [/^\/externo(\/|$)/, /^\/mcp(\/|$)/];
 
-export function nivelExigido(metodo: string): Nivel {
+/** Nível que a chamada exige. Com a rota, considera as ações sem volta (EXIGEM_TOTAL). */
+export function nivelExigido(metodo: string, rota?: string): Nivel {
   const m = metodo.toUpperCase();
   if (m === 'GET' || m === 'HEAD') return 'LEITURA';
   if (m === 'DELETE') return 'TOTAL';
+  const r = rota?.split('?')[0];
+  if (r && EXIGEM_TOTAL.some((e) => e.teste.test(r) && (!e.metodos || e.metodos.includes(m)))) return 'TOTAL';
   return 'GRAVACAO';
 }
 
@@ -109,16 +120,17 @@ export interface Decisao {
 /** A chave com estas permissões pode chamar método+rota (rota sem /api/v1)? */
 export function chavePode(perm: Permissoes, metodo: string, rota: string): Decisao {
   const m = metodo.toUpperCase();
+  rota = rota.split('?')[0];
   if (SEMPRE_LIBERADAS.some((t) => t.test(rota))) return { ok: true };
   if (BLOQUEADAS.some((b) => b.teste.test(rota) && (!b.metodos || b.metodos.includes(m)))) {
     return { ok: false, motivo: 'Esta função é de administração do sistema e não fica disponível para chaves de API.' };
   }
   const rec = recursoDaRota(rota);
   if (!rec) return { ok: false, motivo: 'Esta rota não está liberada para chaves de API.' };
-  const exigido = nivelExigido(m);
+  const exigido = nivelExigido(m, rota);
   const tem = perm[rec.chave];
   if (!tem || PESO[tem] < PESO[exigido]) {
-    const palavra = exigido === 'LEITURA' ? 'leitura' : exigido === 'GRAVACAO' ? 'gravação' : 'exclusão (nível total)';
+    const palavra = exigido === 'LEITURA' ? 'leitura' : exigido === 'GRAVACAO' ? 'gravação' : m === 'DELETE' ? 'exclusão (nível total)' : 'nível total (ação sem volta)';
     return {
       ok: false,
       recurso: rec.chave,
@@ -130,6 +142,7 @@ export function chavePode(perm: Permissoes, metodo: string, rota: string): Decis
 }
 
 export function podeNivel(perm: Permissoes, recurso: string, nivel: Nivel): boolean {
+  if (recurso === '*') return true;
   const tem = perm[recurso];
   return !!tem && PESO[tem] >= PESO[nivel];
 }
@@ -149,84 +162,215 @@ export interface Endpoint {
   corpo?: unknown;
 }
 
-const PAG = ['pagina', 'limite'];
+const PAG = ['pagina', 'limite (até 200)'];
+const PERIODO = ['dataInicial (AAAA-MM-DD)', 'dataFinal (AAAA-MM-DD)'];
+const SITUACAO = { situacaoId: 3, observacao: 'Motivo/observação (opcional)', forcar: false };
+const ACOES = (lista: string) => ({ acoes: lista.split(',') });
+const PARCELA = { dataVencimento: '2026-10-24', valor: 100, formaPagamentoId: 1, observacoes: '' };
+const CONTA = { descricao: 'Aluguel de novembro', valor: 3500, vencimento: '2026-11-05', dataEmissao: '2026-10-24', contatoId: null, categoriaId: 1, formaPagamentoId: null, contaFinanceiraId: null, competencia: '2026-11', observacoes: '', recorrente: false };
+const BAIXA = { valor: 100, data: '2026-10-24', contaFinanceiraId: 1, formaPagamentoId: 1, juros: 0, desconto: 0, observacoes: 'Recebido no Pix' };
+const CRUD = (recurso: string, caminho: string, nome: string, corpo: unknown, filtros: string[] = ['ativo']): Endpoint[] => [
+  { metodo: 'GET', caminho, recurso, resumo: `Lista ${nome} (array simples, sem paginação).`, filtros },
+  { metodo: 'GET', caminho: `${caminho}/{id}`, recurso, resumo: `Um registro de ${nome}.` },
+  { metodo: 'POST', caminho, recurso, resumo: `Cadastra em ${nome}.`, corpo },
+  { metodo: 'PUT', caminho: `${caminho}/{id}`, recurso, resumo: `Altera em ${nome} (mande só os campos que mudam).`, corpo },
+  { metodo: 'DELETE', caminho: `${caminho}/{id}`, recurso, resumo: `Exclui de ${nome} (se estiver em uso, dá 409).` },
+];
 
 export const ENDPOINTS: Endpoint[] = [
-  // clientes
-  { metodo: 'GET', caminho: '/contatos', recurso: 'clientes', resumo: 'Lista/busca contatos (nome, documento, e-mail, telefone).', filtros: ['pesquisa', 'tipo (CLIENTE|FORNECEDOR|TRANSPORTADORA)', 'ativo', ...PAG] },
-  { metodo: 'GET', caminho: '/contatos/{id}', recurso: 'clientes', resumo: 'Um contato com resumo (total comprado, OS, em aberto).' },
-  { metodo: 'GET', caminho: '/contatos/{id}/historico', recurso: 'clientes', resumo: 'Histórico do cliente: vendas, OS, contas, mensagens e linha do tempo.' },
-  { metodo: 'POST', caminho: '/contatos', recurso: 'clientes', resumo: 'Cadastra contato.', corpo: { tipo: 'CLIENTE', tipoPessoa: 'F', nome: 'Maria Souza', documento: '12345678909', email: 'maria@email.com', celular: '19999990000', cep: '13025000', logradouro: 'Av. Anchieta', numero: '789', bairro: 'Cambuí', municipio: 'Campinas', uf: 'SP' } },
-  { metodo: 'PUT', caminho: '/contatos/{id}', recurso: 'clientes', resumo: 'Altera contato (mesmo corpo do cadastro).' },
-  { metodo: 'GET', caminho: '/contatos/cep/{cep}', recurso: 'clientes', resumo: 'Endereço pelo CEP (ViaCEP).' },
-  // produtos
-  { metodo: 'GET', caminho: '/produtos', recurso: 'produtos', resumo: 'Lista/busca produtos com estoque total e reservado.', filtros: ['pesquisa', 'tipo (P|S)', 'categoriaId', 'ativo', 'estoque (zerado|positivo|negativo|abaixoMinimo)', 'prontaEntrega', 'marca', ...PAG] },
-  { metodo: 'GET', caminho: '/produtos/{id}', recurso: 'produtos', resumo: 'Um produto com saldos por depósito.' },
-  { metodo: 'GET', caminho: '/estoque/saldos', recurso: 'produtos', resumo: 'Saldos por produto e depósito.', filtros: ['depositoId', 'pesquisa', 'abaixoMinimo'] },
-  { metodo: 'GET', caminho: '/estoque/movimentos', recurso: 'produtos', resumo: 'Movimentos de estoque.', filtros: ['produtoId', 'depositoId', 'dataInicial', 'dataFinal', ...PAG] },
-  { metodo: 'POST', caminho: '/produtos', recurso: 'produtos', resumo: 'Cadastra produto.', corpo: { nome: 'Mouse sem fio', codigo: 'MOU-001', tipo: 'P', preco: 89.9, precoCusto: 40, unidade: 'UN', ncm: '84716053', controlaEstoque: true } },
-  { metodo: 'PUT', caminho: '/produtos/{id}', recurso: 'produtos', resumo: 'Altera produto (preço, dados fiscais, estoque mínimo…).' },
-  { metodo: 'POST', caminho: '/estoque/ajuste', recurso: 'produtos', resumo: 'Ajuste de estoque (entrada, saída ou balanço).', corpo: { produtoId: 1, depositoId: 1, tipo: 'ENTRADA', quantidade: 5, observacao: 'Chegada do fornecedor' } },
-  // vendas
-  { metodo: 'GET', caminho: '/vendas', recurso: 'vendas', resumo: 'Lista pedidos (ou orçamentos com tipo=ORCAMENTO).', filtros: ['tipo (PEDIDO|ORCAMENTO|TODOS)', 'pesquisa', 'situacaoId', 'contatoId', 'vendedorId', 'dataInicial', 'dataFinal', 'origem', ...PAG] },
-  { metodo: 'GET', caminho: '/vendas/{id}', recurso: 'vendas', resumo: 'Pedido completo: itens, parcelas, situação, nota, comissões, histórico e situações permitidas.' },
+  // ------------------------------------------------ da própria API externa (toda chave)
+  { metodo: 'GET', caminho: '/externo/eu', recurso: '*', resumo: 'Quem sou eu: nome da chave, permissões por área e endereços.' },
+  { metodo: 'GET', caminho: '/externo/openapi.json', recurso: '*', resumo: 'Esta documentação em OpenAPI 3.1, só com o que a chave pode.' },
+  { metodo: 'GET', caminho: '/externo/buscar', recurso: '*', resumo: 'Busca geral: clientes, produtos, vendas, OS e notas de uma vez (só nas áreas liberadas). Aceita nome, documento, telefone, número do pedido/OS/nota.', filtros: ['q (texto, mínimo 2 letras)', 'limite (por grupo, padrão 5)'] },
+  { metodo: 'GET', caminho: '/externo/resumo', recurso: '*', resumo: 'Resumo do dia: vendas, orçamentos, OS abertas/atrasadas, a receber e a pagar, estoque baixo (só as áreas liberadas).', filtros: ['data (AAAA-MM-DD, padrão hoje)'] },
+
+  // ------------------------------------------------ clientes
+  { metodo: 'GET', caminho: '/contatos', recurso: 'clientes', resumo: 'Lista/busca contatos (nome, fantasia, documento, e-mail, telefone).', filtros: ['pesquisa', 'tipo (CLIENTE|FORNECEDOR|TRANSPORTADORA)', 'ativo', 'vendedorId', 'uf', ...PAG] },
+  { metodo: 'GET', caminho: '/contatos/{id}', recurso: 'clientes', resumo: 'Um contato com resumo (total comprado, qtd. de vendas e OS, em aberto, última compra).' },
+  { metodo: 'GET', caminho: '/contatos/{id}/historico', recurso: 'clientes', resumo: 'Histórico do cliente: vendas, OS, contas a receber, mensagens e linha do tempo.', filtros: ['limite (até 500)'] },
+  { metodo: 'GET', caminho: '/contatos/cep/{cep}', recurso: 'clientes', resumo: 'Endereço pelo CEP (ViaCEP): logradouro, bairro, município, UF e código IBGE.' },
+  { metodo: 'POST', caminho: '/contatos', recurso: 'clientes', resumo: 'Cadastra contato.', corpo: { tipo: 'CLIENTE', tipoPessoa: 'F', nome: 'Maria Souza', documento: '12345678909', email: 'maria@email.com', celular: '19999990000', telefone: '', cep: '13025000', logradouro: 'Av. Anchieta', numero: '789', complemento: '', bairro: 'Cambuí', municipio: 'Campinas', uf: 'SP', observacoes: '', vendedorId: null } },
+  { metodo: 'PUT', caminho: '/contatos/{id}', recurso: 'clientes', resumo: 'Altera contato (mande só os campos que mudam).', corpo: { celular: '19988887777', email: 'novo@email.com' } },
+  { metodo: 'DELETE', caminho: '/contatos/{id}', recurso: 'clientes', resumo: 'Exclui contato (com movimento, só desativa).' },
+
+  // ------------------------------------------------ produtos e estoque
+  { metodo: 'GET', caminho: '/produtos', recurso: 'produtos', resumo: 'Lista/busca produtos com preço, estoque total e reservado, foto e pronta entrega.', filtros: ['pesquisa', 'tipo (P|S)', 'categoriaId', 'ativo', 'estoque (zerado|positivo|negativo|abaixoMinimo)', 'prontaEntrega', 'marca', 'origem (site|fora)', 'ordem (nome|pronta)', ...PAG] },
+  { metodo: 'GET', caminho: '/produtos/{id}', recurso: 'produtos', resumo: 'Um produto com saldos por depósito e dados fiscais.' },
+  { metodo: 'GET', caminho: '/produtos/{id}/movimentos', recurso: 'produtos', resumo: 'Movimentos de estoque do produto.', filtros: PAG },
+  { metodo: 'POST', caminho: '/produtos', recurso: 'produtos', resumo: 'Cadastra produto.', corpo: { tipo: 'P', nome: 'Mouse sem fio', codigo: 'MOU-001', gtin: '', unidade: 'UN', preco: 89.9, precoCusto: 40, marca: 'Logitech', estoqueMinimo: 2, controlaEstoque: true, garantiaDias: 90, ncm: '84716053', csosn: '102', origem: 0, categoriaId: null, ativo: true } },
+  { metodo: 'PUT', caminho: '/produtos/{id}', recurso: 'produtos', resumo: 'Altera produto (preço, custo, dados fiscais, estoque mínimo…).', corpo: { preco: 99.9, estoqueMinimo: 3 } },
+  { metodo: 'DELETE', caminho: '/produtos/{id}', recurso: 'produtos', resumo: 'Exclui produto (com movimento, só desativa).' },
+  { metodo: 'GET', caminho: '/estoque/saldos', recurso: 'produtos', resumo: 'Saldos por produto e depósito.', filtros: ['depositoId', 'pesquisa', 'abaixoMinimo (true)'] },
+  { metodo: 'GET', caminho: '/estoque/movimentos', recurso: 'produtos', resumo: 'Movimentos de estoque (entradas, saídas, ajustes, transferências).', filtros: ['produtoId', 'depositoId', ...PERIODO, 'origemTipo', 'tipo', ...PAG] },
+  { metodo: 'POST', caminho: '/estoque/ajuste', recurso: 'produtos', resumo: 'Ajuste de estoque: ENTRADA, SAIDA ou BALANCO (quantidade = saldo novo).', corpo: { produtoId: 1, depositoId: 1, tipo: 'ENTRADA', quantidade: 5, custoUnitario: 40, observacao: 'Chegada do fornecedor' } },
+  { metodo: 'POST', caminho: '/estoque/transferencia', recurso: 'produtos', resumo: 'Transfere estoque entre depósitos.', corpo: { produtoId: 1, origemId: 1, destinoId: 2, quantidade: 2, observacao: 'Para a loja do Centro' } },
+  ...CRUD('produtos', '/categorias-produto', 'categorias de produto', { nome: 'Periféricos', paiId: null }, []),
+
+  // ------------------------------------------------ vendas e orçamentos
+  { metodo: 'GET', caminho: '/vendas', recurso: 'vendas', resumo: 'Lista pedidos (tipo=ORCAMENTO para orçamentos, TODOS para os dois).', filtros: ['tipo (PEDIDO|ORCAMENTO|TODOS)', 'pesquisa', 'situacaoId', 'situacoes (ids separados por vírgula)', 'contatoId', 'vendedorId', ...PERIODO, 'origem', ...PAG] },
+  { metodo: 'GET', caminho: '/vendas/{id}', recurso: 'vendas', resumo: 'Pedido completo: itens, parcelas (com a conta a receber), situação, nota, comissões, histórico e situações permitidas.' },
   {
-    metodo: 'POST', caminho: '/vendas', recurso: 'vendas', resumo: 'Cria pedido ou orçamento (tipo ORCAMENTO). Totais recalculados no servidor; item sem valor usa o preço do produto.',
-    corpo: { tipo: 'PEDIDO', contatoId: 1, vendedorId: 1, data: '2026-10-24', origem: 'BALCAO', observacoes: '', itens: [{ produtoId: 1, quantidade: 1, valorUnitario: 100, desconto: 0 }], parcelas: [{ dataVencimento: '2026-10-24', valor: 100, formaPagamentoId: 1 }] },
+    metodo: 'POST', caminho: '/vendas', recurso: 'vendas', resumo: 'Cria pedido ou orçamento (tipo ORCAMENTO). Totais recalculados no servidor; item sem valor usa o preço do produto; sem parcelas cria 1 à vista; sem situação usa a inicial.',
+    corpo: { tipo: 'PEDIDO', contatoId: 1, vendedorId: 1, data: '2026-10-24', depositoId: null, situacaoId: null, origem: 'BALCAO', observacoes: '', observacoesInternas: '', descontoTipo: 'REAL', descontoValor: 0, frete: 0, itens: [{ produtoId: 1, descricao: 'Mouse sem fio', quantidade: 1, valorUnitario: 100, desconto: 0 }], parcelas: [PARCELA] },
   },
-  { metodo: 'PUT', caminho: '/vendas/{id}', recurso: 'vendas', resumo: 'Altera pedido (bloqueado depois de lançar estoque/contas, exceto observações).' },
-  { metodo: 'POST', caminho: '/vendas/{id}/situacao', recurso: 'vendas', resumo: 'Muda a situação (ex.: Fechada lança estoque e contas; Cancelada estorna).', corpo: { situacaoId: 3, observacao: 'Pago no Pix' } },
-  { metodo: 'POST', caminho: '/vendas/{id}/converter', recurso: 'vendas', resumo: 'Converte orçamento em pedido.' },
-  { metodo: 'POST', caminho: '/vendas/{id}/aprovar', recurso: 'vendas', resumo: 'Marca orçamento como aprovado.', corpo: { aprovadoPor: 'Cliente pelo WhatsApp' } },
-  { metodo: 'POST', caminho: '/vendas/{id}/notificar', recurso: 'vendas', resumo: 'Envia o pedido/orçamento ao cliente (WhatsApp ou e-mail), com PDF.', corpo: { canal: 'WHATSAPP', anexarPdf: true } },
-  { metodo: 'GET', caminho: '/vendas/{id}/pdf', recurso: 'vendas', resumo: 'PDF do pedido/orçamento.' },
-  // compras
-  { metodo: 'GET', caminho: '/compras', recurso: 'compras', resumo: 'Lista pedidos de compra.', filtros: ['pesquisa', 'situacaoId', 'fornecedorId', 'dataInicial', 'dataFinal', ...PAG] },
-  { metodo: 'GET', caminho: '/compras/{id}', recurso: 'compras', resumo: 'Pedido de compra completo.' },
-  { metodo: 'POST', caminho: '/compras', recurso: 'compras', resumo: 'Cria pedido de compra.', corpo: { fornecedorId: 2, data: '2026-10-24', itens: [{ produtoId: 1, quantidade: 10, valorUnitario: 40 }], parcelas: [{ dataVencimento: '2026-11-24', valor: 400 }] } },
-  { metodo: 'POST', caminho: '/compras/{id}/situacao', recurso: 'compras', resumo: 'Muda a situação do pedido de compra.', corpo: { situacaoId: 2 } },
-  // OS
-  { metodo: 'GET', caminho: '/ordens-servico', recurso: 'os', resumo: 'Lista ordens de serviço.', filtros: ['pesquisa', 'situacaoId', 'contatoId', 'tecnicoId', 'prioridade', 'dataInicial', 'dataFinal', ...PAG] },
-  { metodo: 'GET', caminho: '/ordens-servico/kanban', recurso: 'os', resumo: 'OS agrupadas por situação.' },
-  { metodo: 'GET', caminho: '/ordens-servico/{id}', recurso: 'os', resumo: 'OS completa: itens (peças/serviços), parcelas, anexos, histórico.' },
+  { metodo: 'PUT', caminho: '/vendas/{id}', recurso: 'vendas', resumo: 'Altera pedido (bloqueado depois de lançar estoque/contas, exceto observações e transporte).', corpo: { observacoes: 'Entregar à tarde' } },
+  { metodo: 'DELETE', caminho: '/vendas/{id}', recurso: 'vendas', resumo: 'Exclui pedido (só sem estoque/contas lançados e sem NF autorizada).' },
+  { metodo: 'POST', caminho: '/vendas/{id}/situacao', recurso: 'vendas', resumo: 'Muda a situação. Fechada lança estoque, contas e comissão; Cancelada estorna. Erro 422 TRANSICAO_INVALIDA traz as permitidas.', corpo: SITUACAO },
+  { metodo: 'POST', caminho: '/vendas/{id}/acoes', recurso: 'vendas', resumo: 'Executa ações avulsas: lancarEstoque, estornarEstoque, lancarContas, estornarContas.', corpo: ACOES('lancarEstoque,lancarContas') },
+  { metodo: 'POST', caminho: '/vendas/{id}/gerar-parcelas', recurso: 'vendas', resumo: 'Calcula parcelas para a venda (não grava; mande depois no PUT).', corpo: { quantidade: 3, primeiroVencimento: '2026-11-24', formaPagamentoId: 2, intervaloDias: 30 } },
+  { metodo: 'POST', caminho: '/vendas/gerar-parcelas', recurso: 'vendas', resumo: 'Calcula parcelas de um total qualquer (não grava).', corpo: { total: 1200, quantidade: 3, primeiroVencimento: '2026-11-24', formaPagamentoId: 2, intervaloDias: 30 } },
+  { metodo: 'GET', caminho: '/vendas/{id}/nfe/verificar', recurso: 'vendas', resumo: 'Confere se a venda tem tudo para emitir NF-e (diz o que falta).' },
+  { metodo: 'POST', caminho: '/vendas/{id}/gerar-nfe', recurso: 'vendas', resumo: 'Cria a NF-e (55) ou NFC-e (65) da venda, pendente (transmita em /notas-fiscais/{id}/transmitir).', corpo: { modelo: 55, informacoesComplementares: '' } },
+  { metodo: 'POST', caminho: '/vendas/{id}/notificar', recurso: 'vendas', resumo: 'Envia o pedido/orçamento ao cliente por WhatsApp ou e-mail, com PDF.', corpo: { canal: 'WHATSAPP', templateId: null, mensagem: null, anexarPdf: true } },
+  { metodo: 'GET', caminho: '/vendas/{id}/imprimir', recurso: 'vendas', resumo: 'HTML do pedido para impressão.' },
+  { metodo: 'GET', caminho: '/vendas/{id}/pdf', recurso: 'vendas', resumo: 'PDF A4 do pedido/orçamento.', filtros: ['download (1)'] },
+  { metodo: 'POST', caminho: '/vendas/{id}/aprovar', recurso: 'vendas', resumo: 'Marca orçamento como aprovado.', corpo: { aprovadoPor: 'Cliente pelo WhatsApp', observacao: '' } },
+  { metodo: 'POST', caminho: '/vendas/{id}/converter', recurso: 'vendas', resumo: 'Converte orçamento em pedido (uma vez só).', corpo: { situacaoId: null } },
+  { metodo: 'POST', caminho: '/vendas/{id}/transferir-vendedor', recurso: 'vendas', resumo: 'Troca o vendedor (refaz a comissão pendente).', corpo: { vendedorId: 2, observacao: '' } },
+  { metodo: 'POST', caminho: '/vendas/{id}/duplicar', recurso: 'vendas', resumo: 'Clona o pedido/orçamento em situação inicial.' },
+
+  // ------------------------------------------------ compras
+  { metodo: 'GET', caminho: '/compras', recurso: 'compras', resumo: 'Lista pedidos de compra.', filtros: ['pesquisa', 'situacaoId', 'fornecedorId', ...PERIODO, ...PAG] },
+  { metodo: 'GET', caminho: '/compras/{id}', recurso: 'compras', resumo: 'Pedido de compra completo: itens, parcelas (contas a pagar), fornecedor, histórico.' },
+  { metodo: 'POST', caminho: '/compras', recurso: 'compras', resumo: 'Cria pedido de compra.', corpo: { fornecedorId: 2, data: '2026-10-24', depositoId: null, situacaoId: null, categoriaFinanceiraId: null, nfeNumero: '', descontoValor: 0, frete: 0, observacoes: '', itens: [{ produtoId: 1, descricao: 'Mouse sem fio', codigoFornecedor: 'ABC', quantidade: 10, valorUnitario: 40, ipiPct: 0 }], parcelas: [{ dataVencimento: '2026-11-24', valor: 400 }] } },
+  { metodo: 'PUT', caminho: '/compras/{id}', recurso: 'compras', resumo: 'Altera pedido de compra.', corpo: { observacoes: 'Chega na terça' } },
+  { metodo: 'DELETE', caminho: '/compras/{id}', recurso: 'compras', resumo: 'Exclui pedido de compra (sem lançamentos).' },
+  { metodo: 'POST', caminho: '/compras/{id}/situacao', recurso: 'compras', resumo: 'Muda a situação (Fechado: entrada de estoque + contas a pagar; Consignado: só estoque).', corpo: SITUACAO },
+  { metodo: 'POST', caminho: '/compras/{id}/acoes', recurso: 'compras', resumo: 'Ações avulsas: lancarEstoque, estornarEstoque, lancarContas, estornarContas.', corpo: ACOES('lancarEstoque') },
+  { metodo: 'POST', caminho: '/compras/importar-xml', recurso: 'compras', resumo: 'Cria compra a partir do XML da NF-e do fornecedor (casa itens por GTIN/código ou cria).', corpo: { xml: '<nfeProc>…</nfeProc>', depositoId: null, situacaoId: null } },
+  { metodo: 'GET', caminho: '/compras/{id}/imprimir', recurso: 'compras', resumo: 'HTML do pedido de compra para impressão.' },
+
+  // ------------------------------------------------ ordens de serviço
+  { metodo: 'GET', caminho: '/ordens-servico', recurso: 'os', resumo: 'Lista ordens de serviço (com "atrasada").', filtros: ['pesquisa', 'situacaoId', 'situacoes', 'contatoId', 'tecnicoId', 'vendedorId', 'prioridade (BAIXA|NORMAL|ALTA|URGENTE)', ...PERIODO, ...PAG] },
+  { metodo: 'GET', caminho: '/ordens-servico/kanban', recurso: 'os', resumo: 'OS agrupadas por situação (quadro).', filtros: ['tecnicoId', 'diasFinalizadas (padrão 7)'] },
+  { metodo: 'GET', caminho: '/ordens-servico/{id}', recurso: 'os', resumo: 'OS completa: equipamento, defeito, diagnóstico, peças e serviços, parcelas, anexos, histórico.' },
   {
     metodo: 'POST', caminho: '/ordens-servico', recurso: 'os', resumo: 'Abre OS.',
-    corpo: { contatoId: 1, tecnicoId: 1, equipamento: 'Notebook', marca: 'Dell', modelo: 'Inspiron 15', defeitoRelatado: 'Não liga', acessorios: 'Carregador', prioridade: 'NORMAL', orcar: true, itens: [{ tipo: 'SERVICO', descricao: 'Diagnóstico', quantidade: 1, valorUnitario: 80 }] },
+    corpo: { contatoId: 1, tecnicoId: 1, vendedorId: null, dataEntrada: '2026-10-24', dataPrevista: '2026-10-28', equipamento: 'Notebook', marca: 'Dell', modelo: 'Inspiron 15', numeroSerie: '', acessorios: 'Carregador', senhaEquipamento: '', estadoFisico: 'Risco na tampa', defeitoRelatado: 'Não liga', prioridade: 'NORMAL', orcar: true, garantiaDias: 90, itens: [{ tipo: 'SERVICO', descricao: 'Diagnóstico', quantidade: 1, valorUnitario: 80 }, { tipo: 'PECA', produtoId: 1, quantidade: 1, valorUnitario: 150 }], parcelas: [] },
   },
-  { metodo: 'PUT', caminho: '/ordens-servico/{id}', recurso: 'os', resumo: 'Altera OS (diagnóstico, serviço executado, itens…).' },
-  { metodo: 'POST', caminho: '/ordens-servico/{id}/situacao', recurso: 'os', resumo: 'Muda a situação da OS.', corpo: { situacaoId: 5, observacao: '' } },
-  { metodo: 'POST', caminho: '/ordens-servico/{id}/aprovar-orcamento', recurso: 'os', resumo: 'Marca o orçamento da OS como aprovado.', corpo: { aprovadoPor: 'Cliente' } },
-  // financeiro
-  { metodo: 'GET', caminho: '/financeiro/resumo', recurso: 'financeiro', resumo: 'Saldos das contas, a receber/pagar hoje, na semana e atrasado.' },
-  { metodo: 'GET', caminho: '/contas-receber', recurso: 'financeiro', resumo: 'Contas a receber com totais.', filtros: ['situacao (ABERTO|RECEBIDO|PARCIAL|CANCELADO|ATRASADO)', 'contatoId', 'dataInicial', 'dataFinal', 'tipoData (V|E|R)', 'pesquisa', ...PAG] },
-  { metodo: 'POST', caminho: '/contas-receber/{id}/baixar', recurso: 'financeiro', resumo: 'Recebe (baixa) uma conta.', corpo: { valor: 100, data: '2026-10-24', contaFinanceiraId: 1 } },
-  { metodo: 'GET', caminho: '/contas-pagar', recurso: 'financeiro', resumo: 'Contas a pagar com totais.', filtros: ['situacao', 'contatoId', 'dataInicial', 'dataFinal', 'pesquisa', ...PAG] },
-  { metodo: 'POST', caminho: '/contas-pagar', recurso: 'financeiro', resumo: 'Lança conta a pagar.', corpo: { descricao: 'Aluguel', valor: 3500, vencimento: '2026-11-05', categoriaId: 1 } },
-  { metodo: 'GET', caminho: '/financeiro/fluxo-caixa', recurso: 'financeiro', resumo: 'Fluxo de caixa realizado e previsto.', filtros: ['dataInicial', 'dataFinal', 'contaFinanceiraId', 'agrupar (dia|semana|mes)'] },
-  { metodo: 'GET', caminho: '/contas-financeiras', recurso: 'financeiro', resumo: 'Caixa e bancos com saldo atual.' },
-  // fiscal
-  { metodo: 'GET', caminho: '/notas-fiscais', recurso: 'fiscal', resumo: 'Lista notas fiscais.', filtros: ['modelo', 'situacao', 'pesquisa', 'dataInicial', 'dataFinal', ...PAG] },
-  { metodo: 'GET', caminho: '/notas-fiscais/{id}', recurso: 'fiscal', resumo: 'Nota com itens e eventos.' },
-  { metodo: 'GET', caminho: '/notas-fiscais/{id}/danfe', recurso: 'fiscal', resumo: 'PDF do DANFE.' },
-  { metodo: 'GET', caminho: '/notas-fiscais/{id}/xml', recurso: 'fiscal', resumo: 'XML da nota.' },
-  // comissões
-  { metodo: 'GET', caminho: '/comissoes', recurso: 'comissoes', resumo: 'Comissões por competência.', filtros: ['competencia (AAAA-MM)', 'tipo (VENDEDOR|TECNICO)', 'vendedorId', 'status', ...PAG] },
-  { metodo: 'GET', caminho: '/painel-vendedor', recurso: 'comissoes', resumo: 'Painel do vendedor: períodos, meta, ranking e desafios.', filtros: ['vendedorId'] },
-  // relatórios
-  { metodo: 'GET', caminho: '/dashboard/vendas', recurso: 'relatorios', resumo: 'Faturamento, ticket, por vendedor, forma de pagamento, top produtos e clientes.', filtros: ['dataInicial', 'dataFinal', 'vendedorId', 'agrupar (dia|semana|mes)'] },
-  { metodo: 'GET', caminho: '/relatorios/dre', recurso: 'relatorios', resumo: 'DRE por competência ou caixa.', filtros: ['dataInicial', 'dataFinal', 'regime (competencia|caixa)'] },
-  { metodo: 'GET', caminho: '/relatorios/produtos-mais-vendidos', recurso: 'relatorios', resumo: 'Ranking de produtos.', filtros: ['dataInicial', 'dataFinal'] },
-  // comunicação
-  { metodo: 'POST', caminho: '/notificacoes', recurso: 'comunicacao', resumo: 'Envia WhatsApp ou e-mail (entra na fila).', corpo: { canal: 'WHATSAPP', destinatario: '5519999990000', corpo: 'Olá! Seu notebook está pronto.', contatoId: 1 } },
-  { metodo: 'GET', caminho: '/notificacoes', recurso: 'comunicacao', resumo: 'Fila de mensagens enviadas.', filtros: ['status', 'canal', 'contatoId', ...PAG] },
-  { metodo: 'GET', caminho: '/whatsapp/status', recurso: 'comunicacao', resumo: 'WhatsApp da loja conectado?' },
-  // cadastros
-  { metodo: 'GET', caminho: '/situacoes', recurso: 'cadastros', resumo: 'Situações de cada módulo (para usar o situacaoId certo).', filtros: ['modulo (VENDA|ORCAMENTO|COMPRA|OS)'] },
-  { metodo: 'GET', caminho: '/vendedores', recurso: 'cadastros', resumo: 'Vendedores.', filtros: ['ativo'] },
-  { metodo: 'GET', caminho: '/tecnicos', recurso: 'cadastros', resumo: 'Técnicos.', filtros: ['ativo'] },
-  { metodo: 'GET', caminho: '/formas-pagamento', recurso: 'cadastros', resumo: 'Formas de pagamento.', filtros: ['ativo'] },
-  { metodo: 'GET', caminho: '/depositos', recurso: 'cadastros', resumo: 'Depósitos de estoque.' },
+  { metodo: 'PUT', caminho: '/ordens-servico/{id}', recurso: 'os', resumo: 'Altera OS (diagnóstico, serviço executado, itens, datas…). Mande só o que muda.', corpo: { diagnostico: 'Fonte queimada', servicoExecutado: 'Troca da fonte' } },
+  { metodo: 'DELETE', caminho: '/ordens-servico/{id}', recurso: 'os', resumo: 'Exclui OS (sem lançamentos).' },
+  { metodo: 'POST', caminho: '/ordens-servico/{id}/situacao', recurso: 'os', resumo: 'Muda a situação da OS (avisa o cliente se configurado).', corpo: SITUACAO },
+  { metodo: 'POST', caminho: '/ordens-servico/{id}/acoes', recurso: 'os', resumo: 'Ações avulsas: lancarEstoque, estornarEstoque, lancarContas, estornarContas, reservarEstoque, liberarReserva, gerarNfe.', corpo: ACOES('lancarEstoque,lancarContas') },
+  { metodo: 'POST', caminho: '/ordens-servico/{id}/aprovar-orcamento', recurso: 'os', resumo: 'Marca o orçamento da OS como aprovado.', corpo: { aprovadoPor: 'Cliente', observacao: '' } },
+  { metodo: 'POST', caminho: '/ordens-servico/{id}/anexos', recurso: 'os', resumo: 'Anexa arquivo/foto (multipart/form-data, campo "arquivo").' },
+  { metodo: 'DELETE', caminho: '/ordens-servico/{id}/anexos/{anexoId}', recurso: 'os', resumo: 'Remove um anexo.' },
+  { metodo: 'GET', caminho: '/ordens-servico/{id}/imprimir', recurso: 'os', resumo: 'HTML da OS para impressão.', filtros: ['via (cliente|tecnico|etiqueta)'] },
+  { metodo: 'POST', caminho: '/ordens-servico/{id}/notificar', recurso: 'os', resumo: 'Envia a OS/orçamento ao cliente por WhatsApp ou e-mail.', corpo: { canal: 'WHATSAPP', templateId: null, mensagem: null } },
+  { metodo: 'GET', caminho: '/ordens-servico/{id}/nfe/verificar', recurso: 'os', resumo: 'Confere se a OS tem tudo para a NF-e das peças.' },
+  { metodo: 'POST', caminho: '/ordens-servico/{id}/gerar-nfe', recurso: 'os', resumo: 'Cria a NF-e das peças da OS (pendente).', corpo: { modelo: 55 } },
+
+  // ------------------------------------------------ financeiro
+  { metodo: 'GET', caminho: '/financeiro/resumo', recurso: 'financeiro', resumo: 'Saldos das contas e o que há a receber/pagar hoje, na semana e atrasado.' },
+  { metodo: 'GET', caminho: '/financeiro/fluxo-caixa', recurso: 'financeiro', resumo: 'Fluxo de caixa realizado e previsto.', filtros: [...PERIODO, 'contaFinanceiraId', 'agrupar (dia|semana|mes)'] },
+  { metodo: 'GET', caminho: '/financeiro/movimentos', recurso: 'financeiro', resumo: 'Extrato interno (entradas e saídas das contas).', filtros: ['contaFinanceiraId', ...PERIODO, 'tipo (ENTRADA|SAIDA)', 'conciliado', 'pesquisa', ...PAG] },
+  { metodo: 'POST', caminho: '/financeiro/movimentos', recurso: 'financeiro', resumo: 'Lançamento avulso no caixa/banco.', corpo: { contaFinanceiraId: 1, data: '2026-10-24', tipo: 'SAIDA', valor: 45.5, descricao: 'Café e água', categoriaId: null, observacoes: '' } },
+  { metodo: 'DELETE', caminho: '/financeiro/movimentos/{id}', recurso: 'financeiro', resumo: 'Exclui um lançamento avulso.' },
+  { metodo: 'POST', caminho: '/financeiro/transferencia', recurso: 'financeiro', resumo: 'Transferência entre contas (ex.: caixa → banco).', corpo: { origemId: 1, destinoId: 2, valor: 500, data: '2026-10-24', descricao: 'Depósito do caixa' } },
+  { metodo: 'GET', caminho: '/contas-receber', recurso: 'financeiro', resumo: 'Contas a receber com totais (aberto, recebido, atrasado).', filtros: ['situacao (ABERTO|RECEBIDO|PARCIAL|CANCELADO|ATRASADO)', 'contatoId', 'vendedorId', 'categoriaId', 'contaFinanceiraId', 'origemTipo', 'origemId', ...PERIODO, 'tipoData (V=vencimento|E=emissão|R=recebimento)', 'pesquisa', ...PAG] },
+  { metodo: 'GET', caminho: '/contas-receber/{id}', recurso: 'financeiro', resumo: 'Uma conta a receber com as baixas.' },
+  { metodo: 'POST', caminho: '/contas-receber', recurso: 'financeiro', resumo: 'Lança conta a receber avulsa.', corpo: { ...CONTA, descricao: 'Serviço avulso', contatoId: 1 } },
+  { metodo: 'PUT', caminho: '/contas-receber/{id}', recurso: 'financeiro', resumo: 'Altera conta a receber (vencimento, valor, forma…).', corpo: { vencimento: '2026-11-10' } },
+  { metodo: 'DELETE', caminho: '/contas-receber/{id}', recurso: 'financeiro', resumo: 'Cancela a conta a receber.' },
+  { metodo: 'POST', caminho: '/contas-receber/{id}/baixar', recurso: 'financeiro', resumo: 'Recebe (baixa) a conta — total, ou parcial informando valor. Lança a entrada na conta financeira.', corpo: BAIXA },
+  { metodo: 'POST', caminho: '/contas-receber/{id}/estornar', recurso: 'financeiro', resumo: 'Desfaz as baixas da conta a receber.' },
+  { metodo: 'GET', caminho: '/contas-pagar', recurso: 'financeiro', resumo: 'Contas a pagar com totais.', filtros: ['situacao (ABERTO|PAGO|PARCIAL|CANCELADO|ATRASADO)', 'contatoId', 'categoriaId', 'contaFinanceiraId', 'origemTipo', 'origemId', ...PERIODO, 'tipoData (V|E|R)', 'pesquisa', 'recorrente', ...PAG] },
+  { metodo: 'GET', caminho: '/contas-pagar/{id}', recurso: 'financeiro', resumo: 'Uma conta a pagar com as baixas.' },
+  { metodo: 'POST', caminho: '/contas-pagar', recurso: 'financeiro', resumo: 'Lança conta a pagar (recorrente=true repete todo mês).', corpo: CONTA },
+  { metodo: 'PUT', caminho: '/contas-pagar/{id}', recurso: 'financeiro', resumo: 'Altera conta a pagar.', corpo: { valor: 3600 } },
+  { metodo: 'DELETE', caminho: '/contas-pagar/{id}', recurso: 'financeiro', resumo: 'Cancela a conta a pagar.' },
+  { metodo: 'POST', caminho: '/contas-pagar/{id}/baixar', recurso: 'financeiro', resumo: 'Paga (baixa) a conta — total ou parcial. Lança a saída na conta financeira.', corpo: { ...BAIXA, observacoes: 'Pago pelo banco' } },
+  { metodo: 'POST', caminho: '/contas-pagar/{id}/estornar', recurso: 'financeiro', resumo: 'Desfaz as baixas da conta a pagar.' },
+  { metodo: 'POST', caminho: '/contas-pagar/{id}/gerar-proxima', recurso: 'financeiro', resumo: 'Gera a próxima ocorrência de uma conta recorrente.' },
+  { metodo: 'GET', caminho: '/bancos/transacoes', recurso: 'financeiro', resumo: 'Transações do extrato bancário, com sugestões de conciliação.', filtros: ['contaFinanceiraId', 'conciliado (true|false)', 'tipo (CREDITO|DEBITO)', ...PERIODO, 'pesquisa', 'sugestoes (true|false)', ...PAG] },
+  { metodo: 'POST', caminho: '/bancos/transacoes/{id}/conciliar', recurso: 'financeiro', resumo: 'Concilia a transação com uma conta (faz a baixa) ou lança avulso.', corpo: { tipo: 'RECEBER', id: 10, categoriaId: null, descricao: null } },
+  { metodo: 'POST', caminho: '/bancos/transacoes/{id}/ignorar', recurso: 'financeiro', resumo: 'Ignora a transação na conciliação.' },
+  { metodo: 'POST', caminho: '/bancos/transacoes/{id}/reabrir', recurso: 'financeiro', resumo: 'Volta a transação para "a conciliar".' },
+  { metodo: 'POST', caminho: '/bancos/importar-ofx', recurso: 'financeiro', resumo: 'Importa extrato OFX (conteúdo do arquivo em texto).', corpo: { contaFinanceiraId: 2, conteudo: 'OFXHEADER:100…' } },
+  { metodo: 'GET', caminho: '/open-finance/status', recurso: 'financeiro', resumo: 'Open Finance (Pluggy) configurado e ativo?' },
+  { metodo: 'POST', caminho: '/open-finance/sincronizar/{contaFinanceiraId}', recurso: 'financeiro', resumo: 'Busca saldo e transações do banco agora.', filtros: ['dias (1–365, padrão 90)'] },
+  { metodo: 'POST', caminho: '/open-finance/sincronizar-todas', recurso: 'financeiro', resumo: 'Sincroniza todas as contas ligadas ao Open Finance.' },
+  ...CRUD('financeiro', '/contas-financeiras', 'contas financeiras (caixa, bancos, cartões; lista traz saldoAtual e saldoBanco)', { nome: 'Banco Inter', tipo: 'BANCO', banco: '077', agencia: '0001', conta: '12345-6', saldoInicial: 0, padrao: false, ativo: true, cor: '#ff7a00' }),
+  ...CRUD('financeiro', '/categorias-financeiras', 'categorias financeiras (receitas/despesas, grupo do DRE)', { nome: 'Energia elétrica', tipo: 'DESPESA', grupoDre: 'DESPESA_OPERACIONAL', paiId: null, ativo: true }),
+
+  // ------------------------------------------------ fiscal
+  { metodo: 'GET', caminho: '/notas-fiscais', recurso: 'fiscal', resumo: 'Lista notas fiscais.', filtros: ['tipo (0=entrada|1=saída)', 'modelo (55|65)', 'situacao', 'pesquisa', 'contatoId', ...PERIODO, ...PAG] },
+  { metodo: 'GET', caminho: '/notas-fiscais/{id}', recurso: 'fiscal', resumo: 'Nota com itens, eventos e contato.' },
+  { metodo: 'POST', caminho: '/notas-fiscais', recurso: 'fiscal', resumo: 'Cria nota manual (pendente).', corpo: { tipo: 1, modelo: 55, contatoId: 1, naturezaOperacao: 'Venda de mercadoria', finalidade: 1, informacoesComplementares: '', valorFrete: 0, valorDesconto: 0, itens: [{ produtoId: 1, descricao: 'Mouse sem fio', ncm: '84716053', cfop: '5102', unidade: 'UN', quantidade: 1, valorUnitario: 100 }] } },
+  { metodo: 'PUT', caminho: '/notas-fiscais/{id}', recurso: 'fiscal', resumo: 'Altera nota pendente ou rejeitada.', corpo: { informacoesComplementares: 'Pedido 24850' } },
+  { metodo: 'DELETE', caminho: '/notas-fiscais/{id}', recurso: 'fiscal', resumo: 'Exclui nota pendente.' },
+  { metodo: 'POST', caminho: '/notas-fiscais/{id}/transmitir', recurso: 'fiscal', resumo: 'Assina com o certificado A1 e envia à SEFAZ.' },
+  { metodo: 'POST', caminho: '/notas-fiscais/{id}/consultar', recurso: 'fiscal', resumo: 'Consulta a situação da nota na SEFAZ.' },
+  { metodo: 'POST', caminho: '/notas-fiscais/{id}/renumerar', recurso: 'fiscal', resumo: 'Dá o próximo número a uma nota rejeitada por duplicidade.' },
+  { metodo: 'POST', caminho: '/notas-fiscais/{id}/carta-correcao', recurso: 'fiscal', resumo: 'Carta de correção (texto com 15+ caracteres).', corpo: { texto: 'Correção do endereço do destinatário: Rua X, 100' } },
+  { metodo: 'POST', caminho: '/notas-fiscais/{id}/cancelar', recurso: 'fiscal', resumo: 'Cancela a nota na SEFAZ (sem volta — exige nível TOTAL).', corpo: { justificativa: 'Venda cancelada a pedido do cliente' } },
+  { metodo: 'POST', caminho: '/notas-fiscais/inutilizar', recurso: 'fiscal', resumo: 'Inutiliza numeração na SEFAZ (sem volta — exige nível TOTAL).', corpo: { modelo: 55, serie: 4, numeroInicial: 2300, numeroFinal: 2300, justificativa: 'Número pulado por falha no sistema' } },
+  { metodo: 'GET', caminho: '/notas-fiscais/{id}/xml', recurso: 'fiscal', resumo: 'XML da nota (procNFe se autorizada).' },
+  { metodo: 'GET', caminho: '/notas-fiscais/{id}/danfe', recurso: 'fiscal', resumo: 'PDF do DANFE.', filtros: ['download (true)'] },
+  { metodo: 'POST', caminho: '/notas-fiscais/{id}/enviar-email', recurso: 'fiscal', resumo: 'Envia XML + DANFE por e-mail (padrão: e-mail do cliente).', corpo: { para: 'cliente@email.com' } },
+  { metodo: 'GET', caminho: '/fiscal/status-sefaz', recurso: 'fiscal', resumo: 'SEFAZ no ar? Ambiente (homologação/produção).' },
+
+  // ------------------------------------------------ comissões, metas e desafios
+  { metodo: 'GET', caminho: '/comissoes', recurso: 'comissoes', resumo: 'Comissões com totais (pendente, aprovada, paga).', filtros: ['competencia (AAAA-MM)', 'tipo (VENDEDOR|TECNICO)', 'vendedorId', 'tecnicoId', 'status (PENDENTE|APROVADA|PAGA|CANCELADA)', 'origemTipo (VENDA|OS|DESAFIO)', ...PAG] },
+  { metodo: 'GET', caminho: '/comissoes/resumo', recurso: 'comissoes', resumo: 'Comissões por pessoa na competência.', filtros: ['competencia (AAAA-MM)', 'tipo (VENDEDOR|TECNICO)'] },
+  { metodo: 'GET', caminho: '/comissoes/{id}', recurso: 'comissoes', resumo: 'Uma comissão.' },
+  { metodo: 'POST', caminho: '/comissoes/aprovar', recurso: 'comissoes', resumo: 'Aprova comissões.', corpo: { ids: [1, 2] } },
+  { metodo: 'POST', caminho: '/comissoes/cancelar', recurso: 'comissoes', resumo: 'Cancela comissões.', corpo: { ids: [3] } },
+  { metodo: 'POST', caminho: '/comissoes/pagar', recurso: 'comissoes', resumo: 'Paga comissões (gera conta a pagar paga por pessoa — exige nível TOTAL).', corpo: { ids: [1, 2], contaFinanceiraId: 1, data: '2026-10-31', observacoes: '' } },
+  { metodo: 'POST', caminho: '/comissoes/recalcular/{origemTipo}/{id}', recurso: 'comissoes', resumo: 'Recalcula as comissões de uma venda (VENDA) ou OS (OS) ainda não pagas.' },
+  { metodo: 'GET', caminho: '/painel-vendedor', recurso: 'comissoes', resumo: 'Painel do vendedor: períodos, meta, ranking, desafios e últimas vendas.', filtros: ['vendedorId'] },
+  { metodo: 'GET', caminho: '/metas', recurso: 'comissoes', resumo: 'Metas do mês por vendedor.', filtros: ['competencia (AAAA-MM)'] },
+  { metodo: 'PUT', caminho: '/metas', recurso: 'comissoes', resumo: 'Grava as metas (padrão e só do mês).', corpo: { competencia: '2026-11', itens: [{ vendedorId: 1, metaPadrao: 50000, metaMes: null }] } },
+  { metodo: 'GET', caminho: '/desafios', recurso: 'comissoes', resumo: 'Desafios de venda.', filtros: ['situacao (vigentes|todos)'] },
+  { metodo: 'GET', caminho: '/desafios/{id}', recurso: 'comissoes', resumo: 'Um desafio com quem conquistou.' },
+  { metodo: 'POST', caminho: '/desafios', recurso: 'comissoes', resumo: 'Cria desafio (prêmio vira comissão extra automática).', corpo: { titulo: 'Semana dos notebooks', descricao: '', tipo: 'VALOR (ou QTD_VENDAS, QTD_ITENS)', alvo: 10000, premio: 100, inicio: '2026-10-26', fim: '2026-11-01', regra: 'TODOS (ou PRIMEIRO)', produtoId: null, categoriaId: null, todosVendedores: true, vendedoresIds: [] } },
+  { metodo: 'PUT', caminho: '/desafios/{id}', recurso: 'comissoes', resumo: 'Altera desafio.' },
+  { metodo: 'POST', caminho: '/desafios/{id}/encerrar', recurso: 'comissoes', resumo: 'Encerra o desafio (ninguém mais ganha).' },
+  { metodo: 'POST', caminho: '/desafios/{id}/reabrir', recurso: 'comissoes', resumo: 'Reabre o desafio.' },
+  { metodo: 'DELETE', caminho: '/desafios/{id}', recurso: 'comissoes', resumo: 'Exclui desafio (só sem prêmio lançado).' },
+
+  // ------------------------------------------------ relatórios e dashboards
+  { metodo: 'GET', caminho: '/dashboard/geral', recurso: 'relatorios', resumo: 'Painel geral: hoje, financeiro, OS, vendas por situação, estoque baixo, fiscal, alertas.' },
+  { metodo: 'GET', caminho: '/dashboard/vendas', recurso: 'relatorios', resumo: 'Faturamento, ticket, lucro, por vendedor/forma de pagamento/origem, top produtos e clientes.', filtros: [...PERIODO, 'vendedorId', 'agrupar (dia|semana|mes)', 'comparar (true|false)', 'todas (true|false)'] },
+  { metodo: 'GET', caminho: '/dashboard/os', recurso: 'relatorios', resumo: 'OS: abertas, concluídas, faturamento, tempo médio, por técnico e equipamento.', filtros: [...PERIODO, 'tecnicoId', 'agrupar'] },
+  { metodo: 'GET', caminho: '/dashboard/atividades', recurso: 'relatorios', resumo: 'Últimos lançamentos financeiros e acontecimentos do sistema.', filtros: ['limite (5–200)', 'categoria (vendas|os|compras|fiscal|financeiro|cadastros|sistema|acessos)', 'so (lancamentos|acontecimentos)'] },
+  { metodo: 'GET', caminho: '/relatorios/dre', recurso: 'relatorios', resumo: 'DRE por competência ou caixa.', filtros: [...PERIODO, 'regime (competencia|caixa)', 'comparar'] },
+  { metodo: 'GET', caminho: '/relatorios/vendas-por-periodo', recurso: 'relatorios', resumo: 'Vendas agrupadas por dia/semana/mês.', filtros: [...PERIODO, 'agrupar (dia|semana|mes)'] },
+  { metodo: 'GET', caminho: '/relatorios/produtos-mais-vendidos', recurso: 'relatorios', resumo: 'Ranking de produtos.', filtros: [...PERIODO, 'limite'] },
+  { metodo: 'GET', caminho: '/relatorios/estoque', recurso: 'relatorios', resumo: 'Posição de estoque com custo e valor.', filtros: ['depositoId', 'categoriaId'] },
+  { metodo: 'GET', caminho: '/relatorios/comissoes', recurso: 'relatorios', resumo: 'Relatório de comissões da competência.', filtros: ['competencia (AAAA-MM)'] },
+  { metodo: 'GET', caminho: '/relatorios/contas', recurso: 'relatorios', resumo: 'Relatório de contas a receber ou a pagar.', filtros: ['tipo (receber|pagar)', ...PERIODO] },
+
+  // ------------------------------------------------ comunicação
+  { metodo: 'GET', caminho: '/notificacoes', recurso: 'comunicacao', resumo: 'Fila de mensagens (enviadas, pendentes, com erro).', filtros: ['status (PENDENTE|ENVIANDO|ENVIADA|ERRO|CANCELADA)', 'canal (EMAIL|WHATSAPP)', 'origemTipo', 'origemId', 'contatoId', ...PERIODO, 'pesquisa', ...PAG] },
+  { metodo: 'GET', caminho: '/notificacoes/{id}', recurso: 'comunicacao', resumo: 'Uma mensagem.' },
+  { metodo: 'POST', caminho: '/notificacoes', recurso: 'comunicacao', resumo: 'Envia WhatsApp ou e-mail (entra na fila). Com origemTipo/origemId, as {{variáveis}} são preenchidas.', corpo: { canal: 'WHATSAPP', destinatario: '5519999990000', assunto: null, corpo: 'Olá {{cliente.primeiroNome}}! Seu notebook está pronto.', contatoId: 1, origemTipo: null, origemId: null, agendadaPara: null } },
+  { metodo: 'POST', caminho: '/notificacoes/{id}/reenviar', recurso: 'comunicacao', resumo: 'Reenvia uma mensagem.' },
+  { metodo: 'POST', caminho: '/notificacoes/{id}/cancelar', recurso: 'comunicacao', resumo: 'Cancela mensagem pendente.' },
+  { metodo: 'POST', caminho: '/notificacoes/processar', recurso: 'comunicacao', resumo: 'Processa a fila agora.' },
+  { metodo: 'POST', caminho: '/notificacoes/lembretes-contas', recurso: 'comunicacao', resumo: 'Dispara os lembretes de contas a vencer agora.' },
+  { metodo: 'GET', caminho: '/templates-notificacao/variaveis', recurso: 'comunicacao', resumo: 'Variáveis disponíveis nos modelos ({{cliente.nome}}, {{total}}…).' },
+  ...CRUD('comunicacao', '/templates-notificacao', 'modelos de mensagem', { nome: 'OS pronta', evento: 'OS_SITUACAO', canal: 'WHATSAPP', situacaoId: 5, assunto: null, corpo: 'Olá {{cliente.primeiroNome}}, sua OS {{numero}} está pronta!', anexarPdf: false, ativo: true }, ['evento', 'canal', 'ativo']),
+  { metodo: 'POST', caminho: '/templates-notificacao/{id}/preview', recurso: 'comunicacao', resumo: 'Mostra o modelo preenchido com uma venda/OS.', corpo: { origemTipo: 'VENDA', origemId: 1 } },
+  { metodo: 'GET', caminho: '/whatsapp/status', recurso: 'comunicacao', resumo: 'WhatsApp da loja conectado? (número, desde quando).' },
+  { metodo: 'POST', caminho: '/whatsapp/enviar-teste', recurso: 'comunicacao', resumo: 'Envia uma mensagem direta (sem fila).', corpo: { numero: '19999990000', mensagem: 'Teste' } },
+  { metodo: 'POST', caminho: '/whatsapp/reconectar', recurso: 'comunicacao', resumo: 'Reconecta a sessão do WhatsApp (sem precisar de novo QR).' },
+
+  // ------------------------------------------------ cadastros auxiliares
+  ...CRUD('cadastros', '/vendedores', 'vendedores', { nome: 'João', email: 'joao@balao.info', telefone: '', comissaoPadraoPct: 3, ativo: true }),
+  ...CRUD('cadastros', '/tecnicos', 'técnicos', { nome: 'Carlos', email: '', telefone: '', especialidade: 'Notebooks', comissaoPadraoPct: 10, ativo: true }),
+  ...CRUD('cadastros', '/depositos', 'depósitos de estoque', { nome: 'LOJA CASTELO', padrao: true, ativo: true, desconsiderarSaldo: false }),
+  ...CRUD('cadastros', '/formas-pagamento', 'formas de pagamento', { nome: 'Pix', tipo: 'PIX', codigoFiscal: '17', taxaPct: 0, diasRecebimento: 0, maxParcelas: 1, ativo: true }),
+  { metodo: 'GET', caminho: '/situacoes', recurso: 'cadastros', resumo: 'Situações de cada módulo (use o id certo ao mudar a situação).', filtros: ['modulo (VENDA|ORCAMENTO|COMPRA|OS)', 'ativo'] },
+  { metodo: 'GET', caminho: '/situacoes/{id}', recurso: 'cadastros', resumo: 'Uma situação com as ações automáticas.' },
+  { metodo: 'GET', caminho: '/situacoes/{id}/permitidas', recurso: 'cadastros', resumo: 'Para quais situações se pode ir a partir desta.' },
+  { metodo: 'GET', caminho: '/situacoes/transicoes', recurso: 'cadastros', resumo: 'Transições permitidas de um módulo.', filtros: ['modulo'] },
+  { metodo: 'GET', caminho: '/situacoes/acoes', recurso: 'cadastros', resumo: 'Ações automáticas disponíveis (lançar estoque, contas, NF-e, avisar cliente…).' },
   { metodo: 'GET', caminho: '/empresa', recurso: 'cadastros', resumo: 'Dados da empresa (sem segredos).' },
+
+  // ------------------------------------------------ auditoria e saúde
+  { metodo: 'GET', caminho: '/auditoria', recurso: 'sistema', resumo: 'Trilha de auditoria: quem fez o quê, quando.', filtros: ['entidade (Venda|OrdemServico|Contato|…)', 'entidadeId', 'limite'] },
+  { metodo: 'GET', caminho: '/diagnostico', recurso: 'sistema', resumo: 'Saúde do sistema: inconsistências nos dados, com o que corrigir.' },
 ];
 
 /** Eventos que podem ser enviados por webhook. */
