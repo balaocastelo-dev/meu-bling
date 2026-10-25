@@ -29,6 +29,19 @@ export interface BaixaParams {
 
 const SITUACOES_ABERTAS = ['ABERTO', 'PARCIAL'];
 
+/**
+ * Saldo em aberto de uma conta. `valorPago`/`valorRecebido` é o dinheiro que efetivamente saiu/entrou
+ * (inclui juros), então o principal já abatido é `pago - juros`:
+ *   saldo = valor - (pago - juros) - desconto
+ */
+export function saldoContaPagar(c: { valor: number; valorPago: number; juros: number; desconto: number }) {
+  return Math.max(0, arredondar(c.valor + c.juros - c.valorPago - c.desconto));
+}
+export function saldoContaReceber(c: { valor: number; valorRecebido: number; juros: number; desconto: number }) {
+  return Math.max(0, arredondar(c.valor + c.juros - c.valorRecebido - c.desconto));
+}
+const TOLERANCIA = 0.009;
+
 // ---------------------------------------------------------------------
 // Baixa de contas a receber
 // ---------------------------------------------------------------------
@@ -44,9 +57,19 @@ async function baixarReceberTx(tx: Tx, p: BaixaParams) {
 
   const juros = arredondar(p.juros || 0);
   const desconto = arredondar(p.desconto || 0);
+  const saldoAntes = saldoContaReceber(conta);
+  const abatido = arredondar(p.valor - juros + desconto);
+  if (abatido > saldoAntes + TOLERANCIA) {
+    throw new AppError(
+      `Valor maior que o saldo em aberto (R$ ${saldoAntes.toFixed(2).replace('.', ',')}). Se recebeu a mais por juros/multa, informe a diferença no campo "Juros / multa".`,
+      422,
+      'VALOR_ACIMA_DO_SALDO',
+    );
+  }
   const valorRecebido = arredondar(conta.valorRecebido + p.valor);
+  const jurosTotal = arredondar(conta.juros + juros);
   const descontoTotal = arredondar(conta.desconto + desconto);
-  const quitada = valorRecebido + descontoTotal >= conta.valor - 0.005;
+  const quitada = saldoContaReceber({ valor: conta.valor, valorRecebido, juros: jurosTotal, desconto: descontoTotal }) <= TOLERANCIA;
 
   const movimento = await tx.movimentoFinanceiro.create({
     data: {
@@ -54,7 +77,9 @@ async function baixarReceberTx(tx: Tx, p: BaixaParams) {
       data: p.data,
       tipo: 'ENTRADA',
       valor: arredondar(p.valor),
-      descricao: `Recebimento: ${conta.descricao}`,
+      juros,
+      desconto,
+      descricao: `${quitada ? 'Recebimento' : 'Recebimento parcial'}: ${conta.descricao}`,
       categoriaId: conta.categoriaId,
       contaReceberId: conta.id,
       transacaoId: p.transacaoId ?? null,
@@ -68,7 +93,7 @@ async function baixarReceberTx(tx: Tx, p: BaixaParams) {
     where: { id: conta.id },
     data: {
       valorRecebido,
-      juros: arredondar(conta.juros + juros),
+      juros: jurosTotal,
       desconto: descontoTotal,
       situacao: quitada ? 'RECEBIDO' : 'PARCIAL',
       dataRecebimento: quitada ? p.data : conta.dataRecebimento,
@@ -102,9 +127,20 @@ async function baixarPagarTx(tx: Tx, p: BaixaParams) {
 
   const juros = arredondar(p.juros || 0);
   const desconto = arredondar(p.desconto || 0);
+  const saldoAntes = saldoContaPagar(conta);
+  // principal abatido por esta baixa = dinheiro que saiu - juros + desconto
+  const abatido = arredondar(p.valor - juros + desconto);
+  if (abatido > saldoAntes + TOLERANCIA) {
+    throw new AppError(
+      `Valor maior que o saldo em aberto (R$ ${saldoAntes.toFixed(2).replace('.', ',')}). Se pagou a mais por juros/multa, informe a diferença no campo "Juros / multa".`,
+      422,
+      'VALOR_ACIMA_DO_SALDO',
+    );
+  }
   const valorPago = arredondar(conta.valorPago + p.valor);
+  const jurosTotal = arredondar(conta.juros + juros);
   const descontoTotal = arredondar(conta.desconto + desconto);
-  const quitada = valorPago + descontoTotal >= conta.valor - 0.005;
+  const quitada = saldoContaPagar({ valor: conta.valor, valorPago, juros: jurosTotal, desconto: descontoTotal }) <= TOLERANCIA;
 
   const movimento = await tx.movimentoFinanceiro.create({
     data: {
@@ -112,7 +148,9 @@ async function baixarPagarTx(tx: Tx, p: BaixaParams) {
       data: p.data,
       tipo: 'SAIDA',
       valor: arredondar(p.valor),
-      descricao: `Pagamento: ${conta.descricao}`,
+      juros,
+      desconto,
+      descricao: `${quitada ? 'Pagamento' : 'Pagamento parcial'}: ${conta.descricao}`,
       categoriaId: conta.categoriaId,
       contaPagarId: conta.id,
       transacaoId: p.transacaoId ?? null,
@@ -126,7 +164,7 @@ async function baixarPagarTx(tx: Tx, p: BaixaParams) {
     where: { id: conta.id },
     data: {
       valorPago,
-      juros: arredondar(conta.juros + juros),
+      juros: jurosTotal,
       desconto: descontoTotal,
       situacao: quitada ? 'PAGO' : 'PARCIAL',
       dataPagamento: quitada ? p.data : conta.dataPagamento,
@@ -191,6 +229,44 @@ export async function estornarContaPagar(id: number) {
       data: { valorPago: 0, juros: 0, desconto: 0, situacao: 'ABERTO', dataPagamento: null },
     });
     return { conta: atualizada, movimentosEstornados: qtd };
+  });
+}
+
+/**
+ * Estorna UM pagamento (baixa parcial ou total) de uma conta a pagar, mantendo os demais.
+ * Reverte o saldo da conta financeira, libera a transação conciliada e recalcula
+ * valor pago / juros / desconto / situação a partir dos pagamentos que sobraram.
+ */
+export async function estornarPagamentoContaPagar(contaId: number, movimentoId: number) {
+  return prisma.$transaction(async (tx) => {
+    const conta = await tx.contaPagar.findUnique({ where: { id: contaId } });
+    if (!conta) throw new NotFound('Conta a pagar');
+    const mov = await tx.movimentoFinanceiro.findUnique({ where: { id: movimentoId } });
+    if (!mov || mov.contaPagarId !== contaId) throw new NotFound('Pagamento desta conta');
+
+    await tx.contaFinanceira.update({ where: { id: mov.contaFinanceiraId }, data: { saldoAtual: { increment: arredondar(mov.valor) } } });
+    if (mov.transacaoId) await tx.transacaoBancaria.update({ where: { id: mov.transacaoId }, data: { conciliado: false } });
+    await tx.movimentoFinanceiro.delete({ where: { id: mov.id } });
+
+    // Tira só o que este pagamento somou (contas vindas do Bling podem ter valor pago sem movimento)
+    const valorPago = Math.max(0, arredondar(conta.valorPago - mov.valor));
+    const juros = Math.max(0, arredondar(conta.juros - mov.juros));
+    const desconto = Math.max(0, arredondar(conta.desconto - mov.desconto));
+    const semBaixa = valorPago <= TOLERANCIA && desconto <= TOLERANCIA;
+    const quitada = !semBaixa && saldoContaPagar({ valor: conta.valor, valorPago, juros, desconto }) <= TOLERANCIA;
+    const ultimo = await tx.movimentoFinanceiro.findFirst({ where: { contaPagarId: contaId }, orderBy: { data: 'desc' } });
+
+    const atualizada = await tx.contaPagar.update({
+      where: { id: contaId },
+      data: {
+        valorPago: semBaixa ? 0 : valorPago,
+        juros: semBaixa ? 0 : juros,
+        desconto: semBaixa ? 0 : desconto,
+        situacao: semBaixa ? 'ABERTO' : quitada ? 'PAGO' : 'PARCIAL',
+        dataPagamento: quitada ? ultimo?.data ?? conta.dataPagamento : null,
+      },
+    });
+    return { conta: atualizada, movimentoEstornado: mov };
   });
 }
 
@@ -277,14 +353,14 @@ export async function resumoFinanceiro() {
 
   const abertasCR = await prisma.contaReceber.findMany({
     where: { situacao: { in: SITUACOES_ABERTAS }, vencimento: { lte: fimSemana } },
-    select: { valor: true, valorRecebido: true, desconto: true, vencimento: true },
+    select: { valor: true, valorRecebido: true, juros: true, desconto: true, vencimento: true },
   });
   const abertasCP = await prisma.contaPagar.findMany({
     where: { situacao: { in: SITUACOES_ABERTAS }, vencimento: { lte: fimSemana } },
-    select: { valor: true, valorPago: true, desconto: true, vencimento: true },
+    select: { valor: true, valorPago: true, juros: true, desconto: true, vencimento: true },
   });
-  const restCR = (c: { valor: number; valorRecebido: number; desconto: number }) => Math.max(0, c.valor - c.valorRecebido - c.desconto);
-  const restCP = (c: { valor: number; valorPago: number; desconto: number }) => Math.max(0, c.valor - c.valorPago - c.desconto);
+  const restCR = saldoContaReceber;
+  const restCP = saldoContaPagar;
   const soma = (xs: number[]) => arredondar(xs.reduce((a, b) => a + b, 0));
 
   return {
