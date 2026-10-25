@@ -170,7 +170,7 @@ function CardConta({ conta: c, onSincronizar, sincronizando, onDesvincular }: { 
   const vinculada = !!c.openFinanceItemId;
   const diferenca = typeof c.saldoBanco === 'number' ? c.saldoBanco - c.saldoAtual : null;
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
+    <div className="v18-card rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card">
       <div className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white" style={{ backgroundColor: c.cor || '#2563eb' }}>
           {c.tipo === 'CAIXA' ? <Wallet className="h-4 w-4" /> : <Landmark className="h-4 w-4" />}

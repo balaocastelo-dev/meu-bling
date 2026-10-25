@@ -51,7 +51,7 @@ export default function Saude() {
             {(['erro', 'aviso', 'info'] as Nivel[]).map((n) => {
               const E = ESTILO[n];
               return (
-                <div key={n} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-card">
+                <div key={n} className="flex items-center gap-3 v18-card rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card">
                   <E.icone className={clsx('h-6 w-6', E.cor)} />
                   <div>
                     <p className="text-2xl font-bold text-slate-900 num">{d.resumo[n]}</p>
@@ -71,7 +71,7 @@ export default function Saude() {
               {d.achados.map((a) => {
                 const E = ESTILO[a.nivel];
                 return (
-                  <div key={a.id} className={clsx('rounded-lg border bg-white p-4 shadow-card', E.fundo)}>
+                  <div key={a.id} className={clsx('v18-card rounded-2xl border bg-white p-4 shadow-card', E.fundo)}>
                     <div className="flex items-start gap-3">
                       <E.icone className={clsx('mt-0.5 h-5 w-5 shrink-0', E.cor)} />
                       <div className="min-w-0 flex-1">
