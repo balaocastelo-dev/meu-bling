@@ -70,6 +70,7 @@ const ConfigSmtp = lazy(() => import('@/pages/configuracoes/Smtp'));
 const ConfigOpenFinance = lazy(() => import('@/pages/configuracoes/OpenFinance'));
 const ConfigBling = lazy(() => import('@/pages/configuracoes/Bling'));
 const ConfigSaude = lazy(() => import('@/pages/configuracoes/Saude'));
+const ConfigApi = lazy(() => import('@/pages/configuracoes/ApiIntegracoes'));
 const BlingCallback = lazy(() => import('@/pages/configuracoes/BlingCallback'));
 
 const OsPublica = lazy(() => import('@/pages/publico/OsPublica'));
@@ -184,6 +185,7 @@ export const router = createBrowserRouter(
       { path: 'configuracoes/open-finance', element: ADMIN(<ConfigOpenFinance />) },
       { path: 'configuracoes/bling', element: ADMIN(<ConfigBling />) },
       { path: 'configuracoes/saude', element: ADMIN(<ConfigSaude />) },
+      { path: 'configuracoes/api', element: ADMIN(<ConfigApi />) },
       { path: 'configuracoes/bling/callback', element: ADMIN(<BlingCallback />) },
 
       { path: '*', element: S(<NotFound />) },

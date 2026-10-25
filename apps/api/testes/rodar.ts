@@ -88,6 +88,7 @@ async function main() {
     rodar('Fluxo completo (2ª rodada no mesmo banco: numeração/duplicidade)', NPX, ['tsx', 'scripts/smoke.ts', base]);
     rodar('Perfis de acesso', NPX, ['tsx', 'scripts/teste-perfis.ts', base]);
     rodar('Regras de vendas, painel, metas e desafios', NPX, ['tsx', 'testes/regras-vendas.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
+    rodar('API externa: chaves, permissões, MCP para agentes de IA e webhooks', NPX, ['tsx', 'testes/api-externa.ts', base]);
     if (!RAPIDO) rodar('Telas no navegador (todas as páginas × perfis + celular)', NPX, ['tsx', 'testes/telas.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Links: todo link do sistema leva a uma tela que existe', NPX, ['tsx', 'testes/links.ts', base]);
     rodar('Integridade dos dados depois dos testes (Saúde do sistema)', NPX, ['tsx', 'testes/integridade.ts', base]);

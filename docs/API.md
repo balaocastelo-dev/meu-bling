@@ -2,6 +2,7 @@
 
 Base: `http://localhost:3333/api/v1`. JSON. Autenticação: `Authorization: Bearer <token>` (JWT, 12h).
 Todas as rotas em `/api/*` exigem token, exceto `POST /auth/login`, `GET /saude`, `/publico/*`, `/webhooks/*`.
+Outros sistemas e agentes de IA usam **chaves de API** (`X-API-Key: mb_...`) com permissão por área, configuradas em Configurações → API e integrações — ver `API-EXTERNA.md`.
 
 ## Convenções
 
