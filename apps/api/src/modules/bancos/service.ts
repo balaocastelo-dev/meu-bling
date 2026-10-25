@@ -6,7 +6,7 @@ import { prisma, type Tx } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { arredondar } from '../../lib/util.js';
 import { obterProvedor, type TransacaoOpenFinance } from '../../integracoes/openfinance/index.js';
-import { baixarContaReceber, baixarContaPagar, criarMovimentoAvulso } from '../financeiro/service.js';
+import { baixarContaReceber, baixarContaPagar, criarMovimentoAvulso, saldoContaPagar } from '../financeiro/service.js';
 
 export interface Sugestao {
   tipo: 'RECEBER' | 'PAGAR';
@@ -119,7 +119,7 @@ export async function sugerirConciliacao(t: { valor: number; data: Date; tipo: s
       take: 200,
     });
     for (const c of contas) {
-      const resto = arredondar(c.valor - c.valorPago - c.desconto);
+      const resto = saldoContaPagar(c);
       if (resto < min || resto > max) continue;
       let score = Math.abs(resto - alvo) < 0.005 ? 1.0 : 0.8;
       if (dentroVenc(c.vencimento)) score += 0.1;
@@ -157,7 +157,7 @@ export async function conciliar(
       if (t.valor > 0) throw new AppError('Transação de crédito não pode baixar conta a pagar.', 422, 'TIPO_INCOMPATIVEL');
       const conta = await tx.contaPagar.findUnique({ where: { id: p.id } });
       if (!conta) throw new NotFound('Conta a pagar');
-      const resto = arredondar(conta.valor - conta.valorPago - conta.desconto);
+      const resto = saldoContaPagar(conta);
       const dif = arredondar(valor - resto);
       const r = await baixarContaPagar(
         { id: p.id, valor, data: t.data, contaFinanceiraId: t.contaFinanceiraId, juros: dif > 0 ? dif : 0, desconto: dif < 0 && Math.abs(dif) <= resto * 0.01 ? Math.abs(dif) : 0, transacaoId: t.id, observacoes: `Conciliação bancária: ${t.descricao}` },

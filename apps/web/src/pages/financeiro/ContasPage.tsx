@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { CheckCheck, CircleDollarSign, Clock, Plus, TriangleAlert, Undo2, Wallet } from 'lucide-react';
+import { CheckCheck, CircleDollarSign, Clock, History, Plus, TriangleAlert, Undo2, Wallet } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useCategoriasFinanceiras, useContasFinanceiras, useFormasPagamento, useVendedores, opcoesDe } from '@/hooks/useListas';
@@ -20,6 +20,12 @@ interface Props {
 
 function valorPago(c: Conta): number {
   return 'valorRecebido' in c ? c.valorRecebido : c.valorPago;
+}
+
+/** Saldo em aberto: o valor pago inclui juros, então principal abatido = pago - juros. */
+function saldoDe(c: Conta): number {
+  if (typeof c.saldo === 'number') return c.saldo;
+  return Math.max(0, Math.round((c.valor + (c.juros || 0) - valorPago(c) - (c.desconto || 0)) * 100) / 100);
 }
 
 function linkOrigem(c: Conta): string | null {
@@ -54,6 +60,7 @@ export function ContasPage({ tipo }: Props) {
 
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [baixa, setBaixa] = useState<Conta[] | null>(null);
+  const [detalhe, setDetalhe] = useState<number | null>(null);
   const [novo, setNovo] = useState(false);
 
   const params = { ...pg.filtros, pagina: pg.pagina, limite: pg.limite };
@@ -88,7 +95,7 @@ export function ContasPage({ tipo }: Props) {
   const abertas = (resp?.data ?? []).filter((c) => c.situacao === 'ABERTO' || c.situacao === 'PARCIAL');
   const todasSel = abertas.length > 0 && abertas.every((c) => sel.has(c.id));
   const alternarTodas = () => setSel(todasSel ? new Set() : new Set(abertas.map((c) => c.id)));
-  const totalSel = useMemo(() => (resp?.data ?? []).filter((c) => sel.has(c.id)).reduce((s, c) => s + (c.valor - valorPago(c)), 0), [sel, resp]);
+  const totalSel = useMemo(() => (resp?.data ?? []).filter((c) => sel.has(c.id)).reduce((s, c) => s + saldoDe(c), 0), [sel, resp]);
 
   const colunas: Coluna<Conta>[] = [
     {
@@ -141,21 +148,24 @@ export function ContasPage({ tipo }: Props) {
     },
     { chave: 'valor', titulo: 'Valor', direita: true, largura: '110px', render: (c) => <span className="font-medium">{moeda(c.valor)}</span> },
     { chave: 'pago', titulo: ehReceber ? 'Recebido' : 'Pago', direita: true, largura: '110px', ocultarMobile: true, render: (c) => <span className="text-slate-500">{moeda(valorPago(c))}</span> },
-    { chave: 'saldo', titulo: 'Saldo', direita: true, largura: '110px', render: (c) => (c.situacao === 'CANCELADO' ? <span className="text-slate-300">—</span> : <span className={clsx(c.valor - valorPago(c) > 0 ? 'text-slate-800' : 'text-emerald-700')}>{moeda(c.valor - valorPago(c))}</span>) },
+    { chave: 'saldo', titulo: 'Saldo', direita: true, largura: '110px', render: (c) => (c.situacao === 'CANCELADO' ? <span className="text-slate-300">—</span> : <span className={clsx(saldoDe(c) > 0 ? 'text-slate-800' : 'text-emerald-700')}>{moeda(saldoDe(c))}</span>) },
     {
       chave: 'acoes',
       titulo: '',
-      largura: '120px',
+      largura: '150px',
       render: (c) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
           {(c.situacao === 'ABERTO' || c.situacao === 'PARCIAL') && (
             <>
-              <Button tamanho="xs" variante="sucesso" onClick={() => setBaixa([c])}>{ehReceber ? 'Receber' : 'Pagar'}</Button>
+              <Button tamanho="xs" variante="sucesso" title={c.situacao === 'PARCIAL' ? 'Pagar o restante ou mais uma parte' : 'Pagar total ou parcial'} onClick={() => setBaixa([c])}>{ehReceber ? 'Receber' : 'Pagar'}</Button>
               <Button tamanho="xs" variante="fantasma" title="Cancelar conta" onClick={() => { if (confirm('Cancelar esta conta?')) cancelar.mutate(c.id); }}>✕</Button>
             </>
           )}
           {(c.situacao === 'RECEBIDO' || c.situacao === 'PAGO' || c.situacao === 'PARCIAL') && valorPago(c) > 0 && (
-            <Button tamanho="xs" variante="fantasma" icone={<Undo2 className="h-3.5 w-3.5" />} title="Estornar baixa" onClick={() => { if (confirm('Estornar a baixa desta conta?')) estornar.mutate(c.id); }} />
+            <>
+              <Button tamanho="xs" variante="fantasma" icone={<History className="h-3.5 w-3.5" />} title={ehReceber ? 'Histórico de recebimentos' : 'Histórico de pagamentos'} onClick={() => setDetalhe(c.id)} />
+              <Button tamanho="xs" variante="fantasma" icone={<Undo2 className="h-3.5 w-3.5" />} title="Estornar todas as baixas" onClick={() => { if (confirm(c.situacao === 'PARCIAL' ? 'Estornar TODOS os pagamentos desta conta? (para estornar só um, abra o histórico)' : 'Estornar a baixa desta conta?')) estornar.mutate(c.id); }} />
+            </>
           )}
         </div>
       ),
@@ -206,6 +216,7 @@ export function ContasPage({ tipo }: Props) {
           dados={resp?.data}
           carregando={isLoading}
           chave={(c) => c.id}
+          onClickLinha={(c) => setDetalhe(c.id)}
           cartao={(c) => {
             const atr = c.atrasada ?? ((c.situacao === 'ABERTO' || c.situacao === 'PARCIAL') && diasAtraso(c.vencimento) > 0);
             const st = atr ? 'ATRASADO' : c.situacao;
@@ -232,7 +243,7 @@ export function ContasPage({ tipo }: Props) {
                     <Badge tom={tomPorStatus(st)}>{rotulo(st)}</Badge>
                     <span className={clsx(atr && 'font-medium text-red-600')}>vence {data(c.vencimento)}{atr ? ` · ${diasAtraso(c.vencimento)} dias` : ''}</span>
                     {c.formaPagamento?.nome && <span>· {c.formaPagamento.nome}</span>}
-                    {c.situacao !== 'CANCELADO' && valorPago(c) > 0 && c.valor - valorPago(c) > 0 && <span>· falta {moeda(c.valor - valorPago(c))}</span>}
+                    {c.situacao !== 'CANCELADO' && valorPago(c) > 0 && saldoDe(c) > 0 && <span>· pago {moeda(valorPago(c))} · falta {moeda(saldoDe(c))}</span>}
                   </div>
                 </div>
               </div>
@@ -242,7 +253,8 @@ export function ContasPage({ tipo }: Props) {
         {resp && <Pagination pagina={resp.meta.pagina} totalPaginas={resp.meta.totalPaginas} total={resp.meta.total} limite={resp.meta.limite} onPagina={pg.setPagina} onLimite={pg.setLimite} />}
       </Card>
 
-      <BaixaModal tipo={tipo} contas={baixa} onFechar={() => setBaixa(null)} onConcluido={invalidar} contasFin={contasFin ?? []} formas={formas ?? []} />
+      <BaixaModal tipo={tipo} contas={baixa} onFechar={() => setBaixa(null)} onConcluido={() => { invalidar(); qc.invalidateQueries({ queryKey: [base, 'detalhe'] }); }} contasFin={contasFin ?? []} formas={formas ?? []} />
+      <DetalheContaModal tipo={tipo} id={detalhe} onFechar={() => setDetalhe(null)} onPagar={(c) => { setDetalhe(null); setBaixa([c]); }} onAlterado={invalidar} />
       <NovaContaModal tipo={tipo} aberto={novo} onFechar={() => setNovo(false)} onConcluido={invalidar} categorias={categorias ?? []} formas={formas ?? []} contasFin={contasFin ?? []} />
     </div>
   );
@@ -261,19 +273,31 @@ function BaixaModal({ tipo, contas, onFechar, onConcluido, contasFin, formas }: 
   const [desconto, setDesconto] = useState(0);
   const [obs, setObs] = useState('');
   const [progresso, setProgresso] = useState<number | null>(null);
+  /** true quando o usuário digitou o valor (aí juros/desconto não o recalculam mais) */
+  const [valorEditado, setValorEditado] = useState(false);
 
   useEffect(() => {
     if (contas?.length) {
       setDataBaixa(hoje());
       setContaFin(contasFin.find((c) => c.padrao)?.id ?? contasFin[0]?.id ?? '');
       setForma(contas[0].formaPagamentoId ?? '');
-      setValor(contas.reduce((s, c) => s + (c.valor - valorPago(c)), 0));
+      setValor(Math.round(contas.reduce((s, c) => s + saldoDe(c), 0) * 100) / 100);
+      setValorEditado(false);
       setJuros(0);
       setDesconto(0);
       setObs('');
       setProgresso(null);
     }
   }, [contas, contasFin]);
+
+  const saldoAtual = contas?.length ? Math.round(contas.reduce((s, c) => s + saldoDe(c), 0) * 100) / 100 : 0;
+  // se o valor não foi digitado, acompanha juros/desconto (pagamento integral)
+  useEffect(() => {
+    if (!valorEditado && contas?.length === 1) setValor(Math.max(0, Math.round((saldoAtual + juros - desconto) * 100) / 100));
+  }, [juros, desconto]); // eslint-disable-line react-hooks/exhaustive-deps
+  const abatido = Math.round((valor - juros + desconto) * 100) / 100;
+  const restara = Math.round((saldoAtual - abatido) * 100) / 100;
+  const acimaDoSaldo = restara < -0.009;
 
   const m = useMutation({
     mutationFn: async () => {
@@ -285,7 +309,7 @@ function BaixaModal({ tipo, contas, onFechar, onConcluido, contasFin, formas }: 
       // Baixa em lote: uma chamada por conta (valor integral do saldo)
       let i = 0;
       for (const c of contas) {
-        await api.post(`${base}/${c.id}/baixar`, { valor: c.valor - valorPago(c), data: dataBaixa, contaFinanceiraId: Number(contaFin), formaPagamentoId: forma === '' ? undefined : Number(forma), observacoes: obs || undefined });
+        await api.post(`${base}/${c.id}/baixar`, { valor: saldoDe(c), data: dataBaixa, contaFinanceiraId: Number(contaFin), formaPagamentoId: forma === '' ? undefined : Number(forma), observacoes: obs || undefined });
         setProgresso(++i);
       }
     },
@@ -301,18 +325,19 @@ function BaixaModal({ tipo, contas, onFechar, onConcluido, contasFin, formas }: 
   });
 
   if (!contas?.length) return null;
-  const saldo = contas.reduce((s, c) => s + (c.valor - valorPago(c)), 0);
+  const saldo = saldoAtual;
+  const jaPago = contas.length === 1 ? valorPago(contas[0]) : 0;
 
   return (
     <Modal
       aberto
       onFechar={onFechar}
       titulo={lote ? `${ehReceber ? 'Receber' : 'Pagar'} ${contas.length} contas` : ehReceber ? 'Registrar recebimento' : 'Registrar pagamento'}
-      descricao={lote ? `Total ${moeda(saldo)} — cada conta será baixada pelo saldo integral.` : contas[0].descricao}
+      descricao={lote ? `Total ${moeda(saldo)} — cada conta será baixada pelo saldo integral.` : `${contas[0].descricao} · em aberto ${moeda(saldo)}${jaPago > 0 ? ` (já ${ehReceber ? 'recebido' : 'pago'} ${moeda(jaPago)} de ${moeda(contas[0].valor)})` : ''}`}
       rodape={
         <>
           <Button variante="secundario" onClick={onFechar}>Cancelar</Button>
-          <Button variante="sucesso" carregando={m.isPending} disabled={!contaFin || (!lote && valor <= 0)} onClick={() => m.mutate()}>
+          <Button variante="sucesso" carregando={m.isPending} disabled={!contaFin || (!lote && (valor <= 0 || acimaDoSaldo))} onClick={() => m.mutate()}>
             {m.isPending && progresso !== null ? `${progresso}/${contas.length}…` : 'Confirmar'}
           </Button>
         </>
@@ -324,15 +349,115 @@ function BaixaModal({ tipo, contas, onFechar, onConcluido, contasFin, formas }: 
         <Select label="Forma de pagamento" value={forma} onChange={(e) => setForma(e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(formas)} placeholder="—" />
         {!lote && (
           <>
-            <MoneyInput label={ehReceber ? 'Valor recebido' : 'Valor pago'} value={valor} onChange={setValor} />
+            <MoneyInput label={ehReceber ? 'Valor recebido agora' : 'Valor pago agora'} value={valor} onChange={(v) => { setValor(v); setValorEditado(true); }} />
             <MoneyInput label="Juros / multa" value={juros} onChange={setJuros} />
             <MoneyInput label="Desconto" value={desconto} onChange={setDesconto} />
           </>
         )}
         <Textarea className="col-span-2" label="Observações" rows={2} value={obs} onChange={(e) => setObs(e.target.value)} />
       </div>
-      {!lote && valor < saldo && valor > 0 && <p className="mt-2 text-xs text-amber-700">Baixa parcial: restarão {moeda(saldo - valor)} em aberto.</p>}
+      {!lote && (
+        <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          {acimaDoSaldo ? (
+            <p className="font-medium text-red-600">Valor acima do saldo em aberto ({moeda(saldo)}). Se {ehReceber ? 'recebeu' : 'pagou'} a mais por juros/multa, lance a diferença em "Juros / multa".</p>
+          ) : restara > 0.009 && valor > 0 ? (
+            <p className="text-amber-700"><b>{ehReceber ? 'Recebimento' : 'Pagamento'} parcial:</b> restarão <b>{moeda(restara)}</b> em aberto nesta conta para {ehReceber ? 'receber' : 'pagar'} depois.</p>
+          ) : valor > 0 ? (
+            <p className="text-emerald-700">A conta será quitada.</p>
+          ) : null}
+          <p className="mt-1 text-slate-400">Pode {ehReceber ? 'receber' : 'pagar'} só uma parte: digite o valor desta vez. Cada {ehReceber ? 'recebimento' : 'pagamento'} fica registrado no histórico da conta.</p>
+        </div>
+      )}
     </Modal>
+  );
+}
+
+/** Detalhe da conta com histórico de pagamentos/recebimentos (baixas parciais) */
+function DetalheContaModal({ tipo, id, onFechar, onPagar, onAlterado }: { tipo: 'receber' | 'pagar'; id: number | null; onFechar: () => void; onPagar: (c: Conta) => void; onAlterado: () => void }) {
+  const ehReceber = tipo === 'receber';
+  const base = ehReceber ? '/contas-receber' : '/contas-pagar';
+  const qc = useQueryClient();
+  const { data: c, isLoading } = useQuery({ queryKey: [base, 'detalhe', id], queryFn: () => api.get<Conta>(`${base}/${id}`), enabled: id !== null });
+
+  const estornarUm = useMutation({
+    mutationFn: (movId: number) => api.post(`${base}/${id}/pagamentos/${movId}/estornar`),
+    onSuccess: () => {
+      toast.success('Pagamento estornado. O valor voltou para o saldo em aberto.');
+      qc.invalidateQueries({ queryKey: [base, 'detalhe', id] });
+      onAlterado();
+    },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
+
+  if (id === null) return null;
+  const pagos = c?.lancamentos ?? [];
+  const aberta = c && (c.situacao === 'ABERTO' || c.situacao === 'PARCIAL');
+  const pago = c ? valorPago(c) : 0;
+  const semMovimento = c ? Math.round((pago - pagos.reduce((s, m) => s + m.valor, 0)) * 100) / 100 : 0;
+
+  return (
+    <Modal
+      aberto
+      onFechar={onFechar}
+      titulo={c?.descricao ?? 'Conta'}
+      descricao={c ? [c.contato?.nome, c.categoria?.nome, c.parcela && `parc. ${c.parcela}`, `vence ${data(c.vencimento)}`].filter(Boolean).join(' · ') : undefined}
+      rodape={
+        <>
+          <Button variante="secundario" onClick={onFechar}>Fechar</Button>
+          {aberta && c && <Button variante="sucesso" onClick={() => onPagar(c)}>{c.situacao === 'PARCIAL' ? (ehReceber ? 'Receber restante / parte' : 'Pagar restante / parte') : ehReceber ? 'Receber' : 'Pagar'}</Button>}
+        </>
+      }
+    >
+      {isLoading || !c ? (
+        <p className="py-6 text-center text-sm text-slate-400">Carregando…</p>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2 text-sm min-[480px]:grid-cols-4">
+            <Resumo rotulo="Valor da conta" valor={moeda(c.valor)} />
+            <Resumo rotulo={ehReceber ? 'Recebido' : 'Pago'} valor={moeda(pago)} tom="verde" />
+            <Resumo rotulo="Juros / desconto" valor={`${moeda(c.juros)} / ${moeda(c.desconto)}`} />
+            <Resumo rotulo="Falta" valor={moeda(saldoDe(c))} tom={saldoDe(c) > 0 ? 'ambar' : 'verde'} />
+          </div>
+          <div className="flex items-center gap-2"><Badge tom={tomPorStatus(c.atrasada ? 'ATRASADO' : c.situacao)}>{rotulo(c.atrasada ? 'ATRASADO' : c.situacao)}</Badge>{c.situacao === 'PARCIAL' && <span className="text-xs text-slate-500">{ehReceber ? 'Recebida' : 'Paga'} em parte — o restante continua em aberto.</span>}</div>
+
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{ehReceber ? 'Recebimentos' : 'Pagamentos'} ({pagos.length})</p>
+            {pagos.length === 0 && semMovimento <= 0 ? (
+              <p className="rounded-md border border-dashed border-slate-200 py-4 text-center text-sm text-slate-400">Nenhum {ehReceber ? 'recebimento' : 'pagamento'} ainda.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 rounded-md border border-slate-200">
+                {pagos.map((m) => (
+                  <li key={m.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-slate-900">{moeda(m.valor)} <span className="font-normal text-slate-500">em {data(m.data)}</span></p>
+                      <p className="truncate text-xs text-slate-500">{[m.contaFinanceira?.nome, m.juros ? `juros ${moeda(m.juros)}` : null, m.desconto ? `desconto ${moeda(m.desconto)}` : null, m.conciliado ? 'conciliado' : null, m.observacoes].filter(Boolean).join(' · ')}</p>
+                    </div>
+                    {!ehReceber && (
+                      <Button tamanho="xs" variante="fantasma" icone={<Undo2 className="h-3.5 w-3.5" />} carregando={estornarUm.isPending && estornarUm.variables === m.id} title="Estornar só este pagamento"
+                        onClick={() => { if (confirm(`Estornar este pagamento de ${moeda(m.valor)} (${data(m.data)})? O valor volta para o saldo em aberto.`)) estornarUm.mutate(m.id); }}>
+                        Estornar
+                      </Button>
+                    )}
+                  </li>
+                ))}
+                {semMovimento > 0.009 && (
+                  <li className="px-3 py-2 text-xs text-slate-500">{moeda(semMovimento)} {ehReceber ? 'recebidos' : 'pagos'} antes (importado do Bling, sem lançamento de caixa).</li>
+                )}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function Resumo({ rotulo: r, valor, tom }: { rotulo: string; valor: string; tom?: 'verde' | 'ambar' }) {
+  return (
+    <div className="rounded-md border border-slate-200 px-3 py-2">
+      <p className="text-[11px] text-slate-500">{r}</p>
+      <p className={clsx('num font-semibold', tom === 'verde' ? 'text-emerald-700' : tom === 'ambar' ? 'text-amber-700' : 'text-slate-900')}>{valor}</p>
+    </div>
   );
 }
 

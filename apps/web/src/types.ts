@@ -710,6 +710,10 @@ export interface ContaBase {
   parcela?: string | null;
   observacoes?: string | null;
   atrasada?: boolean;
+  /** saldo em aberto calculado pela API (valor + juros - pago - desconto) */
+  saldo?: number;
+  /** pagamentos/recebimentos (baixas) — só no detalhe */
+  lancamentos?: MovimentoFinanceiro[];
 }
 
 export interface ContaReceber extends ContaBase {
@@ -754,9 +758,12 @@ export interface MovimentoFinanceiro {
   data: string;
   tipo: 'ENTRADA' | 'SAIDA' | 'TRANSFERENCIA';
   valor: number;
+  juros?: number;
+  desconto?: number;
   descricao: string;
   categoria?: Ref | null;
   conciliado: boolean;
+  observacoes?: string | null;
 }
 
 export interface TransacaoBancaria {

@@ -991,6 +991,10 @@ model MovimentoFinanceiro {
   /// ENTRADA | SAIDA | TRANSFERENCIA
   tipo              String
   valor             Float
+  /// Baixa de conta: juros/multa e desconto desta baixa (o `valor` é o que efetivamente saiu/entrou,
+  /// já incluindo os juros). Guardado por baixa para permitir estornar só um pagamento parcial.
+  juros             Float                @default(0)
+  desconto          Float                @default(0)
   descricao         String
   categoria         CategoriaFinanceira? @relation(fields: [categoriaId], references: [id])
   categoriaId       Int?

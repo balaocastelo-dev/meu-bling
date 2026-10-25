@@ -14,6 +14,8 @@ import {
   baixarContaPagar,
   estornarContaReceber,
   estornarContaPagar,
+  estornarPagamentoContaPagar,
+  saldoContaPagar,
   criarMovimentoAvulso,
   transferirEntreContas,
   excluirMovimento,
@@ -250,11 +252,11 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     const [total, itens, abertas, pagas] = await Promise.all([
       prisma.contaPagar.count({ where: whereSit }),
       prisma.contaPagar.findMany({ where: whereSit, include, orderBy: [{ vencimento: 'asc' }, { id: 'asc' }], ...paginar(q) }),
-      prisma.contaPagar.findMany({ where: { ...where, situacao: { in: ['ABERTO', 'PARCIAL'] } }, select: { valor: true, valorPago: true, desconto: true, vencimento: true } }),
+      prisma.contaPagar.findMany({ where: { ...where, situacao: { in: ['ABERTO', 'PARCIAL'] } }, select: { valor: true, valorPago: true, juros: true, desconto: true, vencimento: true } }),
       prisma.contaPagar.aggregate({ where: { ...where, situacao: { in: ['PAGO', 'PARCIAL'] } }, _sum: { valorPago: true } }),
     ]);
     const origem = await mapaOrigens(itens);
-    const rest = (c: { valor: number; valorPago: number; desconto: number }) => Math.max(0, c.valor - c.valorPago - c.desconto);
+    const rest = saldoContaPagar;
     return {
       ...respostaPaginada(
         itens.map((c) => ({ ...c, atrasada: ['ABERTO', 'PARCIAL'].includes(c.situacao) && c.vencimento < hoje, saldo: arredondar(rest(c)), origem: origem(c) })),
@@ -277,7 +279,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     });
     if (!c) throw new NotFound('Conta a pagar');
     const origem = await mapaOrigens([c]);
-    return { ...c, atrasada: ['ABERTO', 'PARCIAL'].includes(c.situacao) && c.vencimento < startOfDay(new Date()), origem: origem(c) };
+    return { ...c, saldo: saldoContaPagar(c), atrasada: ['ABERTO', 'PARCIAL'].includes(c.situacao) && c.vencimento < startOfDay(new Date()), origem: origem(c) };
   });
 
   app.post('/api/v1/contas-pagar', { preHandler: fin }, async (req, reply) => {
@@ -338,7 +340,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     const b = baixaSchema.parse(req.body);
     const atual = await prisma.contaPagar.findUnique({ where: { id } });
     if (!atual) throw new NotFound('Conta a pagar');
-    const valor = b.valor ?? arredondar(atual.valor - atual.valorPago - atual.desconto - b.desconto + b.juros);
+    const valor = b.valor ?? arredondar(saldoContaPagar(atual) - b.desconto + b.juros);
     const r = await baixarContaPagar({
       id,
       valor,
@@ -357,6 +359,15 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     const id = Number((req.params as any).id);
     const r = await estornarContaPagar(id);
     await auditar(req, 'ContaPagar', id, 'ACAO', { acao: 'estornar', movimentos: r.movimentosEstornados });
+    return r;
+  });
+
+  /** Estorna só um pagamento (ex.: uma das baixas parciais), mantendo os demais. */
+  app.post('/api/v1/contas-pagar/:id/pagamentos/:movimentoId/estornar', { preHandler: fin }, async (req) => {
+    const id = Number((req.params as any).id);
+    const movimentoId = Number((req.params as any).movimentoId);
+    const r = await estornarPagamentoContaPagar(id, movimentoId);
+    await auditar(req, 'ContaPagar', id, 'ACAO', { acao: 'estornar_pagamento', movimentoId, valor: r.movimentoEstornado.valor, descricao: r.conta.descricao });
     return r;
   });
 
@@ -447,7 +458,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     // previsto: contas em aberto por vencimento dentro do período
     const [cr, cp] = await Promise.all([
       prisma.contaReceber.findMany({ where: { situacao: { in: ['ABERTO', 'PARCIAL'] }, vencimento: { gte: ini, lte: fim } }, select: { vencimento: true, valor: true, valorRecebido: true, desconto: true } }),
-      prisma.contaPagar.findMany({ where: { situacao: { in: ['ABERTO', 'PARCIAL'] }, vencimento: { gte: ini, lte: fim } }, select: { vencimento: true, valor: true, valorPago: true, desconto: true } }),
+      prisma.contaPagar.findMany({ where: { situacao: { in: ['ABERTO', 'PARCIAL'] }, vencimento: { gte: ini, lte: fim } }, select: { vencimento: true, valor: true, valorPago: true, juros: true, desconto: true } }),
     ]);
     const prev = new Map(periodos.map((p) => [p, { periodo: p, receber: 0, pagar: 0 }]));
     for (const c of cr) {
@@ -458,7 +469,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     for (const c of cp) {
       const k = chavePeriodo(c.vencimento, agrupar);
       const s = prev.get(k) || prev.set(k, { periodo: k, receber: 0, pagar: 0 }).get(k)!;
-      s.pagar += Math.max(0, c.valor - c.valorPago - c.desconto);
+      s.pagar += saldoContaPagar(c);
     }
     let projetado = acumulado;
     const previsto = [...prev.values()]
