@@ -230,9 +230,9 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
       <div className="space-y-4">
         {/* Cabeçalho */}
         <Secao titulo={orcamento ? 'Dados do orçamento' : 'Dados do pedido'}>
-          <div className="grid gap-3 md:grid-cols-12">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
             <SearchSelect
-              className="md:col-span-5"
+              className="sm:col-span-2 xl:col-span-5"
               label="Cliente"
               obrigatorio
               erro={erros.contatoId}
@@ -251,18 +251,18 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                 </button>
               }
             />
-            <Select className="md:col-span-3" label="Vendedor" value={form.vendedorId ?? ''} onChange={(e) => set('vendedorId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(vendedores)} placeholder="—" disabled={bloqueado} />
-            <DateInput className="md:col-span-2" label="Data" obrigatorio erro={erros.data} value={form.data} onChange={(v) => set('data', v)} disabled={bloqueado} />
+            <Select className="xl:col-span-3" label="Vendedor" value={form.vendedorId ?? ''} onChange={(e) => set('vendedorId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(vendedores)} placeholder="—" disabled={bloqueado} />
+            <DateInput className="xl:col-span-2" label="Data" obrigatorio erro={erros.data} value={form.data} onChange={(v) => set('data', v)} disabled={bloqueado} />
             {orcamento ? (
-              <DateInput className="md:col-span-2" label="Válido até" value={form.validade ?? null} onChange={(v) => set('validade', v || null)} ajuda="Padrão: 7 dias" />
+              <DateInput className="xl:col-span-2" label="Válido até" value={form.validade ?? null} onChange={(v) => set('validade', v || null)} ajuda="Padrão: 7 dias" />
             ) : (
-              <DateInput className="md:col-span-2" label="Previsão de entrega" value={form.dataPrevista} onChange={(v) => set('dataPrevista', v || null)} />
+              <DateInput className="xl:col-span-2" label="Previsão de entrega" value={form.dataPrevista} onChange={(v) => set('dataPrevista', v || null)} />
             )}
-            <Select className="md:col-span-3" label="Depósito" value={form.depositoId ?? ''} onChange={(e) => set('depositoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(depositos)} placeholder="—" disabled={bloqueado} />
-            <Select className="md:col-span-3" label="Origem" value={form.origem} onChange={(e) => set('origem', e.target.value as VendaPayload['origem'])} opcoes={ORIGENS.map((o) => ({ valor: o, rotulo: rotulo(o) }))} />
-            <Select className="md:col-span-3" label="Categoria financeira" value={form.categoriaFinanceiraId ?? ''} onChange={(e) => set('categoriaFinanceiraId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(categorias?.filter((c) => c.tipo === 'RECEITA'))} placeholder="—" disabled={bloqueado} />
+            <Select className="xl:col-span-3" label="Depósito" value={form.depositoId ?? ''} onChange={(e) => set('depositoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(depositos)} placeholder="—" disabled={bloqueado} />
+            <Select className="xl:col-span-3" label="Origem" value={form.origem} onChange={(e) => set('origem', e.target.value as VendaPayload['origem'])} opcoes={ORIGENS.map((o) => ({ valor: o, rotulo: rotulo(o) }))} />
+            <Select className="xl:col-span-3" label="Categoria financeira" value={form.categoriaFinanceiraId ?? ''} onChange={(e) => set('categoriaFinanceiraId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(categorias?.filter((c) => c.tipo === 'RECEITA'))} placeholder="—" disabled={bloqueado} />
             {!editando && (
-              <Select className="md:col-span-3" label="Situação inicial" value={form.situacaoId ?? ''} onChange={(e) => set('situacaoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(situacoes)} placeholder="Padrão (inicial)" ajuda={orcamento ? undefined : 'Ações da situação (lançar estoque/contas) rodam ao salvar.'} />
+              <Select className="xl:col-span-3" label="Situação inicial" value={form.situacaoId ?? ''} onChange={(e) => set('situacaoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(situacoes)} placeholder="Padrão (inicial)" ajuda={orcamento ? undefined : 'Ações da situação (lançar estoque/contas) rodam ao salvar.'} />
             )}
           </div>
           {cliente && (
@@ -299,7 +299,7 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
           )}
           {erros.itens && <p className="mb-2 text-xs text-red-600">{erros.itens}</p>}
           <div className="overflow-auto rounded-md border border-slate-200">
-            <table className="tbl">
+            <table className="tbl tbl-pilha">
               <thead>
                 <tr>
                   <th className="w-8">#</th>
@@ -322,8 +322,8 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                 )}
                 {form.itens.map((it, i) => (
                   <tr key={i}>
-                    <td className="text-slate-400">{i + 1}</td>
-                    <td>
+                    <td className="pilha-oculto text-slate-400">{i + 1}</td>
+                    <td className="pilha-cheio">
                       <div className="flex items-start gap-2">
                         {it.produtoId && <FotoProduto url={it.imagemUrl} tamanho="sm" />}
                         <div className="min-w-0 flex-1">
@@ -352,21 +352,21 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                         </div>
                       </div>
                     </td>
-                    <td>
+                    <td data-rotulo="Qtd">
                       <MoneyInput value={it.quantidade} onChange={(v) => atualizarItem(i, { quantidade: v })} prefixo="" casas={2} disabled={bloqueado} inputClassName="h-8 py-0" />
                     </td>
-                    <td>
+                    <td data-rotulo="Unitário">
                       <MoneyInput value={it.valorUnitario} onChange={(v) => atualizarItem(i, { valorUnitario: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" />
                     </td>
-                    <td>
+                    <td data-rotulo="Desconto R$">
                       <MoneyInput value={it.desconto} onChange={(v) => atualizarItem(i, { desconto: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" />
                     </td>
-                    <td>
+                    <td data-rotulo="Comissão %">
                       <MoneyInput value={it.comissaoPct ?? 0} onChange={(v) => atualizarItem(i, { comissaoPct: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" />
                     </td>
-                    <td className="num text-right font-medium">{moeda(arred(it.quantidade * it.valorUnitario - (it.desconto || 0)))}</td>
+                    <td data-rotulo="Total" className="num pilha-cheio text-right font-medium">{moeda(arred(it.quantidade * it.valorUnitario - (it.desconto || 0)))}</td>
                     {!bloqueado && (
-                      <td>
+                      <td className="pilha-canto">
                         <button type="button" onClick={() => removerItem(i)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remover">
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -380,8 +380,8 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
         </Secao>
 
         {/* Totais + transporte */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Secao titulo="Transporte" className="lg:col-span-2">
+        <div className="grid gap-4 xl:grid-cols-3">
+          <Secao titulo="Transporte" className="xl:col-span-2">
             <div className="grid gap-3 sm:grid-cols-4">
               <Select
                 label="Frete por conta"
@@ -446,17 +446,18 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
       </div>
 
       {/* Barra fixa de ações */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:left-64">
-        <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-3">
-          <div className="text-sm text-slate-500">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3 lg:left-64">
+        <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-2 sm:gap-3">
+          <div className="min-w-0 text-xs text-slate-500 sm:text-sm">
             {form.itens.length} {form.itens.length === 1 ? 'item' : 'itens'} · Total <span className="num font-semibold text-slate-900">{moeda(totais.total)}</span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex shrink-0 gap-2">
             <Button variante="secundario" onClick={() => nav(editando ? `${base}/${id}` : base)}>
               Cancelar
             </Button>
             <Button variante="primario" icone={<Save className="h-4 w-4" />} carregando={salvar.isPending} onClick={submeter}>
-              {editando ? 'Salvar alterações' : orcamento ? 'Salvar orçamento' : 'Salvar venda'}
+              <span className="sm:hidden">Salvar</span>
+              <span className="hidden sm:inline">{editando ? 'Salvar alterações' : orcamento ? 'Salvar orçamento' : 'Salvar venda'}</span>
             </Button>
           </div>
         </div>

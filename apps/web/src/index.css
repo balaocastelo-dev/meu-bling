@@ -52,6 +52,24 @@ body {
   background: transparent;
 }
 
+@layer base {
+  /* Itens de grade não esticam por causa de conteúdo largo (tabela, texto comprido): sem isso, uma
+     tabela dentro de um card faz o card inteiro sair da tela no celular. Na camada base, para que
+     um min-w-* no próprio item ainda valha. */
+  .grid > * {
+    min-width: 0;
+  }
+  /* Palavra comprida (e-mail, URL, chave) quebra em vez de vazar do card */
+  main,
+  [role="dialog"] {
+    overflow-wrap: break-word;
+  }
+}
+
+/* Classes de componente ficam na camada "components": assim as classes utilitárias passadas no
+   className (w-36, py-0, text-xs, text-right…) valem por cima delas. Fora da camada, a classe
+   base ganhava de qualquer utilitário e, por exemplo, todo campo virava largura 100%. */
+@layer components {
 /* Inputs base (usados pelos componentes ui) */
 .input-base {
   @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-xs transition
@@ -77,6 +95,94 @@ body {
 }
 .tbl tbody tr.clicavel {
   @apply cursor-pointer transition-colors hover:bg-slate-50;
+}
+}
+
+/* Texto que seria cortado com "…" numa tabela quebra em até 2 linhas: numa tabela a célula cresce
+   com o texto (o "…" não segura a largura), e a descrição empurrava a tabela para fora do card. */
+.tbl td .truncate {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Tabela de itens que no celular vira uma pilha de cartões (um por linha, cada campo com rótulo).
+   Uso: <table className="tbl tbl-pilha"> e, nas células, data-rotulo="Qtd" (rótulo no celular),
+   className "pilha-cheio" (linha inteira), "pilha-oculto" (some no celular), "pilha-canto" (botão no canto). */
+@media (max-width: 767px) {
+  table.tbl-pilha,
+  table.tbl-pilha > tbody,
+  table.tbl-pilha > tfoot {
+    display: block;
+    width: 100%;
+  }
+  table.tbl-pilha > thead {
+    display: none;
+  }
+  table.tbl-pilha > tbody > tr {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem 0.75rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid rgb(241 245 249);
+  }
+  table.tbl-pilha > tbody > tr:last-child {
+    border-bottom: 0;
+  }
+  table.tbl-pilha > tbody > tr > td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    text-align: left;
+    white-space: normal;
+  }
+  table.tbl-pilha > tbody > tr > td[colspan] {
+    grid-column: 1 / -1;
+  }
+  table.tbl-pilha > tbody > tr > td[data-rotulo]::before {
+    content: attr(data-rotulo);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgb(148 163 184);
+  }
+  table.tbl-pilha > tbody > tr > td.pilha-cheio,
+  table.tbl-pilha > tbody > tr > td[data-pilha="pilha-cheio"] {
+    grid-column: 1 / -1;
+    padding-right: 2rem;
+  }
+  table.tbl-pilha > tbody > tr > td.pilha-oculto,
+  table.tbl-pilha > tbody > tr > td[data-pilha="pilha-oculto"] {
+    display: none;
+  }
+  table.tbl-pilha > tbody > tr > td.pilha-canto,
+  table.tbl-pilha > tbody > tr > td[data-pilha="pilha-canto"] {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+  }
+  table.tbl-pilha > tfoot > tr {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.25rem 0.75rem;
+    padding: 0.5rem 0.75rem;
+  }
+  table.tbl-pilha > tfoot > tr > td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  table.tbl-pilha > tfoot > tr > td:empty {
+    display: none;
+  }
 }
 
 /* Skeleton */

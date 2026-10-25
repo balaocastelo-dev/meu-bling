@@ -109,6 +109,20 @@ export default function ComprasLista() {
           carregando={isLoading}
           chave={(c) => c.id}
           onClickLinha={(c) => nav(`/compras/${c.id}`)}
+          cartao={(c) => (
+            <div className="min-w-0">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold text-slate-900">Compra {c.numero}</span>
+                <span className="num shrink-0 text-sm font-semibold text-slate-900">{moeda(c.total)}</span>
+              </div>
+              <div className="truncate text-sm text-slate-700">{c.fornecedor?.nome}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                <StatusBadge situacao={c.situacao} />
+                <span>{data(c.data)}</span>
+                {c.nfeNumero && <span>· NF {c.nfeNumero}</span>}
+              </div>
+            </div>
+          )}
           vazio={<EmptyState icone={<ShoppingBag className="h-5 w-5" />} titulo="Nenhuma compra encontrada" descricao="Importe o XML da NF-e do fornecedor ou cadastre manualmente." acao={<Link to="/compras/nova"><Button variante="primario">Nova compra</Button></Link>} />}
         />
         {resp && <Pagination pagina={resp.meta.pagina} totalPaginas={resp.meta.totalPaginas} total={resp.meta.total} limite={resp.meta.limite} onPagina={pg.setPagina} onLimite={pg.setLimite} />}

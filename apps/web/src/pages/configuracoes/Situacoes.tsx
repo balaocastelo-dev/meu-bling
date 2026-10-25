@@ -78,22 +78,23 @@ export default function Situacoes() {
           ) : !lista.length ? (
             <EmptyState titulo="Nenhuma situação" />
           ) : (
-            <table className="tbl">
+            <div className="overflow-x-auto">
+            <table className="tbl tbl-pilha">
               <thead><tr><th className="w-12">#</th><th>Situação</th><th>Marcadores</th><th>Ações ao entrar</th><th className="w-24" /></tr></thead>
               <tbody>
                 {lista.map((s) => (
                   <tr key={s.id} className={clsx('clicavel', !s.ativo && 'opacity-50')} onClick={() => setEditando({ ...s })}>
-                    <td className="text-slate-400">{s.ordem}</td>
-                    <td><BadgeCor cor={s.cor} tamanho="md">{s.nome}</BadgeCor></td>
-                    <td className="space-x-1">
+                    <td className="pilha-oculto text-slate-400">{s.ordem}</td>
+                    <td data-rotulo="Situação"><BadgeCor cor={s.cor} tamanho="md">{s.nome}</BadgeCor></td>
+                    <td className="space-x-1" data-rotulo="Marcadores">
                       {s.inicial && <Badge tom="azul">Inicial</Badge>}
                       {s.final && <Badge tom="verde">Final</Badge>}
                       {s.cancelamento && <Badge tom="vermelho">Cancelamento</Badge>}
                       {s.sistema && <Badge tom="cinza"><Lock className="h-3 w-3" /> Sistema</Badge>}
                       {!s.ativo && <Badge tom="cinza">Inativa</Badge>}
                     </td>
-                    <td className="space-x-1">{s.acoes.length ? s.acoes.map((a) => <code key={a} className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700">{a}</code>) : <span className="text-xs text-slate-400">—</span>}</td>
-                    <td>
+                    <td className="space-x-1" data-rotulo="Ações ao entrar">{s.acoes.length ? s.acoes.map((a) => <code key={a} className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700">{a}</code>) : <span className="text-xs text-slate-400">—</span>}</td>
+                    <td className="pilha-canto">
                       <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                         <Button tamanho="xs" variante="fantasma" icone={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditando({ ...s })} />
                         {!s.sistema && <Button tamanho="xs" variante="fantasma" icone={<Trash2 className="h-3.5 w-3.5 text-red-500" />} onClick={() => setExcluir(s)} />}
@@ -103,6 +104,7 @@ export default function Situacoes() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </Card>
       )}

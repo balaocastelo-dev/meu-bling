@@ -34,10 +34,10 @@ export function AppShell() {
   return (
     <div className="min-h-full">
       <Sidebar aberta={menuAberto} onFechar={() => setMenuAberto(false)} />
-      <div className="flex min-h-screen flex-col lg:pl-64">
+      <div className="flex min-h-screen min-w-0 flex-col lg:pl-64">
         <Topbar onAbrirMenu={() => setMenuAberto(true)} onAbrirBusca={() => setBuscaAberta(true)} />
-        <main className="flex-1 p-4 md:p-6">
-          <div className="mx-auto max-w-[1400px] anim-in" key={loc.pathname}>
+        <main className="min-w-0 flex-1 p-3 sm:p-4 md:p-6">
+          <div className="mx-auto min-w-0 max-w-[1400px] anim-in" key={loc.pathname}>
             <Outlet />
           </div>
         </main>

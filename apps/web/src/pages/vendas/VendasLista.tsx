@@ -31,17 +31,17 @@ function nomePeriodo(i: string, f: string) {
 /** Painel à direita do filtro: total, nº de vendas e vendedor destaque do que está filtrado */
 function PainelResumo({ r, periodo, orcamento, carregando }: { r?: ResumoLista; periodo: string; orcamento: boolean; carregando: boolean }) {
   return (
-    <div className={`ml-auto flex flex-wrap items-stretch gap-2 transition-opacity ${carregando ? 'opacity-50' : ''}`} aria-live="polite">
-      <div className="min-w-[150px] rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5">
+    <div className={`grid w-full grid-cols-2 gap-2 transition-opacity sm:ml-auto sm:flex sm:w-auto sm:flex-wrap sm:items-stretch ${carregando ? 'opacity-50' : ''}`} aria-live="polite">
+      <div className="col-span-2 min-w-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 sm:min-w-[150px]">
         <div className="text-[11px] font-medium text-emerald-700">{orcamento ? 'Total orçado' : 'Total vendido'} · {periodo}</div>
         <div className="num text-lg font-semibold leading-tight text-emerald-800">{r ? moeda(r.valor) : '—'}</div>
       </div>
-      <div className="min-w-[110px] rounded-lg border border-slate-200 bg-white px-3 py-1.5">
+      <div className="min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 sm:min-w-[110px]">
         <div className="text-[11px] font-medium text-slate-500">{orcamento ? 'Orçamentos' : 'Vendas'}</div>
         <div className="num text-lg font-semibold leading-tight text-slate-900">{r ? inteiro(r.quantidade) : '—'}</div>
         {r && r.quantidade > 0 && <div className="num text-[11px] text-slate-500">ticket {moeda(r.ticketMedio)}</div>}
       </div>
-      <div className="min-w-[170px] max-w-[260px] rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5">
+      <div className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 sm:min-w-[170px] sm:max-w-[260px]">
         <div className="flex items-center gap-1 text-[11px] font-medium text-amber-700">
           <Trophy className="h-3 w-3" /> Vendedor destaque
         </div>
@@ -216,6 +216,22 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
           carregando={isLoading}
           chave={(v) => v.id}
           onClickLinha={(v) => nav(`${base}/${v.id}`)}
+          cartao={(v) => (
+            <div className="min-w-0">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold text-slate-900">
+                  {orcamento ? 'Orçamento' : 'Venda'} {v.numero}
+                </span>
+                <span className="num shrink-0 text-sm font-semibold text-slate-900">{moeda(v.total)}</span>
+              </div>
+              <div className="truncate text-sm text-slate-700">{v.contato?.nome}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                <StatusBadge situacao={v.situacao} />
+                <span>{data(v.data)}</span>
+                {v.vendedor?.nome && <span>· {v.vendedor.nome}</span>}
+              </div>
+            </div>
+          )}
           vazio={
             <EmptyState
               icone={orcamento ? <FileSignature className="h-5 w-5" /> : <ShoppingCart className="h-5 w-5" />}

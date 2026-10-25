@@ -62,6 +62,7 @@ export default function VendaPublica() {
           {v.observacoes && <p className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-600">{v.observacoes}</p>}
         </Card>
         <Card semPadding>
+          <div className="overflow-x-auto">
           <table className="tbl">
             <thead><tr><th>Item</th><th className="text-right">Qtd</th><th className="text-right">Unitário</th><th className="text-right">Total</th></tr></thead>
             <tbody>
@@ -77,6 +78,7 @@ export default function VendaPublica() {
               <tr className="bg-slate-50 font-semibold"><td colSpan={3} className="px-3 py-2 text-right">Total</td><td className="num px-3 py-2 text-right text-base">{moeda(v.total)}</td></tr>
             </tbody>
           </table>
+          </div>
         </Card>
         {orcamento && (
           <Card>
@@ -103,6 +105,7 @@ export default function VendaPublica() {
 
         {v.parcelas && v.parcelas.length > 0 && (
           <Card titulo={orcamento ? 'Condições de pagamento' : 'Pagamento'} semPadding>
+            <div className="overflow-x-auto">
             <table className="tbl">
               <thead><tr><th>Parcela</th><th>Vencimento</th><th>Forma</th><th className="text-right">Valor</th><th /></tr></thead>
               <tbody>
@@ -111,6 +114,7 @@ export default function VendaPublica() {
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
         )}
       </div>

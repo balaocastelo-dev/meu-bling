@@ -144,9 +144,9 @@ export default function CompraForm() {
 
       <div className="space-y-4">
         <Secao titulo="Dados do pedido">
-          <div className="grid gap-3 md:grid-cols-12">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
             <SearchSelect
-              className="md:col-span-5"
+              className="sm:col-span-2 xl:col-span-5"
               label="Fornecedor"
               obrigatorio
               erro={erros.fornecedorId}
@@ -164,14 +164,14 @@ export default function CompraForm() {
                 </button>
               }
             />
-            <DateInput className="md:col-span-2" label="Data" obrigatorio value={form.data} onChange={(v) => set('data', v)} disabled={bloqueado} />
-            <DateInput className="md:col-span-2" label="Previsão de entrega" value={form.dataPrevista} onChange={(v) => set('dataPrevista', v || null)} />
-            <Select className="md:col-span-3" label="Depósito de entrada" value={form.depositoId ?? ''} onChange={(e) => set('depositoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(depositos)} placeholder="—" disabled={bloqueado} />
-            <Input className="md:col-span-3" label="Nº pedido no fornecedor" value={form.ordemCompra} onChange={(e) => set('ordemCompra', e.target.value)} />
-            <Input className="md:col-span-2" label="NF nº" value={form.nfeNumero} onChange={(e) => set('nfeNumero', e.target.value)} />
-            <Input className="md:col-span-4" label="Chave da NF-e" value={form.nfeChave} onChange={(e) => set('nfeChave', e.target.value.replace(/\D/g, ''))} maxLength={44} inputMode="numeric" />
-            <Select className="md:col-span-3" label="Categoria financeira" value={form.categoriaFinanceiraId ?? ''} onChange={(e) => set('categoriaFinanceiraId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(categorias?.filter((c) => c.tipo === 'DESPESA'))} placeholder="—" disabled={bloqueado} />
-            {!editando && <Select className="md:col-span-3" label="Situação inicial" value={form.situacaoId ?? ''} onChange={(e) => set('situacaoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(situacoes)} placeholder="Padrão (inicial)" />}
+            <DateInput className="xl:col-span-2" label="Data" obrigatorio value={form.data} onChange={(v) => set('data', v)} disabled={bloqueado} />
+            <DateInput className="xl:col-span-2" label="Previsão de entrega" value={form.dataPrevista} onChange={(v) => set('dataPrevista', v || null)} />
+            <Select className="xl:col-span-3" label="Depósito de entrada" value={form.depositoId ?? ''} onChange={(e) => set('depositoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(depositos)} placeholder="—" disabled={bloqueado} />
+            <Input className="xl:col-span-3" label="Nº pedido no fornecedor" value={form.ordemCompra} onChange={(e) => set('ordemCompra', e.target.value)} />
+            <Input className="xl:col-span-2" label="NF nº" value={form.nfeNumero} onChange={(e) => set('nfeNumero', e.target.value)} />
+            <Input className="sm:col-span-2 xl:col-span-4" label="Chave da NF-e" value={form.nfeChave} onChange={(e) => set('nfeChave', e.target.value.replace(/\D/g, ''))} maxLength={44} inputMode="numeric" />
+            <Select className="xl:col-span-3" label="Categoria financeira" value={form.categoriaFinanceiraId ?? ''} onChange={(e) => set('categoriaFinanceiraId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(categorias?.filter((c) => c.tipo === 'DESPESA'))} placeholder="—" disabled={bloqueado} />
+            {!editando && <Select className="xl:col-span-3" label="Situação inicial" value={form.situacaoId ?? ''} onChange={(e) => set('situacaoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(situacoes)} placeholder="Padrão (inicial)" />}
           </div>
         </Secao>
 
@@ -182,7 +182,7 @@ export default function CompraForm() {
           {!bloqueado && <SearchSelect placeholder="Buscar produto… (Enter adiciona)" valor={null} onChange={(_, op) => op?.dados && adicionarProduto(op.dados as Produto)} buscar={(t) => buscarProdutos(t, 'P')} limparAoSelecionar className="mb-3" />}
           {erros.itens && <p className="mb-2 text-xs text-red-600">{erros.itens}</p>}
           <div className="overflow-auto rounded-md border border-slate-200">
-            <table className="tbl">
+            <table className="tbl tbl-pilha">
               <thead>
                 <tr>
                   <th className="w-8">#</th>
@@ -203,15 +203,15 @@ export default function CompraForm() {
                 )}
                 {form.itens.map((it, i) => (
                   <tr key={i}>
-                    <td className="text-slate-400">{i + 1}</td>
-                    <td><input disabled={bloqueado} value={it.descricao} onChange={(e) => atualizarItem(i, { descricao: e.target.value })} className="input-base h-8 py-0" /></td>
-                    <td><input disabled={bloqueado} value={it.codigoFornecedor ?? ''} onChange={(e) => atualizarItem(i, { codigoFornecedor: e.target.value })} className="input-base h-8 py-0" /></td>
-                    <td><MoneyInput value={it.quantidade} onChange={(v) => atualizarItem(i, { quantidade: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
-                    <td><MoneyInput value={it.valorUnitario} onChange={(v) => atualizarItem(i, { valorUnitario: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
-                    <td><MoneyInput value={it.ipiPct} onChange={(v) => atualizarItem(i, { ipiPct: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
-                    <td className="num text-right font-medium">{moeda(totalItem(it))}</td>
+                    <td className="pilha-oculto text-slate-400">{i + 1}</td>
+                    <td className="pilha-cheio"><input disabled={bloqueado} value={it.descricao} onChange={(e) => atualizarItem(i, { descricao: e.target.value })} className="input-base h-8 py-0" /></td>
+                    <td data-rotulo="Cód. fornecedor"><input disabled={bloqueado} value={it.codigoFornecedor ?? ''} onChange={(e) => atualizarItem(i, { codigoFornecedor: e.target.value })} className="input-base h-8 py-0" /></td>
+                    <td data-rotulo="Qtd"><MoneyInput value={it.quantidade} onChange={(v) => atualizarItem(i, { quantidade: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
+                    <td data-rotulo="Unitário"><MoneyInput value={it.valorUnitario} onChange={(v) => atualizarItem(i, { valorUnitario: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
+                    <td data-rotulo="IPI %"><MoneyInput value={it.ipiPct} onChange={(v) => atualizarItem(i, { ipiPct: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
+                    <td className="num text-right font-medium" data-rotulo="Total">{moeda(totalItem(it))}</td>
                     {!bloqueado && (
-                      <td>
+                      <td className="pilha-canto">
                         <button type="button" onClick={() => removerItem(i)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                       </td>
                     )}
@@ -222,8 +222,8 @@ export default function CompraForm() {
           </div>
         </Secao>
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Secao titulo="Observações" className="lg:col-span-2">
+        <div className="grid gap-4 xl:grid-cols-3">
+          <Secao titulo="Observações" className="xl:col-span-2">
             <div className="grid gap-3 sm:grid-cols-2">
               <Textarea label="Observações" value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} rows={3} />
               <Textarea label="Observações internas" value={form.observacoesInternas} onChange={(e) => set('observacoesInternas', e.target.value)} rows={3} />
@@ -246,10 +246,10 @@ export default function CompraForm() {
         </Secao>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:left-64">
-        <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-3">
-          <div className="text-sm text-slate-500">Total <span className="num font-semibold text-slate-900">{moeda(totais.total)}</span></div>
-          <div className="flex gap-2">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3 lg:left-64">
+        <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-2 sm:gap-3">
+          <div className="min-w-0 text-xs text-slate-500 sm:text-sm">Total <span className="num font-semibold text-slate-900">{moeda(totais.total)}</span></div>
+          <div className="flex shrink-0 gap-2">
             <Button variante="secundario" onClick={() => nav(editando ? `/compras/${id}` : '/compras')}>Cancelar</Button>
             <Button variante="primario" icone={<Save className="h-4 w-4" />} carregando={salvar.isPending} onClick={submeter}>Salvar</Button>
           </div>

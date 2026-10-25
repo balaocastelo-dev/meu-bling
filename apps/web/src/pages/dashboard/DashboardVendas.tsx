@@ -108,7 +108,7 @@ export default function DashboardVendas() {
         )}
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-2">
         <Card titulo="Por vendedor">
           {isLoading ? (
             <Skeleton className="h-56" />
@@ -128,6 +128,7 @@ export default function DashboardVendas() {
             <EmptyState compacto titulo="Sem dados" />
           )}
           {data?.porVendedor.length ? (
+            <div className="overflow-x-auto">
             <table className="tbl mt-3">
               <thead>
                 <tr>
@@ -148,6 +149,7 @@ export default function DashboardVendas() {
                 ))}
               </tbody>
             </table>
+            </div>
           ) : null}
         </Card>
 
@@ -155,7 +157,7 @@ export default function DashboardVendas() {
           {isLoading ? (
             <Skeleton className="h-56" />
           ) : data?.porFormaPagamento.length ? (
-            <div className="flex flex-col items-center gap-4 sm:flex-row">
+            <div className="flex flex-col items-center gap-4 sm:flex-row lg:flex-col xl:flex-row">
               <div className="h-52 w-52 shrink-0">
                 <ResponsiveContainer>
                   <PieChart>
@@ -168,13 +170,13 @@ export default function DashboardVendas() {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <ul className="w-full space-y-1.5 text-sm">
+              <ul className="w-full min-w-0 space-y-1.5 text-sm">
                 {data.porFormaPagamento.map((f, i) => {
                   const total = data.porFormaPagamento.reduce((s, x) => s + x.valor, 0);
                   return (
                     <li key={f.nome} className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PALETA[i % PALETA.length] }} />
-                      <span className="flex-1 truncate text-slate-700">{f.nome}</span>
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: PALETA[i % PALETA.length] }} />
+                      <span className="min-w-0 flex-1 truncate text-slate-700">{f.nome}</span>
                       <span className="num text-xs text-slate-400">{total ? numero((f.valor / total) * 100, 0) : 0}%</span>
                       <span className="num font-medium">{moeda(f.valor)}</span>
                     </li>
@@ -188,13 +190,14 @@ export default function DashboardVendas() {
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Card titulo="Produtos mais vendidos" semPadding>
           {isLoading ? (
             <div className="p-4">
               <Skeleton className="h-48" />
             </div>
           ) : data?.topProdutos.length ? (
+            <div className="overflow-x-auto">
             <table className="tbl">
               <thead>
                 <tr>
@@ -206,8 +209,8 @@ export default function DashboardVendas() {
               <tbody>
                 {data.topProdutos.map((p) => (
                   <tr key={p.produtoId}>
-                    <td className="max-w-[200px] truncate">
-                      <Link to={`/produtos/${p.produtoId}`} className="hover:text-brand-600">
+                    <td className="min-w-[140px] whitespace-normal">
+                      <Link to={`/produtos/${p.produtoId}`} className="line-clamp-2 break-words hover:text-brand-600">
                         {p.nome}
                       </Link>
                     </td>
@@ -217,6 +220,7 @@ export default function DashboardVendas() {
                 ))}
               </tbody>
             </table>
+            </div>
           ) : (
             <EmptyState compacto titulo="Sem dados" />
           )}
@@ -227,6 +231,7 @@ export default function DashboardVendas() {
               <Skeleton className="h-48" />
             </div>
           ) : data?.topClientes.length ? (
+            <div className="overflow-x-auto">
             <table className="tbl">
               <thead>
                 <tr>
@@ -238,8 +243,8 @@ export default function DashboardVendas() {
               <tbody>
                 {data.topClientes.map((c) => (
                   <tr key={c.contatoId}>
-                    <td className="max-w-[200px] truncate">
-                      <Link to={`/contatos/${c.contatoId}`} className="hover:text-brand-600">
+                    <td className="min-w-[140px] whitespace-normal">
+                      <Link to={`/contatos/${c.contatoId}`} className="line-clamp-2 break-words hover:text-brand-600">
                         {c.nome}
                       </Link>
                     </td>
@@ -249,6 +254,7 @@ export default function DashboardVendas() {
                 ))}
               </tbody>
             </table>
+            </div>
           ) : (
             <EmptyState compacto titulo="Sem dados" />
           )}

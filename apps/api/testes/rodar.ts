@@ -5,7 +5,7 @@
  * 2. Cria um banco NOVO e vazio numa pasta temporária (nunca toca o banco de verdade),
  *    carrega os dados de exemplo e sobe uma API de teste numa porta livre.
  * 3. Roda as suítes: fluxo completo (2 rodadas), perfis de acesso, regras de vendas/painel/metas/desafios
- *    e as telas no navegador (todas as páginas × 5 perfis + celular).
+ *    as telas no navegador (todas as páginas × 5 perfis + celular) e o layout em 5 tamanhos de tela.
  * 4. Mostra o resumo e sai com erro se qualquer coisa falhar.
  *
  * Opções: --rapido (pula compilação e telas) · --manter (não apaga a pasta temporária)
@@ -91,6 +91,7 @@ async function main() {
     rodar('API externa: chaves, permissões, MCP para agentes de IA e webhooks', NPX, ['tsx', 'testes/api-externa.ts', base]);
     rodar('API externa: varredura — toda rota aberta para chave está documentada', NPX, ['tsx', 'testes/api-cobertura.ts'], { env });
     if (!RAPIDO) rodar('Telas no navegador (todas as páginas × perfis + celular)', NPX, ['tsx', 'testes/telas.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
+    if (!RAPIDO) rodar('Layout em celular, tablet e computador (nada vaza da tela ou do card)', NPX, ['tsx', 'testes/layout.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Links: todo link do sistema leva a uma tela que existe', NPX, ['tsx', 'testes/links.ts', base]);
     rodar('Integridade dos dados depois dos testes (Saúde do sistema)', NPX, ['tsx', 'testes/integridade.ts', base]);
     // por último: manda lixo em todas as rotas (pode bagunçar os dados de teste)

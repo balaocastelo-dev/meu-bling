@@ -117,17 +117,18 @@ export default function ProdutoDetalhe() {
             (p.tipo === 'S' ? (
               <EmptyState compacto titulo="Serviços não têm estoque" />
             ) : (
-              <table className="tbl">
+              <div className="overflow-x-auto">
+              <table className="tbl tbl-pilha">
                 <thead><tr><th>Depósito</th><th className="text-right">Saldo</th><th className="text-right">Reservado</th><th className="text-right">Disponível</th><th className="w-32" /></tr></thead>
                 <tbody>
                   {(p.saldos ?? []).length === 0 && <tr><td colSpan={5} className="py-4 text-center text-xs text-slate-400">Sem saldo em nenhum depósito.</td></tr>}
                   {(p.saldos ?? []).map((s) => (
                     <tr key={s.depositoId}>
-                      <td className="font-medium">{s.deposito}</td>
-                      <td className={clsx('num text-right', s.saldo < 0 && 'text-red-600')}>{numero(s.saldo)}</td>
-                      <td className="num text-right text-slate-500">{numero(s.reservado)}</td>
-                      <td className="num text-right font-medium">{numero(s.saldo - s.reservado)}</td>
-                      <td className="text-right"><Button tamanho="xs" variante="fantasma" onClick={() => setAjuste({ depositoId: s.depositoId })}>Ajustar</Button></td>
+                      <td className="font-medium" data-rotulo="Depósito">{s.deposito}</td>
+                      <td className={clsx('num text-right', s.saldo < 0 && 'text-red-600')} data-rotulo="Saldo">{numero(s.saldo)}</td>
+                      <td className="num text-right text-slate-500" data-rotulo="Reservado">{numero(s.reservado)}</td>
+                      <td className="num text-right font-medium" data-rotulo="Disponível">{numero(s.saldo - s.reservado)}</td>
+                      <td className="pilha-canto text-right"><Button tamanho="xs" variante="fantasma" onClick={() => setAjuste({ depositoId: s.depositoId })}>Ajustar</Button></td>
                     </tr>
                   ))}
                   {(p.saldos ?? []).length > 0 && (
@@ -135,6 +136,7 @@ export default function ProdutoDetalhe() {
                   )}
                 </tbody>
               </table>
+              </div>
             ))}
           {aba === 'movimentos' && (
             <>

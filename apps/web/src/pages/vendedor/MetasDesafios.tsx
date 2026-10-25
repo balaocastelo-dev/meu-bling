@@ -348,7 +348,7 @@ function AbaMetas() {
         <EmptyState compacto titulo="Nenhum vendedor ativo" descricao="Cadastre os vendedores em Configurações → Vendedores." />
       ) : (
         <div className="overflow-x-auto">
-          <table className="tbl">
+          <table className="tbl tbl-pilha">
             <thead>
               <tr>
                 <th>Vendedor</th>
@@ -364,16 +364,16 @@ function AbaMetas() {
                 const pct = meta ? (l.vendido / meta) * 100 : 0;
                 return (
                   <tr key={l.vendedorId}>
-                    <td className="font-medium text-slate-800">{l.nome}</td>
-                    <td><MoneyInput value={l.metaPadrao} onChange={(v) => atualizar(l.vendedorId, { metaPadrao: v })} /></td>
-                    <td>
+                    <td className="font-medium text-slate-800" data-rotulo="Vendedor">{l.nome}</td>
+                    <td data-rotulo="Meta padrão (todo mês)"><MoneyInput value={l.metaPadrao} onChange={(v) => atualizar(l.vendedorId, { metaPadrao: v })} /></td>
+                    <td data-rotulo="Meta deste mês">
                       <div className="flex items-center gap-2">
                         <Checkbox label="Só neste mês" checked={l.metaMes !== null} onChange={(e) => atualizar(l.vendedorId, { metaMes: e.target.checked ? l.metaPadrao : null })} />
                         {l.metaMes !== null && <MoneyInput className="w-36" value={l.metaMes} onChange={(v) => atualizar(l.vendedorId, { metaMes: v })} />}
                       </div>
                     </td>
-                    <td className="text-right num">{moeda(l.vendido)}</td>
-                    <td>
+                    <td className="text-right num" data-rotulo="Vendido">{moeda(l.vendido)}</td>
+                    <td data-rotulo="Atingido">
                       {meta ? (
                         <div className="flex items-center gap-2">
                           <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">

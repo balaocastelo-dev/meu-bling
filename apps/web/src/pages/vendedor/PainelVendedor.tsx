@@ -163,18 +163,18 @@ export default function PainelVendedor() {
               <div className="p-4"><Skeleton className="h-24 w-full" /></div>
             ) : p.ultimasVendas.length ? (
               <div className="overflow-x-auto">
-              <table className="tbl">
+              <table className="tbl tbl-pilha">
                 <thead>
                   <tr><th>Nº</th><th>Data</th><th>Cliente</th><th>Situação</th><th className="text-right">Total</th></tr>
                 </thead>
                 <tbody>
                   {p.ultimasVendas.map((v) => (
                     <tr key={v.id}>
-                      <td><Link to={`/vendas/${v.id}`} className="font-medium text-brand-600 hover:underline">{v.numero}</Link></td>
-                      <td className="whitespace-nowrap text-slate-500">{data(v.data)}</td>
-                      <td className="max-w-[16rem] truncate">{v.contato?.nome}</td>
-                      <td><BadgeCor cor={v.situacao.cor}>{v.situacao.nome}</BadgeCor></td>
-                      <td className="whitespace-nowrap text-right num">{moeda(v.total)}</td>
+                      <td data-rotulo="Nº"><Link to={`/vendas/${v.id}`} className="font-medium text-brand-600 hover:underline">{v.numero}</Link></td>
+                      <td className="whitespace-nowrap text-slate-500" data-rotulo="Data">{data(v.data)}</td>
+                      <td className="max-w-[16rem] truncate" data-rotulo="Cliente">{v.contato?.nome}</td>
+                      <td data-rotulo="Situação"><BadgeCor cor={v.situacao.cor}>{v.situacao.nome}</BadgeCor></td>
+                      <td className="whitespace-nowrap text-right num" data-rotulo="Total">{moeda(v.total)}</td>
                     </tr>
                   ))}
                 </tbody>

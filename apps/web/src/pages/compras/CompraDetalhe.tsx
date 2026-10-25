@@ -81,7 +81,7 @@ export default function CompraDetalhe() {
               {compra.contasLancadas ? 'Estornar contas' : 'Lançar contas'}
             </Button>
           </div>
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <Badge tom={compra.estoqueLancado ? 'verde' : 'cinza'}>Estoque {compra.estoqueLancado ? 'lançado' : 'pendente'}</Badge>
             <Badge tom={compra.contasLancadas ? 'verde' : 'cinza'}>Contas {compra.contasLancadas ? 'lançadas' : 'pendentes'}</Badge>
           </div>
@@ -92,42 +92,46 @@ export default function CompraDetalhe() {
         <Tabs className="px-3" ativa={aba} onMudar={setAba} abas={[{ id: 'itens', rotulo: 'Itens', contador: compra.itens.length }, { id: 'parcelas', rotulo: 'Parcelas / Contas a pagar', contador: compra.parcelas.length }, { id: 'historico', rotulo: 'Histórico', contador: compra.historico?.length ?? 0 }]} />
         <div className="p-4">
           {aba === 'itens' && (
-            <table className="tbl">
+            <div className="overflow-x-auto">
+            <table className="tbl tbl-pilha">
               <thead>
                 <tr><th>#</th><th>Produto</th><th>Cód. fornecedor</th><th className="text-right">Qtd</th><th className="text-right">Unitário</th><th className="text-right">IPI %</th><th className="text-right">Total</th></tr>
               </thead>
               <tbody>
                 {compra.itens.map((it, i) => (
                   <tr key={it.id ?? i}>
-                    <td className="text-slate-400">{i + 1}</td>
-                    <td>{it.produtoId ? <Link to={`/produtos/${it.produtoId}`} className="hover:text-brand-600">{it.descricao}</Link> : it.descricao}</td>
-                    <td className="text-slate-500">{it.codigoFornecedor ?? '—'}</td>
-                    <td className="num text-right">{numero(it.quantidade)} {it.unidade}</td>
-                    <td className="num text-right">{moeda(it.valorUnitario)}</td>
-                    <td className="num text-right">{numero(it.ipiPct)}%</td>
-                    <td className="num text-right font-medium">{moeda(it.total ?? it.quantidade * it.valorUnitario)}</td>
+                    <td className="pilha-oculto text-slate-400">{i + 1}</td>
+                    <td className="pilha-cheio">{it.produtoId ? <Link to={`/produtos/${it.produtoId}`} className="hover:text-brand-600">{it.descricao}</Link> : it.descricao}</td>
+                    <td className="text-slate-500" data-rotulo="Cód. fornecedor">{it.codigoFornecedor ?? '—'}</td>
+                    <td className="num text-right" data-rotulo="Qtd">{numero(it.quantidade)} {it.unidade}</td>
+                    <td className="num text-right" data-rotulo="Unitário">{moeda(it.valorUnitario)}</td>
+                    <td className="num text-right" data-rotulo="IPI %">{numero(it.ipiPct)}%</td>
+                    <td className="num text-right font-medium" data-rotulo="Total">{moeda(it.total ?? it.quantidade * it.valorUnitario)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           )}
           {aba === 'parcelas' && (
-            <table className="tbl">
+            <div className="overflow-x-auto">
+            <table className="tbl tbl-pilha">
               <thead><tr><th>#</th><th>Vencimento</th><th>Forma</th><th className="text-right">Valor</th><th>Conta a pagar</th><th className="text-right">Pago</th></tr></thead>
               <tbody>
                 {compra.parcelas.length === 0 && <tr><td colSpan={6} className="py-4 text-center text-xs text-slate-400">Sem parcelas.</td></tr>}
                 {compra.parcelas.map((p, i) => (
                   <tr key={p.id ?? i}>
-                    <td className="text-slate-400">{p.numero ?? i + 1}</td>
-                    <td>{data(p.dataVencimento)}</td>
-                    <td>{p.formaPagamento?.nome ?? '—'}</td>
-                    <td className="num text-right">{moeda(p.valor)}</td>
-                    <td>{p.contaPagar ? <Link to={`/financeiro/pagar?pesquisa=${compra.numero}`} className="inline-flex items-center gap-1.5 hover:underline">#{p.contaPagar.id} <Badge tom={tomPorStatus(p.contaPagar.situacao)}>{rotulo(p.contaPagar.situacao)}</Badge></Link> : <span className="text-xs text-slate-400">não lançada</span>}</td>
-                    <td className="num text-right">{p.contaPagar ? moeda(p.contaPagar.valorPago) : '—'}</td>
+                    <td className="pilha-oculto text-slate-400">{p.numero ?? i + 1}</td>
+                    <td data-rotulo="Vencimento">{data(p.dataVencimento)}</td>
+                    <td data-rotulo="Forma">{p.formaPagamento?.nome ?? '—'}</td>
+                    <td className="num text-right" data-rotulo="Valor">{moeda(p.valor)}</td>
+                    <td data-rotulo="Conta a pagar">{p.contaPagar ? <Link to={`/financeiro/pagar?pesquisa=${compra.numero}`} className="inline-flex items-center gap-1.5 hover:underline">#{p.contaPagar.id} <Badge tom={tomPorStatus(p.contaPagar.situacao)}>{rotulo(p.contaPagar.situacao)}</Badge></Link> : <span className="text-xs text-slate-400">não lançada</span>}</td>
+                    <td className="num text-right" data-rotulo="Pago">{p.contaPagar ? moeda(p.contaPagar.valorPago) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           )}
           {aba === 'historico' && <HistoricoSituacoes historico={compra.historico} />}
         </div>
