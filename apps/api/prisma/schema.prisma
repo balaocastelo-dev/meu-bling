@@ -1210,3 +1210,93 @@ model Auditoria {
 
   @@index([entidade, entidadeId])
 }
+
+// ---------------------------------------------------------------------
+// API EXTERNA (outros sistemas e agentes de IA) — tela Configurações → API e integrações (só ADMIN)
+// ---------------------------------------------------------------------
+
+/// Chave de acesso de um sistema/agente. Guardamos só o hash; a chave aparece uma única vez ao criar.
+model ChaveApi {
+  id              Int       @id @default(autoincrement())
+  nome            String
+  descricao       String?
+  /// começo da chave, para reconhecer na lista (ex.: "mb_3f9a1c2e")
+  prefixo         String
+  /// sha256 da chave inteira
+  hash            String    @unique
+  /// JSON { recurso: "LEITURA" | "GRAVACAO" | "TOTAL" } — recurso ausente = sem acesso
+  permissoes      String    @default("{}")
+  /// IPs liberados separados por vírgula (vazio = qualquer IP)
+  ipsPermitidos   String?
+  limitePorMinuto Int       @default(120)
+  /// permite usar a chave dentro da URL do MCP (para conectores que não mandam cabeçalho)
+  permitirNaUrl   Boolean   @default(false)
+  expiraEm        DateTime?
+  ativo           Boolean   @default(true)
+  /// usuário ADMIN que criou — as gravações feitas pela chave saem no nome dele na auditoria
+  criadoPorId     Int?
+  ultimoUsoEm     DateTime?
+  ultimoIp        String?
+  totalChamadas   Int       @default(0)
+  criadoEm        DateTime  @default(now())
+  atualizadoEm    DateTime  @updatedAt
+
+  logs LogApi[]
+}
+
+/// Cada chamada feita com uma chave de API (guardado 30 dias).
+model LogApi {
+  id      Int       @id @default(autoincrement())
+  chave   ChaveApi? @relation(fields: [chaveId], references: [id], onDelete: Cascade)
+  chaveId Int?
+  metodo  String
+  rota    String
+  status  Int
+  ms      Int       @default(0)
+  ip      String?
+  /// API (REST) ou MCP (agente de IA)
+  origem  String    @default("API")
+  erro    String?
+  data    DateTime  @default(now())
+
+  @@index([chaveId, data])
+  @@index([data])
+}
+
+/// Endereço de outro sistema que recebe os acontecimentos do MEU BLING (POST JSON assinado).
+model WebhookSaida {
+  id             Int       @id @default(autoincrement())
+  nome           String
+  url            String
+  /// JSON array com os eventos ("*" = todos)
+  eventos        String    @default("[\"*\"]")
+  /// segredo da assinatura HMAC (criptografado)
+  segredo        String
+  ativo          Boolean   @default(true)
+  ultimoEnvioEm  DateTime?
+  ultimoStatus   Int?
+  falhasSeguidas Int       @default(0)
+  criadoEm       DateTime  @default(now())
+  atualizadoEm   DateTime  @updatedAt
+
+  entregas EntregaWebhook[]
+}
+
+model EntregaWebhook {
+  id               Int          @id @default(autoincrement())
+  webhook          WebhookSaida @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  webhookId        Int
+  evento           String
+  payload          String
+  /// PENDENTE | ENTREGUE | FALHOU
+  status           String       @default("PENDENTE")
+  tentativas       Int          @default(0)
+  respostaStatus   Int?
+  resposta         String?
+  proximaTentativa DateTime     @default(now())
+  entregueEm       DateTime?
+  criadoEm         DateTime     @default(now())
+
+  @@index([status, proximaTentativa])
+  @@index([webhookId, criadoEm])
+}
