@@ -13,6 +13,8 @@
  *   GET  /integracoes/site/clientes?documento=    cliente pelo CPF/CNPJ
  *   POST /integracoes/site/vendas                 nova venda do balcão (idempotente pelo id do PDV)
  *   GET  /integracoes/site/vendas?dia=AAAA-MM-DD  vendas do dia (todas as origens)
+ *   GET  /integracoes/site/vendas?de=…&ate=…      vendas de um período (até 92 dias; Arena e relatórios)
+ *   POST /integracoes/site/agente/documentos      orçamento ou pedido EM ABERTO feito por um agente (JUL.IA)
  *   GET  /integracoes/site/vendas/:id             uma venda (comprovante)
  *   POST /integracoes/site/vendas/:id/nfe         gera e transmite a NF-e (modelo 55)
  *   POST /integracoes/site/notas/:id/consultar    confere a nota na SEFAZ
@@ -145,6 +147,12 @@ function limitesDoDia(dia: string) {
   return { gte: new Date(a, m - 1, d, 0, 0, 0, 0), lte: new Date(a, m - 1, d, 23, 59, 59, 999) };
 }
 
+/** A data do documento como AAAA-MM-DD no relógio da loja. */
+function dataDaLoja(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 type NotaResumo = { id: number; numero: number; serie: number; modelo: number; situacao: string; chave: string | null; motivo: string | null; cStat: string | null; autorizadaEm: string | null };
 
 function resumoDaNota(n: { id: number; numero: number; serie: number; modelo: number; situacao: string; chave: string | null; motivo?: string | null; cStat?: string | null; dataAutorizacao?: Date | null } | null | undefined): NotaResumo | null {
@@ -171,12 +179,13 @@ const includeVenda = {
   parcelas: { orderBy: { numero: 'asc' as const }, include: { formaPagamento: { select: { id: true, nome: true, tipo: true } } } },
 } as const;
 
-async function vendaParaSite(id: number) {
+async function vendaParaSite(id: number, aceitarOrcamento = false) {
   const v = await prisma.venda.findUnique({ where: { id }, include: includeVenda });
-  if (!v || v.tipo !== 'PEDIDO') throw new NotFound('Venda');
+  if (!v || (v.tipo !== 'PEDIDO' && !(aceitarOrcamento && v.tipo === 'ORCAMENTO'))) throw new NotFound('Venda');
   const desconto = v.descontoTipo === 'PERCENTUAL' ? arredondar(v.totalProdutos * (v.descontoValor / 100)) : v.descontoValor;
   return {
     id: v.id,
+    tipo: v.tipo,
     numero: v.numero,
     data: v.data.toISOString(),
     criadaEm: v.criadoEm.toISOString(),
@@ -441,6 +450,74 @@ async function criarDoPdv(e: NovaVenda): Promise<number> {
   return venda.id;
 }
 
+// ---------------------------------------------------------------- agentes (JUL.IA)
+
+/**
+ * Orçamento ou pedido feito por um agente de IA (a JUL.IA, no WhatsApp).
+ * Desde 25/10/2026 entra aqui e não mais no Bling. Diferente do balcão:
+ * o pedido fica EM ABERTO (situação inicial) para um vendedor conferir
+ * pagamento e entrega — regra do Thiago de 11/10/2026.
+ * Idempotente pelo `idExterno`: repetir a chamada devolve o mesmo documento.
+ */
+const documentoDoAgenteSchema = z.object({
+  idExterno: z.string().trim().min(6).max(40),
+  tipo: z.enum(['ORCAMENTO', 'PEDIDO']),
+  agente: z.string().trim().min(1).max(40).default('JUL.IA'),
+  vendedorId: z.coerce.number().int().positive().nullable().optional(),
+  cliente: clienteSchema,
+  itens: novaVendaSchema.shape.itens,
+  observacoes: texto(1000),
+  observacoesInternas: texto(1000),
+});
+type DocumentoDoAgente = z.infer<typeof documentoDoAgenteSchema>;
+
+export async function registrarDocumentoDoAgente(e: DocumentoDoAgente): Promise<{ id: number; criada: boolean }> {
+  const ja = await prisma.venda.findFirst({ where: { tipo: e.tipo, numeroPedidoLoja: e.idExterno }, select: { id: true } });
+  if (ja) return { id: ja.id, criada: false };
+  const chave = `${e.tipo}:${e.idExterno}`;
+  const correndo = emAndamento.get(chave);
+  if (correndo) return { id: await correndo, criada: false };
+  const trabalho = (async () => {
+    let vendedorId = e.vendedorId ?? null;
+    if (vendedorId && !(await prisma.vendedor.findUnique({ where: { id: vendedorId }, select: { id: true } }))) vendedorId = null;
+    const contatoId = await contatoParaVenda(e.cliente);
+    const itens = [];
+    for (const i of e.itens) {
+      itens.push({ produtoId: await produtoDoItem(i), descricao: i.nome, quantidade: i.quantidade, valorUnitario: arredondar(i.valor), desconto: 0 });
+    }
+    const hoje = new Date();
+    const data = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 12, 0, 0, 0);
+    const body = {
+      tipo: e.tipo,
+      contatoId,
+      vendedorId,
+      data,
+      origem: 'WHATSAPP',
+      numeroPedidoLoja: e.idExterno,
+      observacoes: e.observacoes || null,
+      observacoesInternas: [e.observacoesInternas, `Feito por ${e.agente} (agente de IA) no WhatsApp.`].filter(Boolean).join('\n'),
+      descontoTipo: 'REAL',
+      descontoValor: 0,
+      frete: 0,
+      outrasDespesas: 0,
+      fretePorConta: 9,
+      quantidadeVolumes: 0,
+      pesoBruto: 0,
+      itens,
+      parcelas: [],
+    } as unknown as VendaInput;
+    const rotulo = e.tipo === 'ORCAMENTO' ? 'Orçamento' : 'Pedido';
+    const v = await criarVenda(body, null, `${rotulo} feito por ${e.agente} no WhatsApp (${e.idExterno})`);
+    return v.id;
+  })();
+  emAndamento.set(chave, trabalho);
+  try {
+    return { id: await trabalho, criada: true };
+  } finally {
+    emAndamento.delete(chave);
+  }
+}
+
 // ---------------------------------------------------------------- nota
 
 /** Troca o cliente da venda (e das contas a receber dela) — só enquanto não há nota autorizada. */
@@ -534,11 +611,19 @@ export default async function siteRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/v1/integracoes/site/vendas', comChave, async (req) => {
-    const q = z.object({ dia: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.query);
+    const dia = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+    const q = z.object({ dia: dia.optional(), de: dia.optional(), ate: dia.optional() }).parse(req.query);
+    let periodo: { gte: Date; lte: Date };
+    if (q.dia) periodo = limitesDoDia(q.dia);
+    else if (q.de && q.ate) {
+      periodo = { gte: limitesDoDia(q.de).gte, lte: limitesDoDia(q.ate).lte };
+      const dias = (periodo.lte.getTime() - periodo.gte.getTime()) / 86_400_000;
+      if (dias < 0 || dias > 93) throw new AppError('Período inválido: de 1 a 92 dias (de ≤ ate).', 400, 'PERIODO');
+    } else throw new AppError('Informe dia=AAAA-MM-DD ou de=…&ate=….', 400, 'PERIODO');
     const vendas = await prisma.venda.findMany({
-      where: { tipo: 'PEDIDO', data: limitesDoDia(q.dia) },
+      where: { tipo: 'PEDIDO', data: periodo },
       orderBy: { numero: 'desc' },
-      take: 500,
+      take: q.dia ? 500 : 5000,
       include: {
         contato: { select: { nome: true } },
         vendedor: { select: { id: true, nome: true } },
@@ -547,10 +632,13 @@ export default async function siteRoutes(app: FastifyInstance) {
       },
     });
     return {
-      dia: q.dia,
+      dia: q.dia ?? null,
+      de: q.dia ?? q.de,
+      ate: q.dia ?? q.ate,
       vendas: vendas.map((v) => ({
         id: v.id,
         numero: v.numero,
+        data: dataDaLoja(v.data),
         criadaEm: v.criadoEm.toISOString(),
         origem: v.origem,
         pdvId: v.numeroPedidoLoja,
@@ -562,6 +650,13 @@ export default async function siteRoutes(app: FastifyInstance) {
         nota: resumoDaNota(v.nota),
       })),
     };
+  });
+
+  app.post('/api/v1/integracoes/site/agente/documentos', comChave, async (req, reply) => {
+    const entrada = documentoDoAgenteSchema.parse(req.body);
+    const { id, criada } = await registrarDocumentoDoAgente(entrada);
+    if (criada) await auditar(req, 'Venda', id, 'CRIAR', { origem: `Agente ${entrada.agente} (WhatsApp)`, tipo: entrada.tipo, idExterno: entrada.idExterno });
+    return reply.code(criada ? 201 : 200).send({ documento: await vendaParaSite(id, true), criada });
   });
 
   app.get('/api/v1/integracoes/site/vendas/:id', comChave, async (req) => {
