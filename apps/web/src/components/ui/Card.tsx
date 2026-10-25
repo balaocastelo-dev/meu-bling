@@ -12,9 +12,9 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 /** Cartão branco padrão com borda e sombra sutil */
 export function Card({ titulo, descricao, acoes, semPadding, rodape, className, children, ...rest }: CardProps) {
   return (
-    <div className={clsx('min-w-0 rounded-lg border border-slate-200 bg-white shadow-card', className)} {...rest}>
+    <div className={clsx('v18-card min-w-0 rounded-2xl border border-slate-200/80 bg-white shadow-card', rest.onClick && 'v18-hover cursor-pointer', className)} {...rest}>
       {(titulo || acoes) && (
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5">
           <div className="min-w-0">
             {titulo && <h3 className="text-sm font-semibold text-slate-800">{titulo}</h3>}
             {descricao && <p className="mt-0.5 text-xs text-slate-500">{descricao}</p>}
@@ -31,7 +31,7 @@ export function Card({ titulo, descricao, acoes, semPadding, rodape, className, 
 /** Seção de formulário com título (dentro de um Card ou página) */
 export function Secao({ titulo, descricao, children, className, acoes }: { titulo: ReactNode; descricao?: ReactNode; children: ReactNode; className?: string; acoes?: ReactNode }) {
   return (
-    <section className={clsx('rounded-lg border border-slate-200 bg-white shadow-card', className)}>
+    <section className={clsx('v18-card rounded-2xl border border-slate-200/80 bg-white shadow-card', className)}>
       <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-2.5">
         <div>
           <h3 className="text-sm font-semibold text-slate-800">{titulo}</h3>

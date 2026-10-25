@@ -85,7 +85,8 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
               {dados.map((linha, i) => (
                 <li
                   key={chave(linha)}
-                  className={clsx('px-3 py-2.5', onClickLinha && 'cursor-pointer active:bg-slate-100', destacar?.(linha) ? 'bg-brand-50/60' : 'bg-white')}
+                  style={{ animationDelay: `${Math.min(i, 14) * 25}ms` }}
+                  className={clsx('v18-linha px-3 py-2.5', onClickLinha && 'cursor-pointer active:bg-slate-100', destacar?.(linha) ? 'bg-brand-50/60' : 'bg-white')}
                   onClick={() => onClickLinha?.(linha)}
                 >
                   {cartao ? (
@@ -182,7 +183,8 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
           {dados?.map((linha, i) => (
             <tr
               key={chave(linha)}
-              className={clsx(onClickLinha && 'clicavel', destacar?.(linha) && 'bg-brand-50/60')}
+              style={{ animationDelay: `${Math.min(i, 14) * 25}ms` }}
+              className={clsx('v18-linha', onClickLinha && 'clicavel', destacar?.(linha) && 'bg-brand-50/60')}
               onClick={() => onClickLinha?.(linha)}
             >
               {colunas.map((c) => (

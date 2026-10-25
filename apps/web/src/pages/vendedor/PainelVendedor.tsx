@@ -76,7 +76,7 @@ export default function PainelVendedor() {
           {/* ---- vendas por período */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
             {(p?.periodos ?? Array.from({ length: 6 }, () => null)).map((per, i) => (
-              <div key={per?.chave ?? i} className={clsx('rounded-lg border bg-white p-4 shadow-card', per?.chave === 'hoje' ? 'border-brand-200 ring-1 ring-brand-100' : 'border-slate-200')}>
+              <div key={per?.chave ?? i} className={clsx('v18-card v18-hover rounded-2xl border bg-white p-4 shadow-card', per?.chave === 'hoje' ? 'border-brand-200 ring-1 ring-brand-100' : 'border-slate-200')}>
                 {per ? (
                   <>
                     <p className="text-xs font-medium text-slate-500">{per.rotulo}</p>

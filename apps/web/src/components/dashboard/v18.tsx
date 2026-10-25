@@ -33,7 +33,7 @@ const item: Variants = {
 export function PaginaV18({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <MotionConfig reducedMotion="user">
-      <motion.div className={className} variants={lista} initial="oculto" animate="visivel">
+      <motion.div data-motion className={className} variants={lista} initial="oculto" animate="visivel">
         {children}
       </motion.div>
     </MotionConfig>

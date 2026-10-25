@@ -2,6 +2,9 @@ import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+
+const mola = { type: 'spring', stiffness: 420, damping: 34 } as const;
 
 interface ModalProps {
   aberto: boolean;
@@ -29,11 +32,18 @@ export function Modal({ aberto, onFechar, titulo, descricao, children, rodape, t
     };
   }, [aberto, onFechar]);
 
-  if (!aberto) return null;
   return createPortal(
+    <AnimatePresence>
+    {aberto && (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px]" onClick={onFechar} />
-      <div className={clsx('relative m-0 flex max-h-[92vh] w-full flex-col rounded-t-xl bg-white shadow-pop anim-in sm:m-4 sm:rounded-xl', larguras[tamanho])}>
+      <motion.div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" onClick={onFechar} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} />
+      <motion.div
+        initial={{ opacity: 0, y: 24, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 16, scale: 0.98, transition: { duration: 0.15 } }}
+        transition={mola}
+        className={clsx('relative m-0 flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-pop sm:m-4 sm:rounded-2xl', larguras[tamanho])}
+      >
         {(titulo || descricao) && (
           <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
             <div>
@@ -47,8 +57,10 @@ export function Modal({ aberto, onFechar, titulo, descricao, children, rodape, t
         )}
         <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {rodape && <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">{rodape}</div>}
-      </div>
-    </div>,
+      </motion.div>
+    </div>
+    )}
+    </AnimatePresence>,
     document.body,
   );
 }
@@ -62,11 +74,18 @@ export function Drawer({ aberto, onFechar, titulo, descricao, children, rodape, 
     return () => document.removeEventListener('keydown', h);
   }, [aberto, onFechar]);
 
-  if (!aberto) return null;
   return createPortal(
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-slate-900/40" onClick={onFechar} />
-      <div className={clsx('relative flex h-full w-full flex-col bg-white shadow-pop anim-in', largura)}>
+    <AnimatePresence>
+    {aberto && (
+    <div className="fixed inset-0 z-50 flex justify-end overflow-hidden" role="dialog" aria-modal="true">
+      <motion.div className="absolute inset-0 bg-slate-900/40" onClick={onFechar} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} />
+      <motion.div
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%', transition: { duration: 0.2 } }}
+        transition={mola}
+        className={clsx('relative flex h-full w-full flex-col bg-white shadow-pop', largura)}
+      >
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
           <div>
             {titulo && <h2 className="text-base font-semibold text-slate-900">{titulo}</h2>}
@@ -78,8 +97,10 @@ export function Drawer({ aberto, onFechar, titulo, descricao, children, rodape, 
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {rodape && <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">{rodape}</div>}
-      </div>
-    </div>,
+      </motion.div>
+    </div>
+    )}
+    </AnimatePresence>,
     document.body,
   );
 }

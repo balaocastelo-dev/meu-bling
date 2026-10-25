@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
+import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { MENU, podeVer } from './menu';
 import { useAuth } from '@/stores/auth';
@@ -73,12 +74,14 @@ export function Sidebar({ aberta, onFechar }: { aberta: boolean; onFechar: () =>
                       to={it.para}
                       onClick={onFechar}
                       className={clsx(
-                        'group mb-0.5 flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors',
-                        sel ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-slate-100',
+                        'group relative mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors',
+                        sel ? 'text-white' : 'text-slate-400 hover:bg-white/5 hover:text-slate-100',
                       )}
                     >
-                      <Icone className={clsx('h-4 w-4 shrink-0', sel ? 'text-brand-500' : 'text-slate-500 group-hover:text-slate-300')} />
-                      <span className="truncate">{it.rotulo}</span>
+                      {/* fundo do item ativo desliza de um item para o outro (efeito V18) */}
+                      {sel && <motion.span layoutId="menu-ativo" className="absolute inset-0 rounded-lg bg-white/10" transition={{ type: 'spring', stiffness: 450, damping: 38 }} />}
+                      <Icone className={clsx('relative h-4 w-4 shrink-0 transition-transform group-hover:scale-110', sel ? 'text-brand-500' : 'text-slate-500 group-hover:text-slate-300')} />
+                      <span className="relative truncate">{it.rotulo}</span>
                     </NavLink>
                   );
                 })}
