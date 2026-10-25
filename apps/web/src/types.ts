@@ -979,7 +979,7 @@ export interface DashboardVendas {
   porVendedor: { id: number; nome: string; faturamento: number; qtd: number; comissao: number }[];
   porFormaPagamento: { nome: string; valor: number; qtd: number }[];
   porOrigem: { nome: string; valor: number; qtd: number }[];
-  topProdutos: { produtoId: number; nome: string; qtd: number; valor: number }[];
+  topProdutos: { produtoId: number; nome: string; qtd: number; valor: number; imagemUrl?: string | null }[];
   topClientes: { contatoId: number; nome: string; valor: number; qtd: number }[];
   porSituacao: (SituacaoRef & { qtd: number; valor?: number })[];
   porCategoria: { nome: string; valor: number; qtd: number }[];

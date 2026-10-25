@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { BarChart3, CircleDollarSign, Crown, Layers, Package, PieChart as PieIcon, Percent, Receipt, ShoppingCart, Trophy, TrendingUp, Users } from 'lucide-react';
 import { format, startOfMonth, subDays } from 'date-fns';
 import { api } from '@/lib/api';
 import { useVendedores, opcoesDe } from '@/hooks/useListas';
-import { Card, EmptyState, KpiCard, PageHeader, PeriodoFiltro, Segmentado, SelectFiltro, Skeleton } from '@/components/ui';
+import { EmptyState, PeriodoFiltro, SelectFiltro, Skeleton } from '@/components/ui';
+import { FotoProduto } from '@/components/compartilhados/ProdutoSite';
+import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, SegmentadoV18, listaVariants } from '@/components/dashboard/v18';
 import { hoje, inteiro, moeda, numero, percentual } from '@/lib/format';
 import { CORES, PALETA, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import type { DashboardVendas as Dados } from '@/types';
@@ -28,15 +32,16 @@ function intervalo(p: Periodo, custom: { i: string; f: string }): { dataInicial:
   }
 }
 
-/** Dashboard de vendas com filtros de período e vendedor */
+/** Dashboard de vendas — estilo V18 com as cores do sistema */
 export default function DashboardVendas() {
+  const nav = useNavigate();
   const [periodo, setPeriodo] = useState<Periodo>('30d');
   const [custom, setCustom] = useState({ i: format(startOfMonth(new Date()), 'yyyy-MM-dd'), f: hoje() });
   const [vendedorId, setVendedorId] = useState('');
   const { data: vendedores } = useVendedores();
 
   const { dataInicial, dataFinal } = useMemo(() => intervalo(periodo, custom), [periodo, custom]);
-  const agrupar = periodo === 'hoje' || periodo === '7d' || periodo === '30d' || periodo === 'mes' ? 'dia' : 'dia';
+  const agrupar = 'dia';
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-vendas', dataInicial, dataFinal, vendedorId],
@@ -47,41 +52,48 @@ export default function DashboardVendas() {
   const r = data?.resumo;
   const comp = r?.comparativo;
   const series = (data?.series ?? []).map((s) => ({ ...s, rotulo: rotuloPeriodo(s.periodo) }));
+  const lider = data?.porVendedor[0]?.faturamento ?? 0;
+  const totalVend = (data?.porVendedor ?? []).reduce((s, v) => s + v.faturamento, 0);
+  const totalFormas = (data?.porFormaPagamento ?? []).reduce((s, x) => s + x.valor, 0);
+  const maiorCliente = data?.topClientes[0]?.valor ?? 0;
+  const faixa = `${dataInicial.split('-').reverse().join('/')} a ${dataFinal.split('-').reverse().join('/')}`;
+  const qtd = (n: number) => inteiro(Math.round(n));
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        titulo="Dashboard de vendas"
-        descricao="Faturamento, vendedores, formas de pagamento e produtos mais vendidos."
-        acoes={
-          <div className="flex flex-wrap items-end gap-2">
-            <Segmentado
-              valor={periodo}
-              onMudar={setPeriodo}
-              opcoes={[
-                { valor: 'hoje', rotulo: 'Hoje' },
-                { valor: '7d', rotulo: '7 dias' },
-                { valor: '30d', rotulo: '30 dias' },
-                { valor: 'mes', rotulo: 'Este mês' },
-                { valor: 'custom', rotulo: 'Período' },
-              ]}
-            />
-            {periodo === 'custom' && <PeriodoFiltro inicial={custom.i} final={custom.f} onChange={(i, f) => setCustom({ i, f })} label="" atalhos={false} />}
-            <SelectFiltro valor={vendedorId} onChange={setVendedorId} opcoes={opcoesDe(vendedores)} placeholder="Todos os vendedores" />
-          </div>
-        }
-      />
+    <PaginaV18 className="space-y-5">
+      <Aparecer className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Dashboard de vendas</h1>
+          <p className="text-sm text-slate-500">Faturamento, vendedores, formas de pagamento e produtos mais vendidos.</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <SegmentadoV18
+            id="periodo-vendas"
+            valor={periodo}
+            onMudar={setPeriodo}
+            opcoes={[
+              { valor: 'hoje', rotulo: 'Hoje' },
+              { valor: '7d', rotulo: '7 dias' },
+              { valor: '30d', rotulo: '30 dias' },
+              { valor: 'mes', rotulo: 'Este mês' },
+              { valor: 'custom', rotulo: 'Período' },
+            ]}
+          />
+          {periodo === 'custom' && <PeriodoFiltro inicial={custom.i} final={custom.f} onChange={(i, f) => setCustom({ i, f })} label="" atalhos={false} />}
+          <SelectFiltro valor={vendedorId} onChange={setVendedorId} opcoes={opcoesDe(vendedores)} placeholder="Todos os vendedores" />
+        </div>
+      </Aparecer>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiCard rotulo="Faturamento" valor={moeda(r?.faturamento)} atual={r?.faturamento} anterior={comp?.faturamento} carregando={isLoading} sub="vs. período anterior" />
-        <KpiCard rotulo="Vendas" valor={inteiro(r?.qtdVendas)} atual={r?.qtdVendas} anterior={comp?.qtdVendas} carregando={isLoading} />
-        <KpiCard rotulo="Ticket médio" valor={moeda(r?.ticketMedio)} atual={r?.ticketMedio} anterior={comp?.ticketMedio} carregando={isLoading} />
-        <KpiCard rotulo="Itens vendidos" valor={inteiro(r?.itensVendidos)} carregando={isLoading} />
-        <KpiCard rotulo="Lucro bruto" valor={moeda(r?.lucroBruto)} carregando={isLoading} />
-        <KpiCard rotulo="Margem" valor={percentual(r?.margemPct)} carregando={isLoading} />
-      </div>
+      <Grupo className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <KpiV18 rotulo="Faturamento" valor={r?.faturamento} anterior={comp?.faturamento} formato={moeda} icone={<CircleDollarSign className="h-4 w-4" />} tom="verde" carregando={isLoading} sub="vs. período anterior" />
+        <KpiV18 rotulo="Vendas" valor={r?.qtdVendas} anterior={comp?.qtdVendas} formato={qtd} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={isLoading} onClick={() => nav('/vendas')} />
+        <KpiV18 rotulo="Ticket médio" valor={r?.ticketMedio} anterior={comp?.ticketMedio} formato={moeda} icone={<Receipt className="h-4 w-4" />} tom="vermelho" carregando={isLoading} />
+        <KpiV18 rotulo="Itens vendidos" valor={r?.itensVendidos} formato={qtd} icone={<Package className="h-4 w-4" />} tom="neutro" carregando={isLoading} />
+        <KpiV18 rotulo="Lucro bruto" valor={r?.lucroBruto} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={isLoading} />
+        <KpiV18 rotulo="Margem" valor={r?.margemPct} formato={(n) => percentual(n)} icone={<Percent className="h-4 w-4" />} tom="amarelo" carregando={isLoading} />
+      </Grupo>
 
-      <Card titulo="Faturamento por dia" descricao={`${dataInicial.split('-').reverse().join('/')} a ${dataFinal.split('-').reverse().join('/')}`}>
+      <CardV18 titulo="Faturamento por dia" descricao={faixa} icone={<BarChart3 className="h-4 w-4" />} tom="azul">
         {isLoading ? (
           <Skeleton className="h-64" />
         ) : series.length ? (
@@ -90,78 +102,68 @@ export default function DashboardVendas() {
               <AreaChart data={series} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gradFat" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={CORES.receita} stopOpacity={0.25} />
+                    <stop offset="0%" stopColor={CORES.receita} stopOpacity={0.3} />
                     <stop offset="100%" stopColor={CORES.receita} stopOpacity={0} />
                   </linearGradient>
+                  <linearGradient id="gradLucro" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={CORES.lucro} stopOpacity={0.15} />
+                    <stop offset="100%" stopColor={CORES.lucro} stopOpacity={0} />
+                  </linearGradient>
                 </defs>
-                <CartesianGrid stroke={CORES.grade} vertical={false} />
+                <CartesianGrid stroke={CORES.grade} strokeDasharray="3 4" vertical={false} />
                 <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={60} />
-                <Tooltip content={<TooltipPadrao />} />
-                <Area type="monotone" dataKey="faturamento" name="Faturamento" stroke={CORES.receita} fill="url(#gradFat)" strokeWidth={2} />
-                <Area type="monotone" dataKey="lucro" name="Lucro" stroke={CORES.lucro} fill="transparent" strokeWidth={1.5} strokeDasharray="4 3" />
+                <Tooltip content={<TooltipPadrao />} cursor={{ stroke: CORES.eixo, strokeDasharray: '3 3' }} />
+                <Area type="monotone" dataKey="faturamento" name="Faturamento" stroke={CORES.receita} fill="url(#gradFat)" strokeWidth={2.5} activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }} animationDuration={1100} />
+                <Area type="monotone" dataKey="lucro" name="Lucro" stroke={CORES.lucro} fill="url(#gradLucro)" strokeWidth={1.5} strokeDasharray="4 3" animationDuration={1300} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         ) : (
           <EmptyState compacto titulo="Sem vendas no período" descricao="Contam todas as vendas salvas no período (em aberto, fechadas, com NF); canceladas e orçamentos ficam de fora." />
         )}
-      </Card>
+      </CardV18>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card titulo="Por vendedor">
+        {/* Ranking de vendedores */}
+        <CardV18 titulo="Ranking de vendedores" descricao={data?.porVendedor.length ? `${data.porVendedor.length} vendedores · ${moeda(totalVend)}` : faixa} icone={<Trophy className="h-4 w-4" />} tom="amarelo" semPadding>
           {isLoading ? (
-            <Skeleton className="h-56" />
+            <div className="p-4">
+              <Skeleton className="h-56" />
+            </div>
           ) : data?.porVendedor.length ? (
-            <div className="h-56">
-              <ResponsiveContainer>
-                <BarChart data={data.porVendedor} layout="vertical" margin={{ left: 8, right: 16 }}>
-                  <CartesianGrid stroke={CORES.grade} horizontal={false} />
-                  <XAxis type="number" tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="nome" width={110} tick={{ fontSize: 11, fill: '#334155' }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<TooltipPadrao />} />
-                  <Bar dataKey="faturamento" name="Faturamento" fill={CORES.receita} radius={[0, 4, 4, 0]} barSize={18} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <motion.ul className="px-2 pb-3 sm:px-3" variants={listaVariants} initial="oculto" animate="visivel">
+              {data.porVendedor.map((v, i) => (
+                <LinhaV18 key={v.id ?? `sem-${i}`}>
+                  <span className="w-5 shrink-0 text-center text-xs font-bold text-slate-400 num">{i === 0 ? <Crown className="mx-auto h-4 w-4 text-amber-500" /> : `${i + 1}º`}</span>
+                  <Avatar nome={v.nome} indice={i} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-sm font-medium text-slate-800">{v.nome}</span>
+                      <span className="num shrink-0 text-sm font-semibold text-slate-900">{moeda(v.faturamento)}</span>
+                    </div>
+                    <BarraAnimada pct={lider > 0 ? (v.faturamento / lider) * 100 : 0} cor={i === 0 ? '#dc2626' : '#94a3b8'} className="mt-1.5 h-1.5" />
+                    <p className="mt-1 text-[11px] text-slate-400 num">
+                      {inteiro(v.qtd)} {v.qtd === 1 ? 'venda' : 'vendas'} · {totalVend > 0 ? numero((v.faturamento / totalVend) * 100, 0) : 0}% do total · comissão {moeda(v.comissao)}
+                    </p>
+                  </div>
+                </LinhaV18>
+              ))}
+            </motion.ul>
           ) : (
-            <EmptyState compacto titulo="Sem dados" />
+            <EmptyState compacto icone={<Users className="h-5 w-5" />} titulo="Sem vendas no período" />
           )}
-          {data?.porVendedor.length ? (
-            <div className="overflow-x-auto">
-            <table className="tbl mt-3">
-              <thead>
-                <tr>
-                  <th>Vendedor</th>
-                  <th className="text-right">Vendas</th>
-                  <th className="text-right">Faturamento</th>
-                  <th className="text-right">Comissão</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.porVendedor.map((v) => (
-                  <tr key={v.id}>
-                    <td>{v.nome}</td>
-                    <td className="num text-right">{inteiro(v.qtd)}</td>
-                    <td className="num text-right">{moeda(v.faturamento)}</td>
-                    <td className="num text-right text-slate-500">{moeda(v.comissao)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          ) : null}
-        </Card>
+        </CardV18>
 
-        <Card titulo="Formas de pagamento">
+        <CardV18 titulo="Formas de pagamento" descricao={totalFormas ? moeda(totalFormas) : faixa} icone={<PieIcon className="h-4 w-4" />} tom="azul">
           {isLoading ? (
             <Skeleton className="h-56" />
           ) : data?.porFormaPagamento.length ? (
             <div className="flex flex-col items-center gap-4 sm:flex-row lg:flex-col xl:flex-row">
-              <div className="h-52 w-52 shrink-0">
+              <div className="relative h-52 w-52 shrink-0">
                 <ResponsiveContainer>
                   <PieChart>
-                    <Pie data={data.porFormaPagamento} dataKey="valor" nameKey="nome" innerRadius={55} outerRadius={85} paddingAngle={2} stroke="#fff">
+                    <Pie data={data.porFormaPagamento} dataKey="valor" nameKey="nome" innerRadius={62} outerRadius={88} paddingAngle={3} cornerRadius={6} stroke="#fff" animationDuration={1000}>
                       {data.porFormaPagamento.map((_, i) => (
                         <Cell key={i} fill={PALETA[i % PALETA.length]} />
                       ))}
@@ -169,129 +171,137 @@ export default function DashboardVendas() {
                     <Tooltip content={<TooltipPadrao />} />
                   </PieChart>
                 </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[11px] text-slate-400">Total</span>
+                  <span className="num text-sm font-bold text-slate-900">{moeda(totalFormas)}</span>
+                </div>
               </div>
-              <ul className="w-full min-w-0 space-y-1.5 text-sm">
+              <motion.ul className="w-full min-w-0 space-y-2.5 text-sm" variants={listaVariants} initial="oculto" animate="visivel">
                 {data.porFormaPagamento.map((f, i) => {
-                  const total = data.porFormaPagamento.reduce((s, x) => s + x.valor, 0);
+                  const pct = totalFormas ? (f.valor / totalFormas) * 100 : 0;
                   return (
-                    <li key={f.nome} className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: PALETA[i % PALETA.length] }} />
-                      <span className="min-w-0 flex-1 truncate text-slate-700">{f.nome}</span>
-                      <span className="num text-xs text-slate-400">{total ? numero((f.valor / total) * 100, 0) : 0}%</span>
-                      <span className="num font-medium">{moeda(f.valor)}</span>
-                    </li>
+                    <LinhaV18 key={f.nome} bloco className="px-0 py-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: PALETA[i % PALETA.length] }} />
+                        <span className="min-w-0 flex-1 truncate text-slate-700">{f.nome}</span>
+                        <span className="num text-xs text-slate-400">{numero(pct, 0)}%</span>
+                        <span className="num font-medium">{moeda(f.valor)}</span>
+                      </div>
+                      <BarraAnimada pct={pct} cor={PALETA[i % PALETA.length]} className="ml-[18px] mt-1 h-1" />
+                    </LinhaV18>
                   );
                 })}
-              </ul>
+              </motion.ul>
             </div>
           ) : (
             <EmptyState compacto titulo="Sem dados" />
           )}
-        </Card>
+        </CardV18>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <Card titulo="Produtos mais vendidos" semPadding>
-          {isLoading ? (
-            <div className="p-4">
-              <Skeleton className="h-48" />
-            </div>
-          ) : data?.topProdutos.length ? (
-            <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Produto</th>
-                  <th className="text-right">Qtd</th>
-                  <th className="text-right">Valor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.topProdutos.map((p) => (
-                  <tr key={p.produtoId}>
-                    <td className="min-w-[140px] whitespace-normal">
-                      <Link to={`/produtos/${p.produtoId}`} className="line-clamp-2 break-words hover:text-brand-600">
-                        {p.nome}
-                      </Link>
-                    </td>
-                    <td className="num text-right">{numero(p.qtd)}</td>
-                    <td className="num text-right">{moeda(p.valor)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          ) : (
-            <EmptyState compacto titulo="Sem dados" />
-          )}
-        </Card>
-        <Card titulo="Melhores clientes" semPadding>
+      {/* Mais vendidos em cards com foto (estilo "Saved for later" do V18) */}
+      <CardV18 titulo="Produtos mais vendidos" descricao={faixa} icone={<Package className="h-4 w-4" />} tom="vermelho">
+        {isLoading ? (
+          <Skeleton className="h-48" />
+        ) : data?.topProdutos.length ? (
+          <motion.div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" variants={listaVariants} initial="oculto" animate="visivel">
+            {data.topProdutos.map((p, i) => (
+              <motion.div
+                key={p.produtoId ?? `p-${i}`}
+                variants={{ oculto: { opacity: 0, y: 14, scale: 0.97 }, visivel: { opacity: 1, y: 0, scale: 1 } }}
+                whileHover={{ y: -4, boxShadow: '0 14px 30px -12px rgba(15, 23, 42, 0.18)' }}
+                className="min-w-0 overflow-hidden rounded-xl border border-slate-200/80 bg-white"
+              >
+                <Link to={p.produtoId ? `/produtos/${p.produtoId}` : '#'} className="block">
+                  <div className="relative flex h-24 items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100/60 p-2 sm:h-28">
+                    <FotoProduto url={p.imagemUrl} alt={p.nome} tamanho="lg" className="!h-full !w-full !border-0 !bg-transparent" />
+                    <span className={`absolute left-2 top-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold num ${i < 3 ? 'bg-brand-600 text-white' : 'bg-white text-slate-500 shadow-card'}`}>#{i + 1}</span>
+                  </div>
+                  <div className="p-2.5">
+                    <p className="line-clamp-2 min-h-[2.5em] break-words text-xs font-medium leading-tight text-slate-800">{p.nome}</p>
+                    <div className="mt-1.5 flex items-baseline justify-between gap-1">
+                      <span className="num text-sm font-semibold text-slate-900">{moeda(p.valor)}</span>
+                      <span className="num text-[11px] text-slate-400">{numero(p.qtd)} un</span>
+                    </div>
+                  </div>
+                </Link>
+              </motion.div>
+            ))}
+          </motion.div>
+        ) : (
+          <EmptyState compacto titulo="Sem dados" />
+        )}
+      </CardV18>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <CardV18 titulo="Melhores clientes" descricao={faixa} icone={<Users className="h-4 w-4" />} tom="verde" semPadding>
           {isLoading ? (
             <div className="p-4">
               <Skeleton className="h-48" />
             </div>
           ) : data?.topClientes.length ? (
-            <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Cliente</th>
-                  <th className="text-right">Vendas</th>
-                  <th className="text-right">Valor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.topClientes.map((c) => (
-                  <tr key={c.contatoId}>
-                    <td className="min-w-[140px] whitespace-normal">
-                      <Link to={`/contatos/${c.contatoId}`} className="line-clamp-2 break-words hover:text-brand-600">
-                        {c.nome}
-                      </Link>
-                    </td>
-                    <td className="num text-right">{inteiro(c.qtd)}</td>
-                    <td className="num text-right">{moeda(c.valor)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
+            <motion.ul className="px-2 pb-3 sm:px-3" variants={listaVariants} initial="oculto" animate="visivel">
+              {data.topClientes.map((c, i) => (
+                <LinhaV18 key={c.contatoId} onClick={() => nav(`/contatos/${c.contatoId}`)}>
+                  <Avatar nome={c.nome} indice={i + 2} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-sm font-medium text-slate-800">{c.nome}</span>
+                      <span className="num shrink-0 text-sm font-semibold">{moeda(c.valor)}</span>
+                    </div>
+                    <BarraAnimada pct={maiorCliente > 0 ? (c.valor / maiorCliente) * 100 : 0} cor="#16a34a" className="mt-1.5 h-1" />
+                    <p className="mt-0.5 text-[11px] text-slate-400 num">{inteiro(c.qtd)} {c.qtd === 1 ? 'compra' : 'compras'}</p>
+                  </div>
+                </LinhaV18>
+              ))}
+            </motion.ul>
           ) : (
             <EmptyState compacto titulo="Sem dados" />
           )}
-        </Card>
-        <Card titulo="Por situação e origem">
+        </CardV18>
+
+        <CardV18 titulo="Por situação e origem" descricao={faixa} icone={<Layers className="h-4 w-4" />} tom="neutro">
           {isLoading ? (
             <Skeleton className="h-48" />
           ) : (
-            <div className="space-y-4">
-              <ul className="space-y-1.5 text-sm">
-                {(data?.porSituacao ?? []).map((s) => (
-                  <li key={s.id} className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.cor }} />
-                    <span className="flex-1 text-slate-700">{s.nome}</span>
-                    <span className="num text-slate-500">{inteiro(s.qtd)}</span>
-                    {s.valor !== undefined && <span className="num w-24 text-right font-medium">{moeda(s.valor)}</span>}
-                  </li>
-                ))}
-                {!data?.porSituacao?.length && <li className="text-xs text-slate-400">Sem dados</li>}
-              </ul>
+            <div className="space-y-5">
+              {(() => {
+                const tot = (data?.porSituacao ?? []).reduce((s, x) => s + x.qtd, 0);
+                return (
+                  <motion.ul className="space-y-1" variants={listaVariants} initial="oculto" animate="visivel">
+                    {(data?.porSituacao ?? []).map((s) => (
+                      <LinhaV18 key={s.id} onClick={() => nav(`/vendas?situacoes=${s.id}`)} bloco>
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.cor }} />
+                          <span className="min-w-0 flex-1 truncate text-slate-700">{s.nome}</span>
+                          <span className="num text-slate-500">{inteiro(s.qtd)}</span>
+                          {s.valor !== undefined && <span className="num w-24 text-right font-medium">{moeda(s.valor)}</span>}
+                        </div>
+                        <BarraAnimada pct={tot ? (s.qtd / tot) * 100 : 0} cor={s.cor} className="ml-4 mt-1 h-1" />
+                      </LinhaV18>
+                    ))}
+                    {!data?.porSituacao?.length && <li className="text-xs text-slate-400">Sem dados</li>}
+                  </motion.ul>
+                );
+              })()}
               {data?.porOrigem?.length ? (
                 <div>
-                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Origem</p>
-                  <ul className="space-y-1 text-sm">
-                    {data.porOrigem.map((o) => (
-                      <li key={o.nome} className="flex items-center justify-between">
-                        <span className="text-slate-700">{o.nome}</span>
-                        <span className="num">{moeda(o.valor)}</span>
-                      </li>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Origem</p>
+                  <div className="flex flex-wrap gap-2">
+                    {data.porOrigem.map((o, i) => (
+                      <motion.span key={o.nome} whileHover={{ y: -2 }} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs shadow-card">
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: PALETA[i % PALETA.length] }} />
+                        <span className="text-slate-600">{o.nome}</span>
+                        <span className="num font-semibold text-slate-900">{moeda(o.valor)}</span>
+                      </motion.span>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               ) : null}
             </div>
           )}
-        </Card>
+        </CardV18>
       </div>
-    </div>
+    </PaginaV18>
   );
 }

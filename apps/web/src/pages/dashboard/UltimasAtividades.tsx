@@ -3,8 +3,10 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { ArrowDownLeft, ArrowUpRight, Ban, CircleDollarSign, FileText, History, LogIn, Package, Pencil, Plus, RefreshCw, Send, ShoppingCart, Wrench } from 'lucide-react';
 import clsx from 'clsx';
+import { AnimatePresence, motion } from 'framer-motion';
+import { CardV18 } from '@/components/dashboard/v18';
 import { api } from '@/lib/api';
-import { Card, EmptyState, Skeleton } from '@/components/ui';
+import { EmptyState, Skeleton } from '@/components/ui';
 import { dataHora } from '@/lib/format';
 
 type Tom = 'verde' | 'vermelho' | 'azul' | 'amarelo' | 'neutro';
@@ -105,9 +107,11 @@ export function UltimosAcontecimentos({ className }: { className?: string }) {
   const itens = data?.acontecimentos ?? [];
 
   return (
-    <Card
+    <CardV18
       titulo="Últimas movimentações"
-      descricao="Tudo o que acontece no sistema: vendas, OS, situações, pagamentos, compras, notas e cadastros"
+      descricao="Vendas, OS, situações, pagamentos, compras, notas e cadastros"
+      icone={<History className="h-4 w-4" />}
+      tom="vermelho"
       className={className}
       semPadding
       acoes={
@@ -116,7 +120,7 @@ export function UltimosAcontecimentos({ className }: { className?: string }) {
         </button>
       }
     >
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-100 px-3 py-2">
+      <div className="flex gap-1 overflow-x-auto px-4 pb-3 pt-2 sm:px-5">
         {FILTROS.map((f) => (
           <button
             key={f.id || 'tudo'}
@@ -126,11 +130,12 @@ export function UltimosAcontecimentos({ className }: { className?: string }) {
               setLimite(15);
             }}
             className={clsx(
-              'whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
-              categoria === f.id ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+              'relative whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
+              categoria === f.id ? 'text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
             )}
           >
-            {f.nome}
+            {categoria === f.id && <motion.span layoutId="filtro-acontecimentos" className="absolute inset-0 rounded-full bg-slate-900" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
+            <span className="relative">{f.nome}</span>
           </button>
         ))}
       </div>
@@ -140,8 +145,9 @@ export function UltimosAcontecimentos({ className }: { className?: string }) {
         </div>
       ) : itens.length ? (
         <>
-          <ul className="max-h-[560px] divide-y divide-slate-100 overflow-y-auto">
-            {itens.map((a) => {
+          <ul className="max-h-[560px] overflow-y-auto border-t border-slate-100 py-1">
+            <AnimatePresence initial={false}>
+            {itens.map((a, idx) => {
               const dinheiro = a.id.startsWith('m');
               const Icone = dinheiro ? (a.tom === 'vermelho' ? ArrowUpRight : ArrowDownLeft) : a.tom === 'vermelho' ? Ban : a.texto.startsWith('enviou') ? Send : ICONE[a.categoria] ?? History;
               const conteudo = (
@@ -166,23 +172,33 @@ export function UltimosAcontecimentos({ className }: { className?: string }) {
                 </>
               );
               return (
-                <li key={a.id}>
+                <motion.li
+                  key={a.id}
+                  layout="position"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0, transition: { delay: Math.min(idx, 12) * 0.025 } }}
+                  exit={{ opacity: 0 }}
+                  className="relative"
+                >
+                  {/* linha do tempo ligando os ícones */}
+                  {idx < itens.length - 1 && <span aria-hidden className="absolute bottom-0 left-[29px] top-9 w-px bg-slate-100 sm:left-[33px]" />}
                   {a.link ? (
-                    <Link to={a.link} className="flex items-start gap-3 px-4 py-2.5 hover:bg-slate-50">
+                    <Link to={a.link} className="flex items-start gap-3 rounded-xl px-4 py-2.5 transition-colors hover:bg-slate-50 sm:px-5">
                       {conteudo}
                     </Link>
                   ) : (
-                    <div className="flex items-start gap-3 px-4 py-2.5">{conteudo}</div>
+                    <div className="flex items-start gap-3 px-4 py-2.5 sm:px-5">{conteudo}</div>
                   )}
-                </li>
+                </motion.li>
               );
             })}
+            </AnimatePresence>
           </ul>
           {itens.length >= limite && limite < 200 && <BotaoMais onClick={() => setLimite((l) => Math.min(l + 30, 200))} carregando={isFetching} />}
         </>
       ) : (
         <EmptyState compacto icone={<History className="h-5 w-5" />} titulo="Nada por aqui ainda" descricao="Os acontecimentos aparecem conforme a equipe usa o sistema." />
       )}
-    </Card>
+    </CardV18>
   );
 }
