@@ -86,12 +86,37 @@ async function main() {
   await adm.post('/dashboard/assistencia/pagar-tecnico', { ...corpoPg, dataInicial: '2001-01-01', dataFinal: '2001-01-31' }, 422);
   await adm.post('/dashboard/assistencia/pagar-tecnico', { ...corpoPg, percentual: 0 }, [400, 422]);
 
+  secao('Dashboard principal (panorama): vendas + assistência no período');
+  const pano = await adm.get(`/dashboard/panorama?dataInicial=${hoje()}&dataFinal=${hoje()}`);
+  const dv = await adm.get(`/dashboard/vendas?dataInicial=${hoje()}&dataFinal=${hoje()}&comparar=false`);
+  const da = await adm.get(`/dashboard/assistencia?dataInicial=${hoje()}&dataFinal=${hoje()}`);
+  const rp = pano.resumo;
+  verifica(igual(rp.vendas.valor, dv.resumo.faturamento) && rp.vendas.qtd === dv.resumo.qtdVendas, 'vendas do panorama = dashboard de vendas', { p: rp.vendas, v: dv.resumo });
+  verifica(igual(rp.vendas.lucro, dv.resumo.lucroBruto), 'lucro das vendas = lucro bruto do dashboard de vendas', { p: rp.vendas.lucro, v: dv.resumo.lucroBruto });
+  verifica(igual(rp.assistencia.valor, da.resumo.valorEntrada) && igual(rp.assistencia.lucro, da.resumo.lucro), 'assistência do panorama = dashboard de assistência', { p: rp.assistencia, a: da.resumo });
+  verifica(igual(rp.faturamento, rp.vendas.valor + rp.assistencia.valor), 'faturamento = vendas + assistência', rp);
+  verifica(igual(rp.lucro, rp.vendas.lucro + rp.assistencia.lucro) && igual(rp.lucro, rp.faturamento - rp.custo), 'lucro = lucro vendas + lucro assistência = faturamento - custos', rp);
+  verifica(igual(rp.caixa.saldo, rp.caixa.entradas - rp.caixa.saidas), 'caixa: saldo = entrou - saiu', rp.caixa);
+  const somaSerie = pano.series.reduce((s: number, x: any) => s + x.vendas + x.assistencia, 0);
+  verifica(igual(somaSerie, rp.faturamento), 'gráfico soma o mesmo faturamento', { somaSerie, fat: rp.faturamento });
+  verifica(rp.comparativo && typeof rp.comparativo.faturamento === 'number', 'traz o período anterior para comparar');
+  // transferência entre contas não mexe no caixa do período
+  const contasFin: any[] = await adm.get('/contas-financeiras');
+  if (contasFin.length >= 2) {
+    await adm.post('/financeiro/transferencia', { origemId: contasFin[0].id, destinoId: contasFin[1].id, valor: 123.45, data: hoje() }, [200, 201]);
+    const pano2 = await adm.get(`/dashboard/panorama?dataInicial=${hoje()}&dataFinal=${hoje()}`);
+    verifica(igual(pano2.resumo.caixa.entradas, rp.caixa.entradas) && igual(pano2.resumo.caixa.saidas, rp.caixa.saidas), 'transferência entre contas não entra no caixa do período', pano2.resumo.caixa);
+  }
+  const vazio = await adm.get('/dashboard/panorama?dataInicial=2001-01-01&dataFinal=2001-01-07');
+  verifica(vazio.resumo.faturamento === 0 && vazio.series.length === 7, 'período sem movimento: zero e 7 dias no gráfico', vazio.resumo.faturamento);
+
   secao('Permissões');
   const senha = 'Senha@12345';
   await adm.post('/usuarios', { nome: `Tecnico custos ${SUF}`, email: `tc${SUF}@teste.com`, senha, perfil: 'TECNICO' }, 201);
   const tec = await entrar(`tc${SUF}@teste.com`, senha);
   tec.nome = 'TECNICO';
   await tec.get(`/dashboard/assistencia`, 403);
+  await tec.get(`/dashboard/panorama`, 403);
   await tec.post('/dashboard/assistencia/pagar-tecnico', { tecnicoId: 1, percentual: 10 }, 403);
   const vistaTec = await tec.get(`/ordens-servico/${os.id}`);
   verifica(vistaTec.fechamento === null && igual(vistaTec.custoPeca, 280), 'técnico vê/lança os custos, mas não o lucro', vistaTec.fechamento);

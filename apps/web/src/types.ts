@@ -1023,6 +1023,26 @@ export interface MovimentoDashboard {
   categoria?: Ref | null;
 }
 
+export interface TotaisPanorama {
+  faturamento: number;
+  custo: number;
+  lucro: number;
+  margemPct: number;
+  qtd: number;
+  ticketMedio: number;
+  vendas: { valor: number; qtd: number; custo: number; lucro: number; margemPct: number; ticketMedio: number };
+  assistencia: { valor: number; qtd: number; maoDeObra: number; pecas: number; custoPecas: number; custoLogistica: number; custoTerceiros: number; custo: number; lucro: number; margemPct: number; ticketMedio: number };
+  caixa: { entradas: number; saidas: number; saldo: number };
+}
+
+export interface DashboardPanorama {
+  periodo: { dataInicial: string; dataFinal: string; agrupar: 'dia' | 'semana' | 'mes'; base: 'entrada' | 'conclusao' };
+  resumo: TotaisPanorama & { comparativo: TotaisPanorama; osSemCusto: number; melhorPeriodo: { periodo: string; valor: number } | null };
+  series: { periodo: string; vendas: number; assistencia: number; lucro: number; entradas: number; saidas: number }[];
+  porVendedor: { id: number | null; nome: string; valor: number; qtd: number; lucro: number }[];
+  porTecnico: { id: number | null; nome: string; valor: number; qtd: number; lucro: number }[];
+}
+
 export interface DashboardGeral {
   hoje: { vendas: number; valorVendas: number; osAbertas: number; osConcluidasHoje: number };
   financeiro: { saldoTotal: number; receberHoje: number; receberAtrasado: number; pagarHoje: number; pagarAtrasado: number; saldoContas?: ResumoFinanceiro['saldoContas'] } | null;

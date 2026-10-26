@@ -1,40 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AlertTriangle, BarChart3, HandCoins, CircleDollarSign, ClipboardList, Cpu, HardHat, Layers, Package, Percent, Receipt, TrendingUp, Truck, Wrench } from 'lucide-react';
-import { format, startOfMonth, subDays } from 'date-fns';
 import { api } from '@/lib/api';
 import { useTecnicos, opcoesDe } from '@/hooks/useListas';
-import { Button, EmptyState, PeriodoFiltro, SelectFiltro, Skeleton } from '@/components/ui';
+import { Button, EmptyState, SelectFiltro, Skeleton } from '@/components/ui';
+import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
 import { PagarTecnicoModal } from './PagarTecnico';
 import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, SegmentadoV18, listaVariants } from '@/components/dashboard/v18';
-import { data as fmtData, hoje, inteiro, moeda, numero, percentual } from '@/lib/format';
+import { data as fmtData, inteiro, moeda, numero, percentual } from '@/lib/format';
 import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import type { DashboardAssistencia as Dados, TotaisAssistencia } from '@/types';
-
-type Periodo = 'hoje' | '7d' | '30d' | 'mes' | 'mesPassado' | 'custom';
-
-function intervalo(p: Periodo, custom: { i: string; f: string }): { dataInicial: string; dataFinal: string } {
-  const h = new Date();
-  switch (p) {
-    case 'hoje':
-      return { dataInicial: hoje(), dataFinal: hoje() };
-    case '7d':
-      return { dataInicial: format(subDays(h, 6), 'yyyy-MM-dd'), dataFinal: hoje() };
-    case '30d':
-      return { dataInicial: format(subDays(h, 29), 'yyyy-MM-dd'), dataFinal: hoje() };
-    case 'mes':
-      return { dataInicial: format(startOfMonth(h), 'yyyy-MM-dd'), dataFinal: hoje() };
-    case 'mesPassado': {
-      const ini = startOfMonth(subDays(startOfMonth(h), 1));
-      return { dataInicial: format(ini, 'yyyy-MM-dd'), dataFinal: format(subDays(startOfMonth(h), 1), 'yyyy-MM-dd') };
-    }
-    default:
-      return { dataInicial: custom.i, dataFinal: custom.f };
-  }
-}
 
 /** Linha "receita − custo = lucro" de um bloco (mão de obra ou peças) */
 function BlocoLucro({ titulo, icone, receita, custo, rotuloCusto, cor }: { titulo: string; icone: React.ReactNode; receita: number; custo: number; rotuloCusto: string; cor: string }) {
@@ -72,15 +50,13 @@ function MiniTotais({ titulo, t, qtd, tom }: { titulo: string; t?: TotaisAssiste
 /** Dashboard de assistência técnica (só ADMIN) — entradas, mão de obra x peças, custos e lucro das OS */
 export default function DashboardAssistencia() {
   const nav = useNavigate();
-  const [periodo, setPeriodo] = useState<Periodo>('mes');
-  const [custom, setCustom] = useState({ i: format(startOfMonth(new Date()), 'yyyy-MM-dd'), f: hoje() });
+  const { periodo, setPeriodo, custom, setCustom, dataInicial, dataFinal, faixa } = usePeriodoDashboard('dash-assistencia', 'mes');
   const [base, setBase] = useState<'entrada' | 'conclusao'>('entrada');
   const [tecnicoId, setTecnicoId] = useState('');
   const [verCanceladas, setVerCanceladas] = useState(false);
   const [pagarAberto, setPagarAberto] = useState(false);
   const { data: tecnicos } = useTecnicos();
 
-  const { dataInicial, dataFinal } = useMemo(() => intervalo(periodo, custom), [periodo, custom]);
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-assistencia', dataInicial, dataFinal, tecnicoId, base],
     queryFn: () => api.get<Dados>('/dashboard/assistencia', { dataInicial, dataFinal, tecnicoId, base }),
@@ -90,7 +66,6 @@ export default function DashboardAssistencia() {
   const r = data?.resumo;
   const comp = r?.comparativo;
   const series = (data?.series ?? []).map((s) => ({ ...s, rotulo: rotuloPeriodo(s.periodo) }));
-  const faixa = `${dataInicial.split('-').reverse().join('/')} a ${dataFinal.split('-').reverse().join('/')}`;
   const qtd = (n: number) => inteiro(Math.round(n));
   const maiorTec = Math.max(0, ...(data?.porTecnico ?? []).map((t) => t.valorEntrada));
   const totSit = (data?.porSituacao ?? []).reduce((s, x) => s + x.qtd, 0);
@@ -114,20 +89,7 @@ export default function DashboardAssistencia() {
           <p className="text-sm text-slate-500">Entradas das OS, mão de obra x peças, custos e lucro dos serviços.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          <SegmentadoV18
-            id="periodo-assistencia"
-            valor={periodo}
-            onMudar={setPeriodo}
-            opcoes={[
-              { valor: 'hoje', rotulo: 'Hoje' },
-              { valor: '7d', rotulo: '7 dias' },
-              { valor: '30d', rotulo: '30 dias' },
-              { valor: 'mes', rotulo: 'Este mês' },
-              { valor: 'mesPassado', rotulo: 'Mês passado' },
-              { valor: 'custom', rotulo: 'Período' },
-            ]}
-          />
-          {periodo === 'custom' && <PeriodoFiltro inicial={custom.i} final={custom.f} onChange={(i, f) => setCustom({ i, f })} label="" atalhos={false} />}
+          <FiltroPeriodo id="periodo-assistencia" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
           <SegmentadoV18
             id="base-assistencia"
             valor={base}

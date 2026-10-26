@@ -529,6 +529,120 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     };
   });
   // =====================================================================
+  // PANORAMA (só ADMIN) — tela inicial: vendas + assistência no período escolhido
+  // Vendas: pedidos não cancelados (igual ao dashboard de vendas). Assistência: OS não canceladas
+  // por data de entrada ou de conclusão (igual ao dashboard de assistência). Caixa: movimentos reais
+  // das contas no período, sem as transferências entre contas.
+  // =====================================================================
+  app.get('/api/v1/dashboard/panorama', { preHandler: app.exigirPerfil('ADMIN') }, async (req) => {
+    const q = z
+      .object({ dataInicial: dataSchema, dataFinal: dataSchema, base: z.enum(['entrada', 'conclusao']).default('entrada'), agrupar: z.enum(['dia', 'semana', 'mes']).optional() })
+      .parse(req.query);
+    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const agrupar: Agrupar = q.agrupar || agruparPadrao(ini, fim);
+    const [sitVendaCanc, sitOsOk, sitOsCanc] = await Promise.all([situacoesCanceladas('VENDA'), situacoesRealizadas('OS'), situacoesCanceladas('OS')]);
+
+    const carregarVendas = (de: Date, ate: Date) =>
+      prisma.venda.findMany({
+        where: { tipo: 'PEDIDO', data: { gte: de, lte: ate }, situacaoId: { notIn: sitVendaCanc } },
+        select: {
+          data: true, total: true, custoTotal: true, vendedorId: true,
+          vendedor: { select: { id: true, nome: true } },
+          itens: { select: { quantidade: true, custoUnitario: true } },
+        },
+      });
+    const carregarOs = async (de: Date, ate: Date) => (await ordensAssistencia(de, ate, q.base, undefined, sitOsOk)).filter((o) => !sitOsCanc.includes(o.situacaoId));
+    const carregarCaixa = async (de: Date, ate: Date) => {
+      const movs = await prisma.movimentoFinanceiro.findMany({ where: { data: { gte: de, lte: ate }, tipo: { in: ['ENTRADA', 'SAIDA'] } }, select: { data: true, tipo: true, valor: true, observacoes: true } });
+      return movs.filter((m) => m.observacoes !== 'TRANSFERENCIA');
+    };
+    const custoVenda = (v: { custoTotal: number; itens: { quantidade: number; custoUnitario: number }[] }) => v.custoTotal || v.itens.reduce((a, i) => a + i.custoUnitario * i.quantidade, 0);
+
+    type Vendas = Awaited<ReturnType<typeof carregarVendas>>;
+    type Caixa = Awaited<ReturnType<typeof carregarCaixa>>;
+    const resumir = (vendas: Vendas, ordens: LinhaAssistencia[], caixa: Caixa) => {
+      const vValor = vendas.reduce((s, v) => s + v.total, 0);
+      const vCusto = vendas.reduce((s, v) => s + custoVenda(v), 0);
+      const a = somarAssistencia(ordens);
+      const entradas = caixa.filter((m) => m.tipo === 'ENTRADA').reduce((s, m) => s + m.valor, 0);
+      const saidas = caixa.filter((m) => m.tipo === 'SAIDA').reduce((s, m) => s + m.valor, 0);
+      const faturamento = vValor + a.valorEntrada;
+      const lucro = vValor - vCusto + a.lucro;
+      const qtd = vendas.length + a.qtd;
+      return {
+        faturamento: arredondar(faturamento),
+        custo: arredondar(vCusto + a.custoTotal),
+        lucro: arredondar(lucro),
+        margemPct: pct(lucro, faturamento),
+        qtd,
+        ticketMedio: qtd ? arredondar(faturamento / qtd) : 0,
+        vendas: { valor: arredondar(vValor), qtd: vendas.length, custo: arredondar(vCusto), lucro: arredondar(vValor - vCusto), margemPct: pct(vValor - vCusto, vValor), ticketMedio: vendas.length ? arredondar(vValor / vendas.length) : 0 },
+        assistencia: { valor: a.valorEntrada, qtd: a.qtd, maoDeObra: a.maoDeObra, pecas: a.pecas, custoPecas: a.custoPecas, custoLogistica: a.custoLogistica, custoTerceiros: a.custoTerceiros, custo: a.custoTotal, lucro: a.lucro, margemPct: a.margemPct, ticketMedio: a.ticketMedio },
+        caixa: { entradas: arredondar(entradas), saidas: arredondar(saidas), saldo: arredondar(entradas - saidas) },
+      };
+    };
+
+    const [vendas, ordens, caixa] = await Promise.all([carregarVendas(ini, fim), carregarOs(ini, fim), carregarCaixa(ini, fim)]);
+    const ant = periodoAnterior(ini, fim);
+    const [vendasAnt, ordensAnt, caixaAnt] = await Promise.all([carregarVendas(ant.ini, ant.fim), carregarOs(ant.ini, ant.fim), carregarCaixa(ant.ini, ant.fim)]);
+    const resumo: any = resumir(vendas, ordens, caixa);
+    resumo.comparativo = { ...resumir(vendasAnt, ordensAnt, caixaAnt), periodo: { dataInicial: ant.ini, dataFinal: ant.fim } };
+    resumo.osSemCusto = ordens.filter((o) => sitOsOk.includes(o.situacaoId) && o.totalPecas > 0 && fechamentoOs(o).custoPecas === 0).length;
+
+    // série: vendas x assistência x lucro x caixa
+    const nova = (p: string) => ({ periodo: p, vendas: 0, assistencia: 0, lucro: 0, entradas: 0, saidas: 0 });
+    const serie = new Map(listarPeriodos(ini, fim, agrupar).map((p) => [p, nova(p)]));
+    const ponto = (d: Date) => {
+      const k = chavePeriodo(d, agrupar);
+      return serie.get(k) || serie.set(k, nova(k)).get(k)!;
+    };
+    for (const v of vendas) {
+      const s = ponto(v.data);
+      s.vendas += v.total;
+      s.lucro += v.total - custoVenda(v);
+    }
+    for (const o of ordens) {
+      const s = ponto(q.base === 'conclusao' ? o.dataConclusao || o.dataEntrada : o.dataEntrada);
+      s.assistencia += o.total;
+      s.lucro += fechamentoOs(o).lucro;
+    }
+    for (const m of caixa) {
+      const s = ponto(m.data);
+      if (m.tipo === 'ENTRADA') s.entradas += m.valor;
+      else s.saidas += m.valor;
+    }
+
+    // equipe
+    const porVendedor = new Map<number, { id: number | null; nome: string; valor: number; qtd: number; lucro: number }>();
+    for (const v of vendas) {
+      const k = v.vendedorId ?? 0;
+      const x = porVendedor.get(k) || porVendedor.set(k, { id: v.vendedorId ?? null, nome: v.vendedor?.nome || 'Sem vendedor', valor: 0, qtd: 0, lucro: 0 }).get(k)!;
+      x.valor += v.total;
+      x.qtd += 1;
+      x.lucro += v.total - custoVenda(v);
+    }
+    const porTecnico = new Map<number, { id: number | null; nome: string; valor: number; qtd: number; lucro: number }>();
+    for (const o of ordens) {
+      const k = o.tecnicoId ?? 0;
+      const x = porTecnico.get(k) || porTecnico.set(k, { id: o.tecnicoId ?? null, nome: o.tecnico?.nome || 'Sem técnico', valor: 0, qtd: 0, lucro: 0 }).get(k)!;
+      x.valor += o.total;
+      x.qtd += 1;
+      x.lucro += fechamentoOs(o).lucro;
+    }
+    const r2 = (o: any) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === 'number' ? arredondar(v) : v]));
+    const series = [...serie.values()].sort((a, b) => a.periodo.localeCompare(b.periodo)).map(r2);
+    const melhor = series.reduce<any>((m, s: any) => (!m || s.vendas + s.assistencia > m.vendas + m.assistencia ? s : m), null);
+    resumo.melhorPeriodo = melhor && melhor.vendas + melhor.assistencia > 0 ? { periodo: melhor.periodo, valor: arredondar(melhor.vendas + melhor.assistencia) } : null;
+    return {
+      periodo: { dataInicial: ini, dataFinal: fim, agrupar, base: q.base },
+      resumo,
+      series,
+      porVendedor: [...porVendedor.values()].sort((a, b) => b.valor - a.valor).slice(0, 6).map(r2),
+      porTecnico: [...porTecnico.values()].sort((a, b) => b.valor - a.valor).slice(0, 6).map(r2),
+    };
+  });
+
+  // =====================================================================
   // PAGAR TÉCNICO (só ADMIN): % do lucro da assistência no período → contas a pagar
   // O lucro é recalculado aqui (não confia no número da tela).
   // =====================================================================
