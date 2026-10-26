@@ -252,7 +252,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const vendas = await carregar(ini, fim);
     const resumoDe = (lista: typeof vendas) => {
       const faturamento = lista.reduce((s, v) => s + v.total, 0);
-      const custo = lista.reduce((s, v) => s + (v.custoTotal || v.itens.reduce((a, i) => a + i.custoUnitario * i.quantidade, 0)), 0);
+      const custo = lista.reduce((s, v) => s + (v.custoTotal || v.itens.reduce((a, i) => a + i.custoUnitario * i.quantidade, 0)) + (v.custoLogistica || 0), 0);
       const itensVendidos = lista.reduce((s, v) => s + v.itens.reduce((a, i) => a + i.quantidade, 0), 0);
       return {
         faturamento: arredondar(faturamento),
@@ -261,6 +261,8 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         itensVendidos: arredondar(itensVendidos),
         lucroBruto: arredondar(faturamento - custo),
         margemPct: pct(faturamento - custo, faturamento),
+        // vendas com algum item sem custo: o lucro delas está maior que o real
+        semCusto: lista.filter((v) => v.itens.some((i) => !i.custoUnitario)).length,
       };
     };
     const resumo: any = resumoDe(vendas);
@@ -291,7 +293,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const topClientes = new Map<number, { contatoId: number; nome: string; valor: number; qtd: number }>();
 
     for (const v of vendas) {
-      const custo = v.custoTotal || v.itens.reduce((a, i) => a + i.custoUnitario * i.quantidade, 0);
+      const custo = (v.custoTotal || v.itens.reduce((a, i) => a + i.custoUnitario * i.quantidade, 0)) + (v.custoLogistica || 0);
       acumula(serie, chavePeriodo(v.data, agrupar), () => ({ periodo: chavePeriodo(v.data, agrupar), faturamento: 0, qtd: 0, lucro: 0 }), (s) => {
         s.faturamento += v.total;
         s.qtd += 1;
@@ -546,7 +548,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       prisma.venda.findMany({
         where: { tipo: 'PEDIDO', data: { gte: de, lte: ate }, situacaoId: { notIn: sitVendaCanc } },
         select: {
-          data: true, total: true, custoTotal: true, vendedorId: true,
+          data: true, total: true, custoTotal: true, custoLogistica: true, vendedorId: true,
           vendedor: { select: { id: true, nome: true } },
           itens: { select: { quantidade: true, custoUnitario: true } },
         },
@@ -556,7 +558,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       const movs = await prisma.movimentoFinanceiro.findMany({ where: { data: { gte: de, lte: ate }, tipo: { in: ['ENTRADA', 'SAIDA'] } }, select: { data: true, tipo: true, valor: true, observacoes: true } });
       return movs.filter((m) => m.observacoes !== 'TRANSFERENCIA');
     };
-    const custoVenda = (v: { custoTotal: number; itens: { quantidade: number; custoUnitario: number }[] }) => v.custoTotal || v.itens.reduce((a, i) => a + i.custoUnitario * i.quantidade, 0);
+    const custoVenda = (v: { custoTotal: number; custoLogistica: number; itens: { quantidade: number; custoUnitario: number }[] }) => (v.custoTotal || v.itens.reduce((a, i) => a + i.custoUnitario * i.quantidade, 0)) + (v.custoLogistica || 0);
 
     type Vendas = Awaited<ReturnType<typeof carregarVendas>>;
     type Caixa = Awaited<ReturnType<typeof carregarCaixa>>;

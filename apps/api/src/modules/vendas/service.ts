@@ -65,7 +65,26 @@ export async function vendaCompleta(id: number) {
   const v = await carregarVenda(prisma, id);
   const modulo = moduloDe(v.tipo);
   const [hist, permitidas] = await Promise.all([historico(modulo, id), situacoesPermitidas(modulo, v.situacaoId)]);
-  return { ...v, historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
+  return { ...v, fechamento: fechamentoVenda(v), historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
+}
+
+/**
+ * Fechamento interno da venda (ADMIN/GERENTE): custo dos produtos (informado pelo vendedor ou do cadastro)
+ * + logística. Nunca vai para impressão, PDF, link público, e-mail ou WhatsApp.
+ */
+export function fechamentoVenda(v: { total: number; custoTotal: number; custoLogistica: number; itens: { custoUnitario: number; quantidade: number; custoInformado?: boolean; produtoId?: number | null }[] }) {
+  const custoProdutos = arredondar(v.custoTotal || v.itens.reduce((s, i) => s + i.custoUnitario * i.quantidade, 0));
+  const custoTotal = arredondar(custoProdutos + (v.custoLogistica || 0));
+  const lucro = arredondar(v.total - custoTotal);
+  return {
+    custoProdutos,
+    custoLogistica: arredondar(v.custoLogistica || 0),
+    custoTotal,
+    lucro,
+    margemPct: v.total > 0 ? arredondar((lucro / v.total) * 100, 1) : 0,
+    itensSemCusto: v.itens.filter((i) => !i.custoUnitario).length,
+    itensCustoInformado: v.itens.filter((i) => i.custoInformado).length,
+  };
 }
 
 // ---------------------------------------------------------------- cálculo
@@ -79,6 +98,7 @@ export interface ItemCalculado {
   desconto: number;
   total: number;
   custoUnitario: number;
+  custoInformado: boolean;
   comissaoPct: number;
   comissaoValor: number;
   ordem: number;
@@ -127,7 +147,8 @@ export async function montarItens(db: Db, itens: ItemInput[], comissaoPadraoPct:
       valorUnitario,
       desconto,
       total,
-      custoUnitario: p?.precoCusto ?? 0,
+      custoUnitario: i.custoUnitario ?? p?.precoCusto ?? 0,
+      custoInformado: i.custoUnitario !== null && i.custoUnitario !== undefined,
       comissaoPct,
       comissaoValor: arredondar(total * (comissaoPct / 100)),
       ordem: idx,
@@ -234,7 +255,9 @@ export async function copiarVenda(
     valorUnitario: i.valorUnitario,
     desconto: i.desconto,
     total: i.total,
-    custoUnitario: i.produtoId ? custo.get(i.produtoId) ?? i.custoUnitario : i.custoUnitario,
+    // custo digitado pelo vendedor acompanha a cópia; o do cadastro é atualizado
+    custoUnitario: !i.custoInformado && i.produtoId ? custo.get(i.produtoId) ?? i.custoUnitario : i.custoUnitario,
+    custoInformado: i.custoInformado,
     comissaoPct: i.comissaoPct,
     comissaoValor: i.comissaoValor,
     ordem: i.ordem,
@@ -265,6 +288,7 @@ export async function copiarVenda(
       outrasDespesas: orig.outrasDespesas,
       total: orig.total,
       custoTotal,
+      custoLogistica: orig.custoLogistica,
       observacoes: orig.observacoes,
       observacoesInternas: opts.observacoesInternas,
       transportadoraId: orig.transportadoraId,
@@ -603,6 +627,7 @@ export async function criarVenda(body: VendaInput, usuarioId: number | null, obs
         outrasDespesas: body.outrasDespesas,
         total: totais.total,
         custoTotal: totais.custoTotal,
+        custoLogistica: body.custoLogistica,
         observacoes: body.observacoes ?? null,
         observacoesInternas: body.observacoesInternas ?? null,
         transportadoraId: body.transportadoraId ?? null,

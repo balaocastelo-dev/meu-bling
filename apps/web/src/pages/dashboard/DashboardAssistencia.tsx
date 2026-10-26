@@ -50,7 +50,7 @@ function MiniTotais({ titulo, t, qtd, tom }: { titulo: string; t?: TotaisAssiste
 /** Dashboard de assistência técnica (só ADMIN) — entradas, mão de obra x peças, custos e lucro das OS */
 export default function DashboardAssistencia() {
   const nav = useNavigate();
-  const { periodo, setPeriodo, custom, setCustom, dataInicial, dataFinal, faixa } = usePeriodoDashboard('dash-assistencia', 'mes');
+  const { periodo, setPeriodo, custom, setCustom, dataInicial, dataFinal, faixa } = usePeriodoDashboard();
   const [base, setBase] = useState<'entrada' | 'conclusao'>('entrada');
   const [tecnicoId, setTecnicoId] = useState('');
   const [verCanceladas, setVerCanceladas] = useState(false);

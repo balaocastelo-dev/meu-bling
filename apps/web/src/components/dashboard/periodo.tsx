@@ -1,9 +1,9 @@
 /**
  * Filtro de período dos dashboards (o mesmo no Dashboard e no de Assistência):
  * Hoje · 7 dias · 30 dias · Este mês · Mês passado · Período (datas livres).
- * A escolha fica lembrada por tela neste navegador.
+ * Sempre abre em "Hoje".
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { format, startOfMonth, subDays } from 'date-fns';
 import { PeriodoFiltro } from '@/components/ui';
 import { hoje } from '@/lib/format';
@@ -40,33 +40,10 @@ export function intervaloPeriodo(p: Periodo, custom: { i: string; f: string }): 
   }
 }
 
-const VALIDOS = OPCOES_PERIODO.map((o) => o.valor);
-
-function ler<T>(chave: string, padrao: T, valido: (v: unknown) => boolean): T {
-  try {
-    const v = JSON.parse(localStorage.getItem(chave) || 'null');
-    return valido(v) ? (v as T) : padrao;
-  } catch {
-    return padrao;
-  }
-}
-
-function gravar(chave: string, v: unknown) {
-  try {
-    localStorage.setItem(chave, JSON.stringify(v));
-  } catch {
-    /* navegador sem armazenamento: só não lembra */
-  }
-}
-
-/** Estado do período de um dashboard, lembrado em `chave` (por tela). */
-export function usePeriodoDashboard(chave: string, padrao: Periodo = 'mes') {
-  const [periodo, setPeriodo] = useState<Periodo>(() => ler(`${chave}.periodo`, padrao, (v) => VALIDOS.includes(v as Periodo)));
-  const [custom, setCustom] = useState<{ i: string; f: string }>(() =>
-    ler(`${chave}.custom`, { i: format(startOfMonth(new Date()), 'yyyy-MM-dd'), f: hoje() }, (v: any) => !!v && typeof v.i === 'string' && typeof v.f === 'string' && !!v.i && !!v.f),
-  );
-  useEffect(() => gravar(`${chave}.periodo`, periodo), [chave, periodo]);
-  useEffect(() => gravar(`${chave}.custom`, custom), [chave, custom]);
+/** Estado do período de um dashboard. Todo dashboard abre sempre em "Hoje" (pedido do Thiago, 26/10/2026). */
+export function usePeriodoDashboard(padrao: Periodo = 'hoje') {
+  const [periodo, setPeriodo] = useState<Periodo>(padrao);
+  const [custom, setCustom] = useState<{ i: string; f: string }>(() => ({ i: format(startOfMonth(new Date()), 'yyyy-MM-dd'), f: hoje() }));
   const { dataInicial, dataFinal } = useMemo(() => intervaloPeriodo(periodo, custom), [periodo, custom]);
   const faixa = dataInicial === dataFinal ? dataInicial.split('-').reverse().join('/') : `${dataInicial.split('-').reverse().join('/')} a ${dataFinal.split('-').reverse().join('/')}`;
   return { periodo, setPeriodo, custom, setCustom, dataInicial, dataFinal, faixa };

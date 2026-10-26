@@ -348,7 +348,10 @@ export interface VendaItem {
   valorUnitario: number;
   desconto: number;
   total?: number;
-  custoUnitario?: number;
+  /** custo interno (nunca vai para o cliente) */
+  custoUnitario?: number | null;
+  /** true = custo digitado pelo vendedor; false = custo do cadastro do produto */
+  custoInformado?: boolean;
   comissaoPct?: number;
   comissaoValor?: number;
   /** vindo da API (GET /vendas/:id) */
@@ -444,6 +447,9 @@ export interface Venda extends VendaResumo {
   frete: number;
   outrasDespesas: number;
   custoTotal?: number;
+  custoLogistica?: number;
+  /** lucro/margem — só ADMIN/GERENTE (null para os demais) */
+  fechamento?: FechamentoVenda | null;
   observacoes?: string | null;
   observacoesInternas?: string | null;
   transportadoraId?: number | null;
@@ -459,6 +465,16 @@ export interface Venda extends VendaResumo {
   contato: Contato | Ref;
   linkPublico?: string;
   tokenPublico?: string;
+}
+
+export interface FechamentoVenda {
+  custoProdutos: number;
+  custoLogistica: number;
+  custoTotal: number;
+  lucro: number;
+  margemPct: number;
+  itensSemCusto: number;
+  itensCustoInformado: number;
 }
 
 export interface VendaPayload {
@@ -478,6 +494,7 @@ export interface VendaPayload {
   descontoValor: number;
   frete: number;
   outrasDespesas: number;
+  custoLogistica: number;
   transportadoraId: number | null;
   fretePorConta: number;
   quantidadeVolumes: number;
@@ -1064,6 +1081,7 @@ export interface DashboardVendas {
     itensVendidos: number;
     lucroBruto: number;
     margemPct: number;
+    semCusto?: number;
     comparativo?: { faturamento: number; qtdVendas: number; ticketMedio: number } | null;
   };
   series: { periodo: string; faturamento: number; qtd: number; lucro: number }[];
