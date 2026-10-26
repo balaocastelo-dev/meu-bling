@@ -52,6 +52,7 @@ const MAPA_SITUACAO: Record<string, string> = {
   aprovado: 'Aprovado',
   'nao aprovado': 'Reprovado',
   concluido: 'Convertido em venda',
+  modelo: 'Em aberto',
 };
 const norm = (s: string) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
 const PREFIXO = 'PROP-';
@@ -131,6 +132,12 @@ async function main() {
     });
     principais.push({ p: g[0], versoes: g.slice(1) });
   }
+  /** data de proposta sem data no Bling ("0000-00-00"): a da proposta de número anterior mais próximo */
+  const datasPorNumero = [...listagem.values()].filter((l) => l.data && !l.data.startsWith('0000')).sort((a, b) => a.numero - b.numero);
+  const dataVizinha = (n: number) => {
+    const ant = [...datasPorNumero].reverse().find((l) => l.numero <= n) || datasPorNumero[0];
+    return dataBling(ant?.data) || new Date();
+  };
   const maiorBling = Math.max(0, ...[...listagem.values()].map((l) => l.numero));
   console.log(`Números distintos: ${principais.length} · com versões repetidas: ${principais.filter((x) => x.versoes.length).length} · maior número do Bling: ${maiorBling}`);
 
@@ -197,6 +204,12 @@ async function main() {
             });
         }
       }
+      if (!contato && (!cliBling || cliBling === '0')) {
+        // proposta sem cliente no Bling
+        contato = await prisma.contato.findFirst({ where: { nome: 'Cliente não informado (Bling)' } });
+        if (!contato && !simular) contato = await prisma.contato.create({ data: { nome: 'Cliente não informado (Bling)', observacoes: 'Criado na importação dos orçamentos do Bling para propostas sem cliente.' } });
+        if (!contato && simular) contato = { id: -1 } as any;
+      }
       if (!contato) throw new Error(`cliente ${cliBling || '(sem cliente)'} não encontrado`);
       const vendedorId = p.vend && String(p.vend) !== '0' ? vendPorBling.get(String(p.vend)) ?? null : null;
       // itens
@@ -231,7 +244,7 @@ async function main() {
       const dados = {
         tipo: 'ORCAMENTO',
         numero: num(p.numero),
-        data: dataBling(p.data) || new Date(),
+        data: dataBling(p.data) || dataVizinha(num(p.numero)),
         validade: null,
         contatoId: contato.id,
         vendedorId,
