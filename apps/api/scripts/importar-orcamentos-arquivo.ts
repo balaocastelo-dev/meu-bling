@@ -218,10 +218,14 @@ async function main() {
       if (!contato) throw new Error(`cliente ${cliBling || '(sem cliente)'} não encontrado`);
       const vendedorId = p.vend && String(p.vend) !== '0' ? vendPorBling.get(String(p.vend)) ?? null : null;
       // itens
+      const prodIds = [...new Set((p.itens || []).map((it: any) => String(it.prod || '0')).filter((x: string) => x !== '0'))] as string[];
+      const prods = prodIds.length ? await prisma.produto.findMany({ where: { blingId: { in: prodIds } }, select: { id: true, blingId: true } }) : [];
+      const prodPorBling = new Map(prods.map((x) => [x.blingId!, x.id]));
       const itens = (p.itens || []).map((it: any, k: number) => {
         const qtd = num(it.qtd, 1);
         const unit = num(it.vlr);
         return {
+          produtoId: prodPorBling.get(String(it.prod || '0')) ?? null,
           codigo: it.cod || null,
           descricao: [it.desc || 'Item', it.det ? String(it.det).trim() : ''].filter(Boolean).join(' — ').slice(0, 2000),
           unidade: (it.un || 'UN').trim() || 'UN',
