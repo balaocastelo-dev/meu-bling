@@ -223,7 +223,7 @@ async function main() {
       const prodPorBling = new Map(prods.map((x) => [x.blingId!, x.id]));
       const itens = (p.itens || []).map((it: any, k: number) => {
         const qtd = num(it.qtd, 1);
-        const unit = num(it.vlr);
+        const unit = arredondar(num(it.vlr)); // o Bling soma o total com o unitário em 2 casas
         return {
           produtoId: prodPorBling.get(String(it.prod || '0')) ?? null,
           codigo: it.cod || null,
