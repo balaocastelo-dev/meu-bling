@@ -99,7 +99,14 @@ async function main() {
     await page.fill('input[type=email]', contas[perfil]);
     await page.fill('input[type=password]', perfil === 'ADMIN' ? 'admin123' : senha);
     await page.keyboard.press('Enter');
-    await page.waitForURL((u) => !u.pathname.endsWith('/login'), { timeout: 15000 }).catch(() => falhar(`[${perfil}] login pela tela não entrou`));
+    let entrou = await page.waitForURL((u) => !u.pathname.endsWith('/login'), { timeout: 15000 }).then(() => true).catch(() => false);
+    if (!entrou) {
+      // o login tem limite de 20/min: depois das etapas de API pode estar estourado — espera a janela e tenta de novo
+      await page.waitForTimeout(62_000);
+      await page.keyboard.press('Enter');
+      entrou = await page.waitForURL((u) => !u.pathname.endsWith('/login'), { timeout: 15000 }).then(() => true).catch(() => false);
+    }
+    if (!entrou) falhar(`[${perfil}] login pela tela não entrou`);
     await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
 
     for (const r of rotas) {
