@@ -232,6 +232,12 @@ async function main() {
           ordem: k,
         };
       });
+      const parcelas: any[] = [];
+      let np = 0;
+      for (const pa of p.parc || []) {
+        const fp = pa.fp && String(pa.fp) !== '0' ? await prisma.formaPagamento.findUnique({ where: { blingId: String(pa.fp) } }) : null;
+        parcelas.push({ numero: ++np, dataVencimento: dataBling(pa.venc) || dataBling(p.data) || new Date(), valor: num(pa.vlr), formaPagamentoId: fp?.id ?? null, observacoes: pa.obs || null });
+      }
       const totalProdutos = arredondar(itens.reduce((s: number, it: any) => s + it.total, 0));
       const frete = num(p.frete);
       const outras = num(p.outras);
@@ -286,11 +292,12 @@ async function main() {
       if (existente) {
         await prisma.$transaction(async (tx) => {
           await tx.vendaItem.deleteMany({ where: { vendaId: existente.id } });
-          await tx.venda.update({ where: { id: existente.id }, data: { ...dados, itens: { create: itens } } });
+          await tx.vendaParcela.deleteMany({ where: { vendaId: existente.id, contaReceberId: null } });
+          await tx.venda.update({ where: { id: existente.id }, data: { ...dados, itens: { create: itens }, parcelas: { create: parcelas } } });
         });
         relatorio.atualizados += 1;
       } else {
-        const nova = await prisma.venda.create({ data: { ...dados, blingId, itens: { create: itens } } as any });
+        const nova = await prisma.venda.create({ data: { ...dados, blingId, itens: { create: itens }, parcelas: { create: parcelas } } as any });
         await prisma.historicoSituacao.create({
           data: { entidadeTipo: 'ORCAMENTO', entidadeId: nova.id, paraSituacaoId: situacao.id, paraSituacao: situacao.nome, observacao: `Importado do Bling (lá: "${p.sit}")`, data: dados.data },
         });
