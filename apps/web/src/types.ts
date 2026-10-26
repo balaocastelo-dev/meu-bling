@@ -630,6 +630,12 @@ export interface OrdemServico extends OsResumo {
   totalPecas: number;
   descontoValor: number;
   custoTotal?: number;
+  /** custos internos do fechamento (não vão para o cliente) */
+  custoPeca: number;
+  custoLogistica: number;
+  custoMaoObraTerceiro: number;
+  /** lucro/margem — só ADMIN/GERENTE (null para os demais) */
+  fechamento?: FechamentoOs | null;
   garantiaDias: number;
   estoqueLancado: boolean;
   contasLancadas: boolean;
@@ -671,8 +677,73 @@ export interface OsPayload {
   orcar: boolean;
   garantiaDias: number;
   descontoValor: number;
+  custoPeca: number;
+  custoLogistica: number;
+  custoMaoObraTerceiro: number;
   itens: OsItem[];
   parcelas: Parcela[];
+}
+
+export interface FechamentoOs {
+  custoPecas: number;
+  custoPecasOrigem: 'INFORMADO' | 'CADASTRO';
+  custoLogistica: number;
+  custoMaoObraTerceiro: number;
+  custoTotal: number;
+  lucro: number;
+  margemPct: number;
+}
+
+export interface TotaisAssistencia {
+  qtd: number;
+  valorEntrada: number;
+  maoDeObra: number;
+  pecas: number;
+  descontos: number;
+  custoPecas: number;
+  custoLogistica: number;
+  custoTerceiros: number;
+  custoTotal: number;
+  lucro: number;
+  ticketMedio: number;
+  margemPct: number;
+  lucroMaoDeObra: number;
+  lucroPecas: number;
+}
+
+export interface DashboardAssistencia {
+  periodo: { dataInicial: string; dataFinal: string; agrupar: string; base: 'entrada' | 'conclusao' };
+  resumo: TotaisAssistencia & {
+    entradas: number;
+    concluidas: number;
+    emAndamento: number;
+    canceladas: number;
+    semCusto: number;
+    realizado: TotaisAssistencia;
+    previsto: TotaisAssistencia;
+    comparativo: TotaisAssistencia;
+  };
+  series: { periodo: string; valorEntrada: number; custo: number; lucro: number; qtd: number }[];
+  porTecnico: { id: number | null; nome: string; qtd: number; valorEntrada: number; maoDeObra: number; pecas: number; custo: number; lucro: number }[];
+  porEquipamento: { nome: string; qtd: number; valorEntrada: number; lucro: number }[];
+  porSituacao: { id: number; nome: string; cor: string; qtd: number; valor: number }[];
+  ordens: (FechamentoOs & {
+    id: number;
+    numero: number;
+    dataEntrada: string;
+    dataConclusao: string | null;
+    cliente: string;
+    contatoId: number;
+    equipamento: string;
+    tecnico: string | null;
+    situacao: { id: number; nome: string; cor: string };
+    cancelada: boolean;
+    concluida: boolean;
+    valorEntrada: number;
+    maoDeObra: number;
+    pecas: number;
+    desconto: number;
+  })[];
 }
 
 export interface KanbanColuna {

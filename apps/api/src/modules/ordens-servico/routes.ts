@@ -131,7 +131,12 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
     return respostaPaginada(data.map((o) => ({ ...o, atrasada: calcularAtrasada(o) })), total, q);
   });
 
-  app.get('/api/v1/ordens-servico/:id', async (req) => osCompleta(idDe(req)));
+  app.get('/api/v1/ordens-servico/:id', async (req) => {
+    const os = await osCompleta(idDe(req));
+    // lucro/margem do fechamento só para o dono e a gerência; os custos em si ficam visíveis para quem lança
+    if (req.user.perfil !== 'ADMIN' && req.user.perfil !== 'GERENTE') return { ...os, fechamento: null };
+    return os;
+  });
 
   // ---------------------------------------------------------------- criar
   app.post('/api/v1/ordens-servico', async (req, reply) => {
@@ -176,6 +181,9 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
           descontoValor: body.descontoValor,
           total,
           custoTotal,
+          custoPeca: body.custoPeca,
+          custoLogistica: body.custoLogistica,
+          custoMaoObraTerceiro: body.custoMaoObraTerceiro,
           garantiaDias: body.garantiaDias,
           itens: { create: itens },
           parcelas: { create: parcelas },
@@ -225,7 +233,9 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
         throw new AppError(`OS com estoque/contas lançados: itens e valores não podem ser alterados (campos bloqueados: ${alterados.join(', ')}). Estorne antes de editar.`, 422, 'OS_LANCADA', { bloqueados: alterados });
       }
       const data: Record<string, unknown> = {};
-      for (const k of CAMPOS_LIVRES_OS) if ((parcial as any)[k] !== undefined) data[k] = (parcial as any)[k];
+      // só o que veio no corpo (o .partial() ainda aplica os defaults do schema e zeraria campos não enviados)
+      const enviados = req.body as Record<string, unknown>;
+      for (const k of CAMPOS_LIVRES_OS) if (k in enviados && (parcial as any)[k] !== undefined) data[k] = (parcial as any)[k];
       await prisma.ordemServico.update({ where: { id }, data });
       await auditar(req, 'OrdemServico', id, 'ALTERAR', data);
       return osCompleta(id);
@@ -269,6 +279,9 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
           descontoValor: body.descontoValor,
           total,
           custoTotal,
+          custoPeca: body.custoPeca,
+          custoLogistica: body.custoLogistica,
+          custoMaoObraTerceiro: body.custoMaoObraTerceiro,
           garantiaDias: body.garantiaDias,
           itens: { create: itens },
           parcelas: { create: parcelas },
@@ -472,6 +485,9 @@ function mesclarComAtual(atual: Awaited<ReturnType<typeof carregarOs>>, body: Re
     orcar: atual.orcar,
     orcamentoAprovado: atual.orcamentoAprovado,
     descontoValor: atual.descontoValor,
+    custoPeca: atual.custoPeca,
+    custoLogistica: atual.custoLogistica,
+    custoMaoObraTerceiro: atual.custoMaoObraTerceiro,
     garantiaDias: atual.garantiaDias,
     itens: atual.itens.map((i) => ({ tipo: i.tipo, produtoId: i.produtoId, descricao: i.descricao, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoVendedorPct: i.comissaoVendedorPct, comissaoTecnicoPct: i.comissaoTecnicoPct, depositoId: i.depositoId })),
     parcelas: atual.parcelas.map((p) => ({ dataVencimento: p.dataVencimento, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes })),

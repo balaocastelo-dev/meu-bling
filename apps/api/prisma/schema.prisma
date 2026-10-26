@@ -794,6 +794,13 @@ model OrdemServico {
   descontoValor         Float                @default(0)
   total                 Float                @default(0)
   custoTotal            Float                @default(0)
+  // ---- custos internos do fechamento (NUNCA saem na impressão nem no link do cliente)
+  /// custo real pago nas peças desta OS (se 0, usa o custo das peças cadastradas = custoTotal)
+  custoPeca             Float                @default(0)
+  /// frete, motoboy, envio/retirada de peça ou equipamento
+  custoLogistica        Float                @default(0)
+  /// mão de obra terceirizada (técnico/laboratório de fora)
+  custoMaoObraTerceiro  Float                @default(0)
   garantiaDias          Int                  @default(90)
   // ---- controle
   estoqueLancado        Boolean              @default(false)

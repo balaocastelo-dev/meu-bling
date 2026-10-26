@@ -99,12 +99,14 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
   }
   const ordens = await prisma.ordemServico.findMany({
     where: { dataEntrada: { gte: ini, lte: fim }, situacaoId: { in: sitOs.map((s) => s.id) } },
-    select: { totalServicos: true, totalPecas: true, descontoValor: true, itens: { select: { tipo: true, custoUnitario: true, quantidade: true } } },
+    select: { totalServicos: true, totalPecas: true, descontoValor: true, custoPeca: true, itens: { select: { tipo: true, custoUnitario: true, quantidade: true } } },
   });
   for (const o of ordens) {
     ac.receitaServicos += o.totalServicos - Math.min(o.descontoValor, o.totalServicos);
     ac.receitaProdutos += o.totalPecas - Math.max(0, o.descontoValor - o.totalServicos);
-    const custoPecas = o.itens.filter((i) => i.tipo === 'PECA').reduce((s, i) => s + i.custoUnitario * i.quantidade, 0);
+    // custo informado na OS (fechamento) tem prioridade sobre o custo das peças cadastradas.
+    // Logística e mão de obra de terceiros não entram aqui para não duplicar com contas a pagar.
+    const custoPecas = o.custoPeca > 0 ? o.custoPeca : o.itens.filter((i) => i.tipo === 'PECA').reduce((s, i) => s + i.custoUnitario * i.quantidade, 0);
     if (custoPecas) add(ac.cmv, 'Custo das peças (OS)', custoPecas);
   }
   // despesas: contas a pagar por competência (fallback: vencimento), exceto canceladas e exceto CMV de compras (já contabilizado pelo custo das vendas)

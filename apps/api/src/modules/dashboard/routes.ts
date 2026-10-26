@@ -12,6 +12,12 @@ import { resumoFinanceiro } from '../financeiro/service.js';
 import { chavePeriodo, listarPeriodos, resolverPeriodo, periodoAnterior, agruparPadrao, type Agrupar } from '../financeiro/periodos.js';
 import { status as statusWhatsApp } from '../../integracoes/whatsapp/servico.js';
 import { ultimosAcontecimentos, ultimosLancamentos } from './atividades.js';
+import { fechamentoOs } from '../ordens-servico/service.js';
+import { AppError, NotFound } from '../../lib/errors.js';
+import { auditar } from '../../lib/auditoria.js';
+import { competenciaDe } from '../../lib/util.js';
+import { categoriaPadraoId } from '../comum/financeiro.js';
+import { format } from 'date-fns';
 
 async function situacoesRealizadas(modulo: 'VENDA' | 'COMPRA' | 'OS') {
   const s = await prisma.situacao.findMany({ where: { modulo, final: true, cancelamento: false }, select: { id: true } });
@@ -25,6 +31,49 @@ async function situacoesCanceladas(modulo: 'VENDA' | 'COMPRA' | 'OS') {
 
 function pct(parte: number, total: number) {
   return total ? arredondar((parte / total) * 100, 1) : 0;
+}
+
+/** OS do dashboard de assistência no período (base = data de entrada ou de conclusão). */
+function ordensAssistencia(de: Date, ate: Date, base: 'entrada' | 'conclusao', tecnicoId: number | undefined, sitOk: number[]) {
+  const filtroTec = tecnicoId ? { tecnicoId } : {};
+  return prisma.ordemServico.findMany({
+    where: base === 'conclusao' ? { dataConclusao: { gte: de, lte: ate }, situacaoId: { in: sitOk }, ...filtroTec } : { dataEntrada: { gte: de, lte: ate }, ...filtroTec },
+    orderBy: [{ dataEntrada: 'desc' }, { numero: 'desc' }],
+    select: {
+      id: true, numero: true, dataEntrada: true, dataConclusao: true, equipamento: true, marca: true, modelo: true, situacaoId: true, tecnicoId: true,
+      total: true, totalServicos: true, totalPecas: true, descontoValor: true, custoTotal: true, custoPeca: true, custoLogistica: true, custoMaoObraTerceiro: true,
+      contato: { select: { id: true, nome: true } },
+      tecnico: { select: { id: true, nome: true } },
+      situacao: { select: { id: true, nome: true, cor: true } },
+    },
+  });
+}
+type LinhaAssistencia = Awaited<ReturnType<typeof ordensAssistencia>>[number];
+
+function somarAssistencia(lista: LinhaAssistencia[]) {
+  const t = { qtd: 0, valorEntrada: 0, maoDeObra: 0, pecas: 0, descontos: 0, custoPecas: 0, custoLogistica: 0, custoTerceiros: 0, custoTotal: 0, lucro: 0 };
+  for (const o of lista) {
+    const f = fechamentoOs(o);
+    t.qtd += 1;
+    t.valorEntrada += o.total;
+    t.maoDeObra += o.totalServicos;
+    t.pecas += o.totalPecas;
+    t.descontos += o.descontoValor;
+    t.custoPecas += f.custoPecas;
+    t.custoLogistica += f.custoLogistica;
+    t.custoTerceiros += f.custoMaoObraTerceiro;
+    t.custoTotal += f.custoTotal;
+    t.lucro += f.lucro;
+  }
+  const r = Object.fromEntries(Object.entries(t).map(([k, v]) => [k, arredondar(v)])) as typeof t;
+  return {
+    ...r,
+    ticketMedio: r.qtd ? arredondar(r.valorEntrada / r.qtd) : 0,
+    margemPct: pct(r.lucro, r.valorEntrada),
+    // lucro da mão de obra = serviços - terceiros; lucro das peças = peças - custo das peças
+    lucroMaoDeObra: arredondar(r.maoDeObra - r.custoTerceiros),
+    lucroPecas: arredondar(r.pecas - r.custoPecas),
+  };
 }
 
 export default async function dashboardRoutes(app: FastifyInstance) {
@@ -374,5 +423,181 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       porEquipamento: [...porEquip.values()].sort((a, b) => b.qtd - a.qtd).map(r2),
       series: [...serie.values()].sort((a, b) => a.periodo.localeCompare(b.periodo)).map(r2),
     };
+  });
+  // =====================================================================
+  // ASSISTÊNCIA TÉCNICA (só ADMIN) — panorama completo com custos e lucro
+  // base=entrada: OS que ENTRARAM no período; base=conclusao: OS CONCLUÍDAS no período (fechamento do mês)
+  // Canceladas ficam fora dos valores (aparecem só na contagem).
+  // =====================================================================
+  app.get('/api/v1/dashboard/assistencia', { preHandler: app.exigirPerfil('ADMIN') }, async (req) => {
+    const q = z
+      .object({
+        dataInicial: dataSchema,
+        dataFinal: dataSchema,
+        tecnicoId: z.coerce.number().int().optional(),
+        base: z.enum(['entrada', 'conclusao']).default('entrada'),
+        agrupar: z.enum(['dia', 'semana', 'mes']).optional(),
+      })
+      .parse(req.query);
+    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const agrupar: Agrupar = q.agrupar || agruparPadrao(ini, fim);
+    const [sitOk, sitCanc] = await Promise.all([situacoesRealizadas('OS'), situacoesCanceladas('OS')]);
+    const dataBase = (o: { dataEntrada: Date; dataConclusao: Date | null }) => (q.base === 'conclusao' ? o.dataConclusao || o.dataEntrada : o.dataEntrada);
+
+    const carregar = (de: Date, ate: Date) => ordensAssistencia(de, ate, q.base, q.tecnicoId, sitOk);
+
+    const somar = somarAssistencia;
+    const ordens = await carregar(ini, fim);
+    const validas = ordens.filter((o) => !sitCanc.includes(o.situacaoId));
+    const concluidas = validas.filter((o) => sitOk.includes(o.situacaoId));
+    const emAndamento = validas.filter((o) => !sitOk.includes(o.situacaoId));
+    const resumo: any = {
+      ...somar(validas),
+      entradas: ordens.length,
+      concluidas: concluidas.length,
+      emAndamento: emAndamento.length,
+      canceladas: ordens.length - validas.length,
+      realizado: somar(concluidas),
+      previsto: somar(emAndamento),
+      // concluídas com peça mas sem custo nenhum: o lucro delas está inflado
+      semCusto: concluidas.filter((o) => o.totalPecas > 0 && fechamentoOs(o).custoPecas === 0).length,
+    };
+    const ant = periodoAnterior(ini, fim);
+    const anteriores = (await carregar(ant.ini, ant.fim)).filter((o) => !sitCanc.includes(o.situacaoId));
+    resumo.comparativo = { ...somar(anteriores), periodo: { dataInicial: ant.ini, dataFinal: ant.fim } };
+
+    const serie = new Map(listarPeriodos(ini, fim, agrupar).map((p) => [p, { periodo: p, valorEntrada: 0, custo: 0, lucro: 0, qtd: 0 }]));
+    const porTecnico = new Map<number, { id: number | null; nome: string; qtd: number; valorEntrada: number; maoDeObra: number; pecas: number; custo: number; lucro: number }>();
+    const porEquip = new Map<string, { nome: string; qtd: number; valorEntrada: number; lucro: number }>();
+    for (const o of validas) {
+      const f = fechamentoOs(o);
+      const kp = chavePeriodo(dataBase(o), agrupar);
+      const s = serie.get(kp) || serie.set(kp, { periodo: kp, valorEntrada: 0, custo: 0, lucro: 0, qtd: 0 }).get(kp)!;
+      s.valorEntrada += o.total;
+      s.custo += f.custoTotal;
+      s.lucro += f.lucro;
+      s.qtd += 1;
+      const kt = o.tecnicoId ?? 0;
+      const t = porTecnico.get(kt) || porTecnico.set(kt, { id: o.tecnicoId ?? null, nome: o.tecnico?.nome || 'Sem técnico', qtd: 0, valorEntrada: 0, maoDeObra: 0, pecas: 0, custo: 0, lucro: 0 }).get(kt)!;
+      t.qtd += 1;
+      t.valorEntrada += o.total;
+      t.maoDeObra += o.totalServicos;
+      t.pecas += o.totalPecas;
+      t.custo += f.custoTotal;
+      t.lucro += f.lucro;
+      const eq = (o.equipamento || 'Não informado').trim();
+      const e = porEquip.get(eq) || porEquip.set(eq, { nome: eq, qtd: 0, valorEntrada: 0, lucro: 0 }).get(eq)!;
+      e.qtd += 1;
+      e.valorEntrada += o.total;
+      e.lucro += f.lucro;
+    }
+    const porSituacao = new Map<number, { id: number; nome: string; cor: string; qtd: number; valor: number }>();
+    for (const o of ordens) {
+      const s = porSituacao.get(o.situacaoId) || porSituacao.set(o.situacaoId, { id: o.situacao.id, nome: o.situacao.nome, cor: o.situacao.cor, qtd: 0, valor: 0 }).get(o.situacaoId)!;
+      s.qtd += 1;
+      s.valor += o.total;
+    }
+    const r2 = (o: any) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === 'number' ? arredondar(v) : v]));
+    return {
+      periodo: { dataInicial: ini, dataFinal: fim, agrupar, base: q.base },
+      resumo,
+      series: [...serie.values()].sort((a, b) => a.periodo.localeCompare(b.periodo)).map(r2),
+      porTecnico: [...porTecnico.values()].sort((a, b) => b.lucro - a.lucro).map(r2),
+      porEquipamento: [...porEquip.values()].sort((a, b) => b.valorEntrada - a.valorEntrada).slice(0, 8).map(r2),
+      porSituacao: [...porSituacao.values()].sort((a, b) => b.qtd - a.qtd).map(r2),
+      ordens: ordens.map((o) => {
+        const f = fechamentoOs(o);
+        return {
+          id: o.id,
+          numero: o.numero,
+          dataEntrada: o.dataEntrada,
+          dataConclusao: o.dataConclusao,
+          cliente: o.contato.nome,
+          contatoId: o.contato.id,
+          equipamento: [o.equipamento, o.marca, o.modelo].filter(Boolean).join(' '),
+          tecnico: o.tecnico?.nome || null,
+          situacao: o.situacao,
+          cancelada: sitCanc.includes(o.situacaoId),
+          concluida: sitOk.includes(o.situacaoId),
+          valorEntrada: o.total,
+          maoDeObra: o.totalServicos,
+          pecas: o.totalPecas,
+          desconto: o.descontoValor,
+          ...f,
+        };
+      }),
+    };
+  });
+  // =====================================================================
+  // PAGAR TÉCNICO (só ADMIN): % do lucro da assistência no período → contas a pagar
+  // O lucro é recalculado aqui (não confia no número da tela).
+  // =====================================================================
+  const pagarTecnicoSchema = z.object({
+    dataInicial: dataSchema,
+    dataFinal: dataSchema,
+    base: z.enum(['entrada', 'conclusao']).default('entrada'),
+    /** filtro de técnico do dashboard (lucro só das OS dele); vazio = lucro de toda a assistência */
+    filtroTecnicoId: z.coerce.number().int().positive().nullable().optional(),
+    /** técnico que recebe */
+    tecnicoId: z.coerce.number().int().positive(),
+    percentual: z.coerce.number().gt(0, 'Informe a porcentagem').max(100, 'Máximo 100%'),
+    /** SOMENTE_CONCLUIDAS (padrão: só o que já é dinheiro certo) | TODAS */
+    escopo: z.enum(['SOMENTE_CONCLUIDAS', 'TODAS']).default('SOMENTE_CONCLUIDAS'),
+    vencimento: dataSchema,
+    observacoes: z.string().trim().max(1000).nullable().optional(),
+    /** lança mesmo já existindo pagamento para o mesmo técnico e período */
+    confirmarDuplicado: z.boolean().default(false),
+    /** só calcula (prévia), não grava */
+    simular: z.boolean().default(false),
+  });
+
+  app.post('/api/v1/dashboard/assistencia/pagar-tecnico', { preHandler: app.exigirPerfil('ADMIN') }, async (req, reply) => {
+    const b = pagarTecnicoSchema.parse(req.body);
+    const tecnico = await prisma.tecnico.findUnique({ where: { id: b.tecnicoId } });
+    if (!tecnico) throw new NotFound('Técnico');
+    const { ini, fim } = resolverPeriodo(b, 'mes');
+    const [sitOk, sitCanc] = await Promise.all([situacoesRealizadas('OS'), situacoesCanceladas('OS')]);
+    const todas = (await ordensAssistencia(ini, fim, b.base, b.filtroTecnicoId ?? undefined, sitOk)).filter((o) => !sitCanc.includes(o.situacaoId));
+    const consideradas = b.escopo === 'TODAS' ? todas : todas.filter((o) => sitOk.includes(o.situacaoId));
+    const totais = somarAssistencia(consideradas);
+    const valor = arredondar((totais.lucro * b.percentual) / 100);
+    const faixa = `${format(ini, 'dd/MM/yyyy')} a ${format(fim, 'dd/MM/yyyy')}`;
+    const descricao = `Pagamento técnico ${tecnico.nome} — ${b.percentual}% do lucro da assistência (${faixa})`;
+    const previa = { tecnico: { id: tecnico.id, nome: tecnico.nome }, periodo: { dataInicial: ini, dataFinal: fim, base: b.base }, escopo: b.escopo, qtdOs: totais.qtd, lucro: totais.lucro, percentual: b.percentual, valor, descricao };
+    if (b.simular) return previa;
+    if (valor <= 0) throw new AppError(`O lucro considerado no período é ${totais.lucro.toFixed(2)}: não há valor a pagar. Confira o período, o escopo (só concluídas?) e os custos lançados nas OS.`, 422, 'SEM_LUCRO', previa);
+
+    const jaExiste = await prisma.contaPagar.findFirst({ where: { origemTipo: 'PAGAMENTO_TECNICO', origemId: tecnico.id, descricao: { contains: `(${faixa})` }, situacao: { not: 'CANCELADO' } } });
+    if (jaExiste && !b.confirmarDuplicado) {
+      throw new AppError(`Já existe um pagamento para ${tecnico.nome} neste período (conta a pagar nº ${jaExiste.id}, ${jaExiste.valor.toFixed(2)}). Confirme para lançar outro.`, 409, 'PAGAMENTO_DUPLICADO', { contaId: jaExiste.id, ...previa });
+    }
+    const vencimento = b.vencimento || new Date();
+    const categoriaId = await categoriaPadraoId(prisma, 'Pagamento de técnicos (assistência)', 'DESPESA');
+    const detalhe = `${totais.qtd} OS ${b.escopo === 'TODAS' ? '(todas, inclusive em andamento)' : 'concluídas'} · ${b.base === 'conclusao' ? 'por data de conclusão' : 'por data de entrada'} · lucro ${totais.lucro.toFixed(2)} × ${b.percentual}%`;
+    const conta = await prisma.contaPagar.create({
+      data: {
+        descricao,
+        vencimento,
+        competencia: competenciaDe(fim),
+        valor,
+        categoriaId,
+        origemTipo: 'PAGAMENTO_TECNICO',
+        origemId: tecnico.id,
+        observacoes: [detalhe, b.observacoes].filter(Boolean).join('\n'),
+      },
+    });
+    await auditar(req, 'ContaPagar', conta.id, 'CRIAR', { origem: 'PAGAMENTO_TECNICO', tecnicoId: tecnico.id, valor, percentual: b.percentual, lucro: totais.lucro });
+    return reply.code(201).send({ ...previa, contaPagar: { id: conta.id, valor: conta.valor, vencimento: conta.vencimento, situacao: conta.situacao } });
+  });
+
+  // últimos pagamentos de técnico lançados (histórico na tela)
+  app.get('/api/v1/dashboard/assistencia/pagamentos-tecnico', { preHandler: app.exigirPerfil('ADMIN') }, async () => {
+    const contas = await prisma.contaPagar.findMany({
+      where: { origemTipo: 'PAGAMENTO_TECNICO' },
+      orderBy: { id: 'desc' },
+      take: 10,
+      select: { id: true, descricao: true, valor: true, valorPago: true, vencimento: true, situacao: true, origemId: true, criadoEm: true },
+    });
+    return contas;
   });
 }

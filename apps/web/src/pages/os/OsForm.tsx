@@ -41,6 +41,9 @@ function vazio(vendedorId: number | null): OsPayload {
     orcar: false,
     garantiaDias: 90,
     descontoValor: 0,
+    custoPeca: 0,
+    custoLogistica: 0,
+    custoMaoObraTerceiro: 0,
     itens: [],
     parcelas: [],
   };
@@ -72,6 +75,9 @@ function deOs(o: OrdemServico): OsPayload {
     orcar: o.orcar,
     garantiaDias: o.garantiaDias,
     descontoValor: o.descontoValor,
+    custoPeca: o.custoPeca ?? 0,
+    custoLogistica: o.custoLogistica ?? 0,
+    custoMaoObraTerceiro: o.custoMaoObraTerceiro ?? 0,
     itens: o.itens.map((i) => ({ tipo: i.tipo, produtoId: i.produtoId, descricao: i.descricao, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoVendedorPct: i.comissaoVendedorPct, comissaoTecnicoPct: i.comissaoTecnicoPct, depositoId: i.depositoId })),
     parcelas: o.parcelas.map((p) => ({ dataVencimento: dataIso(p.dataVencimento), valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes ?? '' })),
   };
@@ -329,6 +335,14 @@ export default function OsForm() {
             </div>
           </Secao>
         </div>
+
+        <Secao titulo="Custos internos (fechamento)" descricao="Só para o cálculo do fechamento. Não aparecem na impressão da OS nem para o cliente. Podem ser lançados depois da OS concluída.">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MoneyInput label="Custo da peça" value={form.custoPeca} onChange={(v) => set('custoPeca', v)} ajuda={form.custoPeca ? undefined : 'Vazio = usa o custo das peças cadastradas'} />
+            <MoneyInput label="Custo de logística" value={form.custoLogistica} onChange={(v) => set('custoLogistica', v)} ajuda="Frete, motoboy, envio" />
+            <MoneyInput label="Mão de obra de terceiro" value={form.custoMaoObraTerceiro} onChange={(v) => set('custoMaoObraTerceiro', v)} ajuda="Técnico ou laboratório de fora" />
+          </div>
+        </Secao>
 
         <Secao titulo="Pagamento / parcelas">
           {erros.parcelas && <p className="mb-2 text-xs text-red-600">{erros.parcelas}</p>}

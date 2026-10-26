@@ -65,6 +65,10 @@ export const osSchema = z.object({
   orcar: z.boolean().default(false),
   orcamentoAprovado: z.boolean().optional(),
   descontoValor: z.coerce.number().min(0).default(0),
+  // custos internos do fechamento (não aparecem para o cliente nem na impressão)
+  custoPeca: z.coerce.number().min(0).default(0),
+  custoLogistica: z.coerce.number().min(0).default(0),
+  custoMaoObraTerceiro: z.coerce.number().min(0).default(0),
   garantiaDias: z.coerce.number().int().min(0).default(90),
   itens: z.array(itemOsSchema).default([]),
   parcelas: z.array(parcelaOsSchema).default([]),
@@ -75,7 +79,28 @@ export type OsInput = z.infer<typeof osSchema>;
 export const CAMPOS_LIVRES_OS = [
   'observacoes', 'observacoesInternas', 'diagnostico', 'servicoExecutado', 'dataPrevista', 'dataConclusao', 'dataSaida', 'prioridade',
   'acessorios', 'senhaEquipamento', 'estadoFisico', 'tecnicoId', 'garantiaDias', 'numeroSerie', 'marca', 'modelo', 'equipamento', 'defeitoRelatado',
+  // custos internos: lançados no fechamento, depois que a OS já baixou estoque/contas
+  'custoPeca', 'custoLogistica', 'custoMaoObraTerceiro',
 ] as const;
+
+/**
+ * Fechamento da OS (uso interno/ADMIN): custo efetivo e lucro.
+ * Custo das peças = valor informado na OS (custoPeca) ou, se não informado, o custo das peças cadastradas (custoTotal).
+ */
+export function fechamentoOs(os: { total: number; totalServicos: number; totalPecas: number; descontoValor: number; custoTotal: number; custoPeca: number; custoLogistica: number; custoMaoObraTerceiro: number }) {
+  const custoPecas = arredondar(os.custoPeca > 0 ? os.custoPeca : os.custoTotal);
+  const custoTotalOs = arredondar(custoPecas + os.custoLogistica + os.custoMaoObraTerceiro);
+  const lucro = arredondar(os.total - custoTotalOs);
+  return {
+    custoPecas,
+    custoPecasOrigem: (os.custoPeca > 0 ? 'INFORMADO' : 'CADASTRO') as 'INFORMADO' | 'CADASTRO',
+    custoLogistica: arredondar(os.custoLogistica),
+    custoMaoObraTerceiro: arredondar(os.custoMaoObraTerceiro),
+    custoTotal: custoTotalOs,
+    lucro,
+    margemPct: os.total > 0 ? arredondar((lucro / os.total) * 100, 1) : 0,
+  };
+}
 
 export const resumoSelect = {
   id: true, numero: true, dataEntrada: true, dataPrevista: true, dataConclusao: true, dataSaida: true,
@@ -125,6 +150,7 @@ export async function osCompleta(id: number) {
   const [hist, permitidas] = await Promise.all([historico('OS', id), situacoesPermitidas('OS', os.situacaoId)]);
   return {
     ...os,
+    fechamento: fechamentoOs(os),
     anexos: os.anexos.map((a) => ({ ...a, url: `/uploads/anexos/os-${os.id}/${a.caminho}` })),
     atrasada: calcularAtrasada(os),
     historico: hist,

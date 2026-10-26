@@ -14,6 +14,7 @@ const Login = lazy(() => import('@/pages/auth/Login'));
 const Perfil = lazy(() => import('@/pages/auth/Perfil'));
 const DashboardGeral = lazy(() => import('@/pages/dashboard/DashboardGeral'));
 const DashboardVendas = lazy(() => import('@/pages/dashboard/DashboardVendas'));
+const DashboardAssistencia = lazy(() => import('@/pages/dashboard/DashboardAssistencia'));
 const PainelVendedor = lazy(() => import('@/pages/vendedor/PainelVendedor'));
 const MetasDesafios = lazy(() => import('@/pages/vendedor/MetasDesafios'));
 
@@ -117,6 +118,7 @@ export const router = createBrowserRouter(
     children: [
       { index: true, element: <Inicio /> },
       { path: 'dashboard/vendas', element: ADMIN(<DashboardVendas />) },
+      { path: 'dashboard/assistencia', element: ADMIN(<DashboardAssistencia />) },
       { path: 'perfil', element: S(<Perfil />) },
       { path: 'meu-painel', element: S(<Somente perfis={['ADMIN', 'GERENTE', 'VENDEDOR']}><PainelVendedor /></Somente>) },
       { path: 'metas-desafios', element: GESTAO(<MetasDesafios />) },
