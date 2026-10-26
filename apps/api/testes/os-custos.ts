@@ -67,6 +67,15 @@ async function main() {
   const os3 = await adm.post('/ordens-servico', { contatoId: cli.id, dataEntrada: hoje(), equipamento: 'Desktop', defeitoRelatado: 'Não liga', itens: [{ tipo: 'SERVICO', descricao: 'Diagnóstico', quantidade: 1, valorUnitario: 80 }] }, 201);
   verifica(os3.fechamento?.custoPecasOrigem === 'CADASTRO' && igual(os3.fechamento.lucro, 80), 'OS só de serviço sem custo: lucro = 80', os3.fechamento);
 
+  secao('Kanban de OS com filtro de data');
+  const kHoje: any[] = await adm.get(`/ordens-servico/kanban?dataInicial=${hoje()}&dataFinal=${hoje()}`);
+  const idsHoje = kHoje.flatMap((c) => c.ordens.map((o: any) => o.id));
+  verifica(idsHoje.includes(os.id), 'kanban "Hoje" mostra a OS que entrou hoje (mesmo finalizada)', idsHoje.length);
+  const kVelho: any[] = await adm.get('/ordens-servico/kanban?dataInicial=2001-01-01&dataFinal=2001-01-31');
+  verifica(kVelho.every((c) => c.ordens.length === 0) && kVelho.length > 0, 'kanban num período sem OS: colunas vazias');
+  const lVelho = await adm.get('/ordens-servico?dataInicial=2001-01-01&dataFinal=2001-01-31');
+  verifica(lVelho.data.length === 0, 'lista de OS respeita o período');
+
   secao('Pagar técnico: % do lucro vira conta a pagar');
   const tecPg = await adm.post('/tecnicos', { nome: `Técnico Pago ${SUF}`, comissaoPadraoPct: 0, ativo: true }, [200, 201]);
   const dash = await adm.get(`/dashboard/assistencia?dataInicial=${hoje()}&dataFinal=${hoje()}`);
