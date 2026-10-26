@@ -19,6 +19,8 @@ export const itemSchema = z.object({
   valorUnitario: z.coerce.number().min(0).optional(),
   desconto: z.coerce.number().min(0).default(0),
   comissaoPct: z.coerce.number().min(0).max(100).nullable().optional(),
+  /** custo interno informado pelo vendedor; omitido/null = custo do cadastro do produto */
+  custoUnitario: z.coerce.number().min(0).nullable().optional(),
 });
 
 export const parcelaSchema = z.object({
@@ -49,6 +51,8 @@ export const vendaSchema = z.object({
   descontoValor: z.coerce.number().min(0).default(0),
   frete: z.coerce.number().min(0).default(0),
   outrasDespesas: z.coerce.number().min(0).default(0),
+  /** custo interno de logística (não sai para o cliente) */
+  custoLogistica: z.coerce.number().min(0).default(0),
   transportadoraId: z.coerce.number().int().positive().nullable().optional(),
   fretePorConta: z.coerce.number().int().default(9),
   quantidadeVolumes: z.coerce.number().int().min(0).default(0),
@@ -58,7 +62,7 @@ export const vendaSchema = z.object({
 });
 
 /** Campos que podem ser editados mesmo com estoque/contas lançados. */
-export const CAMPOS_LIVRES = ['observacoes', 'observacoesInternas', 'transportadoraId', 'fretePorConta', 'quantidadeVolumes', 'pesoBruto', 'numeroPedidoLoja', 'dataPrevista', 'dataSaida', 'validade'] as const;
+export const CAMPOS_LIVRES = ['observacoes', 'observacoesInternas', 'transportadoraId', 'fretePorConta', 'quantidadeVolumes', 'pesoBruto', 'numeroPedidoLoja', 'dataPrevista', 'dataSaida', 'validade', 'custoLogistica'] as const;
 
 export const listaQuery = paginacaoSchema.extend({
   /** PEDIDO (padrão) | ORCAMENTO | TODOS */

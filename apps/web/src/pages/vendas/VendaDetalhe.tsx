@@ -171,8 +171,29 @@ export default function VendaDetalhe() {
             <div className="flex justify-between"><span className="text-slate-500">Frete</span><span className="num">{moeda(venda.frete)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Outras</span><span className="num">{moeda(venda.outrasDespesas)}</span></div>
             <div className="flex justify-between border-t border-slate-200 pt-2 text-base"><span className="font-semibold">Total</span><span className="num font-bold">{moeda(venda.total)}</span></div>
-            {venda.custoTotal !== undefined && venda.custoTotal > 0 && venda.total > 0 && (
-              <div className="flex justify-between text-xs text-slate-400"><span>Custo / margem</span><span className="num">{moeda(venda.custoTotal)} · {numero(((venda.total - venda.custoTotal) / (venda.total || 1)) * 100, 1)}%</span></div>
+          </div>
+          {/* custos internos — não saem no pedido, PDF, link, e-mail, WhatsApp nem NF */}
+          <div className="mt-3 space-y-1 rounded-md border border-dashed border-slate-200 bg-slate-50/70 p-2.5 text-xs">
+            <p className="mb-1 flex items-center justify-between font-semibold uppercase tracking-wide text-slate-400">
+              <span>Custos internos 🔒</span>
+              <Link to={`${orcamento ? '/orcamentos' : '/vendas'}/${venda.id}/editar`} className="normal-case tracking-normal text-brand-600 hover:underline">Lançar</Link>
+            </p>
+            {(() => {
+              const custoProdutos = venda.fechamento?.custoProdutos ?? venda.custoTotal ?? 0;
+              const semCusto = venda.itens.filter((i) => !i.custoUnitario).length;
+              return (
+                <>
+                  <div className="flex justify-between"><span className="text-slate-500">Custo dos produtos</span><span className="num">{moeda(custoProdutos)}</span></div>
+                  {semCusto > 0 && <p className="text-[11px] text-amber-700">{semCusto} {semCusto === 1 ? 'item' : 'itens'} sem custo</p>}
+                  <div className="flex justify-between"><span className="text-slate-500">Logística</span><span className="num">{moeda(venda.custoLogistica ?? 0)}</span></div>
+                </>
+              );
+            })()}
+            {venda.fechamento && (
+              <div className="mt-1 flex justify-between border-t border-slate-200 pt-1.5 text-sm">
+                <span className="font-semibold text-slate-700">Lucro</span>
+                <span className={`num font-bold ${venda.fechamento.lucro < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{moeda(venda.fechamento.lucro)} <span className="text-[11px] font-normal text-slate-400">({numero(venda.fechamento.margemPct, 1)}%)</span></span>
+              </div>
             )}
           </div>
           {!orcamento && (<>

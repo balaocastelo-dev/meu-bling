@@ -1,46 +1,26 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { BarChart3, CircleDollarSign, Crown, Layers, Package, PieChart as PieIcon, Percent, Receipt, ShoppingCart, Trophy, TrendingUp, Users } from 'lucide-react';
-import { format, startOfMonth, subDays } from 'date-fns';
 import { api } from '@/lib/api';
 import { useVendedores, opcoesDe } from '@/hooks/useListas';
-import { EmptyState, PeriodoFiltro, SelectFiltro, Skeleton } from '@/components/ui';
+import { EmptyState, SelectFiltro, Skeleton } from '@/components/ui';
+import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
 import { FotoProduto } from '@/components/compartilhados/ProdutoSite';
-import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, SegmentadoV18, listaVariants } from '@/components/dashboard/v18';
-import { hoje, inteiro, moeda, numero, percentual } from '@/lib/format';
+import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, listaVariants } from '@/components/dashboard/v18';
+import { inteiro, moeda, numero, percentual } from '@/lib/format';
 import { CORES, PALETA, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import type { DashboardVendas as Dados } from '@/types';
-
-type Periodo = 'hoje' | '7d' | '30d' | 'mes' | 'custom';
-
-function intervalo(p: Periodo, custom: { i: string; f: string }): { dataInicial: string; dataFinal: string } {
-  const h = new Date();
-  switch (p) {
-    case 'hoje':
-      return { dataInicial: hoje(), dataFinal: hoje() };
-    case '7d':
-      return { dataInicial: format(subDays(h, 6), 'yyyy-MM-dd'), dataFinal: hoje() };
-    case '30d':
-      return { dataInicial: format(subDays(h, 29), 'yyyy-MM-dd'), dataFinal: hoje() };
-    case 'mes':
-      return { dataInicial: format(startOfMonth(h), 'yyyy-MM-dd'), dataFinal: hoje() };
-    default:
-      return { dataInicial: custom.i, dataFinal: custom.f };
-  }
-}
 
 /** Dashboard de vendas — estilo V18 com as cores do sistema */
 export default function DashboardVendas() {
   const nav = useNavigate();
-  const [periodo, setPeriodo] = useState<Periodo>('30d');
-  const [custom, setCustom] = useState({ i: format(startOfMonth(new Date()), 'yyyy-MM-dd'), f: hoje() });
+  const { periodo, setPeriodo, custom, setCustom, dataInicial, dataFinal, faixa } = usePeriodoDashboard();
   const [vendedorId, setVendedorId] = useState('');
   const { data: vendedores } = useVendedores();
 
-  const { dataInicial, dataFinal } = useMemo(() => intervalo(periodo, custom), [periodo, custom]);
   const agrupar = 'dia';
 
   const { data, isLoading } = useQuery({
@@ -56,7 +36,6 @@ export default function DashboardVendas() {
   const totalVend = (data?.porVendedor ?? []).reduce((s, v) => s + v.faturamento, 0);
   const totalFormas = (data?.porFormaPagamento ?? []).reduce((s, x) => s + x.valor, 0);
   const maiorCliente = data?.topClientes[0]?.valor ?? 0;
-  const faixa = `${dataInicial.split('-').reverse().join('/')} a ${dataFinal.split('-').reverse().join('/')}`;
   const qtd = (n: number) => inteiro(Math.round(n));
 
   return (
@@ -67,19 +46,7 @@ export default function DashboardVendas() {
           <p className="text-sm text-slate-500">Faturamento, vendedores, formas de pagamento e produtos mais vendidos.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          <SegmentadoV18
-            id="periodo-vendas"
-            valor={periodo}
-            onMudar={setPeriodo}
-            opcoes={[
-              { valor: 'hoje', rotulo: 'Hoje' },
-              { valor: '7d', rotulo: '7 dias' },
-              { valor: '30d', rotulo: '30 dias' },
-              { valor: 'mes', rotulo: 'Este mês' },
-              { valor: 'custom', rotulo: 'Período' },
-            ]}
-          />
-          {periodo === 'custom' && <PeriodoFiltro inicial={custom.i} final={custom.f} onChange={(i, f) => setCustom({ i, f })} label="" atalhos={false} />}
+          <FiltroPeriodo id="periodo-vendas" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
           <SelectFiltro valor={vendedorId} onChange={setVendedorId} opcoes={opcoesDe(vendedores)} placeholder="Todos os vendedores" />
         </div>
       </Aparecer>
@@ -92,6 +59,15 @@ export default function DashboardVendas() {
         <KpiV18 rotulo="Lucro bruto" valor={r?.lucroBruto} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={isLoading} />
         <KpiV18 rotulo="Margem" valor={r?.margemPct} formato={(n) => percentual(n)} icone={<Percent className="h-4 w-4" />} tom="amarelo" carregando={isLoading} />
       </Grupo>
+
+      {!!r?.semCusto && (
+        <Aparecer className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span className="mt-0.5">⚠️</span>
+          <span>
+            {r.semCusto} venda{r.semCusto > 1 ? 's' : ''} com item sem custo — o lucro delas está contando o item como 100% lucro. Abra a venda, clique em Editar e preencha a coluna “Custo un.”.
+          </span>
+        </Aparecer>
+      )}
 
       <CardV18 titulo="Faturamento por dia" descricao={faixa} icone={<BarChart3 className="h-4 w-4" />} tom="azul">
         {isLoading ? (

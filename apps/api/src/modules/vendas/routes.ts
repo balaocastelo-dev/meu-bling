@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
-import { paginar, proximoNumero, respostaPaginada } from '../../lib/util.js';
+import { arredondar, paginar, proximoNumero, respostaPaginada } from '../../lib/util.js';
 import { eventos } from '../../core/eventos.js';
 import { vendedorDoUsuario } from '../comum/vendedores.js';
 import { executarAcoes, mudarSituacao, registrarAcao, registrarModulo, situacaoInicial, type Acao } from '../../core/situacoes.js';
@@ -159,7 +159,10 @@ export default async function vendasRoutes(app: FastifyInstance) {
   });
 
   // ---------------------------------------------------------------- detalhe
-  app.get('/api/v1/vendas/:id', async (req) => vendaCompleta(idDe(req)));
+  // lucro/margem do fechamento só para o dono e a gerência (o vendedor lança os custos, mas não vê o lucro)
+  const comFechamento = (req: { user: { perfil: string } }, v: Awaited<ReturnType<typeof vendaCompleta>>) => (req.user.perfil === 'ADMIN' || req.user.perfil === 'GERENTE' ? v : { ...v, fechamento: null });
+
+  app.get('/api/v1/vendas/:id', async (req) => comFechamento(req, await vendaCompleta(idDe(req))));
 
   // ---------------------------------------------------------------- criar
   app.post('/api/v1/vendas', async (req, reply) => {
@@ -172,7 +175,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     }
     const venda = await criarVenda(body, req.user.id);
     await auditar(req, body.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', venda.id, 'CRIAR', { numero: venda.numero, total: venda.total });
-    return reply.code(201).send(await vendaCompleta(venda.id));
+    return reply.code(201).send(comFechamento(req, await vendaCompleta(venda.id)));
   });
 
   // ---------------------------------------------------------------- alterar
@@ -214,11 +217,29 @@ export default async function vendasRoutes(app: FastifyInstance) {
           { bloqueados: realmenteAlterados },
         );
       }
+      // só o que veio no corpo (o .partial() ainda aplica os defaults do schema e zeraria campos não enviados)
+      const corpo = req.body as Record<string, unknown>;
       const data: Record<string, unknown> = {};
-      for (const k of CAMPOS_LIVRES) if ((parcial as any)[k] !== undefined) data[k] = (parcial as any)[k];
-      await prisma.venda.update({ where: { id }, data });
-      await auditar(req, 'Venda', id, 'ALTERAR', data);
-      return vendaCompleta(id);
+      for (const k of CAMPOS_LIVRES) if (k in corpo && (parcial as any)[k] !== undefined) data[k] = (parcial as any)[k];
+      // custo interno dos itens pode ser lançado/corrigido mesmo com a venda fechada
+      const custosItens = (parcial.itens || [])
+        .map((n, i) => ({ n, a: atual.itens[i] }))
+        .filter(({ n, a }) => a && n.custoUnitario !== undefined && (n.custoUnitario ?? null) !== (a.custoInformado ? a.custoUnitario : null));
+      await prisma.$transaction(async (tx) => {
+        if (custosItens.length) {
+          const prods = await tx.produto.findMany({ where: { id: { in: custosItens.map(({ a }) => a.produtoId).filter((x): x is number => !!x) } }, select: { id: true, precoCusto: true } });
+          const doCadastro = new Map(prods.map((p) => [p.id, p.precoCusto]));
+          for (const { n, a } of custosItens) {
+            const informado = n.custoUnitario !== null && n.custoUnitario !== undefined;
+            await tx.vendaItem.update({ where: { id: a.id }, data: { custoUnitario: informado ? n.custoUnitario! : (a.produtoId ? doCadastro.get(a.produtoId) ?? 0 : 0), custoInformado: informado } });
+          }
+          const itens = await tx.vendaItem.findMany({ where: { vendaId: id }, select: { custoUnitario: true, quantidade: true } });
+          data.custoTotal = arredondar(itens.reduce((s, i) => s + i.custoUnitario * i.quantidade, 0));
+        }
+        if (Object.keys(data).length) await tx.venda.update({ where: { id }, data });
+      });
+      await auditar(req, 'Venda', id, 'ALTERAR', { ...data, ...(custosItens.length ? { custosItens: custosItens.length } : {}) });
+      return comFechamento(req, await vendaCompleta(id));
     }
 
     if (atual.nota && atual.nota.situacao === 'AUTORIZADA') {
@@ -252,6 +273,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
           outrasDespesas: body.outrasDespesas,
           total: totais.total,
           custoTotal: totais.custoTotal,
+          custoLogistica: body.custoLogistica,
           observacoes: body.observacoes ?? null,
           observacoesInternas: body.observacoesInternas ?? null,
           transportadoraId: body.transportadoraId ?? null,
@@ -274,7 +296,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const depois = await vendaCompleta(id);
     eventos.emitir('venda.alterada', { vendaId: id, data: atual.data, tipo: atual.tipo });
     if (+new Date(depois.data) !== +atual.data) eventos.emitir('venda.alterada', { vendaId: id, data: new Date(depois.data), tipo: atual.tipo });
-    return depois;
+    return comFechamento(req, depois);
   });
 
   // ---------------------------------------------------------------- excluir
@@ -320,7 +342,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     await executarAcoes('VENDA', id, body.acoes as Acao[], req.user.id);
     await auditar(req, 'Venda', id, 'ACAO', { acoes: body.acoes });
     const v = await vendaCompleta(id);
-    return { acoesExecutadas: body.acoes, venda: v };
+    return { acoesExecutadas: body.acoes, venda: comFechamento(req, v) };
   });
 
   // ---------------------------------------------------------------- NF-e
@@ -405,7 +427,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const body = aprovarBody.parse(req.body || {});
     const r = await aprovarOrcamento(id, { aprovadoPor: body.aprovadoPor || req.user.nome, observacao: body.observacao, usuarioId: req.user.id });
     await auditar(req, 'Orcamento', id, 'ACAO', { acao: 'aprovar', aprovadoPor: body.aprovadoPor || req.user.nome });
-    return { ok: true, ...r, orcamento: await vendaCompleta(id) };
+    return { ok: true, ...r, orcamento: comFechamento(req, await vendaCompleta(id)) };
   });
 
   app.post('/api/v1/vendas/:id/converter', async (req, reply) => {
@@ -417,7 +439,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     if (acoesIniciais.length) await executarAcoes('VENDA', venda.id, acoesIniciais, req.user.id);
     await auditar(req, 'Orcamento', id, 'ACAO', { acao: 'converter', vendaId: venda.id, numeroVenda: venda.numero });
     eventos.emitir('venda.criada', { vendaId: venda.id, usuarioId: req.user.id });
-    return reply.code(201).send(await vendaCompleta(venda.id));
+    return reply.code(201).send(comFechamento(req, await vendaCompleta(venda.id)));
   });
 
   // ---------------------------------------------------------------- transferir para outro vendedor
@@ -431,7 +453,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     }
     const r = await transferirVendedor(id, body.vendedorId, req.user.id);
     await auditar(req, 'Venda', id, 'ACAO', { acao: 'transferirVendedor', vendedorId: body.vendedorId, observacao: body.observacao });
-    return { ok: true, alterado: r.alterado, venda: await vendaCompleta(id) };
+    return { ok: true, alterado: r.alterado, venda: comFechamento(req, await vendaCompleta(id)) };
   });
 
   // ---------------------------------------------------------------- duplicar (clonar)
@@ -447,7 +469,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     await auditar(req, tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', nova.id, 'CRIAR', { duplicadaDe: orig.numero, numero: nova.numero });
     if (tipo === 'PEDIDO') eventos.emitir('venda.criada', { vendaId: nova.id, usuarioId: req.user.id });
     eventos.emitir('venda.alterada', { vendaId: nova.id, data: nova.data, tipo: nova.tipo });
-    return reply.code(201).send(await vendaCompleta(nova.id));
+    return reply.code(201).send(comFechamento(req, await vendaCompleta(nova.id)));
   });
 
   // ---------------------------------------------------------------- gerar parcelas (não salva)
@@ -490,11 +512,12 @@ function mesclarComAtual(atual: Awaited<ReturnType<typeof carregarVenda>>, body:
     descontoValor: atual.descontoValor,
     frete: atual.frete,
     outrasDespesas: atual.outrasDespesas,
+    custoLogistica: atual.custoLogistica,
     transportadoraId: atual.transportadoraId,
     fretePorConta: atual.fretePorConta,
     quantidadeVolumes: atual.quantidadeVolumes,
     pesoBruto: atual.pesoBruto,
-    itens: atual.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct })),
+    itens: atual.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct, custoUnitario: i.custoInformado ? i.custoUnitario : null })),
     parcelas: atual.parcelas.map((p) => ({ dataVencimento: p.dataVencimento, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes })),
   };
   const { situacaoId: _s, tipo: _t, ...resto } = body;

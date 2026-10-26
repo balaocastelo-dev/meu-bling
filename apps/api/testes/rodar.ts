@@ -90,6 +90,7 @@ async function main() {
     rodar('Regras de vendas, painel, metas e desafios', NPX, ['tsx', 'testes/regras-vendas.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Baixa parcial de contas a pagar (pagar em partes, histórico, estorno de um pagamento)', NPX, ['tsx', 'testes/baixa-parcial.ts', base]);
     rodar('OS: custos internos (peça, logística, terceiros) fora da impressão + dashboard de assistência', NPX, ['tsx', 'testes/os-custos.ts', base]);
+    rodar('Vendas: custo do produto e logística internos (fora do cliente) + ordem do contas a pagar', NPX, ['tsx', 'testes/venda-custos.ts', base]);
     rodar('Porta do site: PDV, JUL.IA (orçamento e pedido em aberto), vendas por dia e por período', NPX, ['tsx', 'testes/integracao-site.ts', base], { env: { TZ: 'America/Sao_Paulo', SITE_CHAVE_INTEGRACAO: env.SITE_CHAVE_INTEGRACAO } });
     rodar('API externa: chaves, permissões, MCP para agentes de IA e webhooks', NPX, ['tsx', 'testes/api-externa.ts', base]);
     rodar('API externa: varredura — toda rota aberta para chave está documentada', NPX, ['tsx', 'testes/api-cobertura.ts'], { env });

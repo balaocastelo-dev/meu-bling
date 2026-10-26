@@ -592,6 +592,8 @@ model Venda {
   outrasDespesas        Float                @default(0)
   total                 Float                @default(0)
   custoTotal            Float                @default(0)
+  /// custo interno de logística da venda (frete pago, motoboy, envio) — nunca sai para o cliente
+  custoLogistica        Float                @default(0)
   observacoes           String?
   observacoesInternas   String?
   // ---- transporte
@@ -635,6 +637,8 @@ model VendaItem {
   desconto      Float    @default(0)
   total         Float    @default(0)
   custoUnitario Float    @default(0)
+  /// custo digitado pelo vendedor (true) ou vindo do cadastro do produto (false)
+  custoInformado Boolean @default(false)
   comissaoPct   Float    @default(0)
   comissaoValor Float    @default(0)
   ordem         Int      @default(0)

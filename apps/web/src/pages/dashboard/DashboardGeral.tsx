@@ -116,7 +116,7 @@ function Ranking({ itens, cor, vazio, rotuloQtd }: { itens: DashboardPanorama['p
 export default function DashboardGeral() {
   const nav = useNavigate();
   const usuario = useAuth((s) => s.usuario);
-  const { periodo, setPeriodo, custom, setCustom, dataInicial, dataFinal, faixa } = usePeriodoDashboard('dash-geral', 'mes');
+  const { periodo, setPeriodo, custom, setCustom, dataInicial, dataFinal, faixa } = usePeriodoDashboard();
   const [base, setBase] = useState<'entrada' | 'conclusao'>('entrada');
 
   const { data: pano, isLoading: carregando } = useQuery({
@@ -150,7 +150,7 @@ export default function DashboardGeral() {
   // composição do faturamento: custos + lucros de cada lado
   const composicao = r
     ? [
-        { nome: 'Custo das mercadorias', valor: r.vendas.custo, cor: '#93c5fd' },
+        { nome: 'Custos das vendas', valor: r.vendas.custo, cor: '#93c5fd' },
         { nome: 'Custos da assistência', valor: r.assistencia.custo, cor: '#fca5a5' },
         { nome: 'Lucro das vendas', valor: r.vendas.lucro, cor: COR_VENDAS },
         { nome: 'Lucro da assistência', valor: r.assistencia.lucro, cor: COR_ASSIST },
@@ -277,7 +277,7 @@ export default function DashboardGeral() {
       <Grupo className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiV18 rotulo="Vendas" valor={r?.vendas.valor} anterior={comp?.vendas.valor} formato={moeda} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={carregando} sub={r ? `${inteiro(r.vendas.qtd)} pedidos · ticket ${moeda(r.vendas.ticketMedio)}` : undefined} onClick={() => nav('/dashboard/vendas')} />
         <KpiV18 rotulo="Assistência" valor={r?.assistencia.valor} anterior={comp?.assistencia.valor} formato={moeda} icone={<Wrench className="h-4 w-4" />} tom="vermelho" carregando={carregando} sub={r ? `${inteiro(r.assistencia.qtd)} OS · ticket ${moeda(r.assistencia.ticketMedio)}` : undefined} onClick={() => nav('/dashboard/assistencia')} />
-        <KpiV18 rotulo="Custos" valor={r?.custo} anterior={comp?.custo} inverter formato={moeda} icone={<Receipt className="h-4 w-4" />} tom="amarelo" carregando={carregando} sub="mercadorias + assistência" />
+        <KpiV18 rotulo="Custos" valor={r?.custo} anterior={comp?.custo} inverter formato={moeda} icone={<Receipt className="h-4 w-4" />} tom="amarelo" carregando={carregando} sub="vendas + assistência" />
         <KpiV18 rotulo="Lucro" valor={r?.lucro} anterior={comp?.lucro} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={carregando} sub={r ? `margem ${percentual(r.margemPct)}` : undefined} />
         <KpiV18 rotulo="Entrou no caixa" valor={r?.caixa.entradas} anterior={comp?.caixa.entradas} formato={moeda} icone={<ArrowDownRight className="h-4 w-4" />} tom="verde" carregando={carregando} sub="recebimentos no período" onClick={() => nav('/financeiro/fluxo-caixa')} />
         <KpiV18 rotulo="Saiu do caixa" valor={r?.caixa.saidas} anterior={comp?.caixa.saidas} inverter formato={moeda} icone={<ArrowUpRight className="h-4 w-4" />} tom="neutro" carregando={carregando} sub="pagamentos no período" onClick={() => nav('/financeiro/pagar')} />
@@ -322,7 +322,7 @@ export default function DashboardGeral() {
                 </motion.ul>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <BlocoLucro titulo="Vendas" icone={<ShoppingCart className="h-3 w-3" />} cor={COR_VENDAS} receita={r.vendas.valor} custo={r.vendas.custo} rotuloCusto="Custo das mercadorias" qtd={r.vendas.qtd} rotuloQtd={r.vendas.qtd === 1 ? 'pedido' : 'pedidos'} onClick={() => nav('/dashboard/vendas')} />
+                <BlocoLucro titulo="Vendas" icone={<ShoppingCart className="h-3 w-3" />} cor={COR_VENDAS} receita={r.vendas.valor} custo={r.vendas.custo} rotuloCusto="Mercadorias e logística" qtd={r.vendas.qtd} rotuloQtd={r.vendas.qtd === 1 ? 'pedido' : 'pedidos'} onClick={() => nav('/dashboard/vendas')} />
                 <BlocoLucro titulo="Assistência" icone={<Wrench className="h-3 w-3" />} cor={COR_ASSIST} receita={r.assistencia.valor} custo={r.assistencia.custo} rotuloCusto="Peças, logística e terceiros" qtd={r.assistencia.qtd} rotuloQtd="OS" onClick={() => nav('/dashboard/assistencia')} />
               </div>
             </div>

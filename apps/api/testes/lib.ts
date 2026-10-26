@@ -53,8 +53,22 @@ export function igual(a: number, b: number, casas = 2) {
 
 export async function entrar(email: string, senha: string): Promise<Sessao> {
   const s = new Sessao('', email);
-  const r = await s.post('/auth/login', { email, senha }, 200);
-  s.token = r?.token || '';
+  // o login tem limite de 20/min por IP: com muitas etapas seguidas, espera a janela e tenta de novo
+  for (let tentativa = 0; tentativa < 4; tentativa++) {
+    const r = await fetch(BASE + '/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, senha }) });
+    if (r.status === 429) {
+      const espera = Number(r.headers.get('retry-after')) || 30;
+      await new Promise((ok) => setTimeout(ok, (Math.min(espera, 61) + 1) * 1000));
+      continue;
+    }
+    const corpo: any = await r.json().catch(() => ({}));
+    if (r.status === 200) {
+      placar.ok++;
+      s.token = corpo?.token || '';
+    } else falhar(`[${email}] POST /auth/login → ${r.status} (esperado 200) ${JSON.stringify(corpo).slice(0, 200)}`);
+    return s;
+  }
+  falhar(`[${email}] POST /auth/login → 429 depois de esperar o limite`);
   return s;
 }
 

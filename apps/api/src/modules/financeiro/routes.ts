@@ -249,9 +249,23 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     const q = listaSchema.parse(req.query);
     const { where, whereSit, hoje } = filtroBase(q, 'pagar');
     if (q.situacao === 'RECEBIDO') whereSit.situacao = 'PAGO';
+    // ordem pedida pelo Thiago (26/10/2026): vencidas primeiro, depois a vencer, pagas por último
+    // (canceladas no fim de tudo); dentro de cada grupo, por vencimento
+    const grupo = (c: { situacao: string; vencimento: Date }) => (c.situacao === 'CANCELADO' ? 3 : c.situacao === 'PAGO' ? 2 : c.vencimento < hoje ? 0 : 1);
+    const pagina = paginar(q) as { skip?: number; take?: number };
+    const idsPagina = async () => {
+      const todos = await prisma.contaPagar.findMany({ where: whereSit, select: { id: true, situacao: true, vencimento: true } });
+      todos.sort((a, b) => grupo(a) - grupo(b) || +a.vencimento - +b.vencimento || a.id - b.id);
+      const ini = pagina.skip ?? 0;
+      return todos.slice(ini, pagina.take !== undefined ? ini + pagina.take : undefined).map((c) => c.id);
+    };
     const [total, itens, abertas, pagas] = await Promise.all([
       prisma.contaPagar.count({ where: whereSit }),
-      prisma.contaPagar.findMany({ where: whereSit, include, orderBy: [{ vencimento: 'asc' }, { id: 'asc' }], ...paginar(q) }),
+      idsPagina().then(async (ids) => {
+        const linhas = await prisma.contaPagar.findMany({ where: { id: { in: ids } }, include });
+        const pos = new Map(ids.map((id, i) => [id, i]));
+        return linhas.sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0));
+      }),
       prisma.contaPagar.findMany({ where: { ...where, situacao: { in: ['ABERTO', 'PARCIAL'] } }, select: { valor: true, valorPago: true, juros: true, desconto: true, vencimento: true } }),
       prisma.contaPagar.aggregate({ where: { ...where, situacao: { in: ['PAGO', 'PARCIAL'] } }, _sum: { valorPago: true } }),
     ]);

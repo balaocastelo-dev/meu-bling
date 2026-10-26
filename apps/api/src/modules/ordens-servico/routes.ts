@@ -131,12 +131,9 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
     return respostaPaginada(data.map((o) => ({ ...o, atrasada: calcularAtrasada(o) })), total, q);
   });
 
-  app.get('/api/v1/ordens-servico/:id', async (req) => {
-    const os = await osCompleta(idDe(req));
-    // lucro/margem do fechamento só para o dono e a gerência; os custos em si ficam visíveis para quem lança
-    if (req.user.perfil !== 'ADMIN' && req.user.perfil !== 'GERENTE') return { ...os, fechamento: null };
-    return os;
-  });
+  // lucro/margem do fechamento só para o dono e a gerência; os custos em si ficam visíveis para quem lança
+  const comFechamento = (req: { user: { perfil: string } }, os: Awaited<ReturnType<typeof osCompleta>>) => (req.user.perfil === 'ADMIN' || req.user.perfil === 'GERENTE' ? os : { ...os, fechamento: null });
+  app.get('/api/v1/ordens-servico/:id', async (req) => comFechamento(req, await osCompleta(idDe(req))));
 
   // ---------------------------------------------------------------- criar
   app.post('/api/v1/ordens-servico', async (req, reply) => {
@@ -198,7 +195,7 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
     await auditar(req, 'OrdemServico', os.id, 'CRIAR', { numero: os.numero, total: os.total });
     eventos.emitir('os.criada', { osId: os.id, usuarioId: req.user.id });
     if (os.orcar && os.situacaoNome === NOME_AGUARDANDO_APROVACAO) eventos.emitir('os.orcamento', { osId: os.id, usuarioId: req.user.id });
-    return reply.code(201).send(await osCompleta(os.id));
+    return reply.code(201).send(comFechamento(req, await osCompleta(os.id)));
   });
 
   // ---------------------------------------------------------------- alterar
@@ -238,7 +235,7 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
       for (const k of CAMPOS_LIVRES_OS) if (k in enviados && (parcial as any)[k] !== undefined) data[k] = (parcial as any)[k];
       await prisma.ordemServico.update({ where: { id }, data });
       await auditar(req, 'OrdemServico', id, 'ALTERAR', data);
-      return osCompleta(id);
+      return comFechamento(req, await osCompleta(id));
     }
 
     const body = osSchema.parse(mesclarComAtual(atual, req.body as Record<string, unknown>));
@@ -298,7 +295,7 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
     await auditar(req, 'OrdemServico', id, 'ALTERAR', { itens: body.itens.length });
     const osAtualizada = await osCompleta(id);
     if (body.orcar && !atual.orcar && osAtualizada.situacao.nome === NOME_AGUARDANDO_APROVACAO) eventos.emitir('os.orcamento', { osId: id, usuarioId: req.user.id });
-    return osAtualizada;
+    return comFechamento(req, osAtualizada);
   });
 
   // ---------------------------------------------------------------- excluir
@@ -342,7 +339,7 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
     const body = z.object({ acoes: z.array(z.enum(['lancarEstoque', 'estornarEstoque', 'lancarContas', 'estornarContas', 'reservarEstoque', 'liberarReserva', 'gerarNfe'])).min(1) }).parse(req.body);
     await executarAcoes('OS', id, body.acoes as Acao[], req.user.id);
     await auditar(req, 'OrdemServico', id, 'ACAO', { acoes: body.acoes });
-    return { acoesExecutadas: body.acoes, os: await osCompleta(id) };
+    return { acoesExecutadas: body.acoes, os: comFechamento(req, await osCompleta(id)) };
   });
 
   // ---------------------------------------------------------------- aprovar orçamento
@@ -365,7 +362,7 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
       }
     }
     await auditar(req, 'OrdemServico', id, 'ACAO', { acao: 'aprovarOrcamento', aprovadoPor: body.aprovadoPor });
-    return { ok: true, orcamentoAprovado: true, situacao: mudou, os: await osCompleta(id) };
+    return { ok: true, orcamentoAprovado: true, situacao: mudou, os: comFechamento(req, await osCompleta(id)) };
   });
 
   // ---------------------------------------------------------------- anexos
