@@ -7,7 +7,7 @@ import { Clock, Kanban, List, Plus, TriangleAlert, Wrench } from 'lucide-react';
 import { api, ApiError, mensagemErro } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useSituacoes, useTecnicos, opcoesDe } from '@/hooks/useListas';
-import { Badge, BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, PageHeader, Pagination, Segmentado, SelectFiltro, Skeleton, StatusBadge, Table, type Coluna } from '@/components/ui';
+import { Badge, BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, PageHeader, Pagination, PeriodoFiltro, Segmentado, SelectFiltro, Skeleton, StatusBadge, Table, type Coluna } from '@/components/ui';
 import { data, diasAtraso, moeda, rotulo, truncar } from '@/lib/format';
 import type { KanbanColuna, OsResumo, Paginado, SituacaoRef } from '@/types';
 
@@ -48,9 +48,9 @@ function CardOs({ os, onDragStart }: { os: OsResumo; onDragStart: (e: React.Drag
 }
 
 /** Kanban de OS com drag & drop HTML5 */
-function KanbanOs({ tecnicoId }: { tecnicoId: string }) {
+function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; dataInicial: string; dataFinal: string }) {
   const qc = useQueryClient();
-  const { data: colunas, isLoading, error } = useQuery({ queryKey: ['os-kanban', tecnicoId], queryFn: () => api.get<KanbanColuna[]>('/ordens-servico/kanban', { tecnicoId }), refetchInterval: 60_000 });
+  const { data: colunas, isLoading, error } = useQuery({ queryKey: ['os-kanban', tecnicoId, dataInicial, dataFinal], queryFn: () => api.get<KanbanColuna[]>('/ordens-servico/kanban', { tecnicoId, dataInicial, dataFinal }), refetchInterval: 60_000 });
   const [sobre, setSobre] = useState<number | null>(null);
 
   const mover = useMutation({
@@ -183,6 +183,8 @@ export default function OsLista() {
   const pg = usePaginacao();
   const visao = (pg.getFiltro('visao') || 'kanban') as 'kanban' | 'lista';
   const tecnicoId = pg.getFiltro('tecnicoId');
+  const dataInicial = pg.getFiltro('dataInicial');
+  const dataFinal = pg.getFiltro('dataFinal');
   const { data: tecnicos } = useTecnicos();
 
   return (
@@ -209,7 +211,11 @@ export default function OsLista() {
           </>
         }
       />
-      {visao === 'kanban' ? <KanbanOs tecnicoId={tecnicoId} /> : <ListaOs tecnicoId={tecnicoId} />}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <PeriodoFiltro inicial={dataInicial} final={dataFinal} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />
+        <span className="text-[11px] text-slate-400">{dataInicial || dataFinal ? 'OS que entraram no período' : visao === 'kanban' ? 'Tudo: abertas + finalizadas nos últimos 7 dias' : 'Todas as OS'}</span>
+      </div>
+      {visao === 'kanban' ? <KanbanOs tecnicoId={tecnicoId} dataInicial={dataInicial} dataFinal={dataFinal} /> : <ListaOs tecnicoId={tecnicoId} />}
     </div>
   );
 }

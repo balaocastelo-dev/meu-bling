@@ -242,7 +242,7 @@ export const ENDPOINTS: Endpoint[] = [
 
   // ------------------------------------------------ ordens de serviço
   { metodo: 'GET', caminho: '/ordens-servico', recurso: 'os', resumo: 'Lista ordens de serviço (com "atrasada").', filtros: ['pesquisa', 'situacaoId', 'situacoes', 'contatoId', 'tecnicoId', 'vendedorId', 'prioridade (BAIXA|NORMAL|ALTA|URGENTE)', ...PERIODO, ...PAG] },
-  { metodo: 'GET', caminho: '/ordens-servico/kanban', recurso: 'os', resumo: 'OS agrupadas por situação (quadro).', filtros: ['tecnicoId', 'diasFinalizadas (padrão 7)'] },
+  { metodo: 'GET', caminho: '/ordens-servico/kanban', recurso: 'os', resumo: 'OS agrupadas por situação (quadro). Com período: todas as OS que entraram nele.', filtros: ['tecnicoId', 'diasFinalizadas (padrão 7)', 'dataInicial', 'dataFinal'] },
   { metodo: 'GET', caminho: '/ordens-servico/{id}', recurso: 'os', resumo: 'OS completa: equipamento, defeito, diagnóstico, peças e serviços, parcelas, anexos, histórico.' },
   {
     metodo: 'POST', caminho: '/ordens-servico', recurso: 'os', resumo: 'Abre OS.',

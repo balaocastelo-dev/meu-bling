@@ -4,7 +4,8 @@ import { CheckCircle2, FileSignature, FileText, Plus, ShoppingCart, Trophy } fro
 import { api } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
-import { BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, StatusBadge, Table, atalhosPeriodo, type Coluna } from '@/components/ui';
+import { OPCOES_PERIODO, periodoDe } from '@/lib/periodo';
+import { BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, StatusBadge, Table, type Coluna } from '@/components/ui';
 import { VendaAcoes, rotaDe } from '@/components/compartilhados/VendaAcoes';
 import { data, inteiro, moeda, rotulo } from '@/lib/format';
 import type { Paginado, TipoVenda, VendaResumo } from '@/types';
@@ -19,8 +20,9 @@ interface ResumoLista {
 
 /** "Hoje", "Semana passada", "01/10 a 15/10", "Todo o período" */
 function nomePeriodo(i: string, f: string) {
-  const at = atalhosPeriodo().find((a) => a.i === i && a.f === f);
-  if (at) return at.nome;
+  const p = periodoDe(i, f);
+  const at = OPCOES_PERIODO.find((o) => o.valor === p && p !== 'custom');
+  if (at) return at.rotulo;
   const br = (x: string) => x.split('-').reverse().slice(0, 2).join('/');
   if (i && f) return i === f ? br(i) : `${br(i)} a ${br(f)}`;
   if (i) return `Desde ${br(i)}`;

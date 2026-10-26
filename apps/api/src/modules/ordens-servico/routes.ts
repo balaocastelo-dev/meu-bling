@@ -66,7 +66,10 @@ const NOME_AGUARDANDO_APROVACAO = 'Aguardando aprovação';
 export default async function ordensServicoRoutes(app: FastifyInstance) {
   // ---------------------------------------------------------------- kanban (antes de /:id)
   app.get('/api/v1/ordens-servico/kanban', async (req) => {
-    const q = z.object({ tecnicoId: z.coerce.number().int().optional(), diasFinalizadas: z.coerce.number().int().min(0).default(7) }).parse(req.query);
+    const q = z
+      .object({ tecnicoId: z.coerce.number().int().optional(), diasFinalizadas: z.coerce.number().int().min(0).default(7), dataInicial: dataSchema, dataFinal: dataSchema })
+      .parse(req.query);
+    // com período: todas as OS que ENTRARAM no período (abertas e finalizadas); sem período: abertas + finalizadas recentes
     const situacoes = await prisma.situacao.findMany({ where: { modulo: 'OS', ativo: true }, orderBy: { ordem: 'asc' } });
     const limite = new Date();
     limite.setDate(limite.getDate() - q.diasFinalizadas);
@@ -74,7 +77,9 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
       where: {
         tecnicoId: q.tecnicoId,
         situacaoId: { in: situacoes.map((s) => s.id) },
-        OR: [{ situacao: { final: false, cancelamento: false } }, { atualizadoEm: { gte: limite } }, { dataConclusao: { gte: limite } }],
+        ...(q.dataInicial || q.dataFinal
+          ? { dataEntrada: intervalo(q.dataInicial, q.dataFinal) }
+          : { OR: [{ situacao: { final: false, cancelamento: false } }, { atualizadoEm: { gte: limite } }, { dataConclusao: { gte: limite } }] }),
       },
       select: resumoSelect,
       orderBy: [{ prioridade: 'desc' }, { dataPrevista: 'asc' }, { dataEntrada: 'asc' }],

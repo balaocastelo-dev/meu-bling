@@ -9,7 +9,7 @@ import { abrirPluggyConnect } from '@/lib/pluggy';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useCategoriasFinanceiras, useContasFinanceiras, opcoesDe } from '@/hooks/useListas';
-import { Badge, BarraFiltros, Button, Card, DateInput, EmptyState, Input, Modal, MoneyInput, PageHeader, Pagination, Select, SelectFiltro, Skeleton, Tabs, Textarea } from '@/components/ui';
+import { Badge, BarraFiltros, Button, Card, DateInput, EmptyState, Input, Modal, MoneyInput, PageHeader, Pagination, PeriodoFiltro, Select, SelectFiltro, Skeleton, Tabs, Textarea } from '@/components/ui';
 import { data, dataHora, hoje, moeda, rotulo } from '@/lib/format';
 import type { ContaFinanceira, OpenFinanceStatus, Paginado, TransacaoBancaria } from '@/types';
 
@@ -222,7 +222,7 @@ function Conciliacao({ contas }: { contas: ContaFinanceira[] }) {
   const [catId, setCatId] = useState<number | ''>('');
   const [desc, setDesc] = useState('');
 
-  const params = { contaFinanceiraId: pg.getFiltro('contaFinanceiraId'), conciliado: pg.getFiltro('conciliado') || 'false', pagina: pg.pagina, limite: pg.limite };
+  const params = { contaFinanceiraId: pg.getFiltro('contaFinanceiraId'), conciliado: pg.getFiltro('conciliado') || 'false', dataInicial: pg.getFiltro('dataInicial'), dataFinal: pg.getFiltro('dataFinal'), pagina: pg.pagina, limite: pg.limite };
   const { data: resp, isLoading } = useQuery({ queryKey: ['transacoes', params], queryFn: () => api.get<Paginado<TransacaoBancaria>>('/bancos/transacoes', params), placeholderData: (p) => p });
 
   const invalidar = () => {
@@ -254,6 +254,7 @@ function Conciliacao({ contas }: { contas: ContaFinanceira[] }) {
       <BarraFiltros>
         <SelectFiltro valor={pg.getFiltro('contaFinanceiraId')} onChange={(v) => pg.setFiltro('contaFinanceiraId', v)} opcoes={opcoesDe(contas)} placeholder="Todas as contas" />
         <SelectFiltro valor={pg.getFiltro('conciliado') || 'false'} onChange={(v) => pg.setFiltro('conciliado', v)} placeholder="" opcoes={[{ valor: 'false', rotulo: 'Pendentes' }, { valor: 'true', rotulo: 'Conciliadas' }]} />
+        <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />
       </BarraFiltros>
       {isLoading ? (
         <div className="p-4"><Skeleton className="h-48" /></div>
@@ -340,11 +341,7 @@ function Extrato({ contas }: { contas: ContaFinanceira[] }) {
     <Card semPadding>
       <BarraFiltros>
         <SelectFiltro valor={pg.getFiltro('contaFinanceiraId')} onChange={(v) => pg.setFiltro('contaFinanceiraId', v)} opcoes={opcoesDe(contas)} placeholder="Todas as contas" />
-        <div className="flex items-center gap-1">
-          <input type="date" value={pg.getFiltro('dataInicial')} onChange={(e) => pg.setFiltro('dataInicial', e.target.value)} className="input-base h-8 w-36 py-0 text-sm" />
-          <span className="text-xs text-slate-400">até</span>
-          <input type="date" value={pg.getFiltro('dataFinal')} onChange={(e) => pg.setFiltro('dataFinal', e.target.value)} className="input-base h-8 w-36 py-0 text-sm" />
-        </div>
+        <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />
       </BarraFiltros>
       {isLoading ? (
         <div className="p-4"><Skeleton className="h-48" /></div>

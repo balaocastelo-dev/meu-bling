@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { Bell, Mail, MessageCircle, RefreshCw, X } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
-import { Badge, BarraFiltros, Button, Card, EmptyState, PageHeader, Pagination, SelectFiltro, Table, tomPorStatus, type Coluna } from '@/components/ui';
+import { Badge, BarraFiltros, Button, Card, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, Table, tomPorStatus, type Coluna } from '@/components/ui';
 import { dataHora, rotulo, truncar } from '@/lib/format';
 import type { Notificacao, Paginado } from '@/types';
 
@@ -68,6 +68,7 @@ export default function Notificacoes() {
       <PageHeader titulo="Notificações" descricao="Fila de envios por WhatsApp e e-mail. O worker processa a cada 5 segundos com até 3 tentativas." />
       <Card semPadding>
         <BarraFiltros>
+          <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />
           <SelectFiltro valor={pg.getFiltro('status')} onChange={(v) => pg.setFiltro('status', v)} placeholder="Todos status" opcoes={['PENDENTE', 'ENVIANDO', 'ENVIADA', 'ERRO', 'CANCELADA'].map((s) => ({ valor: s, rotulo: rotulo(s) }))} />
           <SelectFiltro valor={pg.getFiltro('canal')} onChange={(v) => pg.setFiltro('canal', v)} placeholder="Todos canais" opcoes={[{ valor: 'WHATSAPP', rotulo: 'WhatsApp' }, { valor: 'EMAIL', rotulo: 'E-mail' }]} />
           <SelectFiltro valor={pg.getFiltro('origemTipo')} onChange={(v) => pg.setFiltro('origemTipo', v)} placeholder="Todas origens" opcoes={['VENDA', 'OS', 'COMPRA', 'NFE', 'CONTA', 'MANUAL'].map((s) => ({ valor: s, rotulo: rotulo(s) }))} />

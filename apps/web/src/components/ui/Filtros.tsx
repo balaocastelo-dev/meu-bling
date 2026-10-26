@@ -1,8 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
+import { motion } from 'framer-motion';
 import clsx from 'clsx';
 import { Search, X } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 import type { SituacaoRef } from '@/types';
+import { OPCOES_PERIODO, intervaloPeriodo, periodoDe, type Periodo } from '@/lib/periodo';
 
 /** Barra de filtros padrão das listagens */
 export function BarraFiltros({ children, className }: { children: ReactNode; className?: string }) {
@@ -117,43 +119,60 @@ export function atalhosPeriodo(hoje = new Date()): { id: string; nome: string; i
   ];
 }
 
-/** Período (data inicial/final) para filtros, com atalhos (hoje, semana, mês…) */
+/**
+ * Filtro de data do sistema — o mesmo dos dashboards: Tudo · Hoje · 7 dias · 30 dias · Este mês · Mês passado · Período.
+ * "Tudo" só aparece onde o período é opcional (limpavel). Com atalhos=false mostra só as duas datas.
+ */
 export function PeriodoFiltro({ inicial, final, onChange, label = 'Período', atalhos = true, limpavel = true }: { inicial: string; final: string; onChange: (i: string, f: string) => void; label?: string; atalhos?: boolean; /** false onde o período é obrigatório (DRE, relatórios) */ limpavel?: boolean }) {
-  const opcoes = atalhos ? atalhosPeriodo() : [];
-  const ativo = opcoes.find((o) => o.i === inicial && o.f === final)?.id;
+  const idPill = useId();
+  const detectado = periodoDe(inicial, final);
+  const [livre, setLivre] = useState(false);
+  const ativo: Periodo = livre ? 'custom' : detectado === 'tudo' && !limpavel ? 'custom' : detectado;
+  const opcoes: { valor: Periodo; rotulo: string }[] = [...(limpavel ? [{ valor: 'tudo' as Periodo, rotulo: 'Tudo' }] : []), ...OPCOES_PERIODO];
+  const escolher = (p: Periodo) => {
+    if (p === 'custom') {
+      setLivre(true);
+      if (!inicial && !final) {
+        const r = intervaloPeriodo('mes');
+        onChange(r.dataInicial, r.dataFinal);
+      }
+      return;
+    }
+    setLivre(false);
+    const r = intervaloPeriodo(p);
+    onChange(r.dataInicial, r.dataFinal);
+  };
+  const datas = (
+    <div className="flex w-full min-w-0 items-center gap-1 sm:w-auto">
+      <input type="date" aria-label="Data inicial" value={inicial} max={final || undefined} onChange={(e) => onChange(e.target.value, final)} className="input-base h-9 min-w-0 flex-1 py-0 text-sm sm:h-8 sm:w-36 sm:flex-none" />
+      <span className="text-xs text-slate-400">até</span>
+      <input type="date" aria-label="Data final" value={final} min={inicial || undefined} onChange={(e) => onChange(inicial, e.target.value)} className="input-base h-9 min-w-0 flex-1 py-0 text-sm sm:h-8 sm:w-36 sm:flex-none" />
+    </div>
+  );
   return (
     <div className="flex w-full flex-col gap-1 sm:w-auto">
       {label && <span className="text-[11px] font-medium text-slate-500">{label}</span>}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {opcoes.length > 0 && (
-          <div className="flex flex-wrap gap-1" role="group" aria-label="Atalhos de período">
+      {atalhos ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="inline-flex max-w-full flex-wrap rounded-full border border-slate-200 bg-white p-1 shadow-card" role="group" aria-label="Período">
             {opcoes.map((o) => (
               <button
-                key={o.id}
+                key={o.valor}
                 type="button"
-                onClick={() => (ativo === o.id && limpavel ? onChange('', '') : onChange(o.i, o.f))}
-                className={
-                  'h-8 whitespace-nowrap rounded-md border px-2.5 text-xs font-medium transition-colors ' +
-                  (ativo === o.id ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50')
-                }
-                aria-pressed={ativo === o.id}
+                onClick={() => escolher(o.valor)}
+                aria-pressed={o.valor === ativo}
+                className={clsx('relative h-7 whitespace-nowrap rounded-full px-3 text-xs font-medium transition-colors', o.valor === ativo ? 'text-white' : 'text-slate-500 hover:text-slate-800')}
               >
-                {o.nome}
+                {o.valor === ativo && <motion.span layoutId={`periodo-${idPill}`} className="absolute inset-0 rounded-full bg-slate-900" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
+                <span className="relative">{o.rotulo}</span>
               </button>
             ))}
           </div>
-        )}
-        <div className="flex w-full min-w-0 items-center gap-1 sm:w-auto">
-          <input type="date" aria-label="Data inicial" value={inicial} max={final || undefined} onChange={(e) => onChange(e.target.value, final)} className="input-base h-9 min-w-0 flex-1 py-0 text-sm sm:h-8 sm:w-36 sm:flex-none" />
-          <span className="text-xs text-slate-400">até</span>
-          <input type="date" aria-label="Data final" value={final} min={inicial || undefined} onChange={(e) => onChange(inicial, e.target.value)} className="input-base h-9 min-w-0 flex-1 py-0 text-sm sm:h-8 sm:w-36 sm:flex-none" />
-          {limpavel && (inicial || final) && (
-            <button type="button" onClick={() => onChange('', '')} title="Limpar período" className="h-8 rounded-md px-2 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-              ✕
-            </button>
-          )}
+          {ativo === 'custom' && datas}
         </div>
-      </div>
+      ) : (
+        datas
+      )}
     </div>
   );
 }
