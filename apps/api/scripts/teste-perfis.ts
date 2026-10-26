@@ -46,11 +46,13 @@ async function main() {
   await esperar(gerente, 'POST', '/empresa/smtp/testar', [403], { para: 'a@b.com' }, 'GERENTE');
   await esperar(admin, 'GET', '/dashboard/geral', [200], undefined, 'ADMIN');
   await esperar(admin, 'GET', '/dashboard/vendas', [200], undefined, 'ADMIN');
+  await esperar(admin, 'GET', '/dashboard/assistencia', [200], undefined, 'ADMIN');
   await esperar(admin, 'GET', '/dashboard/atividades', [200], undefined, 'ADMIN');
   await esperar(gerente, 'GET', '/dashboard/atividades', [403], undefined, 'GERENTE');
   await esperar(vendedor, 'GET', '/dashboard/atividades', [403], undefined, 'VENDEDOR');
   await esperar(gerente, 'GET', '/dashboard/geral', [403], undefined, 'GERENTE');
   await esperar(gerente, 'GET', '/dashboard/vendas', [403], undefined, 'GERENTE');
+  await esperar(gerente, 'GET', '/dashboard/assistencia', [403], undefined, 'GERENTE');
   await esperar(gerente, 'GET', '/dashboard/os', [403], undefined, 'GERENTE');
   await esperar(gerente, 'GET', '/financeiro/resumo', [200], undefined, 'GERENTE');
   await esperar(gerente, 'GET', '/relatorios/dre', [200], undefined, 'GERENTE');
@@ -67,6 +69,7 @@ async function main() {
   await esperar(vendedor, 'GET', '/ordens-servico/kanban', [200], undefined, 'VENDEDOR');
   await esperar(vendedor, 'GET', '/dashboard/geral', [403], undefined, 'VENDEDOR');
   await esperar(vendedor, 'GET', '/dashboard/vendas', [403], undefined, 'VENDEDOR');
+  await esperar(vendedor, 'GET', '/dashboard/assistencia', [403], undefined, 'VENDEDOR');
   await esperar(vendedor, 'GET', '/comissoes', [200], undefined, 'VENDEDOR');
   await esperar(vendedor, 'POST', '/contatos', [201], { nome: 'Cliente do vendedor', tipoPessoa: 'F' }, 'VENDEDOR');
   await esperar(vendedor, 'GET', '/financeiro/resumo', [403], undefined, 'VENDEDOR');

@@ -184,6 +184,22 @@ export default function OsDetalhe() {
             <div className="flex justify-between"><span className="text-slate-500">Desconto</span><span className="num text-red-600">- {moeda(os.descontoValor)}</span></div>
             <div className="flex justify-between border-t border-slate-200 pt-2 text-base"><span className="font-semibold">Total</span><span className="num font-bold">{moeda(os.total)}</span></div>
           </div>
+          {/* custos internos do fechamento — não saem na impressão nem no link do cliente */}
+          <div className="mt-3 space-y-1 rounded-md border border-dashed border-slate-200 bg-slate-50/70 p-2.5 text-xs">
+            <p className="mb-1 flex items-center justify-between font-semibold uppercase tracking-wide text-slate-400">
+              <span>Custos internos</span>
+              <Link to={`/ordens-servico/${os.id}/editar`} className="normal-case tracking-normal text-brand-600 hover:underline">Lançar</Link>
+            </p>
+            <div className="flex justify-between"><span className="text-slate-500">Custo da peça{os.fechamento?.custoPecasOrigem === 'CADASTRO' && (os.fechamento?.custoPecas ?? 0) > 0 ? ' (cadastro)' : ''}</span><span className="num">{moeda(os.fechamento ? os.fechamento.custoPecas : os.custoPeca)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Logística</span><span className="num">{moeda(os.custoLogistica)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Mão de obra de terceiro</span><span className="num">{moeda(os.custoMaoObraTerceiro)}</span></div>
+            {os.fechamento && (
+              <div className="mt-1 flex justify-between border-t border-slate-200 pt-1.5 text-sm">
+                <span className="font-semibold text-slate-700">Lucro</span>
+                <span className={`num font-bold ${os.fechamento.lucro < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{moeda(os.fechamento.lucro)} <span className="text-[11px] font-normal text-slate-400">({numero(os.fechamento.margemPct, 1)}%)</span></span>
+              </div>
+            )}
+          </div>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <Button tamanho="sm" variante={os.estoqueLancado ? 'perigo' : 'secundario'} icone={os.estoqueLancado ? <Undo2 className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />} carregando={acoes.isPending} onClick={() => acoes.mutate([os.estoqueLancado ? 'estornarEstoque' : 'lancarEstoque'])}>
               {os.estoqueLancado ? 'Estornar peças' : 'Baixar peças'}

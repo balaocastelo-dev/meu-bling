@@ -8,6 +8,8 @@ interface MoneyInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'v
   onChange: (v: number) => void;
   label?: string;
   erro?: string;
+  /** texto de ajuda abaixo do campo */
+  ajuda?: string;
   obrigatorio?: boolean;
   /** Casas decimais (2 para moeda, 3 para quantidades) */
   casas?: number;
@@ -27,7 +29,7 @@ function formatar(v: number, casas: number): string {
  * Mantém texto livre enquanto digita e normaliza no blur.
  */
 export const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(function MoneyInput(
-  { value, onChange, label, erro, obrigatorio, casas = 2, prefixo = 'R$', alinharDireita = true, className, inputClassName, onBlur, onFocus, ...rest },
+  { value, onChange, label, erro, ajuda, obrigatorio, casas = 2, prefixo = 'R$', alinharDireita = true, className, inputClassName, onBlur, onFocus, ...rest },
   ref,
 ) {
   const [texto, setTexto] = useState(formatar(value, casas));
@@ -39,7 +41,7 @@ export const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(function
   }, [value, casas, focado]);
 
   return (
-    <Campo label={label} erro={erro} obrigatorio={obrigatorio} className={className}>
+    <Campo label={label} erro={erro} ajuda={ajuda} obrigatorio={obrigatorio} className={className}>
       <div className="relative">
         {prefixo && <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-xs text-slate-400">{prefixo}</span>}
         <input

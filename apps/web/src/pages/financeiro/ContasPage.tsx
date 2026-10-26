@@ -42,6 +42,8 @@ function linkOrigem(c: Conta): string | null {
       return `/notas-fiscais/${o.id}`;
     case 'COMISSAO':
       return `/comissoes`;
+    case 'PAGAMENTO_TECNICO':
+      return `/dashboard/assistencia`;
     default:
       return null;
   }
