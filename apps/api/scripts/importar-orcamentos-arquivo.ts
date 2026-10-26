@@ -91,7 +91,12 @@ function textoItens(p: any) {
 
 async function main() {
   const listagem = lerListagem(opt('--listagem')!);
-  const contatosArq: Record<string, any> = opt('--contatos') ? JSON.parse(fs.readFileSync(opt('--contatos')!, 'utf8')) : {};
+  const contatosArq: Record<string, any> = {};
+  if (opt('--contatos')) {
+    const cam = opt('--contatos')!;
+    if (cam.endsWith('.jsonl')) for (const c of lerJsonl(cam)) { if (c?.id && c.nome) contatosArq[String(c.id)] = c; }
+    else Object.assign(contatosArq, JSON.parse(fs.readFileSync(cam, 'utf8')));
+  }
   const brutos = lerJsonl(arquivo!);
   const porId = new Map<string, any>();
   for (const p of brutos) if (p?.id) porId.set(String(p.id), p);
