@@ -106,7 +106,7 @@ export default function DashboardAssistencia() {
 
       <PagarTecnicoModal aberto={pagarAberto} onFechar={() => setPagarAberto(false)} dataInicial={dataInicial} dataFinal={dataFinal} base={base} filtroTecnicoId={tecnicoId} />
 
-      <Grupo className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <KpiV18 rotulo="Valor de entrada" valor={r?.valorEntrada} anterior={comp?.valorEntrada} formato={moeda} icone={<CircleDollarSign className="h-4 w-4" />} tom="azul" carregando={isLoading} sub="vs. período anterior" />
         <KpiV18 rotulo={base === 'entrada' ? 'OS que entraram' : 'OS concluídas'} valor={r?.qtd} anterior={comp?.qtd} formato={qtd} icone={<ClipboardList className="h-4 w-4" />} tom="neutro" carregando={isLoading} onClick={() => nav('/ordens-servico')} sub={r ? `ticket médio ${moeda(r.ticketMedio)}` : undefined} />
         <KpiV18 rotulo="Mão de obra" valor={r?.maoDeObra} anterior={comp?.maoDeObra} formato={moeda} icone={<Wrench className="h-4 w-4" />} tom="vermelho" carregando={isLoading} />

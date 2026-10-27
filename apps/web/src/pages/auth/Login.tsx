@@ -36,7 +36,7 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-dvh">
       {/* lado esquerdo: marca */}
       <div className="hidden w-1/2 flex-col justify-between bg-slate-950 p-10 text-slate-300 lg:flex">
         <div className="flex items-center gap-3">

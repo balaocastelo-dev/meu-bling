@@ -103,7 +103,7 @@ export default function ProdutoDetalhe() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard rotulo="Preço à vista" valor={moeda(p.preco)} sub={p.precoCartao && p.precoCartao !== p.preco ? `cartão ${moeda(p.precoCartao)}` : undefined} tom="verde" />
         <StatCard rotulo="Custo" valor={moeda(p.precoCusto)} sub={p.precoCusto > 0 ? `margem ${numero(((p.preco - p.precoCusto) / p.precoCusto) * 100, 1)}%` : undefined} />
         <StatCard rotulo="Estoque disponível" valor={p.tipo === 'S' ? '—' : numero(total - reservado)} sub={p.tipo === 'S' ? 'serviço' : `${numero(total)} total · ${numero(reservado)} reservado`} tom={p.tipo === 'P' && total <= p.estoqueMinimo ? 'vermelho' : 'azul'} icone={<Package className="h-4 w-4" />} />

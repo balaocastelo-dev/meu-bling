@@ -274,7 +274,7 @@ export default function DashboardGeral() {
       </Aparecer>
 
       {/* KPIs do período */}
-      <Grupo className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <KpiV18 rotulo="Vendas" valor={r?.vendas.valor} anterior={comp?.vendas.valor} formato={moeda} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={carregando} sub={r ? `${inteiro(r.vendas.qtd)} pedidos · ticket ${moeda(r.vendas.ticketMedio)}` : undefined} onClick={() => nav('/dashboard/vendas')} />
         <KpiV18 rotulo="Assistência" valor={r?.assistencia.valor} anterior={comp?.assistencia.valor} formato={moeda} icone={<Wrench className="h-4 w-4" />} tom="vermelho" carregando={carregando} sub={r ? `${inteiro(r.assistencia.qtd)} OS · ticket ${moeda(r.assistencia.ticketMedio)}` : undefined} onClick={() => nav('/dashboard/assistencia')} />
         <KpiV18 rotulo="Custos" valor={r?.custo} anterior={comp?.custo} inverter formato={moeda} icone={<Receipt className="h-4 w-4" />} tom="amarelo" carregando={carregando} sub="vendas + assistência" />
@@ -417,7 +417,7 @@ export default function DashboardGeral() {
         <span className="text-[11px] text-slate-400">não depende do período</span>
       </Aparecer>
 
-      <Grupo className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiV18 rotulo="OS abertas" valor={h?.osAbertas} formato={qtd} sub={data ? `${inteiro(data.os.atrasadas)} atrasadas` : undefined} icone={<Wrench className="h-4 w-4" />} tom={data && data.os.atrasadas > 0 ? 'amarelo' : 'neutro'} carregando={isLoading} onClick={() => nav('/ordens-servico')} />
         {(isLoading || f) && <KpiV18 rotulo="Saldo em contas" valor={f?.saldoTotal} formato={moeda} icone={<Wallet className="h-4 w-4" />} tom="neutro" carregando={isLoading} onClick={() => nav('/financeiro/bancos')} />}
         {(isLoading || f) && <KpiV18 rotulo="A receber hoje" valor={f?.receberHoje} formato={moeda} sub={f ? `a pagar ${moeda(f.pagarHoje)}` : undefined} icone={<Clock className="h-4 w-4" />} tom="azul" carregando={isLoading} onClick={() => nav('/financeiro/receber')} />}

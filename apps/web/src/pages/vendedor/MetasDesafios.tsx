@@ -244,7 +244,7 @@ function FormDesafio({ desafio, onFechar, onSalvo }: { desafio: Desafio | null; 
         <Input label="Título" obrigatorio placeholder='Ex.: "Semana do notebook"' value={f.titulo} onChange={(e) => set({ titulo: e.target.value })} autoFocus />
         <Textarea label="Descrição (opcional)" rows={2} placeholder="Regras ou recado para a equipe" value={f.descricao} onChange={(e) => set({ descricao: e.target.value })} />
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Select
             label="O que conta"
             value={f.tipo}

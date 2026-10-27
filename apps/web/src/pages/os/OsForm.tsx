@@ -243,7 +243,7 @@ export default function OsForm() {
   if (editando && isLoading) return <FormSkeleton />;
 
   return (
-    <div className="pb-24">
+    <div className="espaco-barra-fixa">
       <PageHeader
         migalhas={[{ rotulo: 'Ordens de serviço', para: '/ordens-servico' }, { rotulo: editando ? `OS nº ${os?.numero ?? ''}` : 'Nova OS' }]}
         titulo={editando ? `Editar OS nº ${os?.numero ?? ''}` : 'Nova ordem de serviço'}
@@ -301,7 +301,7 @@ export default function OsForm() {
         </Secao>
 
         <Secao titulo="Diagnóstico e serviço">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 lg:grid-cols-3">
             <Textarea label="Defeito relatado pelo cliente" obrigatorio erro={erros.defeitoRelatado} rows={4} value={form.defeitoRelatado} onChange={(e) => set('defeitoRelatado', e.target.value)} />
             <Textarea label="Diagnóstico técnico" rows={4} value={form.diagnostico} onChange={(e) => set('diagnostico', e.target.value)} />
             <Textarea label="Serviço executado" rows={4} value={form.servicoExecutado} onChange={(e) => set('servicoExecutado', e.target.value)} />
@@ -337,7 +337,7 @@ export default function OsForm() {
         </div>
 
         <Secao titulo="Custos internos (fechamento)" descricao="Só para o cálculo do fechamento. Não aparecem na impressão da OS nem para o cliente. Podem ser lançados depois da OS concluída.">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <MoneyInput label="Custo da peça" value={form.custoPeca} onChange={(v) => set('custoPeca', v)} ajuda={form.custoPeca ? undefined : 'Vazio = usa o custo das peças cadastradas'} />
             <MoneyInput label="Custo de logística" value={form.custoLogistica} onChange={(v) => set('custoLogistica', v)} ajuda="Frete, motoboy, envio" />
             <MoneyInput label="Mão de obra de terceiro" value={form.custoMaoObraTerceiro} onChange={(v) => set('custoMaoObraTerceiro', v)} ajuda="Técnico ou laboratório de fora" />
@@ -350,7 +350,7 @@ export default function OsForm() {
         </Secao>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3 lg:left-64">
+      <div className="barra-fixa fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 pt-2.5 backdrop-blur sm:pt-3 lg:left-64">
         <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-2 sm:gap-3">
           <div className="min-w-0 text-xs text-slate-500 sm:text-sm">Total <span className="num font-semibold text-slate-900">{moeda(totais.total)}</span></div>
           <div className="flex shrink-0 gap-2">

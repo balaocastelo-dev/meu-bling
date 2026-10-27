@@ -245,7 +245,7 @@ export default function OsDetalhe() {
                   { rotulo: 'Estado físico', valor: os.estadoFisico, largo: true },
                 ]}
               />
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 lg:grid-cols-3">
                 {[
                   { t: 'Defeito relatado', v: os.defeitoRelatado },
                   { t: 'Diagnóstico técnico', v: os.diagnostico },
@@ -350,7 +350,7 @@ export default function OsDetalhe() {
                 <Button variante="secundario" icone={<Upload className="h-4 w-4" />} carregando={enviarAnexo.isPending} onClick={() => fileRef.current?.click()}>Enviar arquivo</Button>
               </div>
               {os.anexos?.length ? (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
                   {os.anexos.map((a) => {
                     const ehImagem = (a.mime ?? '').startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(a.nome);
                     const u = urlAnexo(a);

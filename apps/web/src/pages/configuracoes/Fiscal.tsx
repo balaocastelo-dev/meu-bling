@@ -72,14 +72,14 @@ export default function Fiscal() {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Secao titulo="Ambiente e provedor">
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <Select label="Ambiente" value={form.ambienteFiscal} onChange={(e) => set('ambienteFiscal', Number(e.target.value))} opcoes={[{ valor: 2, rotulo: '2 — Homologação (testes)' }, { valor: 1, rotulo: '1 — Produção' }]} />
               <Select label="Provedor" value={form.provedorFiscal} onChange={(e) => set('provedorFiscal', e.target.value as 'mock' | 'sefaz')} opcoes={[{ valor: 'mock', rotulo: 'Simulado (mock) — sem SEFAZ' }, { valor: 'sefaz', rotulo: 'SEFAZ direto (certificado A1)' }]} ajuda="Use “Simulado” para treinar sem transmitir." />
               <MoneyInput label="Alíquota Simples (%) p/ DRE" prefixo="" value={form.aliquotaSimplesPct} onChange={(v) => set('aliquotaSimplesPct', v)} />
             </div>
           </Secao>
           <Secao titulo="Séries e numeração">
-            <div className="grid gap-3 md:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Input label="Série NF-e" type="number" value={form.serieNfe} onChange={(e) => set('serieNfe', Number(e.target.value))} />
               <Input label="Próximo nº NF-e" type="number" value={form.proximoNumeroNfe} onChange={(e) => set('proximoNumeroNfe', Number(e.target.value))} />
               <Input label="Série NFC-e" type="number" value={form.serieNfce} onChange={(e) => set('serieNfce', Number(e.target.value))} />
@@ -88,14 +88,14 @@ export default function Fiscal() {
             <p className="mt-2 text-xs text-slate-400">Ao migrar do Bling, informe o próximo número para continuar a sequência sem inutilizações.</p>
           </Secao>
           <Secao titulo="NFC-e — CSC (Código de Segurança do Contribuinte)">
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <Input label="ID do CSC" value={form.cscId ?? ''} onChange={(e) => set('cscId', e.target.value)} placeholder="000001" />
-              <Input className="md:col-span-2" label="Token CSC" type="password" value={form.cscToken} onChange={(e) => set('cscToken', e.target.value)} placeholder={emp?.cscToken ? '•••••••• (já cadastrado — preencha para trocar)' : 'Token obtido no portal da SEFAZ'} autoComplete="new-password" />
+              <Input className="xl:col-span-2" label="Token CSC" type="password" value={form.cscToken} onChange={(e) => set('cscToken', e.target.value)} placeholder={emp?.cscToken ? '•••••••• (já cadastrado — preencha para trocar)' : 'Token obtido no portal da SEFAZ'} autoComplete="new-password" />
             </div>
           </Secao>
           <Secao titulo="Padrões de emissão (Simples Nacional)">
-            <div className="grid gap-3 md:grid-cols-4">
-              <Input className="md:col-span-2" label="Natureza da operação padrão" value={form.naturezaOperacaoPadrao} onChange={(e) => set('naturezaOperacaoPadrao', e.target.value)} />
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Input className="sm:col-span-2" label="Natureza da operação padrão" value={form.naturezaOperacaoPadrao} onChange={(e) => set('naturezaOperacaoPadrao', e.target.value)} />
               <Input label="CFOP dentro da UF" value={form.cfopPadraoDentroUf} onChange={(e) => set('cfopPadraoDentroUf', e.target.value)} />
               <Input label="CFOP fora da UF" value={form.cfopPadraoForaUf} onChange={(e) => set('cfopPadraoForaUf', e.target.value)} />
               <Input label="CSOSN padrão" value={form.csosnPadrao} onChange={(e) => set('csosnPadrao', e.target.value)} />

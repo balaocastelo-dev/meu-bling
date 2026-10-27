@@ -74,7 +74,7 @@ export default function PainelVendedor() {
       {!error && (
         <div className="space-y-4">
           {/* ---- vendas por período */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
             {(p?.periodos ?? Array.from({ length: 6 }, () => null)).map((per, i) => (
               <div key={per?.chave ?? i} className={clsx('v18-card v18-hover rounded-2xl border bg-white p-4 shadow-card', per?.chave === 'hoje' ? 'border-brand-200 ring-1 ring-brand-100' : 'border-slate-200')}>
                 {per ? (
@@ -213,7 +213,7 @@ function BlocoMeta({ meta }: { meta: MetaPainel }) {
         <div className={clsx('h-full rounded-full transition-all', r.barra)} style={{ width: `${Math.min(100, Math.max(1.5, meta.pct))}%` }} />
         {meta.ritmo !== 'batida' && <div className="absolute inset-y-0 w-0.5 bg-slate-500/70" style={{ left: `${esperadoPct}%` }} title={`Esperado até hoje: ${moeda(meta.esperadoAteHoje)}`} />}
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+      <div className="mt-3 grid grid-cols-2 gap-3 text-sm lg:grid-cols-4">
         <Info rotulo="Falta" valor={moeda(meta.falta)} />
         <Info rotulo="Precisa por dia" valor={meta.falta > 0 ? moeda(meta.porDia) : '—'} />
         <Info rotulo="Dias restantes" valor={inteiro(meta.diasRestantes)} />

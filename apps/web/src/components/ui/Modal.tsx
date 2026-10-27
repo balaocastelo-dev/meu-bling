@@ -18,6 +18,10 @@ interface ModalProps {
 
 const larguras = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' };
 
+/** Respiro do entalhe/barra de gestos do iPhone (viewport-fit=cover) */
+const seguroTopo = { paddingTop: 'max(1rem, env(safe-area-inset-top))' };
+const seguroRodape = { paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' };
+
 /** Modal centralizado — só para ações rápidas (mudar situação, baixar conta, ajuste de estoque...) */
 export function Modal({ aberto, onFechar, titulo, descricao, children, rodape, tamanho = 'md' }: ModalProps) {
   useEffect(() => {
@@ -35,28 +39,33 @@ export function Modal({ aberto, onFechar, titulo, descricao, children, rodape, t
   return createPortal(
     <AnimatePresence>
     {aberto && (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overscroll-contain sm:items-center" role="dialog" aria-modal="true">
       <motion.div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" onClick={onFechar} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} />
       <motion.div
         initial={{ opacity: 0, y: 24, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 16, scale: 0.98, transition: { duration: 0.15 } }}
         transition={mola}
-        className={clsx('relative m-0 flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-pop sm:m-4 sm:rounded-2xl', larguras[tamanho])}
+        className={clsx(
+          'relative m-0 flex w-full flex-col bg-white shadow-pop sm:m-4 sm:max-h-[92dvh] sm:rounded-2xl',
+          // celular: tela cheia com rolagem interna; o "sm" (confirmações curtas) fica como folha que sobe de baixo
+          tamanho === 'sm' ? 'max-h-[92dvh] rounded-t-2xl' : 'h-dvh max-h-dvh rounded-none sm:h-auto',
+          larguras[tamanho],
+        )}
       >
         {(titulo || descricao) && (
-          <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
-            <div>
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-5 max-sm:[padding-top:max(1rem,env(safe-area-inset-top))]">
+            <div className="min-w-0">
               {titulo && <h2 className="text-base font-semibold text-slate-900">{titulo}</h2>}
               {descricao && <p className="mt-0.5 text-sm text-slate-500">{descricao}</p>}
             </div>
-            <button onClick={onFechar} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="Fechar">
+            <button onClick={onFechar} className="-m-1.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 sm:m-0 sm:h-8 sm:w-8" aria-label="Fechar">
               <X className="h-5 w-5" />
             </button>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {rodape && <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">{rodape}</div>}
+        <div className={clsx('min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5', !rodape && 'max-sm:[padding-bottom:max(1rem,env(safe-area-inset-bottom))]')}>{children}</div>
+        {rodape && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-4 py-3 sm:px-5 max-sm:[padding-bottom:max(0.75rem,env(safe-area-inset-bottom))]">{rodape}</div>}
       </motion.div>
     </div>
     )}
@@ -84,19 +93,19 @@ export function Drawer({ aberto, onFechar, titulo, descricao, children, rodape, 
         animate={{ x: 0 }}
         exit={{ x: '100%', transition: { duration: 0.2 } }}
         transition={mola}
-        className={clsx('relative flex h-full w-full flex-col bg-white shadow-pop', largura)}
+        className={clsx('relative flex h-dvh w-full flex-col bg-white shadow-pop', largura)}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
-          <div>
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-5" style={seguroTopo}>
+          <div className="min-w-0">
             {titulo && <h2 className="text-base font-semibold text-slate-900">{titulo}</h2>}
             {descricao && <p className="mt-0.5 text-sm text-slate-500">{descricao}</p>}
           </div>
-          <button onClick={onFechar} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="Fechar">
+          <button onClick={onFechar} className="-m-1.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 sm:m-0 sm:h-8 sm:w-8" aria-label="Fechar">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {rodape && <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">{rodape}</div>}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5" style={rodape ? undefined : seguroRodape}>{children}</div>
+        {rodape && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-4 py-3 sm:px-5" style={seguroRodape}>{rodape}</div>}
       </motion.div>
     </div>
     )}

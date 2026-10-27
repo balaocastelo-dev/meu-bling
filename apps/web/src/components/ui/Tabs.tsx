@@ -13,7 +13,7 @@ export interface Aba {
 export function Tabs({ abas, ativa, onMudar, className }: { abas: Aba[]; ativa: string; onMudar: (id: string) => void; className?: string }) {
   const grupo = useId();
   return (
-    <div className={clsx('flex gap-1 overflow-x-auto border-b border-slate-200', className)} role="tablist">
+    <div className={clsx('flex gap-1 overflow-x-auto overscroll-x-contain border-b border-slate-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', className)} role="tablist">
       {abas.map((a) => {
         const sel = a.id === ativa;
         return (
@@ -23,7 +23,7 @@ export function Tabs({ abas, ativa, onMudar, className }: { abas: Aba[]; ativa: 
             aria-selected={sel}
             onClick={() => onMudar(a.id)}
             className={clsx(
-              'relative -mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm font-medium transition-colors',
+              'relative -mb-px inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm font-medium transition-colors',
               sel ? 'text-brand-700' : 'text-slate-500 hover:border-slate-300 hover:text-slate-700',
             )}
           >
@@ -53,7 +53,7 @@ export function Segmentado<T extends string>({ opcoes, valor, onMudar, className
           onClick={() => onMudar(o.valor)}
           className={clsx(
             'relative inline-flex items-center gap-1.5 rounded px-2.5 font-medium transition-colors whitespace-nowrap',
-            tamanho === 'xs' ? 'h-6 text-xs' : 'h-7 text-xs',
+            tamanho === 'xs' ? 'h-6 text-xs pointer-coarse:h-9' : 'h-7 text-xs pointer-coarse:h-9',
             o.valor === valor ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700',
           )}
         >

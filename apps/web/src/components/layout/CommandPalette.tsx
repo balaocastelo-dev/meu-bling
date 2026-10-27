@@ -110,10 +110,11 @@ export function CommandPalette({ aberto, onFechar }: { aberto: boolean; onFechar
   if (!aberto) return null;
   let grupoAnterior = '';
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-[12vh]">
+    // celular: tela cheia (teclado virtual ocupa metade da tela); do sm em diante: caixa flutuante
+    <div className="fixed inset-0 z-[60] flex items-start justify-center sm:p-4 sm:pt-[12vh]" role="dialog" aria-modal="true" aria-label="Busca">
       <div className="absolute inset-0 bg-slate-900/50" onClick={onFechar} />
-      <div className="relative w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-pop anim-in">
-        <div className="flex items-center gap-3 border-b border-slate-100 px-4">
+      <div className="relative flex h-dvh w-full max-w-xl flex-col overflow-hidden bg-white shadow-pop anim-in sm:h-auto sm:rounded-xl" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <div className="flex shrink-0 items-center gap-3 border-b border-slate-100 px-4">
           {carregando ? <Loader2 className="h-5 w-5 animate-spin text-slate-400" /> : <Search className="h-5 w-5 text-slate-400" />}
           <input
             ref={inputRef}
@@ -123,9 +124,12 @@ export function CommandPalette({ aberto, onFechar }: { aberto: boolean; onFechar
             placeholder="Buscar por nome, documento, código ou nº de venda/OS…"
             className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
           />
-          <kbd className="rounded border border-slate-200 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">Esc</kbd>
+          <kbd className="hidden rounded border border-slate-200 px-1.5 py-0.5 font-mono text-[10px] text-slate-400 sm:inline">Esc</kbd>
+          <button type="button" onClick={onFechar} className="-mr-2 inline-flex h-10 shrink-0 items-center px-2 text-sm font-medium text-slate-500 sm:hidden">
+            Fechar
+          </button>
         </div>
-        <div className="max-h-[60vh] overflow-y-auto py-2">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-2 sm:max-h-[60dvh] sm:flex-none" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
           {todos.length === 0 && !carregando && <p className="px-4 py-6 text-center text-sm text-slate-400">Nenhum resultado.</p>}
           {todos.map((r, i) => {
             const cab = r.grupo !== grupoAnterior;
@@ -136,7 +140,7 @@ export function CommandPalette({ aberto, onFechar }: { aberto: boolean; onFechar
                 <button
                   onMouseEnter={() => setAtivo(i)}
                   onClick={() => ir(r)}
-                  className={clsx('flex w-full items-center gap-3 px-4 py-2 text-left', i === ativo ? 'bg-brand-50' : 'hover:bg-slate-50')}
+                  className={clsx('flex w-full items-center gap-3 px-4 py-2 text-left pointer-coarse:py-2.5', i === ativo ? 'bg-brand-50' : 'hover:bg-slate-50')}
                 >
                   <span className={clsx('flex h-7 w-7 shrink-0 items-center justify-center rounded-md', i === ativo ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-500')}>{r.icone}</span>
                   <span className="min-w-0 flex-1">
