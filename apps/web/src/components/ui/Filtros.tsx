@@ -25,9 +25,9 @@ export function BuscaFiltro({ valor, onChange, placeholder = 'Buscar…', classN
   return (
     <div className={clsx('relative w-full sm:w-auto', className)}>
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-      <input autoFocus={autoFocus} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={placeholder} className="input-base h-9 w-full pl-8 pr-7 text-sm sm:h-8 sm:w-56 md:w-72" />
+      <input autoFocus={autoFocus} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={placeholder} className="input-base h-10 w-full pl-8 pr-9 text-sm sm:h-8 sm:w-56 sm:pr-7 md:w-72" />
       {texto && (
-        <button onClick={() => setTexto('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Limpar busca">
+        <button onClick={() => setTexto('')} className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center text-slate-400 hover:text-slate-600 sm:right-2 sm:h-auto sm:w-auto" aria-label="Limpar busca">
           <X className="h-3.5 w-3.5" />
         </button>
       )}
@@ -49,7 +49,7 @@ export function ChipsSituacao({ situacoes, valor, onChange, contagens }: { situa
       <button
         type="button"
         onClick={() => onChange('')}
-        className={clsx('rounded-full border px-2.5 py-0.5 text-xs font-medium transition', sel.size === 0 ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300')}
+        className={clsx('rounded-full border px-2.5 py-0.5 text-xs font-medium transition pointer-coarse:py-1.5', sel.size === 0 ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300')}
       >
         Todas
       </button>
@@ -60,7 +60,7 @@ export function ChipsSituacao({ situacoes, valor, onChange, contagens }: { situa
             key={s.id}
             type="button"
             onClick={() => alternar(s.id)}
-            className={clsx('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition', ativo ? 'border-transparent' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300')}
+            className={clsx('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition pointer-coarse:py-1.5', ativo ? 'border-transparent' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300')}
             style={ativo ? { backgroundColor: `${s.cor}26`, color: s.cor, borderColor: `${s.cor}66` } : undefined}
           >
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: s.cor }} />
@@ -161,7 +161,7 @@ export function PeriodoFiltro({ inicial, final, onChange, label = 'Período', at
                 type="button"
                 onClick={() => escolher(o.valor)}
                 aria-pressed={o.valor === ativo}
-                className={clsx('relative h-7 whitespace-nowrap rounded-full px-3 text-xs font-medium transition-colors', o.valor === ativo ? 'text-white' : 'text-slate-500 hover:text-slate-800')}
+                className={clsx('relative h-7 whitespace-nowrap rounded-full px-3 text-xs font-medium transition-colors pointer-coarse:h-9', o.valor === ativo ? 'text-white' : 'text-slate-500 hover:text-slate-800')}
               >
                 {o.valor === ativo && <motion.span layoutId={`periodo-${idPill}`} className="absolute inset-0 rounded-full bg-slate-900" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
                 <span className="relative">{o.rotulo}</span>

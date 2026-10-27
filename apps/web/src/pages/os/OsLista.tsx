@@ -95,7 +95,7 @@ function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; da
             <span className="text-sm font-semibold text-slate-800">{col.situacao.nome}</span>
             <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-500">{col.ordens.length}</span>
           </div>
-          <div className="flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2" style={{ maxHeight: 'calc(100vh - 260px)' }}>
+          <div className="flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2" style={{ maxHeight: 'calc(100dvh - 260px)' }}>
             {col.ordens.length === 0 && <p className="py-6 text-center text-xs text-slate-400">Arraste uma OS para cá</p>}
             {col.ordens.map((os) => (
               <CardOs

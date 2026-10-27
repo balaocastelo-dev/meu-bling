@@ -125,53 +125,53 @@ export default function ContatoForm() {
       />
       <div className="space-y-4">
         <Secao titulo="Identificação">
-          <div className="grid gap-3 md:grid-cols-12">
-            <Select className="md:col-span-3" label="Tipo de contato" value={form.tipo} onChange={(e) => set('tipo', e.target.value as TipoContato)} opcoes={[{ valor: 'CLIENTE', rotulo: 'Cliente' }, { valor: 'FORNECEDOR', rotulo: 'Fornecedor' }, { valor: 'TRANSPORTADORA', rotulo: 'Transportadora' }, { valor: 'AMBOS', rotulo: 'Cliente e fornecedor' }]} />
-            <Select className="md:col-span-2" label="Pessoa" value={form.tipoPessoa} onChange={(e) => set('tipoPessoa', e.target.value as Form['tipoPessoa'])} opcoes={[{ valor: 'F', rotulo: 'Física' }, { valor: 'J', rotulo: 'Jurídica' }, { valor: 'E', rotulo: 'Estrangeiro' }]} />
-            <Input className="md:col-span-7" label={ehJuridica ? 'Razão social' : 'Nome completo'} obrigatorio value={form.nome} onChange={(e) => set('nome', e.target.value)} autoFocus />
-            <Input className="md:col-span-4" label={ehJuridica ? 'Nome fantasia' : 'Apelido'} value={form.fantasia ?? ''} onChange={(e) => set('fantasia', e.target.value)} />
-            <Input className="md:col-span-3" label={ehJuridica ? 'CNPJ' : 'CPF'} value={form.documento ?? ''} onChange={(e) => set('documento', e.target.value)} inputMode="numeric" />
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
+            <Select className="xl:col-span-3" label="Tipo de contato" value={form.tipo} onChange={(e) => set('tipo', e.target.value as TipoContato)} opcoes={[{ valor: 'CLIENTE', rotulo: 'Cliente' }, { valor: 'FORNECEDOR', rotulo: 'Fornecedor' }, { valor: 'TRANSPORTADORA', rotulo: 'Transportadora' }, { valor: 'AMBOS', rotulo: 'Cliente e fornecedor' }]} />
+            <Select className="xl:col-span-2" label="Pessoa" value={form.tipoPessoa} onChange={(e) => set('tipoPessoa', e.target.value as Form['tipoPessoa'])} opcoes={[{ valor: 'F', rotulo: 'Física' }, { valor: 'J', rotulo: 'Jurídica' }, { valor: 'E', rotulo: 'Estrangeiro' }]} />
+            <Input className="sm:col-span-2 xl:col-span-7" label={ehJuridica ? 'Razão social' : 'Nome completo'} obrigatorio value={form.nome} onChange={(e) => set('nome', e.target.value)} autoFocus />
+            <Input className="xl:col-span-4" label={ehJuridica ? 'Nome fantasia' : 'Apelido'} value={form.fantasia ?? ''} onChange={(e) => set('fantasia', e.target.value)} />
+            <Input className="xl:col-span-3" label={ehJuridica ? 'CNPJ' : 'CPF'} value={form.documento ?? ''} onChange={(e) => set('documento', e.target.value)} inputMode="numeric" />
             {ehJuridica ? (
               <>
-                <Input className="md:col-span-3" label="Inscrição estadual" value={form.ie ?? ''} onChange={(e) => set('ie', e.target.value)} disabled={form.ieIsento} />
-                <div className="flex items-end pb-2 md:col-span-2"><Checkbox label="IE isento" checked={form.ieIsento} onChange={(e) => set('ieIsento', e.target.checked)} /></div>
+                <Input className="xl:col-span-3" label="Inscrição estadual" value={form.ie ?? ''} onChange={(e) => set('ie', e.target.value)} disabled={form.ieIsento} />
+                <div className="flex items-end pb-2 xl:col-span-2"><Checkbox label="IE isento" checked={form.ieIsento} onChange={(e) => set('ieIsento', e.target.checked)} /></div>
               </>
             ) : (
-              <Input className="md:col-span-3" label="RG" value={form.rg ?? ''} onChange={(e) => set('rg', e.target.value)} />
+              <Input className="xl:col-span-3" label="RG" value={form.rg ?? ''} onChange={(e) => set('rg', e.target.value)} />
             )}
-            <Select className="md:col-span-3" label="Indicador IE (NF-e)" value={form.indicadorIe} onChange={(e) => set('indicadorIe', Number(e.target.value))} opcoes={[{ valor: 9, rotulo: '9 — Não contribuinte' }, { valor: 1, rotulo: '1 — Contribuinte ICMS' }, { valor: 2, rotulo: '2 — Isento' }]} />
+            <Select className="xl:col-span-3" label="Indicador IE (NF-e)" value={form.indicadorIe} onChange={(e) => set('indicadorIe', Number(e.target.value))} opcoes={[{ valor: 9, rotulo: '9 — Não contribuinte' }, { valor: 1, rotulo: '1 — Contribuinte ICMS' }, { valor: 2, rotulo: '2 — Isento' }]} />
           </div>
         </Secao>
 
         <Secao titulo="Contato">
-          <div className="grid gap-3 md:grid-cols-12">
-            <Input className="md:col-span-3" label="Celular (WhatsApp)" value={form.celular ?? ''} onChange={(e) => set('celular', e.target.value)} placeholder="(19) 99999-9999" inputMode="tel" ajuda="Usado para notificações por WhatsApp" />
-            <Input className="md:col-span-3" label="Telefone" value={form.telefone ?? ''} onChange={(e) => set('telefone', e.target.value)} inputMode="tel" />
-            <Input className="md:col-span-6" label="E-mail" type="email" value={form.email ?? ''} onChange={(e) => set('email', e.target.value)} />
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
+            <Input className="xl:col-span-3" label="Celular (WhatsApp)" value={form.celular ?? ''} onChange={(e) => set('celular', e.target.value)} placeholder="(19) 99999-9999" inputMode="tel" ajuda="Usado para notificações por WhatsApp" />
+            <Input className="xl:col-span-3" label="Telefone" value={form.telefone ?? ''} onChange={(e) => set('telefone', e.target.value)} inputMode="tel" />
+            <Input className="xl:col-span-6" label="E-mail" type="email" value={form.email ?? ''} onChange={(e) => set('email', e.target.value)} />
           </div>
         </Secao>
 
         <Secao titulo="Endereço">
-          <div className="grid gap-3 md:grid-cols-12">
-            <div className="md:col-span-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
+            <div className="xl:col-span-3">
               <Input label="CEP" value={form.cep ?? ''} onChange={(e) => set('cep', e.target.value)} inputMode="numeric" sufixo={<button type="button" onClick={buscarCep} className="pointer-events-auto text-brand-600 hover:text-brand-700" title="Buscar CEP">{buscandoCep ? '…' : <Search className="h-4 w-4" />}</button>} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), buscarCep())} />
             </div>
-            <Input className="md:col-span-6" label="Logradouro" value={form.logradouro ?? ''} onChange={(e) => set('logradouro', e.target.value)} />
-            <Input className="md:col-span-1" label="Nº" value={form.numero ?? ''} onChange={(e) => set('numero', e.target.value)} />
-            <Input className="md:col-span-2" label="Complemento" value={form.complemento ?? ''} onChange={(e) => set('complemento', e.target.value)} />
-            <Input className="md:col-span-4" label="Bairro" value={form.bairro ?? ''} onChange={(e) => set('bairro', e.target.value)} />
-            <Input className="md:col-span-4" label="Município" value={form.municipio ?? ''} onChange={(e) => set('municipio', e.target.value)} />
-            <Select className="md:col-span-2" label="UF" value={form.uf ?? ''} onChange={(e) => set('uf', e.target.value)} opcoes={UFS.map((u) => ({ valor: u, rotulo: u }))} placeholder="—" />
-            <Input className="md:col-span-2" label="Cód. IBGE" value={form.codigoMunicipio ?? ''} onChange={(e) => set('codigoMunicipio', e.target.value)} />
+            <Input className="xl:col-span-6" label="Logradouro" value={form.logradouro ?? ''} onChange={(e) => set('logradouro', e.target.value)} />
+            <Input className="xl:col-span-1" label="Nº" value={form.numero ?? ''} onChange={(e) => set('numero', e.target.value)} />
+            <Input className="xl:col-span-2" label="Complemento" value={form.complemento ?? ''} onChange={(e) => set('complemento', e.target.value)} />
+            <Input className="xl:col-span-4" label="Bairro" value={form.bairro ?? ''} onChange={(e) => set('bairro', e.target.value)} />
+            <Input className="xl:col-span-4" label="Município" value={form.municipio ?? ''} onChange={(e) => set('municipio', e.target.value)} />
+            <Select className="xl:col-span-2" label="UF" value={form.uf ?? ''} onChange={(e) => set('uf', e.target.value)} opcoes={UFS.map((u) => ({ valor: u, rotulo: u }))} placeholder="—" />
+            <Input className="xl:col-span-2" label="Cód. IBGE" value={form.codigoMunicipio ?? ''} onChange={(e) => set('codigoMunicipio', e.target.value)} />
           </div>
         </Secao>
 
         <Secao titulo="Comercial">
-          <div className="grid gap-3 md:grid-cols-12">
-            <Select className="md:col-span-4" label="Vendedor responsável" value={form.vendedorId ?? ''} onChange={(e) => set('vendedorId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(vendedores)} placeholder="—" />
-            <MoneyInput className="md:col-span-3" label="Limite de crédito" value={form.limiteCredito} onChange={(v) => set('limiteCredito', v)} />
-            <div className="flex items-end pb-2 md:col-span-2"><Checkbox label="Ativo" checked={form.ativo} onChange={(e) => set('ativo', e.target.checked)} /></div>
-            <Textarea className="md:col-span-12" label="Observações" rows={3} value={form.observacoes ?? ''} onChange={(e) => set('observacoes', e.target.value)} />
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
+            <Select className="xl:col-span-4" label="Vendedor responsável" value={form.vendedorId ?? ''} onChange={(e) => set('vendedorId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(vendedores)} placeholder="—" />
+            <MoneyInput className="xl:col-span-3" label="Limite de crédito" value={form.limiteCredito} onChange={(v) => set('limiteCredito', v)} />
+            <div className="flex items-end pb-2 xl:col-span-2"><Checkbox label="Ativo" checked={form.ativo} onChange={(e) => set('ativo', e.target.checked)} /></div>
+            <Textarea className="sm:col-span-2 xl:col-span-12" label="Observações" rows={3} value={form.observacoes ?? ''} onChange={(e) => set('observacoes', e.target.value)} />
           </div>
         </Secao>
       </div>

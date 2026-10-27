@@ -8,7 +8,7 @@ export function Skeleton({ className }: { className?: string }) {
 export function PaginaSkeleton() {
   return (
     <div className="space-y-4 anim-in">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-20" />
         ))}

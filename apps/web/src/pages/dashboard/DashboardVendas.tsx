@@ -51,7 +51,7 @@ export default function DashboardVendas() {
         </div>
       </Aparecer>
 
-      <Grupo className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <KpiV18 rotulo="Faturamento" valor={r?.faturamento} anterior={comp?.faturamento} formato={moeda} icone={<CircleDollarSign className="h-4 w-4" />} tom="verde" carregando={isLoading} sub="vs. período anterior" />
         <KpiV18 rotulo="Vendas" valor={r?.qtdVendas} anterior={comp?.qtdVendas} formato={qtd} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={isLoading} onClick={() => nav('/vendas')} />
         <KpiV18 rotulo="Ticket médio" valor={r?.ticketMedio} anterior={comp?.ticketMedio} formato={moeda} icone={<Receipt className="h-4 w-4" />} tom="vermelho" carregando={isLoading} />
@@ -180,7 +180,7 @@ export default function DashboardVendas() {
         {isLoading ? (
           <Skeleton className="h-48" />
         ) : data?.topProdutos.length ? (
-          <motion.div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" variants={listaVariants} initial="oculto" animate="visivel">
+          <motion.div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5" variants={listaVariants} initial="oculto" animate="visivel">
             {data.topProdutos.map((p, i) => (
               <motion.div
                 key={p.produtoId ?? `p-${i}`}

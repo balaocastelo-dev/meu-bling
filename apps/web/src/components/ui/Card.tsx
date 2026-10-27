@@ -46,7 +46,7 @@ export function Secao({ titulo, descricao, children, className, acoes }: { titul
 
 /** Lista de pares rótulo/valor (ficha) */
 export function Definicoes({ itens, colunas = 2, className }: { itens: { rotulo: ReactNode; valor: ReactNode; largo?: boolean }[]; colunas?: 1 | 2 | 3 | 4; className?: string }) {
-  const grid = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-2 sm:grid-cols-3', 4: 'grid-cols-2 sm:grid-cols-4' }[colunas];
+  const grid = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-2 lg:grid-cols-3', 4: 'grid-cols-2 lg:grid-cols-4' }[colunas];
   return (
     <dl className={clsx('grid gap-x-4 gap-y-3 sm:gap-x-6', grid, className)}>
       {itens.map((it, i) => (

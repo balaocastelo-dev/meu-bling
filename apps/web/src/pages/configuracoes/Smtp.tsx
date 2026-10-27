@@ -50,13 +50,13 @@ export default function Smtp() {
       <PageHeader migalhas={[{ rotulo: 'Configurações', para: '/configuracoes' }, { rotulo: 'E-mail (SMTP)' }]} titulo="E-mail (SMTP)" descricao="Servidor usado para enviar pedidos, NF-e (XML+DANFE) e notificações por e-mail." acoes={<Button variante="primario" icone={<Save className="h-4 w-4" />} carregando={salvar.isPending} onClick={() => salvar.mutate(form)}>Salvar</Button>} />
       <div className="space-y-4">
         <Secao titulo="Servidor" acoes={<Switch checked={form.smtpAtivo} onChange={(v) => set('smtpAtivo', v)} label={form.smtpAtivo ? 'Ativo' : 'Inativo'} />}>
-          <div className="grid gap-3 md:grid-cols-6">
-            <Input className="md:col-span-4" label="Host" value={form.smtpHost} onChange={(e) => set('smtpHost', e.target.value)} placeholder="smtp.gmail.com" />
-            <Input className="md:col-span-1" label="Porta" type="number" value={form.smtpPort} onChange={(e) => set('smtpPort', Number(e.target.value))} />
-            <div className="flex items-end pb-2 md:col-span-1"><Checkbox label="SSL/TLS" checked={form.smtpSecure} onChange={(e) => set('smtpSecure', e.target.checked)} /></div>
-            <Input className="md:col-span-3" label="Usuário" value={form.smtpUser} onChange={(e) => set('smtpUser', e.target.value)} autoComplete="off" />
-            <Input className="md:col-span-3" label="Senha" type="password" value={form.smtpPass} onChange={(e) => set('smtpPass', e.target.value)} placeholder={emp?.smtp?.temSenha ? '•••••••• (cadastrada — preencha para trocar)' : ''} autoComplete="new-password" />
-            <Input className="md:col-span-6" label="Remetente (From)" value={form.smtpFrom} onChange={(e) => set('smtpFrom', e.target.value)} placeholder='"Balão da Informática" <contato@balao.info>' />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <Input className="sm:col-span-2 lg:col-span-4" label="Host" value={form.smtpHost} onChange={(e) => set('smtpHost', e.target.value)} placeholder="smtp.gmail.com" />
+            <Input className="lg:col-span-1" label="Porta" type="number" value={form.smtpPort} onChange={(e) => set('smtpPort', Number(e.target.value))} />
+            <div className="flex items-end pb-2 lg:col-span-1"><Checkbox label="SSL/TLS" checked={form.smtpSecure} onChange={(e) => set('smtpSecure', e.target.checked)} /></div>
+            <Input className="lg:col-span-3" label="Usuário" value={form.smtpUser} onChange={(e) => set('smtpUser', e.target.value)} autoComplete="off" />
+            <Input className="lg:col-span-3" label="Senha" type="password" value={form.smtpPass} onChange={(e) => set('smtpPass', e.target.value)} placeholder={emp?.smtp?.temSenha ? '•••••••• (cadastrada — preencha para trocar)' : ''} autoComplete="new-password" />
+            <Input className="sm:col-span-2 lg:col-span-6" label="Remetente (From)" value={form.smtpFrom} onChange={(e) => set('smtpFrom', e.target.value)} placeholder='"Balão da Informática" <contato@balao.info>' />
           </div>
           <p className="mt-2 text-xs text-slate-400">Gmail: use uma “senha de app” com porta 587 (STARTTLS) ou 465 (SSL).</p>
         </Secao>

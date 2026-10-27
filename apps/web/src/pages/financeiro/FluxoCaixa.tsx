@@ -55,7 +55,7 @@ export default function FluxoCaixa() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard rotulo="Saldo inicial" valor={moeda(data?.saldoInicial)} carregando={isLoading} />
         <StatCard rotulo="Entradas" valor={moeda(totEntradas)} tom="verde" carregando={isLoading} />
         <StatCard rotulo="Saídas" valor={moeda(totSaidas)} tom="vermelho" carregando={isLoading} />

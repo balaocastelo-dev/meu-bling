@@ -101,16 +101,16 @@ export default function NotaForm() {
       />
       <div className="space-y-4">
         <Secao titulo="Cabeçalho">
-          <div className="grid gap-3 md:grid-cols-12">
-            <Select className="md:col-span-2" label="Modelo" value={form.modelo} onChange={(e) => set('modelo', Number(e.target.value) as 55 | 65)} opcoes={[{ valor: 55, rotulo: 'NF-e (55)' }, { valor: 65, rotulo: 'NFC-e (65)' }]} />
-            <Select className="md:col-span-2" label="Tipo" value={form.tipo} onChange={(e) => set('tipo', Number(e.target.value) as 0 | 1)} opcoes={[{ valor: 1, rotulo: 'Saída' }, { valor: 0, rotulo: 'Entrada' }]} />
-            <SearchSelect className="md:col-span-5" label="Destinatário" obrigatorio={form.modelo === 55} valor={form.contatoId} rotuloAtual={contatoNome} onChange={(v, op) => { set('contatoId', v); setContatoNome(op?.rotulo ?? null); }} buscar={(t) => buscarContatos(t)} placeholder={form.modelo === 65 ? 'Opcional (consumidor final)' : 'Buscar…'} />
-            <Select className="md:col-span-3" label="Finalidade" value={form.finalidade} onChange={(e) => set('finalidade', Number(e.target.value))} opcoes={[{ valor: 1, rotulo: '1 — Normal' }, { valor: 2, rotulo: '2 — Complementar' }, { valor: 3, rotulo: '3 — Ajuste' }, { valor: 4, rotulo: '4 — Devolução' }]} />
-            <Input className="md:col-span-5" label="Natureza da operação" value={form.naturezaOperacao} onChange={(e) => set('naturezaOperacao', e.target.value)} />
-            <Select className="md:col-span-3" label="Forma de pagamento (tPag)" value={form.formaPagamentoFiscal} onChange={(e) => set('formaPagamentoFiscal', e.target.value)} opcoes={TPAG} />
-            <MoneyInput className="md:col-span-2" label="Frete" value={form.valorFrete} onChange={(v) => set('valorFrete', v)} />
-            <MoneyInput className="md:col-span-2" label="Desconto" value={form.valorDesconto} onChange={(v) => set('valorDesconto', v)} />
-            <Textarea className="md:col-span-12" label="Informações complementares" rows={2} value={form.informacoesComplementares} onChange={(e) => set('informacoesComplementares', e.target.value)} />
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
+            <Select className="xl:col-span-2" label="Modelo" value={form.modelo} onChange={(e) => set('modelo', Number(e.target.value) as 55 | 65)} opcoes={[{ valor: 55, rotulo: 'NF-e (55)' }, { valor: 65, rotulo: 'NFC-e (65)' }]} />
+            <Select className="xl:col-span-2" label="Tipo" value={form.tipo} onChange={(e) => set('tipo', Number(e.target.value) as 0 | 1)} opcoes={[{ valor: 1, rotulo: 'Saída' }, { valor: 0, rotulo: 'Entrada' }]} />
+            <SearchSelect className="xl:col-span-5" label="Destinatário" obrigatorio={form.modelo === 55} valor={form.contatoId} rotuloAtual={contatoNome} onChange={(v, op) => { set('contatoId', v); setContatoNome(op?.rotulo ?? null); }} buscar={(t) => buscarContatos(t)} placeholder={form.modelo === 65 ? 'Opcional (consumidor final)' : 'Buscar…'} />
+            <Select className="xl:col-span-3" label="Finalidade" value={form.finalidade} onChange={(e) => set('finalidade', Number(e.target.value))} opcoes={[{ valor: 1, rotulo: '1 — Normal' }, { valor: 2, rotulo: '2 — Complementar' }, { valor: 3, rotulo: '3 — Ajuste' }, { valor: 4, rotulo: '4 — Devolução' }]} />
+            <Input className="xl:col-span-5" label="Natureza da operação" value={form.naturezaOperacao} onChange={(e) => set('naturezaOperacao', e.target.value)} />
+            <Select className="xl:col-span-3" label="Forma de pagamento (tPag)" value={form.formaPagamentoFiscal} onChange={(e) => set('formaPagamentoFiscal', e.target.value)} opcoes={TPAG} />
+            <MoneyInput className="xl:col-span-2" label="Frete" value={form.valorFrete} onChange={(v) => set('valorFrete', v)} />
+            <MoneyInput className="xl:col-span-2" label="Desconto" value={form.valorDesconto} onChange={(v) => set('valorDesconto', v)} />
+            <Textarea className="sm:col-span-2 xl:col-span-12" label="Informações complementares" rows={2} value={form.informacoesComplementares} onChange={(e) => set('informacoesComplementares', e.target.value)} />
           </div>
         </Secao>
 

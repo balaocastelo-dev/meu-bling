@@ -30,6 +30,13 @@ Arquivos: `apps/api/testes/` (rodar.ts, lib.ts, rotas.ts, regras-vendas.ts, tela
 - `.input-base` e `.tbl` ficam em `@layer components`: um `w-36`, `py-0` ou `text-right` no className vale por cima delas.
 - Itens de `grid` têm `min-width: 0` e o conteúdo quebra palavra comprida (`overflow-wrap`), ambos na camada base.
 - Formulários: grade de 2 colunas até 1280 px e de 12 colunas acima (`sm:grid-cols-2 xl:grid-cols-12`).
+- Grades de 3–4 colunas (cards de indicadores, campos) viram 2 no tablet: use `lg:grid-cols-3`/`lg:grid-cols-4` (ou `xl:`), nunca `sm:`/`md:` com 3+ colunas.
+- **Menu**: até 1024 px é gaveta (botão ☰), fecha ao escolher item, tocar fora ou Esc; acima fica fixo.
+- **Modal** fica em tela cheia no celular com rolagem interna (o `tamanho="sm"` sobe como folha de baixo); `Drawer` e busca (Ctrl+K) também ocupam a tela toda no celular.
+- **Toque**: em tela de toque (`pointer-coarse:`) botões, itens de menu e campos têm no mínimo 40 px; no celular campos têm fonte de 16 px (sem zoom do iPhone). No computador nada muda.
+- **Barra fixa de Salvar** (venda/compra/OS): classe `barra-fixa` + `espaco-barra-fixa` no conteúdo, ambas com `env(safe-area-inset-bottom)`.
+- Altura de tela cheia com `dvh` (`min-h-dvh`, `h-dvh`), não `vh`/`h-screen`. O `index.html` tem `viewport-fit=cover`, então algo fixo no topo/rodapé precisa de `env(safe-area-inset-*)`.
+- Animação de entrada com `animation-fill-mode: backwards`, nunca `both`/`forwards` em bloco de página: o transform que sobra prende o `position: fixed` dos filhos.
 
 ## Saúde do sistema (dados reais)
 Configurações → **Saúde do sistema** (só ADMIN) confere os dados de produção, só lendo, e lista o que corrigir com link: vendedor sem cadastro, venda sem vendedor, venda fechada sem lançamentos, cancelada ainda lançada, parcelas ≠ total, venda parada em aberto, comissão de venda cancelada, conta a receber de venda cancelada, saldo de conta ≠ movimentos, estoque negativo ou ≠ histórico, NF rejeitada/parada, produto sem NCM, certificado, OS atrasada. Roda sozinha a cada 6 horas e avisa no dashboard.
