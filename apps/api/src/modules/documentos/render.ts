@@ -13,6 +13,7 @@ import { COR_MARCA, INSTITUCIONAL, OFERTA_LICENCA, TEMAS } from './config.js';
 import type { ContextoDoc, ItemDoc } from './dados.js';
 import { cantoneira, ICONE_ALERTA, ICONE_ESCUDO, ICONE_JANELA, ICONE_OK, ICONE_X, ICONES, ICONES_SERVICOS, selo } from './icones.js';
 import { VERSICULOS, type Versiculo } from './versiculos.js';
+import { fotoDoTipo } from './fotos.js';
 
 export type FormatoDoc = 'cupom' | 'a4' | 'garantia';
 
@@ -162,8 +163,10 @@ table.itens img { width: 34px; height: 34px; object-fit: contain; border-radius:
 .cert .declara { text-align: center; font-family: Georgia, serif; font-size: 13px; line-height: 1.55; color: #1f2937; margin: 3px 30px 0; }
 .cert .declara b { color: var(--cor); }
 .cert .corpo { flex: 1; display: grid; grid-template-columns: 62mm 1fr 46mm; gap: 7mm; align-items: stretch; margin-top: 4mm; min-height: 0; }
-.cert .foto { min-height: 52mm; border-radius: 6px; border: 1px solid #e5e7eb; background: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--cor); }
-.cert .foto img { max-width: 100%; max-height: 100%; object-fit: contain; } .cert .foto svg { width: 70%; height: 70%; }
+.cert .foto { min-height: 52mm; border-radius: 8px; border: 2px solid var(--cor2); background: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--cor); position: relative; box-shadow: 0 2px 10px rgba(0,0,0,.12); }
+.cert .foto img.tipo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cert .foto img.prod { position: absolute; right: 5px; bottom: 5px; width: 34%; aspect-ratio: 1; object-fit: contain; background: #fff; border-radius: 6px; border: 1.5px solid var(--cor2); padding: 2px; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+.cert .foto img.unica { max-width: 100%; max-height: 100%; object-fit: contain; } .cert .foto svg { width: 70%; height: 70%; }
 .cert .ficha { border-left: 3px solid var(--cor); padding-left: 12px; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
 .cert .ficha .prod { font-size: 20px; font-weight: 800; color: #111; line-height: 1.25; }
 .cert .ficha table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -363,6 +366,12 @@ function cupom80(c: ContextoDoc, vers: () => Versiculo): string {
 // =====================================================================================================
 // CERTIFICADO DE GARANTIA (A4 paisagem, emoldurado)
 // =====================================================================================================
+/** foto realista do tipo (PC, PC Gamer...) ocupando o quadro; a foto do produto do site entra num canto */
+function fotoCert(i: ItemDoc): string {
+  const tipo = fotoDoTipo(i.tipo!);
+  if (tipo) return `<img class="tipo" src="${tipo}" alt="">${i.imagemUrl ? `<img class="prod" src="${esc(i.imagemUrl)}" alt="">` : ''}`;
+  return i.imagemUrl ? `<img class="unica" src="${esc(i.imagemUrl)}" alt="">` : ICONES[i.tipo!];
+}
 function certificado(c: ContextoDoc, i: ItemDoc, nCert: number, vers: () => Versiculo): string {
   const tema = TEMAS[i.tipo!];
   const v = c.venda;
@@ -394,7 +403,7 @@ function certificado(c: ContextoDoc, i: ItemDoc, nCert: number, vers: () => Vers
       <div class="declara">Certificamos que o equipamento abaixo foi adquirido no <b>${esc(c.emp.nome)}</b>, conferido e entregue em perfeito funcionamento,
         e está coberto por garantia de <b>${esc(g.texto)}</b> contra defeitos de fabricação, de <b>${dataExtenso(v.data)}</b> a <b>${dataExtenso(g.validaAte)}</b>.</div>
       <div class="corpo">
-        <div class="foto">${i.imagemUrl ? `<img src="${esc(i.imagemUrl)}" alt="">` : ICONES[i.tipo!]}</div>
+        <div class="foto">${fotoCert(i)}</div>
         <div class="ficha">
           <div class="prod">${esc(i.descricao)}</div>
           <table>${linhas.map(([r, val]) => `<tr><td>${esc(r)}</td><td>${esc(val)}</td></tr>`).join('')}</table>
