@@ -16,11 +16,13 @@ async function main() {
   secao('Regras puras: NCM pelo nome e CFOP');
   const casos: [string, string | null][] = [
     ['Notebook Dell Inspiron 15 i5 8GB SSD 256GB', '84713012'],
-    ['SSD Kingston 480GB para notebook', '85235110'],
+    ['SSD Kingston 480GB para notebook', '84717040'],
+    ['Notebook Lenovo IdeaPad 15,6 pol i5', '84713019'],
+    ['Monitor LG 24 polegadas', '85285200'],
     ['Capinha iPhone 13 transparente', '39269090'],
     ['Cabo carregador USB-C 1m', '85444200'],
     ['Apple iPhone 15 128GB', '85171300'],
-    ['Tela Frontal iPhone 11', '85177900'],
+    ['Tela Frontal iPhone 11', '85249100'],
     ['Suporte para notebook', null],
     ['Produto misterioso xyz', null],
   ];
@@ -97,6 +99,15 @@ async function main() {
   const r3 = await adm.post(`/vendas/${v3.id}/emitir-nf`, {}, 200);
   const nota3 = await adm.get(`/notas-fiscais/${r3.notaId}`);
   verifica(nota3.itens?.[0]?.cfop === '6108', 'NF para pessoa física de outro estado sai com CFOP 6108', nota3.itens?.[0]);
+
+  secao('NCM extinto (SH 2022): checklist aponta e o robô sugere o novo');
+  const prodX = await adm.post('/produtos', { nome: `Monitor antigo robo ${SUF}`, codigo: `ROBOX-${SUF}`, preco: 700, ncm: '85285220', controlaEstoque: false }, 201);
+  const vX = await adm.post('/vendas', { contatoId: cli.id, data: hoje(), itens: [{ produtoId: prodX.id, descricao: prodX.nome, quantidade: 1, valorUnitario: 700 }], parcelas: [{ dataVencimento: hoje(), valor: 700, formaPagamentoId: pix.id }] }, 201);
+  const chk = await adm.get(`/vendas/${vX.id}/nfe/verificar`);
+  verifica((chk.pendencias as any[]).some((x) => x.codigo === 'PRODUTO_NCM_EXTINTO'), 'checklist da NF aponta NCM 8528.52.20 extinto', chk.pendencias);
+  await adm.post(`/vendas/${vX.id}/robo-nf/conferir`);
+  const pX = await adm.get(`/produtos/${prodX.id}`);
+  verifica(pX.ncm === '85285200' && pX.ncmOrigem === 'SUGERIDO', 'robô sugere 8528.52.00 (falta confirmar)', { ncm: pX.ncm, origem: pX.ncmOrigem });
 
   secao('Orçamento não entra no robô');
   const orc = await adm.post('/vendas', { tipo: 'ORCAMENTO', contatoId: cli.id, data: hoje(), itens: [{ produtoId: prod.id, descricao: prod.nome, quantidade: 1, valorUnitario: 3000 }] }, 201);

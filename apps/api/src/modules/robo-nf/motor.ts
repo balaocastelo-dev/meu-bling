@@ -16,7 +16,7 @@ import { prisma } from '../../lib/prisma.js';
 import { auditar } from '../../lib/auditoria.js';
 import { verificarNfe, type PendenciaNfe } from '../comum/nfe-checagem.js';
 import { completarCliente } from './cliente.js';
-import { formatarNcm, ncmValido, sugerirNcm } from './ncm.js';
+import { formatarNcm, NCM_EXTINTOS, ncmValido, ncmVigente, sugerirNcm } from './ncm.js';
 
 export type StatusRobo = 'PRONTA' | 'PENDENTE' | 'EMITIDA' | 'IGNORADA';
 
@@ -77,12 +77,22 @@ async function completarProdutos(produtoIds: number[]): Promise<string[]> {
   });
   const feito: string[] = [];
   for (const p of produtos) {
+    // NCM extinto na tabela oficial (ex.: 8528.52.20 → 8528.52.00): a SEFAZ rejeitaria
+    if (ncmValido(p.ncm) && ncmVigente(p.ncm) === false) {
+      const antigo = (p.ncm || '').replace(/\D/g, '');
+      const novo = NCM_EXTINTOS[antigo] ?? (await sugerirNcm(prisma, p))?.ncm;
+      if (novo) {
+        await prisma.produto.update({ where: { id: p.id }, data: { ncm: novo, ncmOrigem: 'SUGERIDO' } });
+        feito.push(`Produto ${p.nome} — NCM ${formatarNcm(antigo)} não existe mais; SUGERIDO ${formatarNcm(novo)}: falta confirmar`);
+      }
+      continue;
+    }
     if (ncmValido(p.ncm)) continue; // já tem NCM: o robô nunca troca
     const s = await sugerirNcm(prisma, p);
     if (!s) continue;
     await prisma.produto.update({ where: { id: p.id }, data: { ncm: s.ncm, ncmOrigem: s.origem } });
     feito.push(
-      s.origem === 'HISTORICO'
+      s.origem !== 'SUGERIDO'
         ? `Produto ${p.nome} — NCM ${formatarNcm(s.ncm)} (${s.motivo})`
         : `Produto ${p.nome} — NCM ${formatarNcm(s.ncm)} SUGERIDO ${s.motivo}: falta confirmar`,
     );

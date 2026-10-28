@@ -71,7 +71,7 @@ async function main() {
   const forn = await req('POST', '/contatos', { nome: `Fornecedor Smoke ${SUF}`, tipo: 'FORNECEDOR', tipoPessoa: 'J', documento: `11222333${SUF}` }, 201);
 
   console.log('== Produtos / estoque');
-  const prod = await req('POST', '/produtos', { nome: `PRODUTO SMOKE SSD ${SUF}`, codigo: `SMK-${SUF}`, preco: 300, precoCusto: 200, ncm: '84717012', csosn: '102', estoqueMinimo: 1 }, 201);
+  const prod = await req('POST', '/produtos', { nome: `PRODUTO SMOKE SSD ${SUF}`, codigo: `SMK-${SUF}`, preco: 300, precoCusto: 200, ncm: '84717040', csosn: '102', estoqueMinimo: 1 }, 201);
   const dep = depositos.find((d: any) => d.padrao)?.id ?? depositos[0].id;
   await req('POST', '/estoque/ajuste', { produtoId: prod.id, depositoId: dep, tipo: 'ENTRADA', quantidade: 10, custoUnitario: 200, observacao: 'smoke' }, [200, 201]);
   const p = await req('GET', `/produtos/${prod.id}`);

@@ -411,13 +411,13 @@ async function demo() {
   const vend2 = await prisma.vendedor.create({ data: { nome: 'Vendedora Ana', comissaoPadraoPct: 3 } });
 
   const produtos = await Promise.all([
-    prisma.produto.create({ data: { nome: 'DESKTOP OFFICE INTEL CORE I5 6ª / 16GB DDR4 / SSD 240GB NVME / FONTE 200W', codigo: 'DT-I5-16-240', preco: 2349, precoCusto: 1650, ncm: '84714110', csosn: '102', categoriaId: await cat('Computadores'), garantiaDias: 365 } }),
+    prisma.produto.create({ data: { nome: 'DESKTOP OFFICE INTEL CORE I5 6ª / 16GB DDR4 / SSD 240GB NVME / FONTE 200W', codigo: 'DT-I5-16-240', preco: 2349, precoCusto: 1650, ncm: '84715010', csosn: '102', categoriaId: await cat('Computadores'), garantiaDias: 365 } }),
     prisma.produto.create({ data: { nome: 'PACOTE LICENÇA MICROSOFT WINDOWS 11 PRO + OFFICE 2021 PRO', codigo: 'LIC-W11-OFF21', preco: 599, precoCusto: 180, ncm: '85234990', csosn: '102', categoriaId: await cat('Licenças e software'), controlaEstoque: false } }),
-    prisma.produto.create({ data: { nome: 'MONITOR LED 23" HDMI E VGA', codigo: 'MON-23-LED', preco: 699, precoCusto: 480, ncm: '85285220', csosn: '102', categoriaId: await cat('Monitores') } }),
+    prisma.produto.create({ data: { nome: 'MONITOR LED 23" HDMI E VGA', codigo: 'MON-23-LED', preco: 699, precoCusto: 480, ncm: '85285200', csosn: '102', categoriaId: await cat('Monitores') } }),
     prisma.produto.create({ data: { nome: 'FONE DE OUVIDO JBL TUNE 520BT BLUETOOTH', codigo: 'JBL-520BT', preco: 199, precoCusto: 120, ncm: '85183000', csosn: '102', categoriaId: await cat('Áudio') } }),
-    prisma.produto.create({ data: { nome: 'SSD NVME 1TB KINGSTON NV3', codigo: 'SSD-NV3-1TB', preco: 449, precoCusto: 300, ncm: '84717012', csosn: '102', categoriaId: await cat('Peças e componentes'), estoqueMinimo: 3 } }),
-    prisma.produto.create({ data: { nome: 'MEMÓRIA RAM 16GB DDR4 3200 KINGSTON FURY', codigo: 'RAM-16-DDR4', preco: 289, precoCusto: 190, ncm: '84733041', csosn: '102', categoriaId: await cat('Peças e componentes'), estoqueMinimo: 4 } }),
-    prisma.produto.create({ data: { nome: 'TECLADO + MOUSE SEM FIO LOGITECH MK270', codigo: 'LOG-MK270', preco: 189, precoCusto: 110, ncm: '84716053', csosn: '102', categoriaId: await cat('Periféricos') } }),
+    prisma.produto.create({ data: { nome: 'SSD NVME 1TB KINGSTON NV3', codigo: 'SSD-NV3-1TB', preco: 449, precoCusto: 300, ncm: '84717040', csosn: '102', categoriaId: await cat('Peças e componentes'), estoqueMinimo: 3 } }),
+    prisma.produto.create({ data: { nome: 'MEMÓRIA RAM 16GB DDR4 3200 KINGSTON FURY', codigo: 'RAM-16-DDR4', preco: 289, precoCusto: 190, ncm: '84733042', csosn: '102', categoriaId: await cat('Peças e componentes'), estoqueMinimo: 4 } }),
+    prisma.produto.create({ data: { nome: 'TECLADO + MOUSE SEM FIO LOGITECH MK270', codigo: 'LOG-MK270', preco: 189, precoCusto: 110, ncm: '84716052', csosn: '102', categoriaId: await cat('Periféricos') } }),
     prisma.produto.create({ data: { nome: 'FORMATAÇÃO COM BACKUP + INSTALAÇÃO DE PROGRAMAS', codigo: 'SRV-FORMAT', tipo: 'S', preco: 150, controlaEstoque: false, codigoServico: '14.01', categoriaId: await cat('Serviços') } }),
     prisma.produto.create({ data: { nome: 'LIMPEZA INTERNA + TROCA DE PASTA TÉRMICA (NOTEBOOK)', codigo: 'SRV-LIMPEZA', tipo: 'S', preco: 120, controlaEstoque: false, codigoServico: '14.01', categoriaId: await cat('Serviços') } }),
     prisma.produto.create({ data: { nome: 'MÃO DE OBRA — TROCA DE COMPONENTE', codigo: 'SRV-MO', tipo: 'S', preco: 100, controlaEstoque: false, codigoServico: '14.01', categoriaId: await cat('Serviços') } }),

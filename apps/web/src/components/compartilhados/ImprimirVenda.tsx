@@ -105,9 +105,9 @@ export function ImprimirVenda({ vendaId, orcamento, aoImprimirPedido }: { vendaI
         titulo="Imprimir"
         tamanho="md"
         gatilho={
-          <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50">
+          <>
             <Printer className="h-4 w-4" /> Imprimir
-          </span>
+          </>
         }
         itens={[
           { rotulo: 'Recibo 80mm (térmica)', icone: <Receipt className="h-4 w-4" />, onClick: cupom },
