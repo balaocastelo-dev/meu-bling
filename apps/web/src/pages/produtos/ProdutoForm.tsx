@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Save, X } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { useCategoriasProduto } from '@/hooks/useListas';
-import { Button, Checkbox, FormSkeleton, Input, MoneyInput, PageHeader, Secao, Select, Textarea } from '@/components/ui';
+import { Button, Checkbox, FormSkeleton, Input, MoneyInput, PageHeader, Secao, Select, Textarea, ValorOculto } from '@/components/ui';
 import { moeda, numero } from '@/lib/format';
 import type { Produto } from '@/types';
 
@@ -120,11 +120,11 @@ export default function ProdutoForm() {
           <Secao titulo="Preços">
             <div className="grid gap-3 sm:grid-cols-2">
               <MoneyInput label="Preço de venda" value={form.preco} onChange={(v) => set('preco', v)} />
-              <MoneyInput label="Preço de custo" value={form.precoCusto} onChange={(v) => set('precoCusto', v)} />
+              <MoneyInput label="Preço de custo" oculto value={form.precoCusto} onChange={(v) => set('precoCusto', v)} />
             </div>
             {margem !== null && (
               <p className="mt-2 text-xs text-slate-500">
-                Margem sobre o custo: <strong className={margem < 0 ? 'text-red-600' : 'text-emerald-700'}>{numero(margem, 1)}%</strong> · lucro unitário {moeda(form.preco - form.precoCusto)}
+                Margem sobre o custo: <ValorOculto><strong className={margem < 0 ? 'text-red-600' : 'text-emerald-700'}>{numero(margem, 1)}%</strong> · lucro unitário {moeda(form.preco - form.precoCusto)}</ValorOculto>
               </p>
             )}
             <p className="mt-1 text-xs text-slate-400">O custo é atualizado automaticamente pela última compra atendida.</p>

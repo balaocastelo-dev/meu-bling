@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowRight, CheckCircle2, Clock, FileText, Link2, Pencil, Printer, Send, ShoppingCart, Undo2, Zap } from 'lucide-react';
 import { abrirEmNovaAba, api, mensagemErro } from '@/lib/api';
-import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, Modal, PageHeader, Select, StatusChanger, Tabs, Textarea, tomPorStatus } from '@/components/ui';
+import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, Modal, PageHeader, Select, StatusChanger, Tabs, Textarea, tomPorStatus, ValorOculto } from '@/components/ui';
 import { VendaAcoes } from '@/components/compartilhados/VendaAcoes';
 import { HistoricoSituacoes } from '@/components/compartilhados/HistoricoSituacoes';
 import { NotificarModal } from '@/components/compartilhados/NotificarModal';
@@ -191,16 +191,16 @@ export default function VendaDetalhe() {
               const semCusto = venda.itens.filter((i) => !i.custoUnitario).length;
               return (
                 <>
-                  <div className="flex justify-between"><span className="text-slate-500">Custo dos produtos</span><span className="num">{moeda(custoProdutos)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Custo dos produtos</span><ValorOculto className="num">{moeda(custoProdutos)}</ValorOculto></div>
                   {semCusto > 0 && <p className="text-[11px] text-amber-700">{semCusto} {semCusto === 1 ? 'item' : 'itens'} sem custo</p>}
-                  <div className="flex justify-between"><span className="text-slate-500">Logística</span><span className="num">{moeda(venda.custoLogistica ?? 0)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Logística</span><ValorOculto className="num">{moeda(venda.custoLogistica ?? 0)}</ValorOculto></div>
                 </>
               );
             })()}
             {venda.fechamento && (
               <div className="mt-1 flex justify-between border-t border-slate-200 pt-1.5 text-sm">
                 <span className="font-semibold text-slate-700">Lucro</span>
-                <span className={`num font-bold ${venda.fechamento.lucro < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{moeda(venda.fechamento.lucro)} <span className="text-[11px] font-normal text-slate-400">({numero(venda.fechamento.margemPct, 1)}%)</span></span>
+                <span className={`num font-bold ${venda.fechamento.lucro < 0 ? 'text-red-600' : 'text-emerald-600'}`}><ValorOculto>{moeda(venda.fechamento.lucro)} <span className="text-[11px] font-normal text-slate-400">({numero(venda.fechamento.margemPct, 1)}%)</span></ValorOculto></span>
               </div>
             )}
           </div>

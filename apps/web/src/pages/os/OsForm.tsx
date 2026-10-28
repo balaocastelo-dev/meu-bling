@@ -338,9 +338,9 @@ export default function OsForm() {
 
         <Secao titulo="Custos internos (fechamento)" descricao="Só para o cálculo do fechamento. Não aparecem na impressão da OS nem para o cliente. Podem ser lançados depois da OS concluída.">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <MoneyInput label="Custo da peça" value={form.custoPeca} onChange={(v) => set('custoPeca', v)} ajuda={form.custoPeca ? undefined : 'Vazio = usa o custo das peças cadastradas'} />
-            <MoneyInput label="Custo de logística" value={form.custoLogistica} onChange={(v) => set('custoLogistica', v)} ajuda="Frete, motoboy, envio" />
-            <MoneyInput label="Mão de obra de terceiro" value={form.custoMaoObraTerceiro} onChange={(v) => set('custoMaoObraTerceiro', v)} ajuda="Técnico ou laboratório de fora" />
+            <MoneyInput label="Custo da peça" oculto value={form.custoPeca} onChange={(v) => set('custoPeca', v)} ajuda={form.custoPeca ? undefined : 'Vazio = usa o custo das peças cadastradas'} />
+            <MoneyInput label="Custo de logística" oculto value={form.custoLogistica} onChange={(v) => set('custoLogistica', v)} ajuda="Frete, motoboy, envio" />
+            <MoneyInput label="Mão de obra de terceiro" oculto value={form.custoMaoObraTerceiro} onChange={(v) => set('custoMaoObraTerceiro', v)} ajuda="Técnico ou laboratório de fora" />
           </div>
         </Secao>
 
