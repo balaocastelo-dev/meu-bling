@@ -1,6 +1,6 @@
 /**
  * Filtro de período dos dashboards (o mesmo no Dashboard e no de Assistência):
- * Hoje · 7 dias · 30 dias · Este mês · Mês passado · Período (datas livres).
+ * Hoje · 7 dias · 30 dias · Este mês · Mês passado · Este ano · Ano passado · Últimos 12 meses · Período.
  * Sempre abre em "Hoje".
  */
 import { useMemo, useState } from 'react';
