@@ -39,7 +39,7 @@ export const RECURSOS: Recurso[] = [
   { chave: 'relatorios', nome: 'Relatórios e dashboards', descricao: 'Dashboards, últimos acontecimentos, DRE, vendas por período, produtos mais vendidos, contas, estoque, comissões.', rotas: [/^\/relatorios(\/|$)/, /^\/dashboard(\/|$)/], maximo: 'LEITURA' },
   { chave: 'comunicacao', nome: 'Mensagens (WhatsApp e e-mail)', descricao: 'Fila de mensagens, enviar WhatsApp/e-mail a clientes, reenviar, modelos de mensagem, status e reconexão do WhatsApp.', rotas: [/^\/notificacoes(\/|$)/, /^\/templates-notificacao(\/|$)/, /^\/whatsapp\/(status|enviar-teste|reconectar)$/] },
   { chave: 'cadastros', nome: 'Cadastros auxiliares', descricao: 'Vendedores, técnicos, depósitos, formas de pagamento, situações e transições (consulta) e dados da empresa (consulta).', rotas: [/^\/vendedores(\/|$)/, /^\/tecnicos(\/|$)/, /^\/depositos(\/|$)/, /^\/formas-pagamento(\/|$)/, /^\/situacoes(\/|$)/, /^\/empresa$/] },
-  { chave: 'sistema', nome: 'Auditoria e saúde do sistema', descricao: 'Trilha de auditoria (quem fez o quê) e a conferência de Saúde do sistema.', rotas: [/^\/auditoria(\/|$)/, /^\/diagnostico(\/|$)/, /^\/robo-saude(\/|$)/], maximo: 'LEITURA' },
+  { chave: 'sistema', nome: 'Auditoria e saúde do sistema', descricao: 'Trilha de auditoria (quem fez o quê) e a conferência de Saúde do sistema.', rotas: [/^\/auditoria(\/|$)/, /^\/diagnostico(\/|$)/], maximo: 'LEITURA' },
 ];
 
 /** Nunca abrem para chave de API, qualquer que seja a permissão. */
@@ -396,8 +396,6 @@ export const ENDPOINTS: Endpoint[] = [
   // ------------------------------------------------ auditoria e saúde
   { metodo: 'GET', caminho: '/auditoria', recurso: 'sistema', resumo: 'Trilha de auditoria: quem fez o quê, quando.', filtros: ['entidade (Venda|OrdemServico|Contato|…)', 'entidadeId', 'limite'] },
   { metodo: 'GET', caminho: '/diagnostico', recurso: 'sistema', resumo: 'Saúde do sistema: inconsistências nos dados, com o que corrigir.' },
-  { metodo: 'GET', caminho: '/robo-saude', recurso: 'sistema', resumo: 'Robô da Saúde: % de saúde, o que ele corrigiu sozinho e as sugestões abertas (com os botões de 1 clique).' },
-  { metodo: 'GET', caminho: '/robo-saude/contagem', recurso: 'sistema', resumo: 'Robô da Saúde: quantas pendências abertas, quantas são erro e quantas correções novas.' },
 ];
 
 /** Eventos que podem ser enviados por webhook. */

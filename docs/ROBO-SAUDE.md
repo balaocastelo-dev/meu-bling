@@ -47,7 +47,7 @@ Toda pendência tem **Ignorar** (não volta por 7 dias). Problema resolvido em q
   correções e do que foi resolvido com um clique, e a conferência detalhada.
 - Alerta no quadro de alertas do dashboard ("Robô da Saúde: N para resolver").
 
-## API (só ADMIN; chave de API só lê)
+## API (só ADMIN logado; fechada para chave de API)
 `GET /robo-saude` · `GET /robo-saude/contagem` · `POST /robo-saude/rodar` · `POST /robo-saude/avisos/:id/executar {acao}` ·
 `POST /robo-saude/avisos/:id/ignorar` · `POST /robo-saude/resolver-tudo` · `POST /robo-saude/marcar-lidas` · `PUT /robo-saude/config {ligado, autoCorrigir}`
 
