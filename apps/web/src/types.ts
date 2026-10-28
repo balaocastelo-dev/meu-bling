@@ -149,6 +149,8 @@ export interface FormaPagamento {
   taxaPct: number;
   diasRecebimento: number;
   maxParcelas: number;
+  /** banco/conta onde o dinheiro desta forma cai */
+  contaFinanceiraId?: number | null;
   ativo: boolean;
 }
 

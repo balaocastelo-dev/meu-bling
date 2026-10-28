@@ -430,6 +430,9 @@ model FormaPagamento {
   maxParcelas     Int     @default(1)
   ativo           Boolean @default(true)
   blingId         String? @unique
+  /// banco/conta onde o dinheiro desta forma cai (sugerido ao finalizar a venda e usado no "pago na hora")
+  contaFinanceira   ContaFinanceira? @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId Int?
 
   vendaParcelas  VendaParcela[]
   compraParcelas CompraParcela[]
@@ -487,6 +490,7 @@ model ContaFinanceira {
   movimentos  ContaReceber[]
   pagamentos  ContaPagar[]
   lancamentos MovimentoFinanceiro[]
+  formasPagamento FormaPagamento[]
   transacoes  TransacaoBancaria[]
 }
 

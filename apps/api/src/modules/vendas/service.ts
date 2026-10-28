@@ -10,12 +10,12 @@ import { executarAcoes, historico, mudarSituacao, situacaoInicial, situacoesPerm
 import { eventos } from '../../core/eventos.js';
 import { linkPublico, tokenPublico } from '../publico/token.js';
 import { depositoPadraoId, liberarReservas, movimentarEstoque, movimentaEstoque, reservarItens, reservasAtivas } from '../comum/estoque.js';
-import { alocarComprasParaVenda, desalocarComprasDaVenda } from '../compras/service.js';
+import { acaoLancarContas as compraLancarContas, acaoLancarEstoque as compraLancarEstoque, alocarComprasParaVenda, desalocarComprasDaVenda, marcarCompraVendida } from '../compras/service.js';
 import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, recriarComissoes } from '../comum/financeiro.js';
 import { criarNotaPendente } from '../comum/nfe.js';
 import { hojeMeioDia } from '../comum/datas.js';
 import { carregarCfgCustos, custosVenda, type CfgCustos, type VendaParaCusto } from '../comum/custos-venda.js';
-import { baixarContaReceber, saldoContaReceber } from '../financeiro/service.js';
+import { baixarContaPagar, baixarContaReceber, saldoContaPagar, saldoContaReceber } from '../financeiro/service.js';
 import type { ItemInput, ParcelaInput, TipoVenda, VendaInput } from './schemas.js';
 
 type Db = Tx | typeof prisma;
@@ -556,26 +556,31 @@ export async function contaRecebimentoVendaId(db: Db): Promise<number | null> {
  * dessas parcelas no caixa, na data da venda. Crediário/boleto ficam em aberto no contas a receber.
  * Idempotente: parcela já recebida não é baixada de novo. Orçamento e venda cancelada são ignorados.
  */
-export async function receberVendaPagaNaHora(tx: Tx, vendaId: number, usuarioId: number | null = null) {
+export async function receberVendaPagaNaHora(tx: Tx, vendaId: number, usuarioId: number | null = null, opts: { mesmoComContasLancadas?: boolean } = {}) {
   const venda = await tx.venda.findUnique({
     where: { id: vendaId },
     include: { situacao: true, parcelas: { include: { formaPagamento: true }, orderBy: { numero: 'asc' } } },
   });
   if (!venda || venda.tipo !== 'PEDIDO' || venda.situacao.cancelamento) return 0;
+  // contas já lançadas: alguém já decidiu o recebimento (ex.: deixou o cartão em aberto ao finalizar) — não refaz sozinho
+  if (venda.contasLancadas && !opts.mesmoComContasLancadas) return 0;
   const pagas = venda.parcelas.filter((p) => p.valor > 0 && p.formaPagamento && TIPOS_PAGO_NA_HORA.includes(p.formaPagamento.tipo));
   if (!pagas.length) return 0;
   if (!venda.contasLancadas) {
     await acaoLancarContas({ modulo: 'VENDA', entidadeId: vendaId, tx, usuarioId, situacaoOrigemId: venda.situacaoId, situacaoDestinoId: venda.situacaoId });
   }
-  const contaId = await contaRecebimentoVendaId(tx);
-  if (!contaId) return 0;
-  const parcelas = await tx.vendaParcela.findMany({ where: { id: { in: pagas.map((p) => p.id) } }, include: { contaReceber: true } });
+  const contaPadrao = await contaRecebimentoVendaId(tx);
+  const parcelas = await tx.vendaParcela.findMany({ where: { id: { in: pagas.map((p) => p.id) } }, include: { contaReceber: true, formaPagamento: { include: { contaFinanceira: { select: { id: true, ativo: true } } } } } });
   let baixadas = 0;
   for (const p of parcelas) {
     const cr = p.contaReceber;
     if (!cr || !['ABERTO', 'PARCIAL'].includes(cr.situacao)) continue;
     const saldo = saldoContaReceber(cr);
     if (saldo < 0.01) continue;
+    // banco da forma de pagamento (ex.: cartão → SumUp, PIX → Cora); senão a conta padrão
+    const contaDaForma = p.formaPagamento?.contaFinanceira?.ativo ? p.formaPagamento.contaFinanceira.id : null;
+    const contaId = contaDaForma || contaPadrao;
+    if (!contaId) continue;
     await baixarContaReceber({ id: cr.id, valor: saldo, data: venda.data, contaFinanceiraId: contaId, formaPagamentoId: p.formaPagamentoId, observacoes: OBS_PAGO_NA_HORA }, tx);
     baixadas++;
   }
@@ -873,4 +878,188 @@ export async function situacaoFinalizar(db: Db = prisma) {
     (await db.situacao.findFirst({ where: { modulo: 'VENDA', final: true, cancelamento: false, ativo: true, NOT: { acoes: { contains: 'gerarNfe' } } }, orderBy: { ordem: 'asc' } }));
   if (!s) throw new AppError('Não há situação "Fechada" cadastrada para vendas.', 500, 'SITUACAO');
   return s;
+}
+
+// ---------------------------------------------------------------- finalizar venda + registrar a compra
+/** Texto que marca a compra gerada ao finalizar a venda (evita registrar duas vezes). */
+export const marcaCompraDaVenda = (numeroVenda: number) => `Compra registrada ao finalizar a venda nº ${numeroVenda}`;
+
+/** Compra já registrada para esta venda (pelo botão Finalizar), se houver. */
+export async function compraDaVenda(numeroVenda: number, db: Db = prisma) {
+  return db.compra.findFirst({ where: { observacoesInternas: { contains: marcaCompraDaVenda(numeroVenda) } }, select: { id: true, numero: true, total: true } });
+}
+
+/** Contato "Fornecedor não informado" (cria se não existir) — quando a compra é registrada sem escolher fornecedor. */
+async function fornecedorNaoInformadoId(db: Db): Promise<number> {
+  const achado = await db.contato.findFirst({ where: { nome: 'Fornecedor não informado' }, orderBy: { id: 'asc' } });
+  if (achado) return achado.id;
+  return (await db.contato.create({ data: { nome: 'Fornecedor não informado', tipoPessoa: 'J', tipo: 'FORNECEDOR' } })).id;
+}
+
+/** Conta que paga as compras quando não é escolhida: a padrão (banco primeiro), senão a primeira ativa. */
+async function contaPagamentoPadraoId(db: Db): Promise<number> {
+  const c =
+    (await db.contaFinanceira.findFirst({ where: { ativo: true, padrao: true }, orderBy: [{ tipo: 'asc' }, { id: 'asc' }], select: { id: true } })) ||
+    (await db.contaFinanceira.findFirst({ where: { ativo: true }, orderBy: { id: 'asc' }, select: { id: true } }));
+  if (!c) throw new AppError('Cadastre uma conta bancária/caixa para lançar o pagamento da compra.', 422, 'SEM_CONTA_FINANCEIRA');
+  return c.id;
+}
+
+export interface CompraDaVendaInput {
+  fornecedorId?: number | null;
+  /** a compra já foi paga → baixa no contas a pagar hoje */
+  paga: boolean;
+  contaFinanceiraId?: number | null;
+  /** vencimento quando ainda não foi paga (padrão: hoje) */
+  vencimento?: Date | null;
+}
+
+/**
+ * Registra o pedido de compra da mercadoria vendida, com o custo informado na venda:
+ * situação "Fechado" (entra no estoque e gera o contas a pagar), ligada aos itens da venda
+ * (a compra vira "Vendido") e, se já paga, com o pagamento baixado na conta escolhida.
+ */
+export async function registrarCompraDaVenda(vendaId: number, p: CompraDaVendaInput, usuarioId: number | null) {
+  const venda = await prisma.venda.findUnique({ where: { id: vendaId }, include: { itens: { include: { produto: true }, orderBy: { ordem: 'asc' } } } });
+  if (!venda) throw new NotFound('Venda');
+  const existente = await compraDaVenda(venda.numero);
+  if (existente) return { compra: existente, jaExistia: true, paga: false };
+  const itens = venda.itens.filter((i) => i.custoUnitario > 0);
+  if (!itens.length) throw new AppError('Os produtos da venda estão sem custo: informe o custo para registrar a compra.', 422, 'SEM_CUSTO');
+  const fechado =
+    (await prisma.situacao.findFirst({ where: { modulo: 'COMPRA', nome: 'Fechado', ativo: true } })) ||
+    (await prisma.situacao.findFirst({ where: { modulo: 'COMPRA', final: true, cancelamento: false, ativo: true }, orderBy: { ordem: 'asc' } }));
+  if (!fechado) throw new AppError('Não há situação "Fechado" cadastrada para compras.', 500, 'SITUACAO');
+  if (p.fornecedorId && !(await prisma.contato.findUnique({ where: { id: p.fornecedorId }, select: { id: true } }))) throw new AppError('Fornecedor não encontrado.', 422, 'FORNECEDOR');
+  const fornecedorId = p.fornecedorId || (await fornecedorNaoInformadoId(prisma));
+  const hoje = hojeMeioDia();
+  const vencimento = p.paga ? hoje : p.vencimento || hoje;
+  const marca = marcaCompraDaVenda(venda.numero);
+
+  const compra = await prisma.$transaction(async (tx) => {
+    const numero = await proximoNumero('COMPRA', tx);
+    const linhas = itens.map((i, idx) => ({ produtoId: i.produtoId, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.custoUnitario, total: arredondar(i.custoUnitario * i.quantidade), ordem: idx }));
+    const total = arredondar(linhas.reduce((s, l) => s + l.total, 0));
+    const c = await tx.compra.create({
+      data: {
+        numero,
+        data: hoje,
+        fornecedorId,
+        situacaoId: fechado.id,
+        depositoId: venda.depositoId ?? null,
+        totalProdutos: total,
+        total,
+        observacoesInternas: marca,
+        itens: { create: linhas },
+        parcelas: { create: [{ numero: 1, dataVencimento: vencimento, valor: total }] },
+      },
+    });
+    await tx.historicoSituacao.create({ data: { entidadeTipo: 'COMPRA', entidadeId: c.id, paraSituacaoId: fechado.id, paraSituacao: fechado.nome, usuarioId, observacao: marca } });
+    const ctx: ContextoAcao = { modulo: 'COMPRA', entidadeId: c.id, tx, usuarioId, situacaoOrigemId: null, situacaoDestinoId: fechado.id };
+    const acoes = JSON.parse(fechado.acoes || '[]') as string[];
+    if (acoes.includes('lancarEstoque')) await compraLancarEstoque(ctx);
+    await compraLancarContas(ctx); // sempre: é o que registra o pagamento
+
+    // liga a mercadoria desta compra à venda (compra vira "Vendido")
+    if (acoes.includes('lancarEstoque')) {
+      const cItens = await tx.compraItem.findMany({ where: { compraId: c.id }, orderBy: { ordem: 'asc' } });
+      for (let k = 0; k < itens.length; k++) {
+        const vi = itens[k];
+        const ci = cItens[k];
+        if (!ci || !vi.produtoId || !movimentaEstoque(vi.produto)) continue;
+        const ja = await tx.alocacaoCompra.aggregate({ where: { vendaItemId: vi.id }, _sum: { quantidade: true } });
+        const q = arredondar(Math.min(ci.quantidade, vi.quantidade - (ja._sum.quantidade || 0)), 4);
+        if (q <= 0) continue;
+        await tx.alocacaoCompra.create({ data: { vendaItemId: vi.id, compraItemId: ci.id, quantidade: q } });
+        await tx.compraItem.update({ where: { id: ci.id }, data: { quantidadeVendida: { increment: q } } });
+      }
+      await marcarCompraVendida(tx, c.id, venda.numero, usuarioId);
+    }
+
+    if (p.paga) {
+      const contaId = p.contaFinanceiraId || (await contaPagamentoPadraoId(tx));
+      const cps = await tx.contaPagar.findMany({ where: { origemTipo: 'COMPRA', origemId: c.id, situacao: { in: ['ABERTO', 'PARCIAL'] } } });
+      for (const cp of cps) {
+        const saldo = saldoContaPagar(cp);
+        if (saldo >= 0.01) await baixarContaPagar({ id: cp.id, valor: saldo, data: hoje, contaFinanceiraId: contaId, observacoes: `Pago — informado ao finalizar a venda nº ${venda.numero}` }, tx);
+      }
+    }
+    return { id: c.id, numero: c.numero, total };
+  });
+  eventos.emitir('compra.criada', { compraId: compra.id, usuarioId });
+  return { compra, jaExistia: false, paga: p.paga };
+}
+
+// ---------------------------------------------------------------- finalizar venda: recebimento em cada banco
+export interface RecebimentoFinalizacao {
+  parcelaId: number;
+  /** o dinheiro desta parcela já entrou? (false = fica em aberto no contas a receber) */
+  recebido: boolean;
+  /** banco/conta onde o dinheiro entrou */
+  contaFinanceiraId?: number | null;
+}
+
+/** Parcelas da venda com a conta sugerida (banco da forma de pagamento) e onde já foi recebida, para a tela de finalizar. */
+export async function parcelasParaFinalizar(vendaId: number, db: Db = prisma) {
+  const contaPadrao = await contaRecebimentoVendaId(db);
+  const parcelas = await db.vendaParcela.findMany({
+    where: { vendaId },
+    orderBy: { numero: 'asc' },
+    include: { formaPagamento: { select: { id: true, nome: true, tipo: true, contaFinanceiraId: true } }, contaReceber: { select: { id: true, situacao: true, contaFinanceiraId: true, valorRecebido: true } } },
+  });
+  return parcelas.map((p) => {
+    const recebida = !!p.contaReceber && p.contaReceber.situacao === 'RECEBIDO';
+    const pagoNaHora = !!p.formaPagamento && TIPOS_PAGO_NA_HORA.includes(p.formaPagamento.tipo);
+    return {
+      id: p.id,
+      numero: p.numero,
+      valor: p.valor,
+      dataVencimento: p.dataVencimento,
+      formaPagamento: p.formaPagamento ? { id: p.formaPagamento.id, nome: p.formaPagamento.nome, tipo: p.formaPagamento.tipo } : null,
+      recebida,
+      contaAtualId: recebida ? p.contaReceber!.contaFinanceiraId : null,
+      contaSugeridaId: (recebida ? p.contaReceber!.contaFinanceiraId : null) || p.formaPagamento?.contaFinanceiraId || contaPadrao,
+      /** o que a tela já deixa marcado: pago na hora (dinheiro/PIX/cartão/transferência) = recebido */
+      recebidoSugerido: recebida || pagoNaHora,
+    };
+  });
+}
+
+/**
+ * Depois de finalizar: deixa cada parcela recebida no banco escolhido (ou em aberto).
+ * Recebimento automático em outro banco é refeito no banco certo; baixa manual não é tocada.
+ */
+export async function aplicarRecebimentosFinalizacao(vendaId: number, lista: RecebimentoFinalizacao[]) {
+  if (!lista.length) return 0;
+  return prisma.$transaction(async (tx) => {
+    const venda = await tx.venda.findUnique({ where: { id: vendaId }, select: { data: true } });
+    if (!venda) throw new NotFound('Venda');
+    let alterados = 0;
+    for (const r of lista) {
+      const p = await tx.vendaParcela.findFirst({ where: { id: r.parcelaId, vendaId }, include: { contaReceber: true } });
+      const cr = p?.contaReceber;
+      if (!p || !cr || cr.situacao === 'CANCELADO') continue;
+      const movs = await tx.movimentoFinanceiro.findMany({ where: { contaReceberId: cr.id } });
+      const soAutomatico = movs.every((m) => m.observacoes === OBS_PAGO_NA_HORA);
+      if (!soAutomatico) continue; // recebimento lançado à mão: respeita
+      const contaId = r.contaFinanceiraId || null;
+      const jaCerto = r.recebido ? cr.situacao === 'RECEBIDO' && movs.length > 0 && movs.every((m) => m.contaFinanceiraId === contaId) : movs.length === 0;
+      if (jaCerto) continue;
+      // desfaz o automático desta parcela
+      for (const m of movs) {
+        await tx.contaFinanceira.update({ where: { id: m.contaFinanceiraId }, data: { saldoAtual: { decrement: arredondar(m.valor) } } });
+        await tx.movimentoFinanceiro.delete({ where: { id: m.id } });
+      }
+      const limpa = await tx.contaReceber.update({
+        where: { id: cr.id },
+        data: { valorRecebido: 0, juros: 0, desconto: 0, situacao: 'ABERTO', dataRecebimento: null, observacoes: (cr.observacoes || '').split('\n').filter((l) => l !== OBS_PAGO_NA_HORA).join('\n') || null },
+      });
+      if (r.recebido) {
+        if (!contaId) throw new AppError(`Parcela ${p.numero}: escolha o banco onde o dinheiro entrou.`, 422, 'SEM_CONTA_FINANCEIRA');
+        await baixarContaReceber({ id: limpa.id, valor: saldoContaReceber(limpa), data: venda.data, contaFinanceiraId: contaId, formaPagamentoId: p.formaPagamentoId, observacoes: OBS_PAGO_NA_HORA }, tx);
+      }
+      alterados++;
+    }
+    return alterados;
+  });
 }

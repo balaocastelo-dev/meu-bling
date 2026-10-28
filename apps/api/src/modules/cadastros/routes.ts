@@ -195,6 +195,8 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
     taxaPct: z.coerce.number().min(0).max(100).default(0),
     diasRecebimento: z.coerce.number().int().min(0).default(0),
     maxParcelas: z.coerce.number().int().min(1).default(1),
+    /** banco/conta onde o dinheiro desta forma cai */
+    contaFinanceiraId: z.coerce.number().int().positive().nullable().optional(),
     ativo: z.boolean().default(true),
   });
   registrarCrud(app, {
