@@ -361,10 +361,28 @@ export async function excluirMovimento(id: number) {
     if (m.contaReceberId || m.contaPagarId) {
       throw new AppError('Este movimento é uma baixa de conta. Use o estorno da conta para desfazê-lo.', 422, 'MOVIMENTO_DE_BAIXA');
     }
-    const delta = m.tipo === 'ENTRADA' ? -m.valor : m.valor;
-    await tx.contaFinanceira.update({ where: { id: m.contaFinanceiraId }, data: { saldoAtual: { increment: arredondar(delta) } } });
-    if (m.transacaoId) await tx.transacaoBancaria.update({ where: { id: m.transacaoId }, data: { conciliado: false } });
-    await tx.movimentoFinanceiro.delete({ where: { id } });
+    // transferência: apaga as duas pernas juntas (senão o dinheiro some de um lado e fica no outro)
+    const pernas = [m];
+    if (m.observacoes === OBS_TRANSFERENCIA) {
+      const par = await tx.movimentoFinanceiro.findFirst({
+        where: {
+          id: { not: m.id },
+          observacoes: OBS_TRANSFERENCIA,
+          tipo: m.tipo === 'ENTRADA' ? 'SAIDA' : 'ENTRADA',
+          valor: { gte: m.valor - 0.005, lte: m.valor + 0.005 },
+          contaFinanceiraId: { not: m.contaFinanceiraId },
+          criadoEm: { gte: new Date(+m.criadoEm - 5000), lte: new Date(+m.criadoEm + 5000) },
+        },
+        orderBy: { id: 'asc' },
+      });
+      if (par) pernas.push(par);
+    }
+    for (const x of pernas) {
+      const delta = x.tipo === 'ENTRADA' ? -x.valor : x.valor;
+      await tx.contaFinanceira.update({ where: { id: x.contaFinanceiraId }, data: { saldoAtual: { increment: arredondar(delta) } } });
+      if (x.transacaoId) await tx.transacaoBancaria.update({ where: { id: x.transacaoId }, data: { conciliado: false } });
+      await tx.movimentoFinanceiro.delete({ where: { id: x.id } });
+    }
     return m;
   });
 }

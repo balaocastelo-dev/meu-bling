@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { ArrowRightLeft, Ban, Scale, CircleCheck, FileUp, Landmark, Link2, Plus, PlugZap, RefreshCw, Unlink, Wallet } from 'lucide-react';
+import { ArrowRightLeft, Ban, Eye, EyeOff, Scale, CircleCheck, FileUp, Landmark, Link2, Plus, PlugZap, RefreshCw, Unlink, Wallet } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { abrirPluggyConnect } from '@/lib/pluggy';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -101,12 +101,40 @@ export default function Bancos() {
   });
 
   const saldoSistema = (contas ?? []).reduce((s, c) => s + c.saldoAtual, 0);
+  const [verSaldo, setVerSaldo] = useState(() => {
+    try {
+      return localStorage.getItem('bancos.verSaldo') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const alternarSaldo = () => {
+    const v = !verSaldo;
+    setVerSaldo(v);
+    try {
+      localStorage.setItem('bancos.verSaldo', v ? '1' : '0');
+    } catch {
+      /* sem armazenamento: só nesta tela */
+    }
+  };
 
   return (
     <div>
       <PageHeader
         titulo="Contas bancárias & conciliação"
-        descricao={contas ? `Saldo total no sistema: ${moeda(saldoSistema)}` : undefined}
+        descricao={
+          contas ? (
+            <span className="inline-flex items-center gap-2">
+              Saldo total no sistema:
+              <span className={clsx('num rounded-lg px-2.5 py-0.5 text-lg font-bold transition', verSaldo ? (saldoSistema < 0 ? 'bg-red-50 text-red-700 ring-1 ring-red-200' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200') : 'bg-slate-100 text-slate-500 tracking-widest')}>
+                {verSaldo ? moeda(saldoSistema) : 'R$ ••••••'}
+              </span>
+              <button type="button" onClick={alternarSaldo} aria-label={verSaldo ? 'Esconder saldo' : 'Mostrar saldo'} title={verSaldo ? 'Esconder saldo' : 'Mostrar saldo'} className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800">
+                {verSaldo ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </span>
+          ) : undefined
+        }
         acoes={
           <>
             <Button variante="secundario" icone={<ArrowRightLeft className="h-4 w-4" />} onClick={() => setTransfAberta(true)}>Transferência</Button>
@@ -175,8 +203,19 @@ export default function Bancos() {
 function CardConta({ conta: c, onSincronizar, sincronizando, onDesvincular }: { conta: ContaFinanceira; onSincronizar: () => void; sincronizando: boolean; onDesvincular: () => void }) {
   const vinculada = !!c.openFinanceItemId;
   const diferenca = typeof c.saldoBanco === 'number' ? c.saldoBanco - c.saldoAtual : null;
+  const navegar = useNavigate();
   return (
-    <div className="v18-card rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card">
+    <div
+      role="link"
+      tabIndex={0}
+      title="Ver extrato"
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest('button,a')) return;
+        navegar(`/financeiro/bancos/${c.id}`);
+      }}
+      onKeyDown={(e) => e.key === 'Enter' && navegar(`/financeiro/bancos/${c.id}`)}
+      className="v18-card v18-hover cursor-pointer rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card"
+    >
       <div className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white" style={{ backgroundColor: c.cor || '#2563eb' }}>
           {c.tipo === 'CAIXA' ? <Wallet className="h-4 w-4" /> : <Landmark className="h-4 w-4" />}
@@ -208,6 +247,12 @@ function CardConta({ conta: c, onSincronizar, sincronizando, onDesvincular }: { 
         <p className={clsx('mt-2 rounded px-2 py-1 text-xs', Math.abs(diferenca) > 0.009 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700')}>Diferença de {moeda(diferenca)} — concilie as transações pendentes.</p>
       )}
       {diferenca !== null && Math.abs(diferenca) <= 0.009 && <p className="mt-2 inline-flex items-center gap-1 text-xs text-emerald-700"><CircleCheck className="h-3.5 w-3.5" /> Saldos conferem</p>}
+      {(c.taxaRecebimentoPct ?? 0) > 0 && (
+        <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200">
+          Taxa de {String(c.taxaRecebimentoPct).replace('.', ',')}% descontada: cada recebimento entra já com o valor menos a taxa.
+        </p>
+      )}
+      <p className="mt-3 text-xs font-medium text-brand-700">Ver extrato →</p>
       {vinculada && (
         <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
           <Button tamanho="xs" variante="secundario" icone={<RefreshCw className={clsx('h-3.5 w-3.5', sincronizando && 'animate-spin')} />} onClick={onSincronizar} disabled={sincronizando}>Sincronizar</Button>
