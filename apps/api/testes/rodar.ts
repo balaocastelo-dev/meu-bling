@@ -93,6 +93,7 @@ async function main() {
     rodar('Vendas: custo do produto e logística internos (fora do cliente) + ordem do contas a pagar', NPX, ['tsx', 'testes/venda-custos.ts', base]);
     rodar('Venda paga na hora entra no caixa + ajuste de saldo fora do DRE + DRE com compras reais', NPX, ['tsx', 'testes/pago-na-hora.ts', base]);
     rodar('Caixinhas (Nubank): por dia, sugestão de hoje, guardar/retirar fora do DRE + avisos do gestor', NPX, ['tsx', 'testes/caixinhas.ts', base]);
+    rodar('Robô de NF: NCM automático, cliente completo, Pronto pra NF, emitir com um clique, CFOP fora do estado', NPX, ['tsx', 'testes/robo-nf.ts', base]);
     rodar('Porta do site: PDV, JUL.IA (orçamento e pedido em aberto), vendas por dia e por período', NPX, ['tsx', 'testes/integracao-site.ts', base], { env: { TZ: 'America/Sao_Paulo', SITE_CHAVE_INTEGRACAO: env.SITE_CHAVE_INTEGRACAO } });
     rodar('API externa: chaves, permissões, MCP para agentes de IA e webhooks', NPX, ['tsx', 'testes/api-externa.ts', base]);
     rodar('API externa: varredura — toda rota aberta para chave está documentada', NPX, ['tsx', 'testes/api-cobertura.ts'], { env });

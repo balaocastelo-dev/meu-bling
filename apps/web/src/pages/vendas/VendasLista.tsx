@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle2, FileSignature, FileText, Plus, ShoppingCart, Trophy } from 'lucide-react';
+import { CheckCircle2, DollarSign, FileSignature, FileText, Package, Plus, ShoppingCart, Trophy } from 'lucide-react';
 import { api } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
@@ -135,16 +135,21 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
       titulo: 'Lanç.',
       ocultarMobile: true,
       render: (v) => (
-        <span className="flex gap-1 text-[10px] font-semibold">
-          <span className={`rounded px-1 ${v.estoqueLancado ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`} title="Estoque lançado">
-            EST
+        <span className="flex items-center gap-1">
+          <span className={`inline-flex rounded p-0.5 ${v.estoqueLancado ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-300'}`} title={v.estoqueLancado ? 'Estoque lançado' : 'Estoque ainda não lançado'} aria-label={v.estoqueLancado ? 'Estoque lançado' : 'Estoque não lançado'}>
+            <Package className="h-3.5 w-3.5" />
           </span>
-          <span className={`rounded px-1 ${v.contasLancadas ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`} title="Contas lançadas">
-            FIN
+          <span className={`inline-flex rounded p-0.5 ${v.contasLancadas ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-300'}`} title={v.contasLancadas ? 'Financeiro lançado (contas a receber)' : 'Financeiro ainda não lançado'} aria-label={v.contasLancadas ? 'Financeiro lançado' : 'Financeiro não lançado'}>
+            <DollarSign className="h-3.5 w-3.5" />
           </span>
           {v.nota && (
-            <span className={`inline-flex items-center gap-0.5 rounded px-1 ${v.nota.situacao === 'AUTORIZADA' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`} title={`NF-e ${v.nota.numero} ${v.nota.situacao}`}>
-              <FileText className="h-3 w-3" /> NF
+            <span className={`inline-flex rounded p-0.5 ${v.nota.situacao === 'AUTORIZADA' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'}`} title={`NF-e ${v.nota.numero} ${v.nota.situacao}`} aria-label={`NF-e ${v.nota.situacao}`}>
+              <FileText className="h-3.5 w-3.5" />
+            </span>
+          )}
+          {!v.nota && v.roboNf?.status === 'PRONTA' && (
+            <span className="inline-flex items-center gap-0.5 rounded bg-emerald-600 px-1 text-white" title="Robô de NF: tudo preenchido — pronto pra emitir a NF">
+              <CheckCircle2 className="h-3 w-3" /> NF
             </span>
           )}
         </span>

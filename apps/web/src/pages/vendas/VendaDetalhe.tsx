@@ -4,11 +4,12 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowRight, CheckCircle2, Clock, FileText, Link2, Pencil, Printer, Send, ShoppingCart, Undo2, Zap } from 'lucide-react';
 import { abrirEmNovaAba, api, mensagemErro } from '@/lib/api';
-import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, Modal, PageHeader, Select, StatusChanger, Tabs, Textarea, tomPorStatus } from '@/components/ui';
+import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, Modal, PageHeader, Select, StatusChanger, Tabs, Textarea, tomPorStatus, ValorOculto } from '@/components/ui';
 import { VendaAcoes } from '@/components/compartilhados/VendaAcoes';
 import { HistoricoSituacoes } from '@/components/compartilhados/HistoricoSituacoes';
 import { NotificarModal } from '@/components/compartilhados/NotificarModal';
 import { EmitirNfModal } from '@/components/compartilhados/EmitirNfModal';
+import { BotaoRoboNf } from '@/components/compartilhados/RoboNf';
 import { NotificacoesLista } from '@/components/compartilhados/NotificacoesLista';
 import { data, dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { Contato, Venda } from '@/types';
@@ -94,6 +95,8 @@ export default function VendaDetalhe() {
         descricao={`${data(venda.data)} · ${contato?.nome ?? ''} · ${venda.vendedor?.nome ? 'vendedor ' + venda.vendedor.nome : 'sem vendedor'}`}
         acoes={
           <>
+            {/* robô de NF: "Pronto pra NF" (verde) ou "Falta N pra NF" (amarelo) */}
+            {!orcamento && !fechado && !venda.nota && <BotaoRoboNf vendaId={venda.id} numero={venda.numero} onEmitida={invalidar} />}
             <VendaAcoes venda={venda} contexto="detalhe" />
             <Button variante="secundario" icone={<Printer className="h-4 w-4" />} onClick={imprimir}>
               Imprimir
@@ -192,25 +195,25 @@ export default function VendaDetalhe() {
               const semCusto = venda.itens.filter((i) => !i.custoUnitario).length;
               return (
                 <>
-                  <div className="flex justify-between"><span className="text-slate-500">Custo dos produtos{venda.fechamento?.custoProdutoPct ? ` (${numero(venda.fechamento.custoProdutoPct, 1)}%)` : ''}</span><span className="num">{moeda(custoProdutos)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Custo dos produtos</span><ValorOculto className="num">{moeda(custoProdutos)}{venda.fechamento?.custoProdutoPct ? ` (${numero(venda.fechamento.custoProdutoPct, 1)}%)` : ''}</ValorOculto></div>
                   {venda.fechamento?.custoProdutoEstimado ? (
                     <p className="text-[11px] text-amber-700">Custo estimado — informe o custo real em “Lançar”</p>
                   ) : semCusto > 0 && <p className="text-[11px] text-amber-700">{semCusto} {semCusto === 1 ? 'item' : 'itens'} sem custo</p>}
                   {venda.fechamento && (
                     <>
-                      <div className="flex justify-between"><span className="text-slate-500">Imposto ({numero(venda.fechamento.impostoPct ?? 0, 1)}%)</span><span className="num">{moeda(venda.fechamento.imposto ?? 0)}</span></div>
-                      <div className="flex justify-between"><span className="text-slate-500">Taxa do cartão{venda.fechamento.taxaCartao ? ` (${venda.fechamento.parcelasCartao ?? 1}x · ${numero(venda.fechamento.taxaCartaoPct ?? 0, 2)}%)` : ''}</span><span className="num">{moeda(venda.fechamento.taxaCartao ?? 0)}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-500">Imposto ({numero(venda.fechamento.impostoPct ?? 0, 1)}%)</span><ValorOculto className="num">{moeda(venda.fechamento.imposto ?? 0)}</ValorOculto></div>
+                      <div className="flex justify-between"><span className="text-slate-500">Taxa do cartão{venda.fechamento.taxaCartao ? ` (${venda.fechamento.parcelasCartao ?? 1}x · ${numero(venda.fechamento.taxaCartaoPct ?? 0, 2)}%)` : ''}</span><ValorOculto className="num">{moeda(venda.fechamento.taxaCartao ?? 0)}</ValorOculto></div>
                     </>
                   )}
-                  <div className="flex justify-between"><span className="text-slate-500">Frete / logística</span><span className="num">{moeda(venda.fechamento?.frete ?? venda.custoLogistica ?? 0)}</span></div>
-                  {venda.fechamento && <div className="flex justify-between font-medium"><span className="text-slate-600">Custo total</span><span className="num">{moeda(venda.fechamento.custoTotal)}</span></div>}
+                  <div className="flex justify-between"><span className="text-slate-500">Frete / logística</span><ValorOculto className="num">{moeda(venda.fechamento?.frete ?? venda.custoLogistica ?? 0)}</ValorOculto></div>
+                  {venda.fechamento && <div className="flex justify-between font-medium"><span className="text-slate-600">Custo total</span><ValorOculto className="num">{moeda(venda.fechamento.custoTotal)}</ValorOculto></div>}
                 </>
               );
             })()}
             {venda.fechamento && (
               <div className="mt-1 flex justify-between border-t border-slate-200 pt-1.5 text-sm">
                 <span className="font-semibold text-slate-700">Lucro</span>
-                <span className={`num font-bold ${venda.fechamento.lucro < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{moeda(venda.fechamento.lucro)} <span className="text-[11px] font-normal text-slate-400">({numero(venda.fechamento.margemPct, 1)}%)</span></span>
+                <span className={`num font-bold ${venda.fechamento.lucro < 0 ? 'text-red-600' : 'text-emerald-600'}`}><ValorOculto>{moeda(venda.fechamento.lucro)} <span className="text-[11px] font-normal text-slate-400">({numero(venda.fechamento.margemPct, 1)}%)</span></ValorOculto></span>
               </div>
             )}
           </div>

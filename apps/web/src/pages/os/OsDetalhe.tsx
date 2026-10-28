@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import clsx from 'clsx';
 import { BadgeCheck, ExternalLink, FileText, Image as ImageIcon, Link2, Paperclip, Pencil, Printer, Send, Trash2, Undo2, Upload, Zap } from 'lucide-react';
 import { abrirEmNovaAba, api, mensagemErro, urlUpload, BASE_PATH } from '@/lib/api';
-import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, PageHeader, StatusBadge, StatusChanger, Tabs, tomPorStatus } from '@/components/ui';
+import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, PageHeader, StatusBadge, StatusChanger, Tabs, tomPorStatus, ValorOculto } from '@/components/ui';
 import { HistoricoSituacoes } from '@/components/compartilhados/HistoricoSituacoes';
 import { NotificarModal } from '@/components/compartilhados/NotificarModal';
 import { EmitirNfModal } from '@/components/compartilhados/EmitirNfModal';
@@ -190,13 +190,13 @@ export default function OsDetalhe() {
               <span>Custos internos</span>
               <Link to={`/ordens-servico/${os.id}/editar`} className="normal-case tracking-normal text-brand-600 hover:underline">Lançar</Link>
             </p>
-            <div className="flex justify-between"><span className="text-slate-500">Custo da peça{os.fechamento?.custoPecasOrigem === 'CADASTRO' && (os.fechamento?.custoPecas ?? 0) > 0 ? ' (cadastro)' : ''}</span><span className="num">{moeda(os.fechamento ? os.fechamento.custoPecas : os.custoPeca)}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Logística</span><span className="num">{moeda(os.custoLogistica)}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Mão de obra de terceiro</span><span className="num">{moeda(os.custoMaoObraTerceiro)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Custo da peça{os.fechamento?.custoPecasOrigem === 'CADASTRO' && (os.fechamento?.custoPecas ?? 0) > 0 ? ' (cadastro)' : ''}</span><ValorOculto className="num">{moeda(os.fechamento ? os.fechamento.custoPecas : os.custoPeca)}</ValorOculto></div>
+            <div className="flex justify-between"><span className="text-slate-500">Logística</span><ValorOculto className="num">{moeda(os.custoLogistica)}</ValorOculto></div>
+            <div className="flex justify-between"><span className="text-slate-500">Mão de obra de terceiro</span><ValorOculto className="num">{moeda(os.custoMaoObraTerceiro)}</ValorOculto></div>
             {os.fechamento && (
               <div className="mt-1 flex justify-between border-t border-slate-200 pt-1.5 text-sm">
                 <span className="font-semibold text-slate-700">Lucro</span>
-                <span className={`num font-bold ${os.fechamento.lucro < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{moeda(os.fechamento.lucro)} <span className="text-[11px] font-normal text-slate-400">({numero(os.fechamento.margemPct, 1)}%)</span></span>
+                <span className={`num font-bold ${os.fechamento.lucro < 0 ? 'text-red-600' : 'text-emerald-600'}`}><ValorOculto>{moeda(os.fechamento.lucro)} <span className="text-[11px] font-normal text-slate-400">({numero(os.fechamento.margemPct, 1)}%)</span></ValorOculto></span>
               </div>
             )}
           </div>
