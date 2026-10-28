@@ -80,6 +80,56 @@ async function main() {
   if (cmv) verifica(igual(info(dre1) - info(dre0), 1234), 'compra de mercadoria aparece no informativo (1.234)', dre1.informativo);
   verifica(igual(linha(dre1, '6') - linha(dre0, '6'), (oper ? 432 : 0) + 100), 'despesas operacionais subiram (aluguel + sem categoria)', { antes: linha(dre0, '6'), depois: linha(dre1, '6') });
 
+  secao('Finalizar resolve tudo: recebimento no banco escolhido + compra paga');
+  const cf: any = await adm.get('/vendas/consumidor-final');
+  const vend = await adm.post('/vendedores', { nome: `Vendedor Finalizar ${SUF}`, comissaoPadraoPct: 0, ativo: true }, [200, 201]);
+  const prod = await adm.post('/produtos', { nome: `SSD FINALIZAR ${SUF}`, codigo: `FIN-${SUF}`, preco: 400, precoCusto: 250, ncm: '84717012', csosn: '102' }, 201);
+  const listaContas = await contas();
+  const bancoA = listaContas[0];
+  const bancoB = await adm.post('/contas-financeiras', { nome: `Banco Teste B ${SUF}`, tipo: 'BANCO', saldoInicial: 0, padrao: false, ativo: true }, [200, 201]);
+  const totalAntes = await saldoTotal();
+  const vf = await adm.post('/vendas', { contatoId: cf.id, vendedorId: vend.id, data: hoje(), itens: [{ produtoId: prod.id, quantidade: 1, valorUnitario: 400, custoUnitario: 250 }], parcelas: [{ dataVencimento: hoje(), valor: 400, formaPagamentoId: dinheiro.id }] }, 201);
+  await aguardar(() => receber(vf.id), (l) => l.length > 0 && l.every((c) => c.situacao === 'RECEBIDO'));
+  const chk: any = await adm.get(`/vendas/${vf.id}/finalizacao`);
+  verifica(chk.podeFinalizar && igual(chk.custoProdutos, 250) && chk.parcelas.length === 1 && chk.parcelas[0].recebidoSugerido, 'tela de finalizar: custo 250 e parcela sugerida como recebida', chk);
+  const saldoB0 = 0;
+  const saldoA0 = (await contas()).find((c) => c.id === bancoA.id).saldoAtual;
+  const fin: any = await adm.post(`/vendas/${vf.id}/finalizar`, {
+    recebimentos: [{ parcelaId: chk.parcelas[0].id, recebido: true, contaFinanceiraId: bancoB.id }],
+    compra: { paga: true, contaFinanceiraId: bancoA.id },
+  }, 200);
+  verifica(fin.compra && !fin.compra.jaExistia && fin.compra.paga, 'compra registrada e paga', fin.compra);
+  const cs = await contas();
+  const sB = cs.find((c) => c.id === bancoB.id).saldoAtual;
+  const sA = cs.find((c) => c.id === bancoA.id).saldoAtual;
+  verifica(igual(sB - saldoB0, 400), 'recebimento de 400 entrou no banco escolhido (B)', { sB });
+  verifica(igual(sA - saldoA0, -650), 'banco A: tirou o recebimento automático (400, foi para o B) e pagou a compra (250)', { sA, saldoA0 });
+  verifica(igual((await saldoTotal()) - totalAntes, 150), 'no total: +400 da venda − 250 da compra', { totalAntes });
+  const compra: any = await adm.get(`/compras/${fin.compra.compra.id}`);
+  verifica(compra.situacao?.nome === 'Vendido' || compra.situacao?.nome === 'Fechado', 'compra criada (Vendido/Fechado)', compra.situacao);
+  const chk2: any = await adm.get(`/vendas/${vf.id}/finalizacao`);
+  verifica(chk2.jaFinalizada && chk2.compraRegistrada?.id === fin.compra.compra.id, 'venda finalizada e compra ligada a ela', chk2);
+
+  secao('Fechamento troca a forma de pagamento e só aceita banco permitido');
+  const pix = formas.find((f) => f.tipo === 'PIX');
+  if (pix) {
+    await adm.put(`/formas-pagamento/${pix.id}`, { contasPermitidas: [bancoB.id], contaFinanceiraId: bancoB.id }, 200);
+    const v3 = await adm.post('/vendas', { contatoId: cf.id, vendedorId: vend.id, data: hoje(), itens: [{ produtoId: prod.id, quantidade: 1, valorUnitario: 100, custoUnitario: 60 }], parcelas: [{ dataVencimento: hoje(), valor: 100, formaPagamentoId: crediario?.id ?? dinheiro.id }] }, 201);
+    const c3: any = await adm.get(`/vendas/${v3.id}/finalizacao`);
+    const fp = c3.formas.find((f: any) => f.id === pix.id);
+    verifica(fp && fp.contasPermitidas.includes(bancoB.id), 'tela recebe os bancos permitidos da forma', fp);
+    await adm.post(`/vendas/${v3.id}/finalizar`, { recebimentos: [{ parcelaId: c3.parcelas[0].id, formaPagamentoId: pix.id, recebido: true, contaFinanceiraId: bancoA.id }], compra: null }, 422);
+    const ok3: any = await adm.post(`/vendas/${v3.id}/finalizar`, { recebimentos: [{ parcelaId: c3.parcelas[0].id, formaPagamentoId: pix.id, recebido: true, contaFinanceiraId: bancoB.id }] }, 200);
+    const v3d: any = await adm.get(`/vendas/${v3.id}`);
+    verifica(v3d.parcelas[0].formaPagamentoId === pix.id, 'parcela passou a ser PIX', v3d.parcelas[0]);
+    const cr3 = await receber(v3.id);
+    verifica(cr3.length === 1 && cr3[0].situacao === 'RECEBIDO' && cr3[0].contaFinanceiraId === bancoB.id, 'PIX recebido no banco permitido', { ok3, cr3 });
+  }
+
+  secao('Link de pagamento sem token do Mercado Pago avisa o que falta');
+  const semToken: any = await adm.post(`/vendas/${vf.id}/link-pagamento`, {}, 422);
+  verifica(semToken.code === 'MERCADOPAGO_SEM_TOKEN', 'erro diz para configurar o Mercado Pago', semToken);
+
   encerrar('Venda paga na hora / ajuste de saldo / DRE');
 }
 

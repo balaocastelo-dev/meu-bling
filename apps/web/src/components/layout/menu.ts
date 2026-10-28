@@ -147,6 +147,7 @@ export const CONFIG_ITENS: { rotulo: string; para: string; descricao: string; pe
   { rotulo: 'Depósitos', para: '/configuracoes/depositos', descricao: 'Locais de estoque e distribuidores' },
   { rotulo: 'Contas financeiras', para: '/configuracoes/contas-financeiras', descricao: 'Caixa, bancos e cartões' },
   { rotulo: 'E-mail (SMTP)', para: '/configuracoes/smtp', descricao: 'Servidor de envio e teste', perfis: ['ADMIN'] },
+  { rotulo: 'Mercado Pago', para: '/configuracoes/mercado-pago', descricao: 'Link de pagamento nos pedidos', perfis: ['ADMIN'] },
   { rotulo: 'Open Finance', para: '/configuracoes/open-finance', descricao: 'Credenciais Pluggy', perfis: ['ADMIN'] },
   { rotulo: 'API e integrações', para: '/configuracoes/api', descricao: 'Chaves para outros sistemas e agentes de IA, webhooks, MCP', perfis: ['ADMIN'] },
   { rotulo: 'Saúde do sistema', para: '/configuracoes/saude', descricao: 'Confere os dados e aponta o que corrigir', perfis: ['ADMIN'] },
