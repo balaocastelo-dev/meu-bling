@@ -13,6 +13,7 @@ import { prisma, type Tx } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { arredondar } from '../../lib/util.js';
 import { eventos } from '../../core/eventos.js';
+import { OBS_AJUSTE_SALDO, OBS_TRANSFERENCIA } from '../comum/financeiro.js';
 
 export interface BaixaParams {
   id: number;
@@ -301,6 +302,33 @@ export async function criarMovimentoAvulso(
   return txExterno ? exec(txExterno) : prisma.$transaction(exec);
 }
 
+/**
+ * Acerta o saldo de uma conta com o valor real (contado na gaveta / extrato do banco).
+ * Lança só a diferença, marcada como AJUSTE_SALDO: mexe no saldo, mas não é receita nem despesa
+ * (fica fora do DRE e do caixa dos dashboards).
+ */
+export async function ajustarSaldoConta(p: { contaFinanceiraId: number; saldoReal: number; data: Date; descricao?: string | null }) {
+  return prisma.$transaction(async (tx) => {
+    const conta = await tx.contaFinanceira.findUnique({ where: { id: p.contaFinanceiraId } });
+    if (!conta) throw new NotFound('Conta financeira');
+    const diferenca = arredondar(p.saldoReal - conta.saldoAtual);
+    if (Math.abs(diferenca) < 0.01) return { movimento: null, diferenca: 0, saldoAnterior: arredondar(conta.saldoAtual) };
+    const movimento = await criarMovimentoAvulso(
+      {
+        contaFinanceiraId: conta.id,
+        data: p.data,
+        tipo: diferenca > 0 ? 'ENTRADA' : 'SAIDA',
+        valor: Math.abs(diferenca),
+        descricao: p.descricao?.trim() || `Ajuste de saldo: ${conta.nome} acertado para R$ ${p.saldoReal.toFixed(2).replace('.', ',')}`,
+        categoriaId: null,
+        observacoes: OBS_AJUSTE_SALDO,
+      },
+      tx,
+    );
+    return { movimento, diferenca, saldoAnterior: arredondar(conta.saldoAtual) };
+  });
+}
+
 export async function transferirEntreContas(p: { origemId: number; destinoId: number; valor: number; data: Date; descricao?: string | null }) {
   if (p.origemId === p.destinoId) throw new AppError('Conta de origem e destino devem ser diferentes.', 422, 'CONTAS_IGUAIS');
   return prisma.$transaction(async (tx) => {
@@ -309,11 +337,11 @@ export async function transferirEntreContas(p: { origemId: number; destinoId: nu
     if (!origem || !destino) throw new NotFound('Conta financeira');
     const desc = p.descricao || 'Transferência entre contas';
     const saida = await criarMovimentoAvulso(
-      { contaFinanceiraId: origem.id, data: p.data, tipo: 'SAIDA', valor: p.valor, descricao: `${desc} → ${destino.nome}`, observacoes: 'TRANSFERENCIA' },
+      { contaFinanceiraId: origem.id, data: p.data, tipo: 'SAIDA', valor: p.valor, descricao: `${desc} → ${destino.nome}`, observacoes: OBS_TRANSFERENCIA },
       tx,
     );
     const entrada = await criarMovimentoAvulso(
-      { contaFinanceiraId: destino.id, data: p.data, tipo: 'ENTRADA', valor: p.valor, descricao: `${desc} ← ${origem.nome}`, observacoes: 'TRANSFERENCIA' },
+      { contaFinanceiraId: destino.id, data: p.data, tipo: 'ENTRADA', valor: p.valor, descricao: `${desc} ← ${origem.nome}`, observacoes: OBS_TRANSFERENCIA },
       tx,
     );
     return { saida, entrada };

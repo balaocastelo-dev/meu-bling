@@ -18,6 +18,7 @@ import {
   saldoContaPagar,
   criarMovimentoAvulso,
   transferirEntreContas,
+  ajustarSaldoConta,
   excluirMovimento,
   resumoFinanceiro,
   mapaOrigens,
@@ -549,6 +550,15 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     const m = await criarMovimentoAvulso({ ...b, data: b.data ?? new Date() });
     await auditar(req, 'MovimentoFinanceiro', m.id, 'CRIAR', { tipo: b.tipo, valor: b.valor });
     return reply.code(201).send(m);
+  });
+
+  // acerta o saldo da conta com o valor real; a diferença não entra no DRE
+  app.post('/api/v1/contas-financeiras/:id/ajustar-saldo', { preHandler: fin }, async (req, reply) => {
+    const id = Number((req.params as any).id);
+    const b = z.object({ saldoReal: z.number(), data: dataSchema, descricao: z.string().nullable().optional() }).parse(req.body);
+    const r = await ajustarSaldoConta({ contaFinanceiraId: id, saldoReal: b.saldoReal, data: b.data ?? new Date(), descricao: b.descricao });
+    await auditar(req, 'ContaFinanceira', id, 'ACAO', { acao: 'ajustar-saldo', saldoAnterior: r.saldoAnterior, saldoReal: b.saldoReal, diferenca: r.diferenca });
+    return reply.code(201).send(r);
   });
 
   app.post('/api/v1/financeiro/transferencia', { preHandler: fin }, async (req, reply) => {

@@ -4,6 +4,7 @@
  * Agregações feitas em JS (SQLite) após filtrar por data no banco.
  */
 import type { FastifyInstance } from 'fastify';
+import { OBS_FORA_DO_RESULTADO } from '../comum/financeiro.js';
 import { z } from 'zod';
 import { startOfDay, endOfDay, differenceInCalendarDays } from 'date-fns';
 import { prisma } from '../../lib/prisma.js';
@@ -556,7 +557,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const carregarOs = async (de: Date, ate: Date) => (await ordensAssistencia(de, ate, q.base, undefined, sitOsOk)).filter((o) => !sitOsCanc.includes(o.situacaoId));
     const carregarCaixa = async (de: Date, ate: Date) => {
       const movs = await prisma.movimentoFinanceiro.findMany({ where: { data: { gte: de, lte: ate }, tipo: { in: ['ENTRADA', 'SAIDA'] } }, select: { data: true, tipo: true, valor: true, observacoes: true } });
-      return movs.filter((m) => m.observacoes !== 'TRANSFERENCIA');
+      return movs.filter((m) => !OBS_FORA_DO_RESULTADO.includes(m.observacoes || ''));
     };
     const custoVenda = (v: { custoTotal: number; custoLogistica: number; itens: { quantidade: number; custoUnitario: number }[] }) => (v.custoTotal || v.itens.reduce((a, i) => a + i.custoUnitario * i.quantidade, 0)) + (v.custoLogistica || 0);
 
