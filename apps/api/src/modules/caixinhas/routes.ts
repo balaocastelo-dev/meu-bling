@@ -2,6 +2,7 @@
  * Rotas das caixinhas (ADMIN, GERENTE, FINANCEIRO) e dos avisos do painel do gestor/gerente.
  */
 import type { FastifyInstance } from 'fastify';
+import { avisosConsignacao } from '../consignacoes/service.js';
 import { z } from 'zod';
 import { startOfDay } from 'date-fns';
 import { prisma } from '../../lib/prisma.js';
@@ -106,6 +107,7 @@ export default async function caixinhasRoutes(app: FastifyInstance) {
     if (fin.receberAtrasado > 0) avisos.push({ tipo: 'aviso', prioridade: 3, mensagem: `Contas a receber vencidas: ${brl(fin.receberAtrasado)}`, link: '/financeiro/receber?situacao=ATRASADO' });
     const osAtrasadas = await prisma.ordemServico.count({ where: { dataPrevista: { lt: startOfDay(new Date()) }, situacao: { final: false, cancelamento: false } } }).catch(() => 0);
     if (osAtrasadas) avisos.push({ tipo: 'aviso', prioridade: 3, mensagem: `${osAtrasadas} OS atrasada${osAtrasadas > 1 ? 's' : ''} (previsão vencida)`, link: '/ordens-servico?atrasadas=true' });
+    for (const a of await avisosConsignacao().catch(() => [])) avisos.push(a);
     avisos.sort((a, b) => a.prioridade - b.prioridade);
     const sugestaoHojeTotal = caixinhas.reduce((s, c) => s + c.sugestaoHoje, 0);
     return { avisos, caixinhas, sugestaoHojeTotal: Math.round(sugestaoHojeTotal * 100) / 100, saldoTotal: fin.saldoTotal };

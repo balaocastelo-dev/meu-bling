@@ -28,6 +28,8 @@ interface Checagem {
   contatoId: number;
   custoProdutos: number;
   compraRegistrada: { id: number; numero: number; total: number } | null;
+  /** itens consignados: o pagamento ao consignante sai pela consignação (na hora) */
+  consignados?: { id: number; numero: number; descricao: string; valorConsignante: number; status: string }[];
   parcelas: {
     id: number;
     numero: number;
@@ -274,9 +276,19 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
                                 className={r.contaFinanceiraId === b.id ? 'rounded-md border border-brand-600 bg-brand-600 px-3 py-1.5 text-sm font-medium text-white' : 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50'}
                               >
                                 {b.nome}
+                                {(b.taxaRecebimentoPct ?? 0) > 0 && <span className="ml-1 text-[11px] opacity-80">(−{String(b.taxaRecebimentoPct).replace('.', ',')}%)</span>}
                               </button>
                             ))}
                           </div>
+                          {(() => {
+                            const banco = bancos.find((b) => b.id === r.contaFinanceiraId);
+                            const t = banco?.taxaRecebimentoPct ?? 0;
+                            return t > 0 ? (
+                              <p className="mt-1 text-xs font-medium text-amber-700">
+                                Cai no {banco!.nome}: {moeda(p.valor * (1 - t / 100))} (taxa de {moeda(p.valor * (t / 100))})
+                              </p>
+                            ) : null;
+                          })()}
                         </div>
                       ) : (
                         <p className="self-end pb-2 text-xs text-slate-500">Fica no contas a receber.</p>
@@ -291,10 +303,17 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
 
           <section>
             <h3 className="mb-2 text-sm font-semibold text-slate-800">2. Compra da mercadoria</h3>
+            {!!c.consignados?.length && (
+              <div className="mb-2 rounded-md border border-violet-200 bg-violet-50 p-2.5 text-sm text-violet-800">
+                {c.consignados.map((k) => (
+                  <p key={k.id}>Consignado nº {k.numero} ({k.descricao}): ao finalizar, o pagamento de <b className="num">{moeda(k.valorConsignante)}</b> ao consignante entra no contas a pagar de hoje e ele recebe um WhatsApp.</p>
+                ))}
+              </div>
+            )}
             {c.compraRegistrada ? (
               <p className="text-sm text-emerald-700">Compra nº {c.compraRegistrada.numero} ({moeda(c.compraRegistrada.total)}) já registrada para esta venda.</p>
             ) : !(c.custoProdutos > 0) ? (
-              <p className="text-sm text-slate-500">Sem custo informado nos produtos.</p>
+              c.consignados?.length ? null : <p className="text-sm text-slate-500">Sem custo informado nos produtos.</p>
             ) : (
               <div className="space-y-3 rounded-md border border-slate-200 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">

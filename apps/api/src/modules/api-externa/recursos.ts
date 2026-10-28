@@ -32,6 +32,7 @@ export const RECURSOS: Recurso[] = [
   { chave: 'produtos', nome: 'Produtos e estoque', descricao: 'Produtos, preços, saldos por depósito, movimentos, ajustes e transferências de estoque, categorias.', rotas: [/^\/produtos(\/|$)/, /^\/estoque(\/|$)/, /^\/categorias-produto(\/|$)/] },
   { chave: 'vendas', nome: 'Pedidos de venda e orçamentos', descricao: 'Criar, editar, mudar situação, aprovar/converter orçamento, PDF, enviar ao cliente.', rotas: [/^\/vendas(\/|$)/] },
   { chave: 'compras', nome: 'Pedidos de compra', descricao: 'Pedidos de compra, entrada de estoque, importação de XML.', rotas: [/^\/compras(\/|$)/] },
+  { chave: 'consignacao', nome: 'Consignação', descricao: 'Equipamentos de clientes à venda na loja: contratos, fotos, desconto autorizado, diárias, pagamento ao consignante, retirada e painel.', rotas: [/^\/consignacoes(\/|$)/] },
   { chave: 'os', nome: 'Ordens de serviço', descricao: 'Assistência técnica: OS, kanban, peças, orçamento, situação, impressão.', rotas: [/^\/ordens-servico(\/|$)/] },
   { chave: 'financeiro', nome: 'Financeiro', descricao: 'Contas a receber e a pagar, empréstimos (Lumicred), baixas e estornos, caixa e bancos, extrato, transferências, conciliação bancária, Open Finance (sincronizar), categorias e contas financeiras.', rotas: [/^\/contas-receber(\/|$)/, /^\/contas-pagar(\/|$)/, /^\/financeiro(\/|$)/, /^\/bancos(\/|$)/, /^\/contas-financeiras(\/|$)/, /^\/categorias-financeiras(\/|$)/, /^\/open-finance\/(status|sincronizar)/] },
   { chave: 'fiscal', nome: 'Notas fiscais', descricao: 'NF-e/NFC-e: listar, criar, transmitir, consultar, carta de correção, XML, DANFE, e-mail; cancelar e inutilizar exigem nível total.', rotas: [/^\/notas-fiscais(\/|$)/, /^\/fiscal(\/|$)/] },
@@ -55,6 +56,8 @@ const BLOQUEADAS: { teste: RegExp; metodos?: string[] }[] = [
   { teste: /^\/open-finance\/(connect-token|vincular|desvincular)/ },
   { teste: /^\/whatsapp\/(conectar|desconectar|eventos)/ },
   { teste: /^\/site\/catalogo/ },
+  // regras da consignação e robô: só pela tela do ADMIN
+  { teste: /^\/consignacoes\/(regras|robo)$/, metodos: ['POST', 'PUT', 'PATCH', 'DELETE'] },
 ];
 
 /**
@@ -67,6 +70,8 @@ const EXIGEM_TOTAL: { teste: RegExp; metodos?: string[] }[] = [
   { teste: /^\/comissoes\/pagar$/ },
   // emitir NF vai para a SEFAZ (documento fiscal de verdade): só chave com nível total
   { teste: /^\/vendas\/[^/]+\/emitir-nf$/ },
+  // dinheiro saindo para o consignante e cancelamento do contrato
+  { teste: /^\/consignacoes\/[^/]+\/(pagar|quitar|cancelar)$/ },
 ];
 
 /** Rotas da própria API externa que qualquer chave válida usa (quem sou eu, documentação, busca, MCP). */
@@ -280,6 +285,7 @@ export const ENDPOINTS: Endpoint[] = [
   { metodo: 'GET', caminho: '/financeiro/movimentos', recurso: 'financeiro', resumo: 'Extrato interno (entradas e saídas das contas).', filtros: ['contaFinanceiraId', ...PERIODO, 'tipo (ENTRADA|SAIDA)', 'conciliado', 'pesquisa', ...PAG] },
   { metodo: 'POST', caminho: '/financeiro/movimentos', recurso: 'financeiro', resumo: 'Lançamento avulso no caixa/banco.', corpo: { contaFinanceiraId: 1, data: '2026-10-24', tipo: 'SAIDA', valor: 45.5, descricao: 'Café e água', categoriaId: null, observacoes: '' } },
   { metodo: 'DELETE', caminho: '/financeiro/movimentos/{id}', recurso: 'financeiro', resumo: 'Exclui um lançamento avulso.' },
+  { metodo: 'GET', caminho: '/contas-financeiras/{id}/extrato', recurso: 'financeiro', resumo: 'Extrato da conta: cada lançamento com de onde veio / para onde foi e o saldo depois dele.' },
   { metodo: 'POST', caminho: '/contas-financeiras/{id}/ajustar-saldo', recurso: 'financeiro', resumo: 'Acerta o saldo da conta com o valor real; lança só a diferença, fora do DRE.', corpo: { saldoReal: 7500, data: '2026-10-28' } },
   { metodo: 'POST', caminho: '/financeiro/transferencia', recurso: 'financeiro', resumo: 'Transferência entre contas (ex.: caixa → banco).', corpo: { origemId: 1, destinoId: 2, valor: 500, data: '2026-10-24', descricao: 'Depósito do caixa' } },
   { metodo: 'GET', caminho: '/contas-receber', recurso: 'financeiro', resumo: 'Contas a receber com totais (aberto, recebido, atrasado).', filtros: ['situacao (ABERTO|RECEBIDO|PARCIAL|CANCELADO|ATRASADO)', 'contatoId', 'vendedorId', 'categoriaId', 'contaFinanceiraId', 'origemTipo', 'origemId', ...PERIODO, 'tipoData (V=vencimento|E=emissão|R=recebimento)', 'pesquisa', ...PAG] },
@@ -318,6 +324,26 @@ export const ENDPOINTS: Endpoint[] = [
   { metodo: 'POST', caminho: '/financeiro/carnes/{id}/parcelas/{contaId}/receber', recurso: 'financeiro', resumo: 'Baixa uma parcela no caixa/banco escolhido (PIX → Cora; dinheiro → Caixa). Sem juros informados aplica multa e mora se atrasou.', corpo: { contaFinanceiraId: 2, data: '2026-11-28' } },
   { metodo: 'POST', caminho: '/financeiro/carnes/{id}/parcelas/{contaId}/estornar', recurso: 'financeiro', resumo: 'Estorna o recebimento de uma parcela do carnê.' },
   { metodo: 'GET', caminho: '/financeiro/carnes/{id}/imprimir', recurso: 'financeiro', resumo: 'Carnê para imprimir (HTML A4, 3 por folha, com capa e agradecimento, QR Code PIX em cada parcela).', filtros: ['abertas (só parcelas em aberto)'] },
+  { metodo: 'GET', caminho: '/consignacoes', recurso: 'consignacao', resumo: 'Contratos de consignação com valores, prazo, quanto falta pagar ao consignante, diárias e o alerta do que fazer; totais.', filtros: ['status (NO_PRAZO|EM_DIARIAS|AGUARDANDO_RETIRADA|VENDIDO|QUITADO|RETIRADO|CANCELADO)', 'ativas (true)', 'pesquisa', 'consignanteId'] },
+  { metodo: 'GET', caminho: '/consignacoes/painel', recurso: 'consignacao', resumo: 'Painel do ADM: pagar agora, compromisso de caixa por dia, sugestões de quitar (vendidos durante as diárias), perto do prazo e sem assinatura.' },
+  { metodo: 'GET', caminho: '/consignacoes/regras', recurso: 'consignacao', resumo: 'Regras vigentes (percentual do consignante, prazo, diária %/mínimo/máximo, taxa de retirada, desconto do robô).' },
+  { metodo: 'GET', caminho: '/consignacoes/simular', recurso: 'consignacao', resumo: 'Conta de um contrato antes de criar: valor do consignante, lucro da loja e diárias.', filtros: ['precoVenda', 'percentual'] },
+  { metodo: 'GET', caminho: '/consignacoes/{id}', recurso: 'consignacao', resumo: 'Um contrato com pagamentos, descontos pedidos, fotos e linha do tempo.' },
+  { metodo: 'GET', caminho: '/consignacoes/{id}/contrato', recurso: 'consignacao', resumo: 'Contrato em HTML pronto para imprimir.' },
+  { metodo: 'POST', caminho: '/consignacoes', recurso: 'consignacao', resumo: 'Cria o contrato: produto CONS-N com 1 no estoque, pedido de compra "Consignado" e WhatsApp ao consignante com o link para assinar.', corpo: { consignante: { nome: 'Maria Silva', documento: '12345678909', celular: '19999990000' }, tipoEquipamento: 'NOTEBOOK', descricao: 'MacBook Air M1 8GB 256GB', estado: 'Seminovo', precoVenda: 3750, declaracaoOrigem: true } },
+  { metodo: 'PUT', caminho: '/consignacoes/{id}', recurso: 'consignacao', resumo: 'Altera dados do equipamento, preço (nunca abaixo do valor travado do consignante) e vitrine do site.', corpo: { precoVenda: 3900, destaque: true } },
+  { metodo: 'POST', caminho: '/consignacoes/{id}/fotos', recurso: 'consignacao', resumo: 'Envia fotos (multipart, campo de arquivo); a primeira é a capa no site.' },
+  { metodo: 'DELETE', caminho: '/consignacoes/{id}/fotos/{nome}', recurso: 'consignacao', resumo: 'Remove uma foto.' },
+  { metodo: 'PUT', caminho: '/consignacoes/{id}/fotos/ordem', recurso: 'consignacao', resumo: 'Reordena as fotos (a primeira vira capa).', corpo: { ordem: ['foto.jpg'] } },
+  { metodo: 'POST', caminho: '/consignacoes/{id}/assinar-na-loja', recurso: 'consignacao', resumo: 'Registra o contrato como assinado na loja (com a imagem da assinatura opcional).', corpo: { nome: 'Maria Silva' } },
+  { metodo: 'POST', caminho: '/consignacoes/{id}/desconto', recurso: 'consignacao', resumo: 'Pede ao consignante, pelo WhatsApp, autorização para baixar o preço (padrão 5%).', corpo: { pct: 5 } },
+  { metodo: 'POST', caminho: '/consignacoes/{id}/reenviar-link', recurso: 'consignacao', resumo: 'Reenvia ao consignante o link do contrato pelo WhatsApp.' },
+  { metodo: 'POST', caminho: '/consignacoes/{id}/pagar', recurso: 'consignacao', resumo: 'Paga o consignante (o que vence até hoje, ou o valor informado) saindo da conta escolhida. Exige nível total.', corpo: { contaFinanceiraId: 2, data: '2026-10-28' } },
+  { metodo: 'POST', caminho: '/consignacoes/{id}/quitar', recurso: 'consignacao', resumo: 'Troca as diárias que faltam por um pagamento só, hoje (e paga se vier a conta). Exige nível total.', corpo: { contaFinanceiraId: 2 } },
+  { metodo: 'POST', caminho: '/consignacoes/{id}/retirada', recurso: 'consignacao', resumo: 'Registra a retirada do equipamento pelo consignante (taxa antes do prazo, devolução de diárias recebidas).', corpo: { recebido: true, contaFinanceiraId: 2 } },
+  { metodo: 'POST', caminho: '/consignacoes/{id}/escolha', recurso: 'consignacao', resumo: 'Registra a escolha do consignante no fim do prazo: RECEBER (diárias) ou RETIRAR.', corpo: { escolha: 'RECEBER' } },
+  { metodo: 'POST', caminho: '/consignacoes/{id}/iniciar-diarias', recurso: 'consignacao', resumo: 'Começa as diárias agora (encerra o prazo hoje).' },
+  { metodo: 'POST', caminho: '/consignacoes/{id}/cancelar', recurso: 'consignacao', resumo: 'Cancela um contrato lançado por engano (sem venda e sem pagamento). Exige nível total.' },
   { metodo: 'GET', caminho: '/bancos/transacoes', recurso: 'financeiro', resumo: 'Transações do extrato bancário, com sugestões de conciliação.', filtros: ['contaFinanceiraId', 'conciliado (true|false)', 'tipo (CREDITO|DEBITO)', ...PERIODO, 'pesquisa', 'sugestoes (true|false)', ...PAG] },
   { metodo: 'POST', caminho: '/bancos/transacoes/{id}/conciliar', recurso: 'financeiro', resumo: 'Concilia a transação com uma conta (faz a baixa) ou lança avulso.', corpo: { tipo: 'RECEBER', id: 10, categoriaId: null, descricao: null } },
   { metodo: 'POST', caminho: '/bancos/transacoes/{id}/ignorar', recurso: 'financeiro', resumo: 'Ignora a transação na conciliação.' },

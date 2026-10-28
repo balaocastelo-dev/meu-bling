@@ -62,6 +62,12 @@ const REGRAS: Regra[] = [
   { teste: /^\/(metas|desafios)(\/|$)/, perfis: GESTAO },
   { teste: /^\/painel-vendedor(\/|$)/, perfis: ['ADMIN', 'GERENTE', 'VENDEDOR'] },
 
+  // ---- consignação: todos criam e acompanham contratos; o painel (com o caixa) e os pagamentos são do financeiro
+  { teste: /^\/consignacoes\/painel$/, perfis: FIN },
+  { metodos: MUT, teste: /^\/consignacoes\/\d+\/(pagar|quitar)$/, perfis: FIN },
+  { metodos: MUT, teste: /^\/consignacoes\/\d+\/(cancelar|iniciar-diarias)$/, perfis: GESTAO },
+  { metodos: MUT, teste: /^\/consignacoes\/(regras|robo)$/, perfis: ['ADMIN'] },
+
   // ---- financeiro
   { teste: /^\/(financeiro|contas-pagar|bancos|open-finance)(\/|$)/, perfis: FIN },
   { metodos: MUT, teste: /^\/contas-receber(\/|$)/, perfis: FIN },

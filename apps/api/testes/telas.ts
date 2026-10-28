@@ -78,6 +78,7 @@ async function main() {
     contatos: await primeiro('/contatos?limite=1'),
     produtos: await primeiro('/produtos?limite=1'),
     'notas-fiscais': await primeiro('/notas-fiscais?limite=1'),
+    consignacoes: await primeiro('/consignacoes'),
   };
   const montar = (caminho: string) => {
     if (!caminho.includes(':id')) return caminho;

@@ -126,6 +126,16 @@ async function main() {
     verifica(cr3.length === 1 && cr3[0].situacao === 'RECEBIDO' && cr3[0].contaFinanceiraId === bancoB.id, 'PIX recebido no banco permitido', { ok3, cr3 });
   }
 
+  secao('Banco com taxa (Mercado Pago 5%): entra o valor menos a taxa');
+  const mp = await adm.post('/contas-financeiras', { nome: `Mercado Pago ${SUF}`, tipo: 'BANCO', saldoInicial: 0, taxaRecebimentoPct: 5, padrao: false, ativo: true }, [200, 201]);
+  const v4 = await adm.post('/vendas', { contatoId: cf.id, vendedorId: vend.id, data: hoje(), itens: [{ produtoId: prod.id, quantidade: 1, valorUnitario: 200, custoUnitario: 100 }], parcelas: [{ dataVencimento: hoje(), valor: 200, formaPagamentoId: crediario?.id ?? dinheiro.id }] }, 201);
+  const c4: any = await adm.get(`/vendas/${v4.id}/finalizacao`);
+  await adm.post(`/vendas/${v4.id}/finalizar`, { recebimentos: [{ parcelaId: c4.parcelas[0].id, formaPagamentoId: dinheiro.id, recebido: true, contaFinanceiraId: mp.id }] }, 200);
+  const mpDepois = (await contas()).find((c) => c.id === mp.id);
+  verifica(igual(mpDepois.saldoAtual, 190), 'Mercado Pago recebeu 190 (200 − 5%)', mpDepois);
+  const cr4 = await receber(v4.id);
+  verifica(cr4[0]?.situacao === 'RECEBIDO' && igual(cr4[0].desconto, 10), 'título quitado com 10 de taxa', cr4[0]);
+
   secao('Link de pagamento sem token do Mercado Pago avisa o que falta');
   const semToken: any = await adm.post(`/vendas/${vf.id}/link-pagamento`, {}, 422);
   verifica(semToken.code === 'MERCADOPAGO_SEM_TOKEN', 'erro diz para configurar o Mercado Pago', semToken);

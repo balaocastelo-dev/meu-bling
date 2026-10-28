@@ -1,7 +1,7 @@
 /**
  * Servidor de arquivos do storage em /uploads/<pasta>/<arquivo>.
  *
- *  - logos/                       → público (aparece nas páginas públicas e no login)
+ *  - logos/, consignados/         → público (páginas públicas, login, vitrine de consignados do site)
  *  - anexos/, danfe/, nfe/, pedidos/ → exige sessão válida: cookie `mb_token` (definido no login)
  *                                   ou cabeçalho Authorization: Bearer
  *  - whatsapp/, temp/, importacao/ e qualquer outra pasta → nunca servidos (404)
@@ -14,7 +14,8 @@ import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { env } from '../lib/env.js';
 
-const PUBLICAS = new Set(['logos']);
+// consignados/: fotos dos equipamentos consignados (vitrine do site e link do consignante)
+const PUBLICAS = new Set(['logos', 'consignados']);
 const PROTEGIDAS = new Set(['anexos', 'danfe', 'nfe', 'pedidos']);
 
 const MIME: Record<string, string> = {

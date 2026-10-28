@@ -95,6 +95,7 @@ async function main() {
     rodar('Empréstimos (Lumicred): repasse, cliente paga direto, capital de giro, cancelar; DRE só com juros', NPX, ['tsx', 'testes/emprestimos.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Crédito bancário como forma de pagamento: venda (cliente ou loja paga) e compra geram o empréstimo', NPX, ['tsx', 'testes/credito-bancario.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Carnê próprio: PIX no Cora, risco 7–15%, auditoria, venda no carnê, receber, DRE e impressão', NPX, ['tsx', 'testes/carnes.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
+    rodar('Consignação: contrato, assinatura pelo celular, desconto autorizado, venda na hora, diárias em dias úteis, quitação, retirada e vitrine do site', NPX, ['tsx', 'testes/consignacao.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Caixinhas (Nubank): por dia, sugestão de hoje, guardar/retirar fora do DRE + avisos do gestor', NPX, ['tsx', 'testes/caixinhas.ts', base]);
     rodar('Robô de NF: NCM automático, cliente completo, Pronto pra NF, emitir com um clique, CFOP fora do estado', NPX, ['tsx', 'testes/robo-nf.ts', base]);
     rodar('Documentos da venda: recibo 80mm/A4, certificados de garantia, termo, licenças e versículo', NPX, ['tsx', 'testes/documentos.ts', base]);

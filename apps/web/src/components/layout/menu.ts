@@ -34,6 +34,7 @@ import {
   Wrench,
   HandCoins,
   BookOpen,
+  Handshake,
 } from 'lucide-react';
 import type { Perfil } from '@/types';
 
@@ -78,6 +79,7 @@ export const MENU: GrupoMenu[] = [
     titulo: 'Compras',
     itens: [
       { rotulo: 'Pedidos de compra', para: '/compras', icone: ShoppingBag },
+      { rotulo: 'Consignação', para: '/consignacoes', icone: Handshake },
       { rotulo: 'Fornecedores', para: '/contatos?tipo=FORNECEDOR', icone: Truck },
     ],
   },

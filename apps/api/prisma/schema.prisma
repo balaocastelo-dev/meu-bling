@@ -155,6 +155,7 @@ model Vendedor {
   contasReceber ContaReceber[]
   metas         MetaVendedor[]
   conquistas    DesafioConquista[]
+  consignacoes  Consignacao[]
 }
 
 /// Meta de vendas de um vendedor num mês específico (sobrepõe Vendedor.metaMensal)
@@ -316,6 +317,7 @@ model Contato {
   emprestimosCredor  Emprestimo[]   @relation("EmprestimoCredor")
   emprestimosCliente Emprestimo[]   @relation("EmprestimoCliente")
   carnes             Carne[]        @relation("CarneCliente")
+  consignacoes       Consignacao[]
 
   @@index([nome])
   @@index([documento])
@@ -393,6 +395,7 @@ model Produto {
   compraItens CompraItem[]
   osItens     OrdemServicoItem[]
   nfItens     NotaFiscalItem[]
+  consignacao Consignacao?
 
   @@index([nome])
   @@index([prontaEntrega])
@@ -494,6 +497,8 @@ model ContaFinanceira {
   agencia              String?
   conta                String?
   saldoInicial         Float     @default(0)
+  /// taxa que o banco/maquininha desconta de cada recebimento (ex.: Mercado Pago 5%): cai o valor − taxa
+  taxaRecebimentoPct   Float     @default(0)
   saldoAtual           Float     @default(0)
   /// saldo informado pelo banco via Open Finance (ao vivo)
   saldoBanco           Float?
@@ -746,6 +751,7 @@ model Compra {
   itens       CompraItem[]
   parcelas    CompraParcela[]
   emprestimos Emprestimo[]
+  consignacao Consignacao?
 
   @@index([data])
   @@index([fornecedorId])
@@ -1006,8 +1012,12 @@ model ContaReceber {
   carneParcela Int?
 
   vendaParcela VendaParcela?
-  osParcela    OrdemServicoParcela?
-  lancamentos  MovimentoFinanceiro[]
+
+  /// taxa de retirada / devolução cobrada do consignante
+  consignacao   Consignacao?          @relation(fields: [consignacaoId], references: [id])
+  consignacaoId Int?
+  osParcela     OrdemServicoParcela?
+  lancamentos   MovimentoFinanceiro[]
 
   @@index([vencimento, situacao])
   @@index([origemTipo, origemId])
@@ -1049,6 +1059,10 @@ model ContaPagar {
   emprestimoId Int?
 
   compraParcela CompraParcela?
+
+  /// pagamento ao consignante (diária ou valor da venda)
+  consignacao   Consignacao?          @relation(fields: [consignacaoId], references: [id])
+  consignacaoId Int?
   comissoes     Comissao[]
   lancamentos   MovimentoFinanceiro[]
 
@@ -1513,4 +1527,140 @@ model Carne {
 
   @@index([clienteId])
   @@index([vendaId])
+}
+
+// ---------------------------------------------------------------------
+// CONSIGNAÇÃO (28/10/2026): o cliente deixa o equipamento para a loja vender.
+//   Consignante fica com X% (padrão 80) do preço — valor TRAVADO no contrato.
+//   Vendeu → paga na hora. Não vendeu em N dias corridos (padrão 10) → a loja paga
+//   5% por dia útil (mín. R$ 100, máx. R$ 1.000) até quitar; quitou → item vira estoque próprio.
+//   Retirada antes do prazo: taxa (padrão R$ 100); depois do prazo, sem taxa.
+// ---------------------------------------------------------------------
+model Consignacao {
+  id                       Int       @id @default(autoincrement())
+  numero                   Int       @unique
+  /// token do link do consignante (assinar, acompanhar, autorizar desconto, escolher retirar/receber)
+  token                    String    @unique
+  consignante              Contato   @relation(fields: [consignanteId], references: [id])
+  consignanteId            Int
+  vendedor                 Vendedor? @relation(fields: [vendedorId], references: [id])
+  vendedorId               Int?
+  usuarioId                Int?
+  // ---- equipamento
+  /// NOTEBOOK | PC | PC_GAMER | CELULAR | TABLET | GAMES | MONITOR | OUTRO
+  tipoEquipamento          String    @default("OUTRO")
+  /// título que aparece no site e no estoque (ex.: "MacBook Air M1 8GB 256GB")
+  descricao                String
+  marca                    String?
+  modelo                   String?
+  numeroSerie              String?
+  imei                     String?
+  /// estado de conservação (ex.: "Seminovo, sem marcas")
+  estado                   String?
+  acessorios               String?
+  /// texto da página de venda no site
+  detalhes                 String?
+  /// JSON: nomes dos arquivos em /uploads/consignados/<id>/
+  fotos                    String?
+  /// consignante declarou que o equipamento é dele, de origem lícita e sem bloqueio
+  declaracaoOrigem         Boolean   @default(false)
+  // ---- valores (travados no contrato; só mudam com desconto autorizado pelo consignante)
+  precoVenda               Float
+  percentualConsignante    Float     @default(80)
+  valorConsignante         Float
+  precoVendaOriginal       Float
+  valorConsignanteOriginal Float
+  // ---- regras copiadas da configuração no dia do contrato
+  prazoDias                Int       @default(10)
+  diariaPct                Float     @default(5)
+  diariaMinima             Float     @default(100)
+  diariaMaxima             Float     @default(1000)
+  taxaRetirada             Float     @default(100)
+  dataEntrada              DateTime
+  /// último dia do prazo (entrada + prazoDias corridos)
+  dataLimite               DateTime
+  /// NO_PRAZO | EM_DIARIAS | AGUARDANDO_RETIRADA | VENDIDO | QUITADO | RETIRADO | CANCELADO
+  status                   String    @default("NO_PRAZO")
+  // ---- assinatura
+  assinadoEm               DateTime?
+  /// CELULAR | LOJA
+  assinadoPor              String?
+  assinaturaNome           String?
+  assinaturaDocumento      String?
+  assinaturaIp             String?
+  assinaturaAgente         String?
+  /// imagem da assinatura (anexos/consignacoes/<id>/assinatura.png)
+  assinaturaArquivo        String?
+  // ---- escolha do consignante no fim do prazo
+  /// RECEBER | RETIRAR
+  escolha                  String?
+  escolhaEm                DateTime?
+  diariasIniciadasEm       DateTime?
+  diariaValor              Float?
+  // ---- desfecho
+  vendaId                  Int?
+  vendaNumero              Int?
+  vendidoEm                DateTime?
+  /// vendeu durante as diárias: o painel sugere quitar o saldo (decisão do ADMIN)
+  vendidoEmDiarias         Boolean   @default(false)
+  retiradoEm               DateTime?
+  quitadoEm                DateTime?
+  canceladoEm              DateTime?
+  // ---- vínculos
+  compra                   Compra?   @relation(fields: [compraId], references: [id])
+  compraId                 Int?      @unique
+  produto                  Produto?  @relation(fields: [produtoId], references: [id])
+  produtoId                Int?      @unique
+  /// aparece na vitrine "Consignados" do site (depois de assinado)
+  mostrarNoSite            Boolean   @default(true)
+  destaque                 Boolean   @default(false)
+  observacoes              String?
+  /// JSON: avisos de WhatsApp já enviados (chave → data), para não repetir
+  avisos                   String?
+  criadoEm                 DateTime  @default(now())
+  atualizadoEm             DateTime  @updatedAt
+
+  contasPagar   ContaPagar[]
+  contasReceber ContaReceber[]
+  descontos     ConsignacaoDesconto[]
+  eventos       ConsignacaoEvento[]
+
+  @@index([status])
+  @@index([consignanteId])
+}
+
+/// Pedido de desconto ao consignante (o robô pede nos primeiros dias; a loja também pode pedir)
+model ConsignacaoDesconto {
+  id            Int         @id @default(autoincrement())
+  consignacao   Consignacao @relation(fields: [consignacaoId], references: [id], onDelete: Cascade)
+  consignacaoId Int
+  pct           Float
+  precoDe       Float
+  precoPara     Float
+  valorDe       Float
+  valorPara     Float
+  /// PENDENTE | AUTORIZADO | RECUSADO | EXPIRADO
+  status        String      @default("PENDENTE")
+  /// ROBO | LOJA
+  origem        String      @default("ROBO")
+  pedidoEm      DateTime    @default(now())
+  respondidoEm  DateTime?
+  ip            String?
+
+  @@index([consignacaoId, status])
+}
+
+/// Linha do tempo do contrato (o que aconteceu, em português, para a loja e para o consignante)
+model ConsignacaoEvento {
+  id            Int         @id @default(autoincrement())
+  consignacao   Consignacao @relation(fields: [consignacaoId], references: [id], onDelete: Cascade)
+  consignacaoId Int
+  data          DateTime    @default(now())
+  tipo          String
+  texto         String
+  /// aparece no painel do consignante
+  publico       Boolean     @default(true)
+  usuarioId     Int?
+
+  @@index([consignacaoId])
 }
