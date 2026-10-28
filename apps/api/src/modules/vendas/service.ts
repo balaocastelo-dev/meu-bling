@@ -121,6 +121,7 @@ export interface ItemCalculado {
   comissaoPct: number;
   comissaoValor: number;
   ordem: number;
+  numeroSerie: string | null;
 }
 
 export interface TotaisVenda {
@@ -170,6 +171,7 @@ export async function montarItens(db: Db, itens: ItemInput[], comissaoPadraoPct:
       custoInformado: i.custoUnitario !== null && i.custoUnitario !== undefined,
       comissaoPct,
       comissaoValor: arredondar(total * (comissaoPct / 100)),
+      numeroSerie: i.numeroSerie || null,
       ordem: idx,
     };
   });

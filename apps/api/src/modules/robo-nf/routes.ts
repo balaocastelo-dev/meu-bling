@@ -19,7 +19,7 @@ import { eventos } from '../../core/eventos.js';
 import { registrarServico } from '../../core/servicos.js';
 import { carregarVenda, exigirPedido, gerarNfeDaVenda } from '../vendas/service.js';
 import { transmitir } from '../../integracoes/fiscal/service.js';
-import { agendarConferencia, conferirVenda, DIAS_VARREDURA, estadoAtual, estadoDoRegistro, painel, varrer } from './motor.js';
+import { agendarConferencia, conferirVenda, DIAS_VARREDURA, estadoAtual, estadoDoRegistro, painel, preencherCatalogo, varrer } from './motor.js';
 import { formatarNcm } from './ncm.js';
 
 const idDe = (req: any) => {
@@ -49,7 +49,10 @@ registrarServico('robo-nf', (app) => {
     return;
   }
   const rodada = () =>
-    varrer()
+    preencherCatalogo()
+      .then((r) => r.preenchidos && app.log.info(`[robo-nf] catálogo: NCM preenchido em ${r.preenchidos} produto(s)`))
+      .catch((e) => app.log.error({ e }, '[robo-nf] falha ao preencher o catálogo'))
+      .then(() => varrer())
       .then((r) => r && r.conferidas && app.log.info(`[robo-nf] varredura: ${r.conferidas} venda(s) conferida(s), ${r.prontas} pronta(s) pra NF, ${r.pendentes} com pendência`))
       .catch((e) => app.log.error({ e }, '[robo-nf] falha na varredura'));
   // primeira rodada logo depois de subir (sem atrasar a subida da API)

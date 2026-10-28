@@ -73,7 +73,7 @@ function deVenda(v: Venda): VendaPayload {
     fretePorConta: v.fretePorConta,
     quantidadeVolumes: v.quantidadeVolumes,
     pesoBruto: v.pesoBruto,
-    itens: v.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct, custoUnitario: i.custoUnitario ?? 0, custoInformado: !!i.custoInformado, imagemUrl: i.produto?.imagemUrl ?? null, prontaEntrega: Boolean(i.produto?.prontaEntrega) })),
+    itens: v.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct, custoUnitario: i.custoUnitario ?? 0, custoInformado: !!i.custoInformado, numeroSerie: i.numeroSerie ?? null, imagemUrl: i.produto?.imagemUrl ?? null, prontaEntrega: Boolean(i.produto?.prontaEntrega) })),
     parcelas: v.parcelas.map((p) => ({ dataVencimento: dataIso(p.dataVencimento), valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes ?? '' })),
   };
 }
@@ -358,6 +358,16 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                           <span className="flex items-center gap-2">
                             {it.codigo && <span className="text-[10px] text-slate-400">cód. {it.codigo}</span>}
                             {it.prontaEntrega && <SeloProntaEntrega compacto />}
+                            {it.produtoId && (
+                              <input
+                                disabled={bloqueado}
+                                value={it.numeroSerie ?? ''}
+                                onChange={(e) => atualizarItem(i, { numeroSerie: e.target.value || null })}
+                                className="h-6 w-36 rounded border border-slate-200 px-1.5 text-[11px] placeholder:text-slate-400"
+                                placeholder="Nº série / IMEI"
+                                title="Sai no certificado de garantia"
+                              />
+                            )}
                             {!it.produtoId && !bloqueado && (
                               <span className="text-[11px] text-amber-700">
                                 Sem cadastro: não baixa estoque nem vai na NF ·{' '}

@@ -225,6 +225,33 @@ export async function varrer(limite = 300) {
   }
 }
 
+/**
+ * Catálogo inteiro: preenche o NCM dos produtos que ainda não têm (não só os das vendas),
+ * um lote por varredura. Produto sem regra fica marcado SEM_REGRA e é tentado de novo 1x por dia.
+ */
+export async function preencherCatalogo(limite = 300) {
+  const ontem = new Date(Date.now() - 86400_000);
+  const produtos = await prisma.produto.findMany({
+    where: {
+      tipo: 'P',
+      ativo: true,
+      OR: [{ ncm: null }, { ncm: '' }, { ncm: '00000000' }],
+      AND: [{ OR: [{ ncmOrigem: null }, { ncmOrigem: 'SEM_REGRA', atualizadoEm: { lt: ontem } }] }],
+    },
+    select: { id: true, nome: true, categoria: { select: { nome: true } } },
+    take: limite,
+  });
+  let preenchidos = 0;
+  for (const p of produtos) {
+    const s = await sugerirNcm(prisma, p);
+    if (s) {
+      await prisma.produto.update({ where: { id: p.id }, data: { ncm: s.ncm, ncmOrigem: s.origem } });
+      preenchidos++;
+    } else await prisma.produto.update({ where: { id: p.id }, data: { ncmOrigem: 'SEM_REGRA' } });
+  }
+  return { conferidos: produtos.length, preenchidos };
+}
+
 /** Números para o painel do robô. */
 export async function painel() {
   const desde = new Date(Date.now() - DIAS_VARREDURA * 86400_000);

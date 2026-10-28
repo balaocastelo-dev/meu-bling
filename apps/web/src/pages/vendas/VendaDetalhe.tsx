@@ -10,6 +10,7 @@ import { HistoricoSituacoes } from '@/components/compartilhados/HistoricoSituaco
 import { NotificarModal } from '@/components/compartilhados/NotificarModal';
 import { EmitirNfModal } from '@/components/compartilhados/EmitirNfModal';
 import { BotaoRoboNf } from '@/components/compartilhados/RoboNf';
+import { ImprimirVenda } from '@/components/compartilhados/ImprimirVenda';
 import { NotificacoesLista } from '@/components/compartilhados/NotificacoesLista';
 import { data, dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { Contato, Venda } from '@/types';
@@ -98,9 +99,7 @@ export default function VendaDetalhe() {
             {/* robô de NF: "Pronto pra NF" (verde) ou "Falta N pra NF" (amarelo) */}
             {!orcamento && !fechado && !venda.nota && <BotaoRoboNf vendaId={venda.id} numero={venda.numero} onEmitida={invalidar} />}
             <VendaAcoes venda={venda} contexto="detalhe" />
-            <Button variante="secundario" icone={<Printer className="h-4 w-4" />} onClick={imprimir}>
-              Imprimir
-            </Button>
+            <ImprimirVenda vendaId={venda.id} orcamento={orcamento} aoImprimirPedido={imprimir} />
             <Button variante="secundario" icone={<Send className="h-4 w-4" />} onClick={() => setNotificar(true)}>
               Enviar ao cliente
             </Button>
