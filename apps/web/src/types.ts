@@ -358,6 +358,8 @@ export interface VendaItem {
   custoInformado?: boolean;
   comissaoPct?: number;
   comissaoValor?: number;
+  /** nº de série / IMEI (sai no certificado de garantia) */
+  numeroSerie?: string | null;
   /** vindo da API (GET /vendas/:id) */
   produto?: { id: number; nome: string; imagemUrl?: string | null; prontaEntrega?: boolean } | null;
   /** só na tela do formulário (não vai para a API) */

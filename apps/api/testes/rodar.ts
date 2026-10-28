@@ -94,6 +94,7 @@ async function main() {
     rodar('Venda paga na hora entra no caixa + ajuste de saldo fora do DRE + DRE', NPX, ['tsx', 'testes/pago-na-hora.ts', base]);
     rodar('Empréstimos (Lumicred): repasse, cliente paga direto, capital de giro, cancelar; DRE só com juros', NPX, ['tsx', 'testes/emprestimos.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Robô de NF: NCM automático, cliente completo, Pronto pra NF, emitir com um clique, CFOP fora do estado', NPX, ['tsx', 'testes/robo-nf.ts', base]);
+    rodar('Documentos da venda: recibo 80mm/A4, certificados de garantia, termo, licenças e versículo', NPX, ['tsx', 'testes/documentos.ts', base]);
     rodar('Porta do site: PDV, JUL.IA (orçamento e pedido em aberto), vendas por dia e por período', NPX, ['tsx', 'testes/integracao-site.ts', base], { env: { TZ: 'America/Sao_Paulo', SITE_CHAVE_INTEGRACAO: env.SITE_CHAVE_INTEGRACAO } });
     rodar('API externa: chaves, permissões, MCP para agentes de IA e webhooks', NPX, ['tsx', 'testes/api-externa.ts', base]);
     rodar('API externa: varredura — toda rota aberta para chave está documentada', NPX, ['tsx', 'testes/api-cobertura.ts'], { env });

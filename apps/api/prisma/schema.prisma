@@ -669,6 +669,8 @@ model VendaItem {
   custoInformado Boolean  @default(false)
   comissaoPct    Float    @default(0)
   comissaoValor  Float    @default(0)
+  /// nº de série / IMEI do aparelho vendido (sai no certificado de garantia)
+  numeroSerie    String?
   ordem          Int      @default(0)
 
   alocacoesCompra AlocacaoCompra[]

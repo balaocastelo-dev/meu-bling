@@ -6,6 +6,7 @@
  * nivel "aviso" → dá para emitir, mas vale conferir
  */
 import { somenteDigitos } from '../../lib/util.js';
+import { ncmVigente } from '../robo-nf/ncm.js';
 import type { Db } from './nfe.js';
 
 export interface AcaoPendencia {
@@ -224,11 +225,20 @@ export async function verificarNfe(db: Db, p: ParamsChecagem): Promise<Resultado
         codigo: 'PRODUTO_SEM_NCM',
         grupo: 'ITENS',
         titulo: `${nItem}: o produto está sem NCM.`,
-        detalhe: 'O robô de NF não conseguiu descobrir o NCM pelo nome. Informe no cadastro do produto (ex.: notebook 8471.30.12, monitor 8528.52.20) — depois ele vale para todas as vendas desse produto.',
+        detalhe: 'O robô de NF não conseguiu descobrir o NCM pelo nome. Informe no cadastro do produto (ex.: notebook 8471.30.12, monitor 8528.52.00) — depois ele vale para todas as vendas desse produto.',
         acoes: [{ rotulo: 'Informar NCM do produto', rota: `/produtos/${pr.id}/editar` }],
       });
     } else if (ncm.length !== 8) {
       pend.push({ nivel: 'erro', codigo: 'PRODUTO_NCM_INVALIDO', grupo: 'ITENS', titulo: `${nItem}: NCM "${pr.ncm}" inválido (precisa de 8 dígitos).`, acoes: [{ rotulo: 'Corrigir NCM', rota: `/produtos/${pr.id}/editar` }] });
+    } else if (ncmVigente(ncm) === false) {
+      pend.push({
+        nivel: 'erro',
+        codigo: 'PRODUTO_NCM_EXTINTO',
+        grupo: 'ITENS',
+        titulo: `${nItem}: o NCM ${ncmFmt} não existe mais na tabela oficial (a SEFAZ rejeita).`,
+        detalhe: 'Códigos antigos (antes de 2022) foram trocados — ex.: monitor 8528.52.20 virou 8528.52.00. O robô de NF sugere o novo; confira no produto.',
+        acoes: [{ rotulo: 'Corrigir NCM do produto', rota: `/produtos/${pr.id}/editar` }],
+      });
     } else if (pr.ncmOrigem === 'SUGERIDO') {
       pend.push({
         nivel: 'erro',

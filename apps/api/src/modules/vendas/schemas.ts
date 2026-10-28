@@ -21,6 +21,8 @@ export const itemSchema = z.object({
   comissaoPct: z.coerce.number().min(0).max(100).nullable().optional(),
   /** custo interno informado pelo vendedor; omitido/null = custo do cadastro do produto */
   custoUnitario: z.coerce.number().min(0).nullable().optional(),
+  /** nº de série / IMEI (certificado de garantia) */
+  numeroSerie: z.string().trim().max(120).nullable().optional(),
 });
 
 export const parcelaSchema = z.object({
