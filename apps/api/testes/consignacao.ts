@@ -112,7 +112,7 @@ async function main() {
   const v1 = await adm.post('/vendas', { contatoId: cliente.id, data: hoje(), itens: [{ produtoId: c1.produto.id, quantidade: 1, valorUnitario: 3562.5 }], parcelas: [{ dataVencimento: hoje(), valor: 3562.5, formaPagamentoId: pix.id }] }, 201);
   const fz = await adm.get(`/vendas/${v1.id}/finalizacao`);
   verifica(fz.consignados?.some((x: any) => x.numero === c1.numero) && igual(fz.custoProdutos, 0), 'finalizar: reconhece o consignado e não pergunta da compra', { c: fz.consignados, custo: fz.custoProdutos });
-  await adm.post(`/vendas/${v1.id}/finalizar`, { compra: { paga: true, contaFinanceiraId: banco.id }, recebimentos: [{ parcelaId: fz.parcelas[0].id, recebido: true, contaFinanceiraId: banco.id }] }, 200);
+  await adm.post(`/vendas/${v1.id}/finalizar`, { compra: { paga: true, contaFinanceiraId: banco.id }, recebimentos: [{ parcelaId: fz.parcelas[0].id, recebido: false }] }, 200);
   const c1v = await adm.get(`/consignacoes/${c1.id}`);
   const contaVenda = c1v.contasPagar.find((x: any) => x.parcela === 'VENDA');
   verifica(c1v.status === 'VENDIDO' && contaVenda && igual(contaVenda.valor, 2850) && contaVenda.vencimento.slice(0, 10) === hoje() && c1v.alerta?.tom === 'vermelho', 'VENDIDO: conta de R$ 2.850 vencendo hoje e alerta "pague agora"', { s: c1v.status, conta: contaVenda, alerta: c1v.alerta });
@@ -158,7 +158,7 @@ async function main() {
   secao('Vendeu durante as diárias → painel sugere quitar o saldo');
   const v3 = await adm.post('/vendas', { contatoId: cliente.id, data: hoje(), itens: [{ produtoId: c3.produto.id, quantidade: 1, valorUnitario: 5000 }], parcelas: [{ dataVencimento: hoje(), valor: 5000, formaPagamentoId: pix.id }] }, 201);
   const fz3 = await adm.get(`/vendas/${v3.id}/finalizacao`);
-  await adm.post(`/vendas/${v3.id}/finalizar`, { recebimentos: [{ parcelaId: fz3.parcelas[0].id, recebido: true, contaFinanceiraId: banco.id }] }, 200);
+  await adm.post(`/vendas/${v3.id}/finalizar`, { recebimentos: [{ parcelaId: fz3.parcelas[0].id, recebido: false }] }, 200);
   const c3v = await adm.get(`/consignacoes/${c3.id}`);
   verifica(c3v.status === 'VENDIDO' && c3v.vendidoEmDiarias && c3v.alerta?.texto.includes('quitar'), 'VENDIDO nas diárias, alerta sugere quitar', { s: c3v.status, d: c3v.vendidoEmDiarias, a: c3v.alerta });
   const painel2 = await adm.get('/consignacoes/painel');
