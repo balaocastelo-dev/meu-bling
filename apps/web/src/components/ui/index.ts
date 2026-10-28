@@ -2,6 +2,7 @@
 export * from './Button';
 export * from './Input';
 export * from './MoneyInput';
+export * from './Oculto';
 export * from './DateInput';
 export * from './Badge';
 export * from './Card';
