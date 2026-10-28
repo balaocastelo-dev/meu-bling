@@ -6,7 +6,7 @@ import clsx from 'clsx';
 import { ArrowRightLeft, ExternalLink, Globe, Package, Pencil, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
-import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, PageHeader, Pagination, StatCard, Table, Tabs, type Coluna } from '@/components/ui';
+import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, PageHeader, Pagination, StatCard, Table, Tabs, type Coluna, ValorOculto } from '@/components/ui';
 import { AjusteEstoqueModal, TransferenciaEstoqueModal } from '@/components/compartilhados/EstoqueModais';
 import { dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { MovimentoEstoque, Paginado, Produto } from '@/types';
@@ -43,7 +43,7 @@ export default function ProdutoDetalhe() {
     { chave: 'origem', titulo: 'Origem', render: (m) => <span className="text-xs text-slate-500">{rotulo(m.origemTipo)}{m.origemId ? ` #${m.origemId}` : ''}</span> },
     { chave: 'qtd', titulo: 'Qtd', direita: true, render: (m) => <span className={m.tipo === 'SAIDA' ? 'text-red-600' : 'text-emerald-700'}>{m.tipo === 'SAIDA' ? '-' : '+'}{numero(Math.abs(m.quantidade))}</span> },
     { chave: 'saldo', titulo: 'Saldo', direita: true, render: (m) => <span className="text-slate-500">{numero(m.saldoAnterior)} → <strong className="text-slate-800">{numero(m.saldoPosterior)}</strong></span> },
-    { chave: 'custo', titulo: 'Custo', direita: true, ocultarMobile: true, render: (m) => moeda(m.custoUnitario) },
+    { chave: 'custo', titulo: 'Custo', direita: true, ocultarMobile: true, render: (m) => <ValorOculto>{moeda(m.custoUnitario)}</ValorOculto> },
     { chave: 'usuario', titulo: 'Usuário', ocultarMobile: true, render: (m) => <span className="text-xs text-slate-500">{m.usuario?.nome ?? '—'}</span> },
     { chave: 'obs', titulo: 'Observação', ocultarMobile: true, render: (m) => <span className="text-xs text-slate-500">{m.observacao ?? ''}</span> },
   ];
@@ -105,7 +105,7 @@ export default function ProdutoDetalhe() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard rotulo="Preço à vista" valor={moeda(p.preco)} sub={p.precoCartao && p.precoCartao !== p.preco ? `cartão ${moeda(p.precoCartao)}` : undefined} tom="verde" />
-        <StatCard rotulo="Custo" valor={moeda(p.precoCusto)} sub={p.precoCusto > 0 ? `margem ${numero(((p.preco - p.precoCusto) / p.precoCusto) * 100, 1)}%` : undefined} />
+        <StatCard rotulo="Custo" valor={<ValorOculto>{moeda(p.precoCusto)}</ValorOculto>} sub={p.precoCusto > 0 ? <>margem <ValorOculto>{numero(((p.preco - p.precoCusto) / p.precoCusto) * 100, 1)}%</ValorOculto></> : undefined} />
         <StatCard rotulo="Estoque disponível" valor={p.tipo === 'S' ? '—' : numero(total - reservado)} sub={p.tipo === 'S' ? 'serviço' : `${numero(total)} total · ${numero(reservado)} reservado`} tom={p.tipo === 'P' && total <= p.estoqueMinimo ? 'vermelho' : 'azul'} icone={<Package className="h-4 w-4" />} />
         <StatCard rotulo="Estoque mínimo" valor={p.tipo === 'S' ? '—' : numero(p.estoqueMinimo)} sub={p.controlaEstoque ? undefined : 'não controla estoque'} />
       </div>

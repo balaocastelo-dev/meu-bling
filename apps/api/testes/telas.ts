@@ -133,6 +133,48 @@ async function main() {
     await ctx.close();
   }
 
+  // ---- custos escondidos (28/10): o cliente olha a tela do balcão — custo e lucro aparecem como **** com olhinho
+  secao('Custos escondidos com **** e olhinho (cliente olhando a tela)');
+  {
+    const ctxC = await browser.newContext({ viewport: { width: 1366, height: 860 } });
+    const pg = await ctxC.newPage();
+    await pg.goto(`${RAIZ}/login`);
+    await pg.fill('input[type=email]', 'admin@balao.info');
+    await pg.fill('input[type=password]', 'admin123');
+    await pg.keyboard.press('Enter');
+    await pg.waitForURL((u) => !u.pathname.endsWith('/login'), { timeout: 15000 }).catch(() => undefined);
+    for (const c of [`/vendas/${ids.vendas}`, `/produtos/${ids.produtos}`, '/produtos', '/estoque', `/ordens-servico/${ids['ordens-servico']}`]) {
+      await visitar(pg, RAIZ + c);
+      const olhos = pg.locator('button[aria-label="Mostrar valor"]:visible');
+      const n = await olhos.count();
+      if (!n) {
+        falhar(`[custos] ${c}: nenhum custo escondido com olhinho`);
+        continue;
+      }
+      const antes = await pg.locator('body').innerText();
+      await olhos.first().click();
+      await pg.waitForTimeout(150);
+      const depois = await pg.locator('body').innerText();
+      const mostrou = (await pg.locator('button[aria-label="Esconder valor"]:visible').count()) > 0 && depois.split('****').length < antes.split('****').length;
+      if (!antes.includes('****')) falhar(`[custos] ${c}: custo não aparece como ****`);
+      else if (!mostrou) falhar(`[custos] ${c}: o olhinho não mostrou o valor`);
+      else {
+        placar.ok++;
+        console.log(`  ✔ [custos] ${c}: ${n} valor(es) escondido(s), olhinho mostra`);
+      }
+    }
+    // tela de digitar a venda: o custo do item é um campo escondido que abre no olho
+    await visitar(pg, RAIZ + `/vendas/${ids.vendas}/editar`);
+    const campos = pg.locator('input[title="Custo escondido: clique no olho para ver"]');
+    if (!(await campos.count())) falhar('[custos] /vendas/:id/editar: campo de custo não está escondido');
+    else if ((await campos.first().inputValue()) !== '****') falhar('[custos] /vendas/:id/editar: campo de custo mostra o valor');
+    else {
+      placar.ok++;
+      console.log(`  ✔ [custos] /vendas/:id/editar: ${await campos.count()} campo(s) de custo como ****`);
+    }
+    await ctxC.close();
+  }
+
   // ---- celular: nenhuma tela principal pode estourar a largura
   secao('Celular (390 px): telas principais sem rolagem lateral');
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

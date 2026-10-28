@@ -69,7 +69,7 @@ export function AjusteEstoqueModal({ aberto, onFechar, produtoId, produtoNome, d
         </div>
         <div className="grid grid-cols-2 gap-3">
           <MoneyInput label={tipo === 'BALANCO' ? 'Novo saldo' : 'Quantidade'} prefixo="" value={qtd} onChange={setQtd} />
-          <MoneyInput label="Custo unitário (opcional)" value={custo} onChange={setCusto} />
+          <MoneyInput label="Custo unitário (opcional)" oculto value={custo} onChange={setCusto} />
         </div>
         <Textarea label="Observação" rows={2} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Motivo do ajuste" />
       </div>

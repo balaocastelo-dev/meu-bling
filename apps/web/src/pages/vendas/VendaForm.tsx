@@ -8,7 +8,7 @@ import { useCategoriasFinanceiras, useDepositos, useSituacoes, useVendedores, op
 import { useAuth } from '@/stores/auth';
 import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/ProdutoSite';
 import { buscarContatos, buscarProdutos } from '@/lib/buscas';
-import { Button, DateInput, FormSkeleton, Input, MoneyInput, PageHeader, SearchSelect, Secao, Select, Textarea } from '@/components/ui';
+import { Button, DateInput, FormSkeleton, Input, MoneyInput, PageHeader, SearchSelect, Secao, Select, Textarea, ValorOculto } from '@/components/ui';
 import { ParcelasEditor, parcelasValidas } from '@/components/compartilhados/ParcelasEditor';
 import { ContatoRapidoDrawer } from '@/components/compartilhados/ContatoRapidoDrawer';
 import { arred, dataIso, hoje, moeda, rotulo } from '@/lib/format';
@@ -395,6 +395,7 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                       <MoneyInput
                         value={it.custoUnitario ?? 0}
                         onChange={(v) => atualizarItem(i, { custoUnitario: v, custoInformado: true })}
+                        oculto
                         prefixo=""
                         inputClassName={`h-8 py-0 ${it.custoInformado ? 'bg-amber-50/60' : !it.custoUnitario ? 'border-amber-300' : 'text-slate-500'}`}
                         title={it.custoInformado ? 'Custo informado por você' : it.custoUnitario ? 'Custo do cadastro do produto (digite para trocar)' : 'Sem custo: digite o custo deste item'}
@@ -420,20 +421,20 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-xs text-slate-500">Custo dos produtos</p>
-              <p className="num text-base font-semibold text-slate-800">{moeda(custos.produtos)}</p>
+              <p className="num text-base font-semibold text-slate-800"><ValorOculto>{moeda(custos.produtos)}</ValorOculto></p>
               <p className={`text-[11px] ${custos.semCusto ? 'text-amber-700' : 'text-slate-400'}`}>{custos.semCusto ? `${custos.semCusto} ${custos.semCusto === 1 ? 'item' : 'itens'} sem custo: preencha na coluna "Custo un."` : 'pela coluna "Custo un." dos itens'}</p>
             </div>
-            <MoneyInput label="Custo de logística" value={form.custoLogistica} onChange={(v) => set('custoLogistica', v)} ajuda="Frete pago, motoboy, envio" />
+            <MoneyInput label="Custo de logística" oculto value={form.custoLogistica} onChange={(v) => set('custoLogistica', v)} ajuda="Frete pago, motoboy, envio" />
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
               <p className="text-xs text-slate-500">Custo total</p>
-              <p className="num text-base font-semibold text-slate-800">{moeda(custos.total)}</p>
+              <p className="num text-base font-semibold text-slate-800"><ValorOculto>{moeda(custos.total)}</ValorOculto></p>
               <p className="text-[11px] text-slate-400">produtos + logística</p>
             </div>
             {veLucro && (
               <div className={`rounded-md border px-3 py-2 ${custos.lucro < 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50/60'}`}>
                 <p className="text-xs text-slate-500">Lucro estimado</p>
-                <p className={`num text-base font-bold ${custos.lucro < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{moeda(custos.lucro)}</p>
-                <p className="num text-[11px] text-slate-500">margem {custos.margem.toFixed(1).replace('.', ',')}%</p>
+                <p className={`num text-base font-bold ${custos.lucro < 0 ? 'text-red-600' : 'text-emerald-700'}`}><ValorOculto>{moeda(custos.lucro)}</ValorOculto></p>
+                <p className="num text-[11px] text-slate-500">margem <ValorOculto>{custos.margem.toFixed(1).replace('.', ',')}%</ValorOculto></p>
               </div>
             )}
           </div>
