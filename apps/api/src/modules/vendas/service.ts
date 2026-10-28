@@ -14,6 +14,7 @@ import { alocarComprasParaVenda, desalocarComprasDaVenda } from '../compras/serv
 import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, recriarComissoes } from '../comum/financeiro.js';
 import { criarNotaPendente } from '../comum/nfe.js';
 import { hojeMeioDia } from '../comum/datas.js';
+import { baixarContaReceber, saldoContaReceber } from '../financeiro/service.js';
 import type { ItemInput, ParcelaInput, TipoVenda, VendaInput } from './schemas.js';
 
 type Db = Tx | typeof prisma;
@@ -499,9 +500,106 @@ export async function acaoEstornarContas(ctx: ContextoAcao) {
   const venda = await tx.venda.findUnique({ where: { id } });
   if (!venda) throw new NotFound('Venda');
   if (!venda.contasLancadas) return;
+  // recebimentos automáticos ("pago na hora") são desfeitos junto; baixas manuais continuam bloqueando
+  await desfazerRecebimentoPagoNaHora(tx, id);
   await cancelarContasReceber(tx, 'VENDA', id);
   await cancelarComissoes(tx, { origemTipo: 'VENDA', vendaId: id });
   await tx.venda.update({ where: { id }, data: { contasLancadas: false } });
+}
+
+// ---------------------------------------------------------------- venda paga na hora → caixa
+/** Formas de pagamento em que o cliente paga no ato da venda (o dinheiro entra no caixa na hora). */
+export const TIPOS_PAGO_NA_HORA = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'TRANSFERENCIA'];
+/** Marca do movimento de caixa criado automaticamente pela venda (permite desfazer sozinho ao editar/cancelar). */
+export const OBS_PAGO_NA_HORA = 'Recebido automaticamente: pago na hora da venda';
+
+/**
+ * Conta financeira que recebe as vendas pagas na hora: a da configuração `vendas.contaRecebimentoId`;
+ * senão, o caixa (tipo CAIXA) mais usado; senão a conta padrão.
+ */
+export async function contaRecebimentoVendaId(db: Db): Promise<number | null> {
+  const cfg = await db.configuracao.findUnique({ where: { chave: 'vendas.contaRecebimentoId' } });
+  if (cfg && Number(cfg.valor)) {
+    const c = await db.contaFinanceira.findFirst({ where: { id: Number(cfg.valor), ativo: true }, select: { id: true } });
+    if (c) return c.id;
+  }
+  const caixas = await db.contaFinanceira.findMany({ where: { ativo: true, tipo: 'CAIXA' }, select: { id: true } });
+  if (caixas.length) {
+    const uso = await db.movimentoFinanceiro.groupBy({ by: ['contaFinanceiraId'], where: { contaFinanceiraId: { in: caixas.map((c) => c.id) } }, _count: { _all: true } });
+    uso.sort((a, b) => b._count._all - a._count._all);
+    return uso[0]?.contaFinanceiraId ?? caixas[0].id;
+  }
+  const padrao = await db.contaFinanceira.findFirst({ where: { ativo: true }, orderBy: [{ padrao: 'desc' }, { id: 'asc' }], select: { id: true } });
+  return padrao?.id ?? null;
+}
+
+/**
+ * Venda paga na hora (dinheiro, PIX, cartão, transferência): lança as contas a receber e já dá baixa
+ * dessas parcelas no caixa, na data da venda. Crediário/boleto ficam em aberto no contas a receber.
+ * Idempotente: parcela já recebida não é baixada de novo. Orçamento e venda cancelada são ignorados.
+ */
+export async function receberVendaPagaNaHora(tx: Tx, vendaId: number, usuarioId: number | null = null) {
+  const venda = await tx.venda.findUnique({
+    where: { id: vendaId },
+    include: { situacao: true, parcelas: { include: { formaPagamento: true }, orderBy: { numero: 'asc' } } },
+  });
+  if (!venda || venda.tipo !== 'PEDIDO' || venda.situacao.cancelamento) return 0;
+  const pagas = venda.parcelas.filter((p) => p.valor > 0 && p.formaPagamento && TIPOS_PAGO_NA_HORA.includes(p.formaPagamento.tipo));
+  if (!pagas.length) return 0;
+  if (!venda.contasLancadas) {
+    await acaoLancarContas({ modulo: 'VENDA', entidadeId: vendaId, tx, usuarioId, situacaoOrigemId: venda.situacaoId, situacaoDestinoId: venda.situacaoId });
+  }
+  const contaId = await contaRecebimentoVendaId(tx);
+  if (!contaId) return 0;
+  const parcelas = await tx.vendaParcela.findMany({ where: { id: { in: pagas.map((p) => p.id) } }, include: { contaReceber: true } });
+  let baixadas = 0;
+  for (const p of parcelas) {
+    const cr = p.contaReceber;
+    if (!cr || !['ABERTO', 'PARCIAL'].includes(cr.situacao)) continue;
+    const saldo = saldoContaReceber(cr);
+    if (saldo < 0.01) continue;
+    await baixarContaReceber({ id: cr.id, valor: saldo, data: venda.data, contaFinanceiraId: contaId, formaPagamentoId: p.formaPagamentoId, observacoes: OBS_PAGO_NA_HORA }, tx);
+    baixadas++;
+  }
+  return baixadas;
+}
+
+/** Desfaz só os recebimentos automáticos ("pago na hora") da venda: tira do caixa e volta a conta para aberto. */
+export async function desfazerRecebimentoPagoNaHora(tx: Tx, vendaId: number) {
+  const contas = await tx.contaReceber.findMany({ where: { origemTipo: 'VENDA', origemId: vendaId } });
+  let desfeitos = 0;
+  for (const c of contas) {
+    const movs = await tx.movimentoFinanceiro.findMany({ where: { contaReceberId: c.id, observacoes: OBS_PAGO_NA_HORA } });
+    if (!movs.length) continue;
+    let valorRecebido = c.valorRecebido;
+    for (const m of movs) {
+      await tx.contaFinanceira.update({ where: { id: m.contaFinanceiraId }, data: { saldoAtual: { decrement: arredondar(m.valor) } } });
+      await tx.movimentoFinanceiro.delete({ where: { id: m.id } });
+      valorRecebido = arredondar(valorRecebido - m.valor);
+      desfeitos++;
+    }
+    const zerada = valorRecebido < 0.01;
+    const observacoes = (c.observacoes || '').split('\n').filter((l) => l !== OBS_PAGO_NA_HORA).join('\n') || null;
+    await tx.contaReceber.update({
+      where: { id: c.id },
+      data: { valorRecebido: zerada ? 0 : valorRecebido, situacao: zerada ? 'ABERTO' : 'PARCIAL', dataRecebimento: zerada ? null : c.dataRecebimento, observacoes },
+    });
+  }
+  return desfeitos;
+}
+
+/** true se a venda tem contas lançadas e TODOS os recebimentos dela são automáticos (pode destravar a edição sozinha). */
+export async function soRecebimentoAutomatico(db: Db, vendaId: number) {
+  const contas = await db.contaReceber.findMany({ where: { origemTipo: 'VENDA', origemId: vendaId }, select: { id: true, valorRecebido: true } });
+  if (!contas.length) return false;
+  const movs = await db.movimentoFinanceiro.findMany({ where: { contaReceberId: { in: contas.map((c) => c.id) } }, select: { valor: true, observacoes: true } });
+  if (movs.some((m) => m.observacoes !== OBS_PAGO_NA_HORA)) return false;
+  // valor recebido sem movimento (importado) também conta como baixa manual
+  const automatico = movs.reduce((s, m) => s + m.valor, 0);
+  const recebido = contas.reduce((s, c) => s + c.valorRecebido, 0);
+  if (Math.abs(recebido - automatico) > 0.01) return false;
+  const comissaoPaga = await db.comissao.count({ where: { origemTipo: 'VENDA', vendaId, status: 'PAGA' } });
+  return comissaoPaga === 0;
 }
 
 export async function acaoReservarEstoque(ctx: ContextoAcao) {

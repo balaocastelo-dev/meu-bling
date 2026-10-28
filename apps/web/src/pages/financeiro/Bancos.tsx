@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { ArrowRightLeft, Ban, CircleCheck, FileUp, Landmark, Link2, Plus, PlugZap, RefreshCw, Unlink, Wallet } from 'lucide-react';
+import { ArrowRightLeft, Ban, Scale, CircleCheck, FileUp, Landmark, Link2, Plus, PlugZap, RefreshCw, Unlink, Wallet } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { abrirPluggyConnect } from '@/lib/pluggy';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -27,6 +27,7 @@ export default function Bancos() {
   const [itemConta, setItemConta] = useState<number | ''>('');
   const [transfAberta, setTransfAberta] = useState(false);
   const [lancAberto, setLancAberto] = useState(false);
+  const [ajusteAberto, setAjusteAberto] = useState(false);
 
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: ['contas-financeiras'] });
@@ -109,6 +110,7 @@ export default function Bancos() {
           <>
             <Button variante="secundario" icone={<ArrowRightLeft className="h-4 w-4" />} onClick={() => setTransfAberta(true)}>Transferência</Button>
             <Button variante="secundario" icone={<Plus className="h-4 w-4" />} onClick={() => setLancAberto(true)}>Lançamento avulso</Button>
+            <Button variante="secundario" icone={<Scale className="h-4 w-4" />} onClick={() => setAjusteAberto(true)}>Ajustar saldo</Button>
             <Button variante="secundario" icone={<RefreshCw className={clsx('h-4 w-4', sincronizar.isPending && 'animate-spin')} />} onClick={() => sincronizar.mutate(undefined)} disabled={sincronizar.isPending || !of?.ativo}>Sincronizar todas</Button>
             <Button variante="primario" icone={<PlugZap className="h-4 w-4" />} carregando={conectar.isPending} onClick={() => conectar.mutate()} disabled={of ? !of.configurado : false} title={of && !of.configurado ? 'Configure o Open Finance em Configurações' : undefined}>
               Conectar banco (Open Finance)
@@ -162,6 +164,7 @@ export default function Bancos() {
 
       <TransferenciaModal aberto={transfAberta} onFechar={() => setTransfAberta(false)} contas={contas ?? []} onConcluido={invalidar} />
       <LancamentoModal aberto={lancAberto} onFechar={() => setLancAberto(false)} contas={contas ?? []} onConcluido={invalidar} />
+      <AjusteSaldoModal aberto={ajusteAberto} onFechar={() => setAjusteAberto(false)} contas={contas ?? []} onConcluido={invalidar} />
     </div>
   );
 }
@@ -417,6 +420,42 @@ function LancamentoModal({ aberto, onFechar, contas, onConcluido }: { aberto: bo
         <DateInput label="Data" value={f.data} onChange={(v) => setF({ ...f, data: v })} />
         <Select className="col-span-2" label="Categoria" value={f.categoriaId} onChange={(e) => setF({ ...f, categoriaId: e.target.value ? Number(e.target.value) : '' })} opcoes={opcoesDe((categorias ?? []).filter((c) => c.tipo === (f.tipo === 'ENTRADA' ? 'RECEITA' : 'DESPESA')))} placeholder="—" />
         <Textarea className="col-span-2" label="Descrição" rows={2} value={f.descricao} onChange={(e) => setF({ ...f, descricao: e.target.value })} />
+      </div>
+    </Modal>
+  );
+}
+
+/** Acerta o saldo de uma conta com o valor real (gaveta/extrato). A diferença não entra no DRE nem nos dashboards. */
+function AjusteSaldoModal({ aberto, onFechar, contas, onConcluido }: { aberto: boolean; onFechar: () => void; contas: ContaFinanceira[]; onConcluido: () => void }) {
+  const [f, setF] = useState({ contaFinanceiraId: '' as number | '', saldoReal: 0, data: hoje() });
+  const conta = contas.find((c) => c.id === f.contaFinanceiraId);
+  const diferenca = conta ? Math.round((f.saldoReal - conta.saldoAtual) * 100) / 100 : 0;
+  const m = useMutation({
+    mutationFn: () => api.post(`/contas-financeiras/${f.contaFinanceiraId}/ajustar-saldo`, { saldoReal: f.saldoReal, data: f.data }),
+    onSuccess: () => {
+      toast.success('Saldo ajustado.');
+      onConcluido();
+      onFechar();
+    },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
+  return (
+    <Modal
+      aberto={aberto}
+      onFechar={onFechar}
+      titulo="Ajustar saldo"
+      descricao="Informe quanto tem de verdade na conta. O sistema lança só a diferença, fora do DRE (não é receita nem despesa)."
+      rodape={<><Button variante="secundario" onClick={onFechar}>Cancelar</Button><Button variante="primario" carregando={m.isPending} disabled={!f.contaFinanceiraId || Math.abs(diferenca) < 0.01} onClick={() => m.mutate()}>Ajustar</Button></>}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <Select className="col-span-2" label="Conta" value={f.contaFinanceiraId} onChange={(e) => setF({ ...f, contaFinanceiraId: e.target.value ? Number(e.target.value) : '' })} opcoes={opcoesDe(contas)} placeholder="—" />
+        <MoneyInput label="Saldo real" value={f.saldoReal} onChange={(v) => setF({ ...f, saldoReal: v })} />
+        <DateInput label="Data" value={f.data} onChange={(v) => setF({ ...f, data: v })} />
+        {conta && (
+          <p className="col-span-2 text-sm text-slate-600">
+            Saldo no sistema: <b>{moeda(conta.saldoAtual)}</b> · diferença a lançar: <b className={diferenca < 0 ? 'text-red-600' : 'text-emerald-600'}>{moeda(diferenca)}</b>
+          </p>
+        )}
       </div>
     </Modal>
   );

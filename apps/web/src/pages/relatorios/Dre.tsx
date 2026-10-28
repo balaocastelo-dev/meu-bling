@@ -93,7 +93,7 @@ export default function Dre() {
     <div className="space-y-4">
       <PageHeader
         titulo="DRE — Demonstrativo de resultado"
-        descricao={regime === 'competencia' ? 'Regime de competência: vendas/OS concluídas pela data, despesas por vencimento/competência.' : 'Regime de caixa: recebimentos e pagamentos efetivos nas contas.'}
+        descricao={regime === 'competencia' ? 'Regime de competência: vendas/OS concluídas pela data; CMV = compras reais de mercadoria; todas as despesas por competência/vencimento.' : 'Regime de caixa: recebimentos e pagamentos efetivos nas contas (transferências e ajustes de saldo ficam fora).'}
         acoes={
           <div className="flex flex-wrap items-end gap-2">
             <Segmentado

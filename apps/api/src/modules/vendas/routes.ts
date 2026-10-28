@@ -38,6 +38,8 @@ import {
   sequenciaDe,
   temReserva,
   transferirVendedor,
+  receberVendaPagaNaHora,
+  soRecebimentoAutomatico,
   vendaCompleta,
 } from './service.js';
 import { acoesBody, aprovarBody, CAMPOS_LIVRES, converterBody, gerarNfeBody, gerarParcelasBody, listaQuery, notificarBody, situacaoBody, transferirVendedorBody, vendaSchema } from './schemas.js';
@@ -78,6 +80,11 @@ async function moverVendaPorNota(notaId: number, destinoNome: 'NF emitida' | 'Fe
 }
 eventos.ouvir('nfe.autorizada', (d) => moverVendaPorNota(d.notaId, 'NF emitida', 'Automático: NF-e autorizada'));
 eventos.ouvir('nfe.cancelada', (d) => moverVendaPorNota(d.notaId, 'Fechada', 'Automático: NF-e cancelada'));
+// venda paga na hora (dinheiro/PIX/cartão/transferência) entra no caixa ao salvar — vale para tela, PDV, API e clonagem
+eventos.ouvir('venda.alterada', async (d) => {
+  if (d.tipo !== 'PEDIDO') return;
+  await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, d.vendaId));
+});
 
 /**
  * Resumo do que a lista está mostrando (painel à direita do filtro): total vendido, nº de vendas,
@@ -118,6 +125,11 @@ async function resumoLista(where: any, filtrouSituacao: boolean, usuario: { perf
 }
 
 export default async function vendasRoutes(app: FastifyInstance) {
+  // se a edição destravou uma venda "paga na hora", o recebimento volta para o caixa no fim (deu certo ou não)
+  app.addHook('onResponse', async (req) => {
+    const id = (req as any).religarPagoNaHora as number | undefined;
+    if (id) await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, id)).catch((e) => req.log.error(e, 'religar pago na hora'));
+  });
   // ---------------------------------------------------------------- listagem
   app.get('/api/v1/vendas', async (req) => {
     const q = listaQuery.parse(req.query);
@@ -181,8 +193,18 @@ export default async function vendasRoutes(app: FastifyInstance) {
   // ---------------------------------------------------------------- alterar
   app.put('/api/v1/vendas/:id', async (req) => {
     const id = idDe(req);
-    const atual = await carregarVenda(prisma, id);
-    const bloqueada = atual.estoqueLancado || atual.contasLancadas;
+    let atual = await carregarVenda(prisma, id);
+    let bloqueada = atual.estoqueLancado || atual.contasLancadas;
+    // venda travada só porque foi recebida automaticamente (pago na hora, estoque ainda não baixado):
+    // desfaz o recebimento, deixa editar e recebe de novo no fim (hook onResponse)
+    if (bloqueada && !atual.estoqueLancado && atual.tipo === 'PEDIDO' && (await soRecebimentoAutomatico(prisma, id))) {
+      await prisma.$transaction((tx) =>
+        acaoEstornarContas({ modulo: 'VENDA', entidadeId: id, tx, usuarioId: req.user.id, situacaoOrigemId: atual.situacaoId, situacaoDestinoId: atual.situacaoId }),
+      );
+      (req as any).religarPagoNaHora = id;
+      atual = await carregarVenda(prisma, id);
+      bloqueada = atual.estoqueLancado || atual.contasLancadas;
+    }
 
     if (bloqueada) {
       // só campos livres (observações / transporte)
@@ -302,8 +324,14 @@ export default async function vendasRoutes(app: FastifyInstance) {
   // ---------------------------------------------------------------- excluir
   app.delete('/api/v1/vendas/:id', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE') }, async (req) => {
     const id = idDe(req);
-    const v = await prisma.venda.findUnique({ where: { id }, include: { nota: true } });
+    let v = await prisma.venda.findUnique({ where: { id }, include: { nota: true } });
     if (!v) throw new NotFound('Venda');
+    // venda só recebida automaticamente (pago na hora) e sem estoque baixado: tira do caixa e deixa excluir
+    if (v.contasLancadas && !v.estoqueLancado && v.tipo === 'PEDIDO' && (await soRecebimentoAutomatico(prisma, id))) {
+      const sit = v.situacaoId;
+      await prisma.$transaction((tx) => acaoEstornarContas({ modulo: 'VENDA', entidadeId: id, tx, usuarioId: req.user.id, situacaoOrigemId: sit, situacaoDestinoId: sit }));
+      v = (await prisma.venda.findUnique({ where: { id }, include: { nota: true } }))!;
+    }
     if (v.estoqueLancado || v.contasLancadas) throw new AppError('Venda com estoque/contas lançados não pode ser excluída. Estorne (ou cancele) antes.', 422, 'VENDA_LANCADA');
     if (v.nota && v.nota.situacao === 'AUTORIZADA') throw new AppError('Venda com NF-e autorizada não pode ser excluída.', 422, 'NOTA_AUTORIZADA');
     await prisma.$transaction(async (tx) => {
@@ -317,6 +345,8 @@ export default async function vendasRoutes(app: FastifyInstance) {
         if (v.nota && v.nota.situacao === 'PENDENTE') await tx.notaFiscal.delete({ where: { id: v.notaId } });
       }
       await tx.venda.delete({ where: { id } });
+      // contas a receber canceladas (sem nenhum recebimento) da venda excluída não ficam órfãs
+      await tx.contaReceber.deleteMany({ where: { origemTipo: 'VENDA', origemId: id, situacao: 'CANCELADO', valorRecebido: 0 } });
     });
     await auditar(req, v.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', id, 'EXCLUIR', { numero: v.numero });
     eventos.emitir('venda.alterada', { vendaId: id, data: v.data, tipo: v.tipo });

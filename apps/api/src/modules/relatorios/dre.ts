@@ -2,13 +2,17 @@
  * DRE — Demonstração do Resultado do Exercício (Simples Nacional).
  *
  * Regime COMPETÊNCIA: receita = vendas/OS em situação final (não cancelada) pela data;
- *   CMV = custoTotal das vendas + custo das peças das OS; despesas = contas a pagar por competência (ou vencimento).
+ *   CMV = compras REAIS de mercadoria (contas a pagar da categoria CMV e as geradas por pedido de compra
+ *   sem outra categoria) por competência + custo das peças das OS;
+ *   despesas = todas as demais contas a pagar por competência (ou vencimento), exceto canceladas.
+ *   O custo estimado por venda (VendaItem.custoUnitario) NÃO entra no DRE — fica só nos dashboards.
  * Regime CAIXA: receita = MovimentoFinanceiro ENTRADA por categoria; despesas = SAIDA por categoria.
  * Deduções: aliquotaSimplesPct × receita bruta + categorias DEDUCAO.
  */
 import { endOfMonth, format, startOfMonth, addMonths } from 'date-fns';
 import { prisma } from '../../lib/prisma.js';
 import { arredondar } from '../../lib/util.js';
+import { OBS_FORA_DO_RESULTADO } from '../comum/financeiro.js';
 
 export type Regime = 'competencia' | 'caixa';
 
@@ -88,14 +92,12 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
   ]);
   const vendas = await prisma.venda.findMany({
     where: { tipo: 'PEDIDO', data: { gte: ini, lte: fim }, situacaoId: { in: sitVenda.map((s) => s.id) } },
-    select: { total: true, custoTotal: true, itens: { select: { custoUnitario: true, quantidade: true, produto: { select: { tipo: true } }, total: true } } },
+    select: { total: true, itens: { select: { produto: { select: { tipo: true } }, total: true } } },
   });
   for (const v of vendas) {
     const servicos = v.itens.filter((i) => i.produto?.tipo === 'S').reduce((s, i) => s + i.total, 0);
     ac.receitaProdutos += v.total - servicos;
     ac.receitaServicos += servicos;
-    const custo = v.custoTotal || v.itens.reduce((s, i) => s + i.custoUnitario * i.quantidade, 0);
-    if (custo) add(ac.cmv, 'Custo das mercadorias vendidas (vendas)', custo);
   }
   const ordens = await prisma.ordemServico.findMany({
     where: { dataEntrada: { gte: ini, lte: fim }, situacaoId: { in: sitOs.map((s) => s.id) } },
@@ -109,7 +111,9 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
     const custoPecas = o.custoPeca > 0 ? o.custoPeca : o.itens.filter((i) => i.tipo === 'PECA').reduce((s, i) => s + i.custoUnitario * i.quantidade, 0);
     if (custoPecas) add(ac.cmv, 'Custo das peças (OS)', custoPecas);
   }
-  // despesas: contas a pagar por competência (fallback: vencimento), exceto canceladas e exceto CMV de compras (já contabilizado pelo custo das vendas)
+  // TODAS as contas a pagar por competência (fallback: vencimento), exceto canceladas.
+  // Compra de mercadoria (categoria CMV, ou gerada por pedido de compra sem outra categoria) vai para o CMV;
+  // o resto vai para o grupo DRE da categoria (sem categoria → despesas operacionais).
   const compIni = format(ini, 'yyyy-MM');
   const compFim = format(fim, 'yyyy-MM');
   const contas = await prisma.contaPagar.findMany({
@@ -121,7 +125,10 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
   });
   for (const c of contas) {
     const cat = c.categoriaId ? cats.get(c.categoriaId) : null;
-    if (cat?.grupoDre === 'CMV' || c.origemTipo === 'COMPRA') continue; // CMV por competência vem do custo das vendas
+    if (cat?.grupoDre === 'CMV' || (c.origemTipo === 'COMPRA' && !cat)) {
+      add(ac.cmv, cat?.nome || 'Compra de mercadorias (pedidos de compra)', c.valor, cat?.id ?? null);
+      continue;
+    }
     lancarPorCategoria(ac, cat, c.valor, 'DESPESA');
   }
   // receitas manuais a receber (não originadas de venda/OS) por competência
@@ -146,8 +153,8 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
 async function acumularCaixa(ini: Date, fim: Date, cats: Map<number, Cat>): Promise<Acumulado> {
   const ac = novoAcumulado();
   const movs = await prisma.movimentoFinanceiro.findMany({
-    // transferências entre contas não entram no DRE (observacoes = 'TRANSFERENCIA'); NULL precisa ser incluído explicitamente
-    where: { data: { gte: ini, lte: fim }, tipo: { in: ['ENTRADA', 'SAIDA'] }, OR: [{ observacoes: null }, { observacoes: { not: 'TRANSFERENCIA' } }] },
+    // transferências entre contas e ajustes de saldo não entram no DRE; NULL precisa ser incluído explicitamente
+    where: { data: { gte: ini, lte: fim }, tipo: { in: ['ENTRADA', 'SAIDA'] }, OR: [{ observacoes: null }, { observacoes: { notIn: OBS_FORA_DO_RESULTADO } }] },
     select: { tipo: true, valor: true, categoriaId: true, contaReceberId: true, contaPagarId: true },
   });
   for (const m of movs) {
