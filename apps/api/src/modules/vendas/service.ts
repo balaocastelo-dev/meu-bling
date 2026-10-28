@@ -591,10 +591,23 @@ export async function receberVendaPagaNaHora(tx: Tx, vendaId: number, usuarioId:
     const contaDaForma = p.formaPagamento?.contaFinanceira?.ativo ? p.formaPagamento.contaFinanceira.id : null;
     const contaId = contaDaForma || contaPadrao;
     if (!contaId) continue;
-    await baixarContaReceber({ id: cr.id, valor: saldo, data: venda.data, contaFinanceiraId: contaId, formaPagamentoId: p.formaPagamentoId, observacoes: OBS_PAGO_NA_HORA }, tx);
+    await baixarComTaxa(tx, { contaReceberId: cr.id, saldo, data: venda.data, contaFinanceiraId: contaId, formaPagamentoId: p.formaPagamentoId });
     baixadas++;
   }
   return baixadas;
+}
+
+/**
+ * Baixa o recebimento na conta escolhida descontando a taxa da conta (ex.: Mercado Pago 5%):
+ * entra no banco o valor − taxa; a taxa fica como desconto do título.
+ */
+async function baixarComTaxa(tx: Tx, p: { contaReceberId: number; saldo: number; data: Date; contaFinanceiraId: number; formaPagamentoId: number | null }) {
+  const conta = await tx.contaFinanceira.findUnique({ where: { id: p.contaFinanceiraId }, select: { taxaRecebimentoPct: true } });
+  const taxa = arredondar(p.saldo * ((conta?.taxaRecebimentoPct || 0) / 100));
+  await baixarContaReceber(
+    { id: p.contaReceberId, valor: arredondar(p.saldo - taxa), desconto: taxa, data: p.data, contaFinanceiraId: p.contaFinanceiraId, formaPagamentoId: p.formaPagamentoId, observacoes: OBS_PAGO_NA_HORA },
+    tx,
+  );
 }
 
 /** Desfaz só os recebimentos automáticos ("pago na hora") da venda: tira do caixa e volta a conta para aberto. */
@@ -615,7 +628,7 @@ export async function desfazerRecebimentoPagoNaHora(tx: Tx, vendaId: number) {
     const observacoes = (c.observacoes || '').split('\n').filter((l) => l !== OBS_PAGO_NA_HORA).join('\n') || null;
     await tx.contaReceber.update({
       where: { id: c.id },
-      data: { valorRecebido: zerada ? 0 : valorRecebido, situacao: zerada ? 'ABERTO' : 'PARCIAL', dataRecebimento: zerada ? null : c.dataRecebimento, observacoes },
+      data: { valorRecebido: zerada ? 0 : valorRecebido, desconto: zerada ? 0 : c.desconto, situacao: zerada ? 'ABERTO' : 'PARCIAL', dataRecebimento: zerada ? null : c.dataRecebimento, observacoes },
     });
   }
   return desfeitos;
@@ -1104,7 +1117,7 @@ export async function aplicarRecebimentosFinalizacao(vendaId: number, lista: Rec
       });
       if (r.recebido) {
         if (!contaId) throw new AppError(`Parcela ${p.numero}: escolha o banco onde o dinheiro entrou.`, 422, 'SEM_CONTA_FINANCEIRA');
-        await baixarContaReceber({ id: limpa.id, valor: saldoContaReceber(limpa), data: venda.data, contaFinanceiraId: contaId, formaPagamentoId: p.formaPagamentoId, observacoes: OBS_PAGO_NA_HORA }, tx);
+        await baixarComTaxa(tx, { contaReceberId: limpa.id, saldo: saldoContaReceber(limpa), data: venda.data, contaFinanceiraId: contaId, formaPagamentoId: p.formaPagamentoId });
       }
       alterados++;
     }

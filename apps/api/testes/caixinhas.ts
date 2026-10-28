@@ -51,6 +51,21 @@ async function main() {
   const u = await adm.put(`/caixinhas/${c.id}`, { ativo: false }, 200);
   verifica(u.situacao === 'USADA', 'caixinha marcada como usada', u);
 
+  secao('Extrato da conta: de onde veio, para onde foi, saldo');
+  const ex: any = await adm.get(`/contas-financeiras/${nubank.id}/extrato`);
+  verifica(igual(ex.conta.saldoAtual, ex.saldoFinal) && ex.lancamentos.length >= 2, 'saldo final do extrato = saldo da conta', { saldoFinal: ex.saldoFinal, saldoAtual: ex.conta.saldoAtual });
+  const guardou = ex.lancamentos.find((l: any) => l.natureza === 'CAIXINHA' && l.tipo === 'ENTRADA');
+  verifica(guardou && guardou.contraparte.includes(origem.nome), 'lançamento da caixinha mostra de qual banco veio', guardou);
+
+  secao('Excluir uma perna da transferência desfaz as duas');
+  const t: any = await adm.post('/financeiro/transferencia', { origemId: origem.id, destinoId: nubank.id, valor: 10, data: hoje() }, 201);
+  const antesO = (await adm.get(`/contas-financeiras/${origem.id}/extrato`)).conta.saldoAtual;
+  const antesN = (await adm.get(`/contas-financeiras/${nubank.id}/extrato`)).conta.saldoAtual;
+  await adm.del(`/financeiro/movimentos/${t.entrada.id}`, 200);
+  const depoisO = (await adm.get(`/contas-financeiras/${origem.id}/extrato`)).conta.saldoAtual;
+  const depoisN = (await adm.get(`/contas-financeiras/${nubank.id}/extrato`)).conta.saldoAtual;
+  verifica(igual(depoisO - antesO, 10) && igual(depoisN - antesN, -10), 'as duas contas voltaram (origem +10, Nubank −10)', { antesO, depoisO, antesN, depoisN });
+
   encerrar('Caixinhas e avisos');
 }
 

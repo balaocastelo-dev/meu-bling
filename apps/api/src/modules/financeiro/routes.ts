@@ -24,6 +24,7 @@ import {
   mapaOrigens,
 } from './service.js';
 import { chavePeriodo, listarPeriodos, resolverPeriodo, type Agrupar } from './periodos.js';
+import { extratoConta } from './extrato.js';
 
 const SIT_FILTRO = ['ABERTO', 'RECEBIDO', 'PAGO', 'PARCIAL', 'CANCELADO', 'ATRASADO'] as const;
 
@@ -550,6 +551,13 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     const m = await criarMovimentoAvulso({ ...b, data: b.data ?? new Date() });
     await auditar(req, 'MovimentoFinanceiro', m.id, 'CRIAR', { tipo: b.tipo, valor: b.valor });
     return reply.code(201).send(m);
+  });
+
+  // extrato da conta: de onde veio / para onde foi cada lançamento e o saldo depois dele
+  app.get('/api/v1/contas-financeiras/:id/extrato', { preHandler: fin }, async (req) => {
+    const id = Number((req.params as any).id);
+    const q = z.object({ dataInicial: dataSchema, dataFinal: dataSchema }).parse(req.query);
+    return extratoConta(id, { dataInicial: q.dataInicial, dataFinal: q.dataFinal });
   });
 
   // acerta o saldo da conta com o valor real; a diferença não entra no DRE
