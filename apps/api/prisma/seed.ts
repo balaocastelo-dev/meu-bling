@@ -375,10 +375,9 @@ async function base() {
   }
 
   console.log('→ Contas financeiras');
-  if (!(await prisma.contaFinanceira.findFirst({ where: { nome: 'Caixa' } }))) {
+  // só num banco novo (sem nenhuma conta): a loja já tem as dela e excluiu estas de propósito (28/10/2026)
+  if (!(await prisma.contaFinanceira.count())) {
     await prisma.contaFinanceira.create({ data: { nome: 'Caixa', tipo: 'CAIXA', padrao: true, cor: '#16a34a' } });
-  }
-  if (!(await prisma.contaFinanceira.findFirst({ where: { nome: 'Banco principal' } }))) {
     await prisma.contaFinanceira.create({ data: { nome: 'Banco principal', tipo: 'BANCO', cor: '#2563eb' } });
   }
 
