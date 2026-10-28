@@ -140,6 +140,7 @@ export type TipoFormaPagamento =
   | 'TRANSFERENCIA'
   | 'CREDIARIO'
   | 'CREDITO_BANCARIO'
+  | 'CARNE'
   | 'OUTRO';
 
 export interface FormaPagamento {

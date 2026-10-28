@@ -216,6 +216,7 @@ export const ROTULOS: Record<string, string> = {
   BOLETO: 'Boleto',
   CREDIARIO: 'Crediário',
   CREDITO_BANCARIO: 'Crédito bancário',
+  CARNE: 'Carnê',
   RECEITA_BRUTA: 'Receita bruta',
   DEDUCAO: 'Dedução',
   CMV: 'CMV / Custo',

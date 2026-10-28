@@ -47,6 +47,7 @@ const Caixinhas = lazy(() => import('@/pages/financeiro/Caixinhas'));
 const InicioGerente = lazy(() => import('@/pages/dashboard/InicioGerente'));
 const Comissoes = lazy(() => import('@/pages/financeiro/Comissoes'));
 const Emprestimos = lazy(() => import('@/pages/financeiro/Emprestimos'));
+const Carnes = lazy(() => import('@/pages/financeiro/Carnes'));
 
 const NotasLista = lazy(() => import('@/pages/fiscal/NotasLista'));
 const NotaDetalhe = lazy(() => import('@/pages/fiscal/NotaDetalhe'));
@@ -165,6 +166,7 @@ export const router = createBrowserRouter(
       { path: 'financeiro/fluxo-caixa', element: FIN(<FluxoCaixa />) },
       { path: 'financeiro/caixinhas', element: FIN(<Caixinhas />) },
       { path: 'financeiro/emprestimos', element: FIN(<Emprestimos />) },
+      { path: 'financeiro/carnes', element: FIN(<Carnes />) },
       { path: 'comissoes', element: S(<Comissoes />) },
 
       { path: 'notas-fiscais', element: S(<NotasLista />) },

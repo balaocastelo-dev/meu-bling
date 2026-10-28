@@ -7,7 +7,7 @@ import { numero, rotulo } from '@/lib/format';
 import { useContasFinanceiras, opcoesDe } from '@/hooks/useListas';
 import type { FormaPagamento } from '@/types';
 
-const TIPOS = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA', 'CREDIARIO', 'CREDITO_BANCARIO', 'OUTRO'];
+const TIPOS = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA', 'CREDIARIO', 'CREDITO_BANCARIO', 'CARNE', 'OUTRO'];
 const TPAG = [['01', 'Dinheiro'], ['02', 'Cheque'], ['03', 'Cartão de crédito'], ['04', 'Cartão de débito'], ['05', 'Crédito loja'], ['15', 'Boleto'], ['16', 'Depósito'], ['17', 'PIX'], ['18', 'Transferência'], ['90', 'Sem pagamento'], ['99', 'Outros']];
 
 /** Formas de pagamento */

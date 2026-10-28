@@ -64,6 +64,15 @@ model Empresa {
   freteVendaPadrao       Float   @default(10.0)
   custoProdutoMinPct     Float   @default(40.0)
   custoProdutoMaxPct     Float   @default(70.0)
+  /// CARNÊ PRÓPRIO (PIX): chave, nome e cidade do recebedor no QR Code; juros por risco do cliente (% ao mês)
+  pixChave               String?
+  pixNome                String?
+  pixCidade              String?
+  carneTaxaMinPct        Float   @default(7.0)
+  carneTaxaMaxPct        Float   @default(15.0)
+  /// multa e juros de mora impressos no carnê (cobrados à mão na baixa)
+  carneMultaPct          Float   @default(2.0)
+  carneMoraMesPct        Float   @default(1.0)
   /// Provedor fiscal: "sefaz" (direto com certificado A1) | "mock" (simulado p/ testes)
   provedorFiscal         String  @default("mock")
 
@@ -306,6 +315,7 @@ model Contato {
   transportesVenda   Venda[]        @relation("VendaTransportadora")
   emprestimosCredor  Emprestimo[]   @relation("EmprestimoCredor")
   emprestimosCliente Emprestimo[]   @relation("EmprestimoCliente")
+  carnes             Carne[]        @relation("CarneCliente")
 
   @@index([nome])
   @@index([documento])
@@ -502,6 +512,7 @@ model ContaFinanceira {
   pagamentos      ContaPagar[]
   lancamentos     MovimentoFinanceiro[]
   formasPagamento FormaPagamento[]
+  carnes          Carne[]
   caixinhas       Caixinha[]
   transacoes      TransacaoBancaria[]
 }
@@ -633,6 +644,8 @@ model Venda {
   pesoBruto             Float                @default(0)
   // ---- controle
   estoqueLancado        Boolean              @default(false)
+  /// carnê: juros ao mês escolhidos na venda (vazio = pelo risco do cliente)
+  carneTaxaPct          Float?
   contasLancadas        Boolean              @default(false)
   nota                  NotaFiscal?          @relation(fields: [notaId], references: [id])
   notaId                Int?                 @unique
@@ -646,6 +659,7 @@ model Venda {
   parcelas    VendaParcela[]
   comissoes   Comissao[]
   emprestimos Emprestimo[]
+  carnes      Carne[]
 
   @@unique([tipo, numero])
   @@index([data])
@@ -986,6 +1000,10 @@ model ContaReceber {
   /// entrada do dinheiro de um empréstimo (não é receita: fica fora do DRE)
   emprestimo   Emprestimo? @relation(fields: [emprestimoId], references: [id])
   emprestimoId Int?
+  /// parcela de carnê próprio (no DRE: só os juros são resultado financeiro)
+  carne        Carne?      @relation(fields: [carneId], references: [id])
+  carneId      Int?
+  carneParcela Int?
 
   vendaParcela VendaParcela?
   osParcela    OrdemServicoParcela?
@@ -1456,4 +1474,43 @@ model VendaRoboNf {
   verificadoEm      DateTime @default(now())
 
   @@index([status])
+}
+
+// ---------------------------------------------------------------------
+// CARNÊ PRÓPRIO — o cliente paga cada parcela por PIX (QR Code) na conta da loja (Cora)
+// ---------------------------------------------------------------------
+model Carne {
+  id                 Int              @id @default(autoincrement())
+  numero             Int              @unique
+  cliente            Contato          @relation("CarneCliente", fields: [clienteId], references: [id])
+  clienteId          Int
+  venda              Venda?           @relation(fields: [vendaId], references: [id])
+  vendaId            Int?
+  descricao          String?
+  dataEmissao        DateTime
+  /// valor financiado (sem juros)
+  valorFinanciado    Float
+  taxaMensalPct      Float
+  parcelas           Int
+  primeiroVencimento DateTime
+  valorParcela       Float
+  /// soma das parcelas e juros totais (tabela Price)
+  total              Float
+  juros              Float
+  /// risco calculado na hora da emissão (A..E) e nota 0-100
+  risco              String?
+  score              Int?
+  /// banco onde o PIX cai (Cora)
+  contaFinanceira    ContaFinanceira? @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId  Int?
+  /// ATIVO | CANCELADO (quitado/atrasado são calculados pelas parcelas)
+  situacao           String           @default("ATIVO")
+  observacoes        String?
+  criadoEm           DateTime         @default(now())
+  atualizadoEm       DateTime         @updatedAt
+
+  contas ContaReceber[]
+
+  @@index([clienteId])
+  @@index([vendaId])
 }

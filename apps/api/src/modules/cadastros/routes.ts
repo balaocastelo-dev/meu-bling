@@ -194,7 +194,7 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
   const formaComContas = <T extends { contasPermitidas: string | null }>(f: T) => ({ ...f, contasPermitidas: lerContasPermitidas(f.contasPermitidas) });
 
   // ---------------- Formas de pagamento
-  const TIPOS_FP = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA', 'CREDIARIO', 'CREDITO_BANCARIO', 'OUTRO'] as const;
+  const TIPOS_FP = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA', 'CREDIARIO', 'CREDITO_BANCARIO', 'CARNE', 'OUTRO'] as const;
   const formaSchema = z.object({
     nome: z.string().trim().min(2),
     tipo: z.enum(TIPOS_FP).default('OUTRO'),

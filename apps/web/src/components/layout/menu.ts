@@ -33,6 +33,7 @@ import {
   Wallet,
   Wrench,
   HandCoins,
+  BookOpen,
 } from 'lucide-react';
 import type { Perfil } from '@/types';
 
@@ -101,6 +102,7 @@ export const MENU: GrupoMenu[] = [
       { rotulo: 'Contas a pagar', para: '/financeiro/pagar', icone: Banknote, perfis: FIN },
       { rotulo: 'Bancos & conciliação', para: '/financeiro/bancos', icone: Landmark, perfis: FIN },
       { rotulo: 'Empréstimos', para: '/financeiro/emprestimos', icone: HandCoins, perfis: FIN },
+      { rotulo: 'Carnês', para: '/financeiro/carnes', icone: BookOpen, perfis: FIN },
       { rotulo: 'Fluxo de caixa', para: '/financeiro/fluxo-caixa', icone: ChartLine, perfis: FIN },
       { rotulo: 'Caixinhas', para: '/financeiro/caixinhas', icone: PiggyBank, perfis: FIN },
       { rotulo: 'Comissões', para: '/comissoes', icone: Percent, perfis: [...FIN, 'VENDEDOR', 'TECNICO'] },
