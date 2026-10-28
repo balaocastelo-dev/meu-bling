@@ -237,7 +237,7 @@ export default function DashboardGeral() {
                   <p className="num text-[11px] text-emerald-700/70">margem {percentual(r?.margemPct ?? 0)}</p>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-3">
-                  <p className="text-[11px] font-medium text-slate-500">Caixa do período</p>
+                  <p className="text-[11px] font-medium text-slate-500">Banco + caixa no período</p>
                   <p className={clsx('num text-lg font-bold', (r?.caixa.saldo ?? 0) < 0 ? 'text-red-600' : 'text-slate-900')}>{carregando ? '…' : <Contador valor={r?.caixa.saldo ?? 0} formato={moeda} />}</p>
                   <p className="num text-[11px] text-slate-400">entrou {moeda(r?.caixa.entradas ?? 0)}</p>
                 </div>
@@ -279,8 +279,8 @@ export default function DashboardGeral() {
         <KpiV18 rotulo="Assistência" valor={r?.assistencia.valor} anterior={comp?.assistencia.valor} formato={moeda} icone={<Wrench className="h-4 w-4" />} tom="vermelho" carregando={carregando} sub={r ? `${inteiro(r.assistencia.qtd)} OS · ticket ${moeda(r.assistencia.ticketMedio)}` : undefined} onClick={() => nav('/dashboard/assistencia')} />
         <KpiV18 rotulo="Custos" valor={r?.custo} anterior={comp?.custo} inverter formato={moeda} icone={<Receipt className="h-4 w-4" />} tom="amarelo" carregando={carregando} sub="vendas + assistência" />
         <KpiV18 rotulo="Lucro" valor={r?.lucro} anterior={comp?.lucro} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={carregando} sub={r ? `margem ${percentual(r.margemPct)}` : undefined} />
-        <KpiV18 rotulo="Entrou no caixa" valor={r?.caixa.entradas} anterior={comp?.caixa.entradas} formato={moeda} icone={<ArrowDownRight className="h-4 w-4" />} tom="verde" carregando={carregando} sub="recebimentos no período" onClick={() => nav('/financeiro/fluxo-caixa')} />
-        <KpiV18 rotulo="Saiu do caixa" valor={r?.caixa.saidas} anterior={comp?.caixa.saidas} inverter formato={moeda} icone={<ArrowUpRight className="h-4 w-4" />} tom="neutro" carregando={carregando} sub="pagamentos no período" onClick={() => nav('/financeiro/pagar')} />
+        <KpiV18 rotulo="Entrou (banco + caixa)" valor={r?.caixa.entradas} anterior={comp?.caixa.entradas} formato={moeda} icone={<ArrowDownRight className="h-4 w-4" />} tom="verde" carregando={carregando} sub="recebimentos baixados em todas as contas" onClick={() => nav('/financeiro/fluxo-caixa')} />
+        <KpiV18 rotulo="Saiu (banco + caixa)" valor={r?.caixa.saidas} anterior={comp?.caixa.saidas} inverter formato={moeda} icone={<ArrowUpRight className="h-4 w-4" />} tom="neutro" carregando={carregando} sub="pagamentos baixados em todas as contas" onClick={() => nav('/financeiro/pagar')} />
       </Grupo>
 
       {!!r?.osSemCusto && (
@@ -379,7 +379,7 @@ export default function DashboardGeral() {
         <CardV18 titulo="Técnicos" descricao={faixa} icone={<HardHat className="h-4 w-4" />} tom="vermelho" semPadding acoes={<Link to="/dashboard/assistencia" className="text-xs font-medium text-brand-600 hover:underline">Detalhes</Link>}>
           {carregando ? <div className="p-4"><Skeleton className="h-48" /></div> : <Ranking itens={pano?.porTecnico ?? []} cor={COR_ASSIST} vazio="Sem OS no período" rotuloQtd={['OS', 'OS']} />}
         </CardV18>
-        <CardV18 titulo="Caixa do período" descricao="o que entrou e saiu das contas" icone={<Landmark className="h-4 w-4" />} tom="verde">
+        <CardV18 titulo="Banco + caixa no período" descricao="o que entrou e saiu de todas as contas (transferências e ajustes de saldo ficam fora)" icone={<Landmark className="h-4 w-4" />} tom="verde">
           {carregando ? (
             <Skeleton className="h-48" />
           ) : (

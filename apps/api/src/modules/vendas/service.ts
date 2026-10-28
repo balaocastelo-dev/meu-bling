@@ -533,7 +533,7 @@ export const OBS_PAGO_NA_HORA = 'Recebido automaticamente: pago na hora da venda
 
 /**
  * Conta financeira que recebe as vendas pagas na hora: a da configuração `vendas.contaRecebimentoId`;
- * senão, o caixa (tipo CAIXA) mais usado; senão a conta padrão.
+ * senão a conta padrão (banco primeiro — a loja usa pouco o caixa físico); senão o caixa mais usado.
  */
 export async function contaRecebimentoVendaId(db: Db): Promise<number | null> {
   const cfg = await db.configuracao.findUnique({ where: { chave: 'vendas.contaRecebimentoId' } });
@@ -541,6 +541,8 @@ export async function contaRecebimentoVendaId(db: Db): Promise<number | null> {
     const c = await db.contaFinanceira.findFirst({ where: { id: Number(cfg.valor), ativo: true }, select: { id: true } });
     if (c) return c.id;
   }
+  const padraoBanco = await db.contaFinanceira.findFirst({ where: { ativo: true, padrao: true }, orderBy: [{ tipo: 'asc' }, { id: 'asc' }], select: { id: true } });
+  if (padraoBanco) return padraoBanco.id;
   const caixas = await db.contaFinanceira.findMany({ where: { ativo: true, tipo: 'CAIXA' }, select: { id: true } });
   if (caixas.length) {
     const uso = await db.movimentoFinanceiro.groupBy({ by: ['contaFinanceiraId'], where: { contaFinanceiraId: { in: caixas.map((c) => c.id) } }, _count: { _all: true } });
