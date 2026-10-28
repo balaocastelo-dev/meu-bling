@@ -44,6 +44,7 @@ const ContasPagar = lazy(() => import('@/pages/financeiro/ContasPagar'));
 const Bancos = lazy(() => import('@/pages/financeiro/Bancos'));
 const FluxoCaixa = lazy(() => import('@/pages/financeiro/FluxoCaixa'));
 const Comissoes = lazy(() => import('@/pages/financeiro/Comissoes'));
+const Emprestimos = lazy(() => import('@/pages/financeiro/Emprestimos'));
 
 const NotasLista = lazy(() => import('@/pages/fiscal/NotasLista'));
 const NotaDetalhe = lazy(() => import('@/pages/fiscal/NotaDetalhe'));
@@ -158,6 +159,7 @@ export const router = createBrowserRouter(
       { path: 'financeiro/pagar', element: FIN(<ContasPagar />) },
       { path: 'financeiro/bancos', element: FIN(<Bancos />) },
       { path: 'financeiro/fluxo-caixa', element: FIN(<FluxoCaixa />) },
+      { path: 'financeiro/emprestimos', element: FIN(<Emprestimos />) },
       { path: 'comissoes', element: S(<Comissoes />) },
 
       { path: 'notas-fiscais', element: S(<NotasLista />) },

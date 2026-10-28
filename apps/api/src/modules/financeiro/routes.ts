@@ -439,14 +439,14 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     const contas = await prisma.contaFinanceira.findMany({ where: { ativo: true, ...(q.contaFinanceiraId ? { id: q.contaFinanceiraId } : {}) } });
     const antes = await prisma.movimentoFinanceiro.groupBy({
       by: ['tipo'],
-      where: { ...filtroConta, data: { lt: ini }, contaFinanceira: { ativo: true } },
+      where: { ...filtroConta, data: { lt: ini }, contaFinanceira: { ativo: true, tipo: { not: 'COMPENSACAO' } } },
       _sum: { valor: true },
     });
     const somaTipo = (tipo: string) => antes.find((a) => a.tipo === tipo)?._sum.valor || 0;
     const saldoInicial = arredondar(contas.reduce((s, c) => s + c.saldoInicial, 0) + somaTipo('ENTRADA') - somaTipo('SAIDA'));
 
     const movs = await prisma.movimentoFinanceiro.findMany({
-      where: { ...filtroConta, data: { gte: ini, lte: fim }, contaFinanceira: { ativo: true } },
+      where: { ...filtroConta, data: { gte: ini, lte: fim }, contaFinanceira: { ativo: true, tipo: { not: 'COMPENSACAO' } } },
       select: { data: true, tipo: true, valor: true },
     });
     const periodos = listarPeriodos(ini, fim, agrupar);

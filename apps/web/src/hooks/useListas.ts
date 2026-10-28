@@ -54,7 +54,8 @@ export function useCategoriasProduto() {
 }
 
 export function useContasFinanceiras(somenteAtivos = true) {
-  return useQuery({ queryKey: ['contas-financeiras', somenteAtivos], queryFn: () => lista<ContaFinanceira>('/contas-financeiras', somenteAtivos ? { ativo: true } : undefined), ...OPCOES });
+  // a conta técnica "Encontro de contas (empréstimos)" nunca aparece para escolher
+  return useQuery({ queryKey: ['contas-financeiras', somenteAtivos], queryFn: async () => (await lista<ContaFinanceira>('/contas-financeiras', somenteAtivos ? { ativo: true } : undefined)).filter((c) => c.tipo !== 'COMPENSACAO'), ...OPCOES });
 }
 
 export function useSituacoes(modulo: Modulo) {

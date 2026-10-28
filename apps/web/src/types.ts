@@ -180,7 +180,7 @@ export interface CategoriaProduto {
 export interface ContaFinanceira {
   id: number;
   nome: string;
-  tipo: 'CAIXA' | 'BANCO' | 'CARTAO' | 'INVESTIMENTO' | 'OUTRO';
+  tipo: 'CAIXA' | 'BANCO' | 'CARTAO' | 'INVESTIMENTO' | 'OUTRO' | 'COMPENSACAO';
   banco?: string | null;
   agencia?: string | null;
   conta?: string | null;

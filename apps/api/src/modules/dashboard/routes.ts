@@ -560,7 +560,8 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       });
     const carregarOs = async (de: Date, ate: Date) => (await ordensAssistencia(de, ate, q.base, undefined, sitOsOk)).filter((o) => !sitOsCanc.includes(o.situacaoId));
     const carregarCaixa = async (de: Date, ate: Date) => {
-      const movs = await prisma.movimentoFinanceiro.findMany({ where: { data: { gte: de, lte: ate }, tipo: { in: ['ENTRADA', 'SAIDA'] } }, select: { data: true, tipo: true, valor: true, observacoes: true } });
+      // a conta "Encontro de contas (empréstimos)" não é dinheiro de verdade: fica de fora do caixa
+      const movs = await prisma.movimentoFinanceiro.findMany({ where: { data: { gte: de, lte: ate }, tipo: { in: ['ENTRADA', 'SAIDA'] }, contaFinanceira: { tipo: { not: 'COMPENSACAO' } } }, select: { data: true, tipo: true, valor: true, observacoes: true } });
       return movs.filter((m) => !OBS_FORA_DO_RESULTADO.includes(m.observacoes || ''));
     };
     const cfgC = await carregarCfgCustos();
