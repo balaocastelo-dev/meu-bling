@@ -936,7 +936,10 @@ export async function registrarCompraDaVenda(vendaId: number, p: CompraDaVendaIn
   if (!venda) throw new NotFound('Venda');
   const existente = await compraDaVenda(venda.numero);
   if (existente) return { compra: existente, jaExistia: true, paga: false };
-  const itens = venda.itens.filter((i) => i.custoUnitario > 0);
+  // consignado já tem a compra dele (e o pagamento ao consignante sai pela consignação)
+  const consignados = new Set((await prisma.consignacao.findMany({ where: { produtoId: { in: venda.itens.map((i) => i.produtoId).filter((x): x is number => !!x) } }, select: { produtoId: true } })).map((c) => c.produtoId));
+  const itens = venda.itens.filter((i) => i.custoUnitario > 0 && !(i.produtoId && consignados.has(i.produtoId)));
+  if (!itens.length && consignados.size) return { compra: null, jaExistia: false, paga: false, consignado: true };
   if (!itens.length) throw new AppError('Os produtos da venda estão sem custo: informe o custo para registrar a compra.', 422, 'SEM_CUSTO');
   const fechado =
     (await prisma.situacao.findFirst({ where: { modulo: 'COMPRA', nome: 'Fechado', ativo: true } })) ||
