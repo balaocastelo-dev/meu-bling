@@ -65,6 +65,8 @@ const EXIGEM_TOTAL: { teste: RegExp; metodos?: string[] }[] = [
   { teste: /^\/notas-fiscais\/[^/]+\/cancelar$/ },
   { teste: /^\/notas-fiscais\/inutilizar$/ },
   { teste: /^\/comissoes\/pagar$/ },
+  // emitir NF vai para a SEFAZ (documento fiscal de verdade): só chave com nível total
+  { teste: /^\/vendas\/[^/]+\/emitir-nf$/ },
 ];
 
 /** Rotas da própria API externa que qualquer chave válida usa (quem sou eu, documentação, busca, MCP). */
@@ -199,6 +201,7 @@ export const ENDPOINTS: Endpoint[] = [
   { metodo: 'GET', caminho: '/produtos/{id}/movimentos', recurso: 'produtos', resumo: 'Movimentos de estoque do produto.', filtros: PAG },
   { metodo: 'POST', caminho: '/produtos', recurso: 'produtos', resumo: 'Cadastra produto.', corpo: { tipo: 'P', nome: 'Mouse sem fio', codigo: 'MOU-001', gtin: '', unidade: 'UN', preco: 89.9, precoCusto: 40, marca: 'Logitech', estoqueMinimo: 2, controlaEstoque: true, garantiaDias: 90, ncm: '84716053', csosn: '102', origem: 0, categoriaId: null, ativo: true } },
   { metodo: 'PUT', caminho: '/produtos/{id}', recurso: 'produtos', resumo: 'Altera produto (preço, custo, dados fiscais, estoque mínimo…).', corpo: { preco: 99.9, estoqueMinimo: 3 } },
+  { metodo: 'POST', caminho: '/produtos/{id}/confirmar-ncm', recurso: 'produtos', resumo: 'Confirma o NCM sugerido pelo robô de NF (vale para todas as vendas do produto). Pode mandar outro NCM no corpo.', corpo: { ncm: '84713012' } },
   { metodo: 'DELETE', caminho: '/produtos/{id}', recurso: 'produtos', resumo: 'Exclui produto (com movimento, só desativa).' },
   { metodo: 'GET', caminho: '/estoque/saldos', recurso: 'produtos', resumo: 'Saldos por produto e depósito.', filtros: ['depositoId', 'pesquisa', 'abaixoMinimo (true)'] },
   { metodo: 'GET', caminho: '/estoque/movimentos', recurso: 'produtos', resumo: 'Movimentos de estoque (entradas, saídas, ajustes, transferências).', filtros: ['produtoId', 'depositoId', ...PERIODO, 'origemTipo', 'tipo', ...PAG] },
@@ -224,6 +227,9 @@ export const ENDPOINTS: Endpoint[] = [
   { metodo: 'POST', caminho: '/vendas/gerar-parcelas', recurso: 'vendas', resumo: 'Calcula parcelas de um total qualquer (não grava).', corpo: { total: 1200, quantidade: 3, primeiroVencimento: '2026-11-24', formaPagamentoId: 2, intervaloDias: 30 } },
   { metodo: 'GET', caminho: '/vendas/{id}/nfe/verificar', recurso: 'vendas', resumo: 'Confere se a venda tem tudo para emitir NF-e (diz o que falta).' },
   { metodo: 'POST', caminho: '/vendas/{id}/gerar-nfe', recurso: 'vendas', resumo: 'Cria a NF-e (55) ou NFC-e (65) da venda, pendente (transmita em /notas-fiscais/{id}/transmitir).', corpo: { modelo: 55, informacoesComplementares: '' } },
+  { metodo: 'GET', caminho: '/vendas/{id}/robo-nf', recurso: 'vendas', resumo: 'Robô de NF: status da venda (PRONTA = "Pronto pra NF", PENDENTE com a lista do que falta e onde corrigir, EMITIDA, IGNORADA) e o que o robô preencheu sozinho.' },
+  { metodo: 'POST', caminho: '/vendas/{id}/robo-nf/conferir', recurso: 'vendas', resumo: 'Robô de NF: confere a venda agora (completa cliente pelo CEP/CNPJ e NCM dos produtos) e devolve o status.' },
+  { metodo: 'POST', caminho: '/vendas/{id}/emitir-nf', recurso: 'vendas', resumo: 'Emite a NF-e (modelo 55, DANFE A4) da venda e transmite à SEFAZ — só quando o robô diz PRONTA (senão 422 NFE_PENDENCIAS com a lista).', corpo: { informacoesComplementares: '' } },
   { metodo: 'POST', caminho: '/vendas/{id}/notificar', recurso: 'vendas', resumo: 'Envia o pedido/orçamento ao cliente por WhatsApp ou e-mail, com PDF.', corpo: { canal: 'WHATSAPP', templateId: null, mensagem: null, anexarPdf: true } },
   { metodo: 'GET', caminho: '/vendas/{id}/imprimir', recurso: 'vendas', resumo: 'HTML do pedido para impressão.' },
   { metodo: 'GET', caminho: '/vendas/{id}/pdf', recurso: 'vendas', resumo: 'PDF A4 do pedido/orçamento.', filtros: ['download (1)'] },

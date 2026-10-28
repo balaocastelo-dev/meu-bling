@@ -188,6 +188,9 @@ export default async function produtosRoutes(app: FastifyInstance) {
     }
     if (dados.codigo === '') (dados as any).codigo = null;
     if ((dados.tipo ?? atual.tipo) === 'S') dados.controlaEstoque = false;
+    // NCM trocado à mão: deixa de ser "sugerido pelo robô" (vale o que a pessoa digitou)
+    const ncmNovo = dados.ncm !== undefined ? String(dados.ncm || '').replace(/\D/g, '') : undefined;
+    if (ncmNovo !== undefined && ncmNovo !== String(atual.ncm || '').replace(/\D/g, '')) (dados as any).ncmOrigem = null;
     const p = await prisma.produto.update({ where: { id }, data: dados });
     await auditar(req, 'Produto', id, 'ALTERAR', dados);
     return p;

@@ -72,6 +72,8 @@ const REGRAS: Regra[] = [
 
   // ---- vendas
   { metodos: MUT, teste: /^\/notas-fiscais(\/|$)/, perfis: VENDAS },
+  // botão "Emitir NF" do robô de NF: mesmos perfis que emitem nota (técnico não emite)
+  { metodos: MUT, teste: /^\/vendas\/\d+\/emitir-nf$/, perfis: VENDAS },
   { metodos: MUT, teste: /^\/notificacoes(\/|$)/, perfis: OPERACAO },
   // dashboards (geral, vendas, OS): só o dono
   { teste: /^\/dashboard(\/|$)/, perfis: ['ADMIN'] },

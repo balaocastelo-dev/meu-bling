@@ -147,6 +147,11 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
               <FileText className="h-3 w-3" /> NF
             </span>
           )}
+          {!v.nota && v.roboNf?.status === 'PRONTA' && (
+            <span className="inline-flex items-center gap-0.5 rounded bg-emerald-600 px-1 text-white" title="Robô de NF: tudo preenchido — pronto pra emitir a NF">
+              <CheckCircle2 className="h-3 w-3" /> NF
+            </span>
+          )}
         </span>
       ),
     },
