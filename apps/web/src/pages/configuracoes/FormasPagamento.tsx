@@ -1,6 +1,7 @@
 import { CrudSimples } from '@/components/compartilhados/CrudSimples';
 import { Badge, Checkbox, Input, MoneyInput, Select } from '@/components/ui';
 import { numero, rotulo } from '@/lib/format';
+import { useContasFinanceiras, opcoesDe } from '@/hooks/useListas';
 import type { FormaPagamento } from '@/types';
 
 const TIPOS = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA', 'CREDIARIO', 'OUTRO'];
@@ -8,10 +9,12 @@ const TPAG = [['01', 'Dinheiro'], ['02', 'Cheque'], ['03', 'Cartão de crédito'
 
 /** Formas de pagamento */
 export default function FormasPagamento() {
+  const { data: contas } = useContasFinanceiras();
+  const nomeConta = (id?: number | null) => contas?.find((c) => c.id === id)?.nome;
   return (
     <CrudSimples<FormaPagamento>
       titulo="Formas de pagamento"
-      descricao="Taxas, prazos de recebimento e código fiscal (tPag) usado na NF-e."
+      descricao="Banco onde o dinheiro cai, taxas, prazos de recebimento e código fiscal (tPag) usado na NF-e."
       rota="/formas-pagamento"
       invalidar={['formas-pagamento']}
       rotuloNovo="Nova forma"
@@ -20,6 +23,7 @@ export default function FormasPagamento() {
       colunas={[
         { titulo: 'Nome', render: (f) => <span className="font-medium">{f.nome}</span> },
         { titulo: 'Tipo', render: (f) => <span className="text-slate-500">{rotulo(f.tipo)}</span> },
+        { titulo: 'Bancos', render: (f) => <span className="text-slate-600">{(f.contasPermitidas?.length ? f.contasPermitidas.map((id) => nomeConta(id)).filter(Boolean).join(', ') : nomeConta(f.contaFinanceiraId)) ?? '— todos —'}</span> },
         { titulo: 'tPag', render: (f) => <span className="font-mono text-xs">{f.codigoFiscal}</span> },
         { titulo: 'Taxa', className: 'text-right num', render: (f) => `${numero(f.taxaPct)}%` },
         { titulo: 'Recebe em', className: 'text-right num', render: (f) => `${f.diasRecebimento} d` },
@@ -35,6 +39,31 @@ export default function FormasPagamento() {
             <MoneyInput label="Taxa (%)" prefixo="" value={f.taxaPct ?? 0} onChange={(v) => set({ taxaPct: v })} />
             <Input label="Dias para receber" type="number" min={0} value={f.diasRecebimento ?? 0} onChange={(e) => set({ diasRecebimento: Number(e.target.value) })} />
             <Input label="Máximo de parcelas" type="number" min={1} value={f.maxParcelas ?? 1} onChange={(e) => set({ maxParcelas: Number(e.target.value) })} />
+            <Select
+              className="col-span-2"
+              label="Banco onde o dinheiro cai"
+              value={f.contaFinanceiraId ?? ''}
+              onChange={(e) => set({ contaFinanceiraId: e.target.value ? Number(e.target.value) : null })}
+              opcoes={opcoesDe(contas)}
+              placeholder="Conta padrão"
+            />
+            <div className="col-span-2">
+              <span className="mb-1 block text-xs font-medium text-slate-600">Bancos que recebem esta forma (aparecem no fechamento da venda)</span>
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                {(contas ?? []).map((c) => {
+                  const lista = f.contasPermitidas ?? [];
+                  return (
+                    <Checkbox
+                      key={c.id}
+                      label={c.nome}
+                      checked={lista.includes(c.id)}
+                      onChange={(e) => set({ contasPermitidas: e.target.checked ? [...lista, c.id] : lista.filter((x) => x !== c.id) })}
+                    />
+                  );
+                })}
+              </div>
+              <p className="mt-1 text-xs text-slate-400">Nenhum marcado = todos os bancos aparecem.</p>
+            </div>
           </div>
           <Checkbox label="Ativa" checked={f.ativo ?? true} onChange={(e) => set({ ativo: e.target.checked })} />
         </>

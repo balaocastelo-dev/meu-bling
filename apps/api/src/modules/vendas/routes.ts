@@ -4,11 +4,12 @@
  * nunca movimenta estoque/financeiro nem emite nota; "converter" gera a venda vinculada.
  */
 import type { FastifyInstance } from 'fastify';
+import { criarLinkPagamento } from '../../integracoes/mercadopago/link.js';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
-import { arredondar, paginar, proximoNumero, respostaPaginada } from '../../lib/util.js';
+import { arredondar, dataSchema, paginar, proximoNumero, respostaPaginada } from '../../lib/util.js';
 import { eventos } from '../../core/eventos.js';
 import { vendedorDoUsuario } from '../comum/vendedores.js';
 import { executarAcoes, mudarSituacao, registrarAcao, registrarModulo, situacaoInicial, type Acao } from '../../core/situacoes.js';
@@ -46,6 +47,12 @@ import {
   mensagemFinalizacao,
   pendenciasFinalizacao,
   situacaoFinalizar,
+  compraDaVenda,
+  parcelasParaFinalizar,
+  formasParaFinalizar,
+  aplicarRecebimentosFinalizacao,
+  validarRecebimentosFinalizacao,
+  registrarCompraDaVenda,
 } from './service.js';
 import { acoesBody, aprovarBody, CAMPOS_LIVRES, converterBody, gerarNfeBody, gerarParcelasBody, listaQuery, notificarBody, situacaoBody, transferirVendedorBody, vendaSchema } from './schemas.js';
 import { htmlVenda } from './imprimir.js';
@@ -395,20 +402,51 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const v = await carregarVenda(prisma, id);
     const pendencias = pendenciasFinalizacao(v as any);
     const destino = await situacaoFinalizar();
-    return { podeFinalizar: !pendencias.length, pendencias, jaFinalizada: !!v.situacao.final && !v.situacao.cancelamento, situacaoAtual: { id: v.situacao.id, nome: v.situacao.nome }, destino: { id: destino.id, nome: destino.nome, cor: destino.cor }, contatoId: v.contatoId };
+    const custoProdutos = arredondar(v.itens.reduce((s: number, i: any) => s + (i.custoUnitario || 0) * i.quantidade, 0));
+    const compraRegistrada = await compraDaVenda(v.numero);
+    return { podeFinalizar: !pendencias.length, pendencias, jaFinalizada: !!v.situacao.final && !v.situacao.cancelamento, situacaoAtual: { id: v.situacao.id, nome: v.situacao.nome }, destino: { id: destino.id, nome: destino.nome, cor: destino.cor }, contatoId: v.contatoId, custoProdutos, compraRegistrada, parcelas: await parcelasParaFinalizar(id), formas: await formasParaFinalizar() };
   });
 
   /** Finaliza (vai para "Fechada") a partir de qualquer situação, desde que a venda esteja completa. */
   app.post('/api/v1/vendas/:id/finalizar', async (req) => {
     const id = idDe(req);
-    const body = z.object({ observacao: z.string().max(500).nullish() }).parse(req.body ?? {});
+    const body = z
+      .object({
+        observacao: z.string().max(500).nullish(),
+        /** registrar o pedido de compra da mercadoria (com o custo da venda) e se já está paga */
+        compra: z
+          .object({
+            fornecedorId: z.coerce.number().int().positive().nullish(),
+            paga: z.boolean(),
+            contaFinanceiraId: z.coerce.number().int().positive().nullish(),
+            vencimento: dataSchema.nullish(),
+          })
+          .nullish(),
+        /** onde entrou o dinheiro de cada parcela (ou se fica em aberto) */
+        recebimentos: z
+          .array(z.object({ parcelaId: z.coerce.number().int().positive(), formaPagamentoId: z.coerce.number().int().positive().nullish(), recebido: z.boolean(), contaFinanceiraId: z.coerce.number().int().positive().nullish() }))
+          .nullish(),
+      })
+      .parse(req.body ?? {});
     const v = await exigirVendaCompleta(id);
     exigirPedido(v, 'ser finalizado');
     const destino = await situacaoFinalizar();
     if (v.situacao.final && !v.situacao.cancelamento) return { situacao: { id: v.situacao.id, nome: v.situacao.nome, cor: v.situacao.cor }, acoesExecutadas: [], alterado: false };
+    // confere as escolhas de pagamento antes de lançar qualquer coisa
+    if (body.recebimentos?.length) await validarRecebimentosFinalizacao(id, body.recebimentos);
+    // primeiro a compra (entra no estoque e fica ligada à venda), depois a venda baixa o estoque
+    let compra: Awaited<ReturnType<typeof registrarCompraDaVenda>> | null = null;
+    if (body.compra) {
+      compra = await registrarCompraDaVenda(id, body.compra, req.user.id);
+      await auditar(req, 'Compra', compra.compra.id, 'CRIAR', { numero: compra.compra.numero, deVenda: v.numero, paga: compra.paga, jaExistia: compra.jaExistia });
+    }
     const r = await mudarSituacao({ modulo: 'VENDA', entidadeId: id, situacaoDestinoId: destino.id, usuarioId: req.user.id, observacao: body.observacao || 'Venda finalizada', forcar: true });
     await auditar(req, 'Venda', id, 'SITUACAO', { para: r.situacao.nome, acoes: r.acoes, finalizar: true });
-    return { situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor }, acoesExecutadas: r.acoes, alterado: r.alterado };
+    // garante as contas lançadas (pago na hora) e põe cada recebimento no banco escolhido
+    const recebimentos = body.recebimentos?.length
+      ? await aplicarRecebimentosFinalizacao(id, body.recebimentos)
+      : await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, id, req.user.id, { mesmoComContasLancadas: true }));
+    return { situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor }, acoesExecutadas: r.acoes, alterado: r.alterado, compra, recebimentos };
   });
 
   /** Contato "Consumidor Final" (cria se não existir) — botão da tela de venda. */
@@ -525,6 +563,20 @@ export default async function vendasRoutes(app: FastifyInstance) {
   });
 
   // ---------------------------------------------------------------- transferir para outro vendedor
+  // ---------------------------------------------------------------- link de pagamento (Mercado Pago)
+  /** O vendedor gera o link do Mercado Pago dentro do pedido (padrão: total da venda). */
+  app.post('/api/v1/vendas/:id/link-pagamento', async (req) => {
+    const id = idDe(req);
+    const body = z.object({ valor: z.coerce.number().positive().nullish() }).parse(req.body ?? {});
+    const v = await prisma.venda.findUnique({ where: { id }, include: { contato: { select: { nome: true, email: true } } } });
+    if (!v) throw new NotFound('Venda');
+    const valor = body.valor ?? v.total;
+    const link = await criarLinkPagamento({ referencia: `venda-${v.id}`, titulo: `${v.tipo === 'ORCAMENTO' ? 'Orçamento' : 'Pedido'} nº ${v.numero} — Balão da Informática`, valor, email: v.contato?.email, nome: v.contato?.nome });
+    await prisma.venda.update({ where: { id }, data: { linkPagamentoUrl: link.url, linkPagamentoId: link.id, linkPagamentoValor: link.valor, linkPagamentoEm: new Date() } });
+    await auditar(req, 'Venda', id, 'ACAO', { acao: 'link-pagamento', valor: link.valor });
+    return { url: link.url, valor: link.valor };
+  });
+
   app.post('/api/v1/vendas/:id/transferir-vendedor', async (req) => {
     const id = idDe(req);
     const body = transferirVendedorBody.parse(req.body);

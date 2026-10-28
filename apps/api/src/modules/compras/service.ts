@@ -519,7 +519,7 @@ export async function alocarComprasParaVenda(tx: Tx, vendaId: number, usuarioId:
 }
 
 /** Compra com toda a mercadoria vendida → situação "Vendido" (se existir e ainda não estiver nela). */
-async function marcarCompraVendida(tx: Tx, compraId: number, vendaNumero: number, usuarioId: number | null) {
+export async function marcarCompraVendida(tx: Tx, compraId: number, vendaNumero: number, usuarioId: number | null) {
   const compra = await tx.compra.findUnique({ where: { id: compraId }, include: { itens: { include: { produto: true } }, situacao: true } });
   if (!compra || compra.situacao.cancelamento) return false;
   const itensEstoque = compra.itens.filter((i) => i.produtoId && movimentaEstoque(i.produto));

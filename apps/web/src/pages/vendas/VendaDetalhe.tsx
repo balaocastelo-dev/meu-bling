@@ -14,6 +14,7 @@ import { data, dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { Contato, Venda } from '@/types';
 import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/ProdutoSite';
 import { FinalizarVendaModal } from '@/components/compartilhados/FinalizarVenda';
+import { LinkPagamento } from '@/components/compartilhados/LinkPagamento';
 
 /** Detalhe do pedido de venda com abas e ações */
 export default function VendaDetalhe() {
@@ -228,6 +229,9 @@ export default function VendaDetalhe() {
           </div>
           </>)}
           {orcamento && <p className="mt-3 text-xs text-slate-400">Orçamento não movimenta estoque nem financeiro. Ao converter, a venda criada segue o fluxo normal.</p>}
+          <div className="mt-3">
+            <LinkPagamento venda={venda as any} />
+          </div>
         </Card>
       </div>
 
