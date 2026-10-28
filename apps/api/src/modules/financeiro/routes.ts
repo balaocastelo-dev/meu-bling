@@ -16,6 +16,7 @@ import {
   estornarContaPagar,
   estornarPagamentoContaPagar,
   saldoContaPagar,
+  saldoContaReceber,
   criarMovimentoAvulso,
   transferirEntreContas,
   ajustarSaldoConta,
@@ -24,6 +25,7 @@ import {
   mapaOrigens,
 } from './service.js';
 import { chavePeriodo, listarPeriodos, resolverPeriodo, type Agrupar } from './periodos.js';
+import { OBS_FORA_DO_RESULTADO } from '../comum/financeiro.js';
 
 const SIT_FILTRO = ['ABERTO', 'RECEBIDO', 'PAGO', 'PARCIAL', 'CANCELADO', 'ATRASADO'] as const;
 
@@ -447,28 +449,61 @@ export default async function financeiroRoutes(app: FastifyInstance) {
 
     const movs = await prisma.movimentoFinanceiro.findMany({
       where: { ...filtroConta, data: { gte: ini, lte: fim }, contaFinanceira: { ativo: true, tipo: { not: 'COMPENSACAO' } } },
-      select: { data: true, tipo: true, valor: true },
+      select: {
+        id: true, data: true, tipo: true, valor: true, descricao: true, observacoes: true, criadoEm: true,
+        categoria: { select: { nome: true } },
+        contaFinanceira: { select: { id: true, nome: true, cor: true } },
+        contaReceber: { select: { origemTipo: true } },
+        contaPagar: { select: { origemTipo: true } },
+      },
     });
+    // transferências e acertos de saldo mexem no saldo, mas não são entrada/saída de dinheiro da loja
+    const fora = (m: { observacoes: string | null }) => OBS_FORA_DO_RESULTADO.includes(m.observacoes || '');
     const periodos = listarPeriodos(ini, fim, agrupar);
-    const mapa = new Map(periodos.map((p) => [p, { periodo: p, entradas: 0, saidas: 0, saldo: 0 }]));
+    const mapa = new Map(periodos.map((p) => [p, { periodo: p, entradas: 0, saidas: 0, ajustes: 0, saldo: 0 }]));
     for (const m of movs) {
       const k = chavePeriodo(m.data, agrupar);
-      const s = mapa.get(k) || mapa.set(k, { periodo: k, entradas: 0, saidas: 0, saldo: 0 }).get(k)!;
-      if (m.tipo === 'ENTRADA') s.entradas += m.valor;
+      const s = mapa.get(k) || mapa.set(k, { periodo: k, entradas: 0, saidas: 0, ajustes: 0, saldo: 0 }).get(k)!;
+      if (fora(m)) s.ajustes += m.tipo === 'ENTRADA' ? m.valor : -m.valor;
+      else if (m.tipo === 'ENTRADA') s.entradas += m.valor;
       else if (m.tipo === 'SAIDA') s.saidas += m.valor;
     }
     let acumulado = saldoInicial;
     const series = [...mapa.values()]
       .sort((a, b) => a.periodo.localeCompare(b.periodo))
       .map((s) => {
-        acumulado = arredondar(acumulado + s.entradas - s.saidas);
-        return { periodo: s.periodo, entradas: arredondar(s.entradas), saidas: arredondar(s.saidas), saldo: acumulado };
+        acumulado = arredondar(acumulado + s.entradas - s.saidas + s.ajustes);
+        return { periodo: s.periodo, entradas: arredondar(s.entradas), saidas: arredondar(s.saidas), ajustes: arredondar(s.ajustes), saldo: acumulado };
       });
+    const operacionais = movs.filter((m) => !fora(m));
     const realizado = {
-      entradas: arredondar(movs.filter((m) => m.tipo === 'ENTRADA').reduce((s, m) => s + m.valor, 0)),
-      saidas: arredondar(movs.filter((m) => m.tipo === 'SAIDA').reduce((s, m) => s + m.valor, 0)),
+      entradas: arredondar(operacionais.filter((m) => m.tipo === 'ENTRADA').reduce((s, m) => s + m.valor, 0)),
+      saidas: arredondar(operacionais.filter((m) => m.tipo === 'SAIDA').reduce((s, m) => s + m.valor, 0)),
+      ajustes: arredondar(movs.filter(fora).reduce((s, m) => s + (m.tipo === 'ENTRADA' ? m.valor : -m.valor), 0)),
       saldoFinal: acumulado,
     };
+    // quebras para o painel
+    const agrupa = (lista: typeof movs, chave: (m: (typeof movs)[number]) => string) => {
+      const g = new Map<string, number>();
+      for (const m of lista) g.set(chave(m), (g.get(chave(m)) || 0) + m.valor);
+      return [...g.entries()].map(([nome, valor]) => ({ nome, valor: arredondar(valor) })).sort((a, b) => b.valor - a.valor);
+    };
+    const entradasOp = operacionais.filter((m) => m.tipo === 'ENTRADA');
+    const saidasOp = operacionais.filter((m) => m.tipo === 'SAIDA');
+    const origemEntrada = (m: (typeof movs)[number]) => (m.contaReceber?.origemTipo === 'VENDA' ? 'Vendas' : m.contaReceber?.origemTipo === 'OS' ? 'Assistência técnica' : m.contaReceber ? 'Outros recebimentos' : 'Lançamentos avulsos');
+    const origemSaida = (m: (typeof movs)[number]) => (m.contaPagar?.origemTipo === 'COMPRA' ? 'Compras de mercadoria' : m.contaPagar?.origemTipo === 'COMISSAO' ? 'Comissões' : m.contaPagar ? 'Contas a pagar' : 'Lançamentos avulsos');
+    const quebras = {
+      entradasPorCategoria: agrupa(entradasOp, (m) => m.categoria?.nome || 'Sem categoria').slice(0, 8),
+      saidasPorCategoria: agrupa(saidasOp, (m) => m.categoria?.nome || 'Sem categoria').slice(0, 8),
+      entradasPorOrigem: agrupa(entradasOp, origemEntrada),
+      saidasPorOrigem: agrupa(saidasOp, origemSaida),
+    };
+    const contasSaldo = await prisma.contaFinanceira.findMany({ where: { ativo: true }, select: { id: true, nome: true, cor: true, saldoAtual: true }, orderBy: { saldoAtual: 'desc' } });
+    const saldoAgora = arredondar(contasSaldo.filter((c) => !q.contaFinanceiraId || c.id === q.contaFinanceiraId).reduce((s, c) => s + c.saldoAtual, 0));
+    const ultimos = [...movs]
+      .sort((a, b) => +b.criadoEm - +a.criadoEm)
+      .slice(0, 12)
+      .map((m) => ({ id: m.id, data: m.data, criadoEm: m.criadoEm, tipo: m.tipo, valor: m.valor, descricao: m.descricao, conta: m.contaFinanceira, foraDoResultado: fora(m) }));
 
     // previsto: contas em aberto por vencimento dentro do período
     const [cr, cp] = await Promise.all([
@@ -494,7 +529,31 @@ export default async function financeiroRoutes(app: FastifyInstance) {
         return { periodo: p.periodo, receber: arredondar(p.receber), pagar: arredondar(p.pagar), saldoProjetado: projetado };
       });
 
-    return { periodo: { dataInicial: ini, dataFinal: fim, agrupar }, saldoInicial, series, realizado, previsto };
+    // próximos 7 dias (a partir de hoje), independente do período
+    const hojeIni = startOfDay(new Date());
+    const em7 = new Date(hojeIni.getTime() + 8 * 86400000 - 1);
+    const [cr7, cp7] = await Promise.all([
+      prisma.contaReceber.findMany({ where: { situacao: { in: ['ABERTO', 'PARCIAL'] }, vencimento: { lte: em7 } }, orderBy: { vencimento: 'asc' }, take: 40, select: { id: true, descricao: true, vencimento: true, valor: true, valorRecebido: true, juros: true, desconto: true, contato: { select: { nome: true } } } }),
+      prisma.contaPagar.findMany({ where: { situacao: { in: ['ABERTO', 'PARCIAL'] }, vencimento: { lte: em7 } }, orderBy: { vencimento: 'asc' }, take: 40, select: { id: true, descricao: true, vencimento: true, valor: true, valorPago: true, juros: true, desconto: true, contato: { select: { nome: true } } } }),
+    ]);
+    const proximos = {
+      receber: cr7.map((c) => ({ id: c.id, descricao: c.descricao, contato: c.contato?.nome ?? null, vencimento: c.vencimento, valor: saldoContaReceber(c), atrasada: c.vencimento < hojeIni })).filter((c) => c.valor > 0.009),
+      pagar: cp7.map((c) => ({ id: c.id, descricao: c.descricao, contato: c.contato?.nome ?? null, vencimento: c.vencimento, valor: saldoContaPagar(c), atrasada: c.vencimento < hojeIni })).filter((c) => c.valor > 0.009),
+    };
+
+    return {
+      periodo: { dataInicial: ini, dataFinal: fim, agrupar },
+      saldoInicial,
+      series,
+      realizado,
+      previsto,
+      quebras,
+      saldoAgora,
+      contas: contasSaldo.map((c) => ({ ...c, saldoAtual: arredondar(c.saldoAtual) })),
+      ultimos,
+      proximos,
+      atualizadoEm: new Date(),
+    };
   });
 
   app.get('/api/v1/financeiro/movimentos', { preHandler: fin }, async (req) => {
