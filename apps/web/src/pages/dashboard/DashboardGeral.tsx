@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { AvisosImportantes } from '@/components/compartilhados/AvisosImportantes';
+import { CardRoboSaude } from '@/components/compartilhados/RoboSaude';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import clsx from 'clsx';
@@ -205,6 +206,11 @@ export default function DashboardGeral() {
       {/* avisos mais importantes (caixinhas no prazo, contas vencidas, OS atrasadas) */}
       <Aparecer>
         <AvisosImportantes />
+      </Aparecer>
+
+      {/* Robô da Saúde (só ADMIN): corrige sozinho e deixa o resto com o botão pronto */}
+      <Aparecer>
+        <CardRoboSaude />
       </Aparecer>
 
       {/* destaque: faturamento total do período */}
