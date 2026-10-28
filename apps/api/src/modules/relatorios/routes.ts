@@ -8,6 +8,7 @@ import { prisma } from '../../lib/prisma.js';
 import { dataSchema, arredondar } from '../../lib/util.js';
 import { chavePeriodo, listarPeriodos, resolverPeriodo, agruparPadrao, type Agrupar } from '../financeiro/periodos.js';
 import { gerarDre } from './dre.js';
+import { carregarCfgCustos, custosVenda } from '../comum/custos-venda.js';
 
 /** Gera CSV (separador ';', compatível com Excel BR) a partir de linhas-objeto. */
 function csv(linhas: Record<string, any>[], colunas?: { chave: string; titulo: string }[]): string {
@@ -64,8 +65,9 @@ export default async function relatoriosRoutes(app: FastifyInstance) {
     const sit = await prisma.situacao.findMany({ where: { modulo: 'VENDA', ...(q.todas === 'true' ? { cancelamento: false } : { final: true, cancelamento: false }) }, select: { id: true } });
     const vendas = await prisma.venda.findMany({
       where: { tipo: 'PEDIDO', data: { gte: ini, lte: fim }, situacaoId: { in: sit.map((s) => s.id) }, ...(q.vendedorId ? { vendedorId: q.vendedorId } : {}) },
-      select: { data: true, total: true, custoTotal: true, custoLogistica: true, descontoValor: true, frete: true, itens: { select: { quantidade: true } } },
+      select: { id: true, data: true, total: true, custoTotal: true, custoLogistica: true, descontoValor: true, frete: true, itens: { select: { quantidade: true, custoUnitario: true } }, parcelas: { select: { valor: true, formaPagamento: { select: { tipo: true } } } } },
     });
+    const cfgC = await carregarCfgCustos();
     const mapa = new Map(listarPeriodos(ini, fim, agrupar).map((p) => [p, { periodo: p, qtdVendas: 0, itens: 0, faturamento: 0, descontos: 0, frete: 0, custo: 0, lucro: 0, ticketMedio: 0 }]));
     for (const v of vendas) {
       const k = chavePeriodo(v.data, agrupar);
@@ -75,8 +77,9 @@ export default async function relatoriosRoutes(app: FastifyInstance) {
       s.faturamento += v.total;
       s.descontos += v.descontoValor;
       s.frete += v.frete;
-      s.custo += v.custoTotal + v.custoLogistica;
-      s.lucro += v.total - v.custoTotal - v.custoLogistica;
+      const c = custosVenda(v, cfgC);
+      s.custo += c.total;
+      s.lucro += c.lucro;
     }
     const data = [...mapa.values()]
       .sort((a, b) => a.periodo.localeCompare(b.periodo))

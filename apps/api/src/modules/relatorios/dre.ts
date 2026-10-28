@@ -5,7 +5,9 @@
  *   CMV = compras REAIS de mercadoria (contas a pagar da categoria CMV e as geradas por pedido de compra
  *   sem outra categoria) por competência + custo das peças das OS;
  *   despesas = todas as demais contas a pagar por competência (ou vencimento), exceto canceladas.
- *   O custo estimado por venda (VendaItem.custoUnitario) NÃO entra no DRE — fica só nos dashboards.
+ *   Desde 28/10/2026 o resultado usa o CUSTO DE CADA VENDA (comum/custos-venda.ts): produto (CMV), imposto
+ *   (alíquota em deduções), taxa de cartão e frete (despesas operacionais). As contas a pagar de compra de
+ *   mercadoria, imposto sobre vendas e logística ficam fora do resultado (já cobertas) e saem em `informativo`.
  * Regime CAIXA: receita = MovimentoFinanceiro ENTRADA por categoria; despesas = SAIDA por categoria.
  * Deduções: aliquotaSimplesPct × receita bruta + categorias DEDUCAO.
  */
@@ -13,6 +15,18 @@ import { endOfMonth, format, startOfMonth, addMonths } from 'date-fns';
 import { prisma } from '../../lib/prisma.js';
 import { arredondar } from '../../lib/util.js';
 import { OBS_FORA_DO_RESULTADO } from '../comum/financeiro.js';
+import { carregarCfgCustos, custosVenda, SELECT_CUSTO_VENDA } from '../comum/custos-venda.js';
+
+/**
+ * Contas a pagar que o custo por venda já cobre (não entram no DRE para não contar duas vezes; aparecem
+ * como informativo): compra de mercadoria (CMV / pedido de compra sem categoria), imposto sobre vendas e logística.
+ */
+function cobertaPeloCustoDaVenda(cat: Cat | null | undefined, origemTipo: string | null): string | null {
+  if (cat?.grupoDre === 'CMV' || (origemTipo === 'COMPRA' && !cat)) return cat?.nome || 'Compra de mercadorias (pedidos de compra)';
+  if (cat && cat.grupoDre === 'DEDUCAO' && /imposto|simples|das\b/i.test(cat.nome)) return cat.nome;
+  if (cat && /log[ií]stica|frete|entrega/i.test(cat.nome)) return cat.nome;
+  return null;
+}
 
 export type Regime = 'competencia' | 'caixa';
 
@@ -36,10 +50,12 @@ interface Acumulado {
   despPessoal: Map<string, { nome: string; valor: number; categoriaId: number | null }>;
   resultFin: Map<string, { nome: string; valor: number; categoriaId: number | null }>;
   outras: Map<string, { nome: string; valor: number; categoriaId: number | null }>;
+  /** pago/lançado, mas já coberto pelo custo de cada venda — só para conferência */
+  informativo: Map<string, { nome: string; valor: number; categoriaId: number | null }>;
 }
 
 function novoAcumulado(): Acumulado {
-  return { receitaProdutos: 0, receitaServicos: 0, receitaOutrasCat: new Map(), deducoes: new Map(), cmv: new Map(), despOper: new Map(), despPessoal: new Map(), resultFin: new Map(), outras: new Map() };
+  return { receitaProdutos: 0, receitaServicos: 0, receitaOutrasCat: new Map(), deducoes: new Map(), cmv: new Map(), despOper: new Map(), despPessoal: new Map(), resultFin: new Map(), outras: new Map(), informativo: new Map() };
 }
 
 function add(mapa: Map<string, { nome: string; valor: number; categoriaId: number | null }>, nome: string, valor: number, categoriaId: number | null = null) {
@@ -92,12 +108,18 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
   ]);
   const vendas = await prisma.venda.findMany({
     where: { tipo: 'PEDIDO', data: { gte: ini, lte: fim }, situacaoId: { in: sitVenda.map((s) => s.id) } },
-    select: { total: true, itens: { select: { produto: { select: { tipo: true } }, total: true } } },
+    select: { ...SELECT_CUSTO_VENDA, itens: { select: { custoUnitario: true, quantidade: true, produto: { select: { tipo: true } }, total: true } } },
   });
+  // custo completo de cada venda: produto (CMV) + imposto (deduções, pela alíquota) + taxa de cartão + frete
+  const cfg = await carregarCfgCustos();
   for (const v of vendas) {
     const servicos = v.itens.filter((i) => i.produto?.tipo === 'S').reduce((s, i) => s + i.total, 0);
     ac.receitaProdutos += v.total - servicos;
     ac.receitaServicos += servicos;
+    const c = custosVenda(v, cfg);
+    if (c.produto) add(ac.cmv, 'Custo dos produtos vendidos', c.produto);
+    if (c.taxaCartao) add(ac.despOper, 'Taxas de cartão (vendas)', c.taxaCartao);
+    if (c.frete) add(ac.despOper, 'Frete das vendas', c.frete);
   }
   const ordens = await prisma.ordemServico.findMany({
     where: { dataEntrada: { gte: ini, lte: fim }, situacaoId: { in: sitOs.map((s) => s.id) } },
@@ -125,8 +147,9 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
   });
   for (const c of contas) {
     const cat = c.categoriaId ? cats.get(c.categoriaId) : null;
-    if (cat?.grupoDre === 'CMV' || (c.origemTipo === 'COMPRA' && !cat)) {
-      add(ac.cmv, cat?.nome || 'Compra de mercadorias (pedidos de compra)', c.valor, cat?.id ?? null);
+    const coberta = cobertaPeloCustoDaVenda(cat, c.origemTipo);
+    if (coberta) {
+      add(ac.informativo, coberta, c.valor, cat?.id ?? null);
       continue;
     }
     lancarPorCategoria(ac, cat, c.valor, 'DESPESA');
@@ -164,6 +187,9 @@ async function acumularCaixa(ini: Date, fim: Date, cats: Map<number, Cat>): Prom
         if (cat && /servi/i.test(cat.nome)) ac.receitaServicos += m.valor;
         else ac.receitaProdutos += m.valor;
       } else lancarPorCategoria(ac, cat, m.valor, 'RECEITA');
+    } else if (cat && cat.grupoDre === 'DEDUCAO' && /imposto|simples|das\b/i.test(cat.nome)) {
+      // imposto já entra pela alíquota sobre a receita (linha de deduções)
+      add(ac.informativo, cat.nome, m.valor, cat.id);
     } else {
       lancarPorCategoria(ac, cat, m.valor, 'DESPESA');
     }
@@ -174,7 +200,7 @@ async function acumularCaixa(ini: Date, fim: Date, cats: Map<number, Cat>): Prom
 function montarLinhas(ac: Acumulado, aliquotaSimplesPct: number): LinhaDre[] {
   const receitaBruta = ac.receitaProdutos + ac.receitaServicos;
   const impostos = arredondar(receitaBruta * (aliquotaSimplesPct / 100));
-  const deducoesItens = [{ nome: `Impostos (Simples ${aliquotaSimplesPct}%)`, valor: impostos }, ...[...ac.deducoes.values()].map((d) => ({ nome: d.nome, valor: arredondar(d.valor), categoriaId: d.categoriaId }))];
+  const deducoesItens = [{ nome: `Impostos sobre vendas (${aliquotaSimplesPct}%)`, valor: impostos }, ...[...ac.deducoes.values()].map((d) => ({ nome: d.nome, valor: arredondar(d.valor), categoriaId: d.categoriaId }))];
   if (!ac.deducoes.size) deducoesItens.push({ nome: 'Devoluções e cancelamentos', valor: 0 });
   const deducoes = deducoesItens.reduce((s, i) => s + i.valor, 0);
   const receitaLiquida = receitaBruta - deducoes;
@@ -214,13 +240,15 @@ function resumoDe(linhas: LinhaDre[]) {
 
 export async function gerarDre(p: { ini: Date; fim: Date; regime: Regime; comparar: boolean; mensal?: boolean }) {
   const empresa = await prisma.empresa.findUnique({ where: { id: 1 }, select: { aliquotaSimplesPct: true } });
-  const aliquota = empresa?.aliquotaSimplesPct ?? 6;
+  const aliquota = empresa?.aliquotaSimplesPct ?? 10;
   const catsLista = await prisma.categoriaFinanceira.findMany({ select: { id: true, nome: true, tipo: true, grupoDre: true } });
   const cats = new Map(catsLista.map((c) => [c.id, c]));
   const acumular = (ini: Date, fim: Date) => (p.regime === 'caixa' ? acumularCaixa(ini, fim, cats) : acumularCompetencia(ini, fim, cats));
 
-  const linhas = montarLinhas(await acumular(p.ini, p.fim), aliquota);
+  const acPeriodo = await acumular(p.ini, p.fim);
+  const linhas = montarLinhas(acPeriodo, aliquota);
   const resumo = resumoDe(linhas);
+  const informativo = [...acPeriodo.informativo.values()].sort((a, b) => b.valor - a.valor).map((d) => ({ nome: d.nome, valor: arredondar(d.valor), categoriaId: d.categoriaId }));
 
   // mensal: um item por mês do período
   const mensal: { competencia: string; receita: number; cmv: number; despesas: number; resultado: number }[] = [];
@@ -245,5 +273,5 @@ export async function gerarDre(p: { ini: Date; fim: Date; regime: Regime; compar
     comparativo = { periodo: { dataInicial: iniAnt, dataFinal: fimAnt }, regime: p.regime, linhas: linhasAnt, resumo: resumoDe(linhasAnt) };
   }
 
-  return { periodo: { dataInicial: p.ini, dataFinal: p.fim }, regime: p.regime, aliquotaSimplesPct: aliquota, linhas, resumo, mensal, comparativo };
+  return { periodo: { dataInicial: p.ini, dataFinal: p.fim }, regime: p.regime, aliquotaSimplesPct: aliquota, linhas, resumo, mensal, comparativo, informativo };
 }

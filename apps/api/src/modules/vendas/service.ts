@@ -14,6 +14,7 @@ import { alocarComprasParaVenda, desalocarComprasDaVenda } from '../compras/serv
 import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, recriarComissoes } from '../comum/financeiro.js';
 import { criarNotaPendente } from '../comum/nfe.js';
 import { hojeMeioDia } from '../comum/datas.js';
+import { carregarCfgCustos, custosVenda, type CfgCustos, type VendaParaCusto } from '../comum/custos-venda.js';
 import { baixarContaReceber, saldoContaReceber } from '../financeiro/service.js';
 import type { ItemInput, ParcelaInput, TipoVenda, VendaInput } from './schemas.js';
 
@@ -66,23 +67,33 @@ export async function vendaCompleta(id: number) {
   const v = await carregarVenda(prisma, id);
   const modulo = moduloDe(v.tipo);
   const [hist, permitidas] = await Promise.all([historico(modulo, id), situacoesPermitidas(modulo, v.situacaoId)]);
-  return { ...v, fechamento: fechamentoVenda(v), historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
+  return { ...v, fechamento: fechamentoVenda(v, await carregarCfgCustos()), historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
 }
 
 /**
  * Fechamento interno da venda (ADMIN/GERENTE): custo dos produtos (informado pelo vendedor ou do cadastro)
  * + logística. Nunca vai para impressão, PDF, link público, e-mail ou WhatsApp.
  */
-export function fechamentoVenda(v: { total: number; custoTotal: number; custoLogistica: number; itens: { custoUnitario: number; quantidade: number; custoInformado?: boolean; produtoId?: number | null }[] }) {
-  const custoProdutos = arredondar(v.custoTotal || v.itens.reduce((s, i) => s + i.custoUnitario * i.quantidade, 0));
-  const custoTotal = arredondar(custoProdutos + (v.custoLogistica || 0));
-  const lucro = arredondar(v.total - custoTotal);
+export function fechamentoVenda(
+  v: VendaParaCusto & { itens: { custoUnitario: number; quantidade: number; custoInformado?: boolean; produtoId?: number | null }[] },
+  cfg: CfgCustos,
+) {
+  // custo completo: produto + imposto + taxa de cartão + frete (mesma regra do DRE e dos dashboards)
+  const c = custosVenda(v, cfg);
   return {
-    custoProdutos,
-    custoLogistica: arredondar(v.custoLogistica || 0),
-    custoTotal,
-    lucro,
-    margemPct: v.total > 0 ? arredondar((lucro / v.total) * 100, 1) : 0,
+    custoProdutos: c.produto,
+    custoProdutoEstimado: c.produtoEstimado,
+    custoProdutoPct: c.produtoPct,
+    imposto: c.imposto,
+    impostoPct: c.impostoPct,
+    taxaCartao: c.taxaCartao,
+    taxaCartaoPct: c.taxaCartaoPct,
+    parcelasCartao: c.parcelasCartao,
+    frete: c.frete,
+    custoLogistica: c.frete,
+    custoTotal: c.total,
+    lucro: c.lucro,
+    margemPct: c.margemPct,
     itensSemCusto: v.itens.filter((i) => !i.custoUnitario).length,
     itensCustoInformado: v.itens.filter((i) => i.custoInformado).length,
   };

@@ -19,6 +19,7 @@ import { auditar } from '../../lib/auditoria.js';
 import { competenciaDe } from '../../lib/util.js';
 import { categoriaPadraoId } from '../comum/financeiro.js';
 import { format } from 'date-fns';
+import { carregarCfgCustos, custosVenda } from '../comum/custos-venda.js';
 
 async function situacoesRealizadas(modulo: 'VENDA' | 'COMPRA' | 'OS') {
   const s = await prisma.situacao.findMany({ where: { modulo, final: true, cancelamento: false }, select: { id: true } });
@@ -243,7 +244,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         where: { tipo: 'PEDIDO', data: { gte: de, lte: ate }, ...whereSit, ...(q.vendedorId ? { vendedorId: q.vendedorId } : {}) },
         include: {
           itens: { select: { produtoId: true, descricao: true, quantidade: true, total: true, custoUnitario: true, comissaoValor: true, produto: { select: { categoriaId: true, categoria: { select: { nome: true } } } } } },
-          parcelas: { select: { valor: true, formaPagamento: { select: { nome: true } } } },
+          parcelas: { select: { valor: true, formaPagamento: { select: { nome: true, tipo: true } } } },
           vendedor: { select: { id: true, nome: true } },
           contato: { select: { id: true, nome: true } },
           situacao: { select: { id: true, nome: true, cor: true } },
@@ -251,9 +252,11 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       });
 
     const vendas = await carregar(ini, fim);
+    // custo completo da venda: produto + imposto + taxa de cartão + frete (mesma regra do DRE)
+    const cfgC = await carregarCfgCustos();
     const resumoDe = (lista: typeof vendas) => {
       const faturamento = lista.reduce((s, v) => s + v.total, 0);
-      const custo = lista.reduce((s, v) => s + (v.custoTotal || v.itens.reduce((a, i) => a + i.custoUnitario * i.quantidade, 0)) + (v.custoLogistica || 0), 0);
+      const custo = lista.reduce((s, v) => s + custosVenda(v, cfgC).total, 0);
       const itensVendidos = lista.reduce((s, v) => s + v.itens.reduce((a, i) => a + i.quantidade, 0), 0);
       return {
         faturamento: arredondar(faturamento),
@@ -294,7 +297,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const topClientes = new Map<number, { contatoId: number; nome: string; valor: number; qtd: number }>();
 
     for (const v of vendas) {
-      const custo = (v.custoTotal || v.itens.reduce((a, i) => a + i.custoUnitario * i.quantidade, 0)) + (v.custoLogistica || 0);
+      const custo = custosVenda(v, cfgC).total;
       acumula(serie, chavePeriodo(v.data, agrupar), () => ({ periodo: chavePeriodo(v.data, agrupar), faturamento: 0, qtd: 0, lucro: 0 }), (s) => {
         s.faturamento += v.total;
         s.qtd += 1;
@@ -549,7 +552,8 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       prisma.venda.findMany({
         where: { tipo: 'PEDIDO', data: { gte: de, lte: ate }, situacaoId: { notIn: sitVendaCanc } },
         select: {
-          data: true, total: true, custoTotal: true, custoLogistica: true, vendedorId: true,
+          id: true, data: true, total: true, custoTotal: true, custoLogistica: true, vendedorId: true,
+          parcelas: { select: { valor: true, formaPagamento: { select: { tipo: true } } } },
           vendedor: { select: { id: true, nome: true } },
           itens: { select: { quantidade: true, custoUnitario: true } },
         },
@@ -559,7 +563,8 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       const movs = await prisma.movimentoFinanceiro.findMany({ where: { data: { gte: de, lte: ate }, tipo: { in: ['ENTRADA', 'SAIDA'] } }, select: { data: true, tipo: true, valor: true, observacoes: true } });
       return movs.filter((m) => !OBS_FORA_DO_RESULTADO.includes(m.observacoes || ''));
     };
-    const custoVenda = (v: { custoTotal: number; custoLogistica: number; itens: { quantidade: number; custoUnitario: number }[] }) => (v.custoTotal || v.itens.reduce((a, i) => a + i.custoUnitario * i.quantidade, 0)) + (v.custoLogistica || 0);
+    const cfgC = await carregarCfgCustos();
+    const custoVenda = (v: Parameters<typeof custosVenda>[0]) => custosVenda(v, cfgC).total;
 
     type Vendas = Awaited<ReturnType<typeof carregarVendas>>;
     type Caixa = Awaited<ReturnType<typeof carregarCaixa>>;

@@ -5,6 +5,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { limparCacheCfgCustos } from '../comum/custos-venda.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { prisma } from '../../lib/prisma.js';
@@ -49,6 +50,11 @@ const empresaSchema = z.object({
   cfopPadraoForaUf: z.string().trim().length(4).optional(),
   csosnPadrao: z.string().trim().min(3).max(4).optional(),
   aliquotaSimplesPct: z.coerce.number().min(0).max(100).optional(),
+  taxaCartao1xPct: z.coerce.number().min(0).max(100).optional(),
+  taxaCartao12xPct: z.coerce.number().min(0).max(100).optional(),
+  freteVendaPadrao: z.coerce.number().min(0).optional(),
+  custoProdutoMinPct: z.coerce.number().min(0).max(100).optional(),
+  custoProdutoMaxPct: z.coerce.number().min(0).max(100).optional(),
   provedorFiscal: z.enum(['sefaz', 'mock']).optional(),
   // smtp
   smtpHost: texto,
@@ -143,6 +149,7 @@ export default async function empresaRoutes(app: FastifyInstance) {
     if (body.email === '') data.email = null;
 
     const e = await prisma.empresa.update({ where: { id: 1 }, data });
+    limparCacheCfgCustos();
     const alterados = Object.keys(data).filter((k) => !(SEGREDOS as readonly string[]).includes(k));
     await auditar(req, 'Empresa', 1, 'ALTERAR', { campos: alterados, segredos: Object.keys(data).filter((k) => (SEGREDOS as readonly string[]).includes(k)) });
     return serializarEmpresa(e);

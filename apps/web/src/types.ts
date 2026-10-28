@@ -469,6 +469,14 @@ export interface Venda extends VendaResumo {
 
 export interface FechamentoVenda {
   custoProdutos: number;
+  custoProdutoEstimado?: boolean;
+  custoProdutoPct?: number;
+  imposto?: number;
+  impostoPct?: number;
+  taxaCartao?: number;
+  taxaCartaoPct?: number;
+  parcelasCartao?: number;
+  frete?: number;
   custoLogistica: number;
   custoTotal: number;
   lucro: number;
@@ -1110,6 +1118,8 @@ export interface Dre {
   linhas: DreLinha[];
   mensal: { competencia: string; receita: number; cmv: number; despesas: number; resultado: number }[];
   comparativo?: { linhas: DreLinha[] } | null;
+  /** contas lançadas que já estão cobertas pelo custo de cada venda (fora do resultado, só para conferência) */
+  informativo?: { nome: string; valor: number; categoriaId?: number | null }[];
 }
 
 // ---------------------------------------------------------------------
@@ -1148,6 +1158,11 @@ export interface Empresa {
   cfopPadraoForaUf: string;
   csosnPadrao: string;
   aliquotaSimplesPct: number;
+  taxaCartao1xPct?: number;
+  taxaCartao12xPct?: number;
+  freteVendaPadrao?: number;
+  custoProdutoMinPct?: number;
+  custoProdutoMaxPct?: number;
   provedorFiscal: 'mock' | 'sefaz';
   smtpHost?: string | null;
   smtpPort?: number | null;

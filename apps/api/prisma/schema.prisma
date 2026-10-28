@@ -56,7 +56,14 @@ model Empresa {
   cfopPadraoForaUf       String  @default("6102")
   csosnPadrao            String  @default("102")
   /// alíquota aproximada do Simples usada no DRE (deduções) — ex.: 6.0
-  aliquotaSimplesPct     Float   @default(6.0)
+  aliquotaSimplesPct     Float   @default(10.0)
+  /// custo de cada venda (DRE, dashboards): taxa do cartão em 1x e em 12x (linear entre elas), frete por venda
+  /// e faixa do custo estimado do produto quando a venda não tem custo informado
+  taxaCartao1xPct        Float   @default(5.0)
+  taxaCartao12xPct       Float   @default(12.0)
+  freteVendaPadrao       Float   @default(10.0)
+  custoProdutoMinPct     Float   @default(40.0)
+  custoProdutoMaxPct     Float   @default(70.0)
   /// Provedor fiscal: "sefaz" (direto com certificado A1) | "mock" (simulado p/ testes)
   provedorFiscal         String  @default("mock")
 
