@@ -4,6 +4,7 @@
  * Agregações feitas em JS (SQLite) após filtrar por data no banco.
  */
 import type { FastifyInstance } from 'fastify';
+import { avisosCaixinhas } from '../caixinhas/service.js';
 import { OBS_FORA_DO_RESULTADO } from '../comum/financeiro.js';
 import { z } from 'zod';
 import { startOfDay, endOfDay, differenceInCalendarDays } from 'date-fns';
@@ -128,6 +129,8 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const empresa = await prisma.empresa.findUnique({ where: { id: 1 }, select: { whatsappAtivo: true, smtpAtivo: true, certificadoValidade: true, ambienteFiscal: true } });
 
     const alertas: { tipo: 'erro' | 'aviso' | 'info'; mensagem: string; link: string }[] = [];
+    // caixinhas (Nubank) primeiro: completar no prazo é prioridade
+    for (const a of (await avisosCaixinhas()).avisos) alertas.push({ tipo: a.tipo, mensagem: a.mensagem, link: a.link });
     if (osAtrasadas) alertas.push({ tipo: 'aviso', mensagem: `${osAtrasadas} OS atrasada${osAtrasadas > 1 ? 's' : ''} (previsão vencida)`, link: '/ordens-servico?atrasadas=true' });
     if (financeiro.receberAtrasado > 0) alertas.push({ tipo: 'aviso', mensagem: `Contas a receber vencidas: R$ ${financeiro.receberAtrasado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, link: '/financeiro/receber?situacao=ATRASADO' });
     if (financeiro.pagarAtrasado > 0) alertas.push({ tipo: 'erro', mensagem: `Contas a pagar vencidas: R$ ${financeiro.pagarAtrasado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, link: '/financeiro/pagar?situacao=ATRASADO' });
