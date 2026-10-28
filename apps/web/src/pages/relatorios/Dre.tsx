@@ -190,8 +190,8 @@ export default function Dre() {
             )}
           </Card>
           {!!data?.informativo?.length && (
-            <Card titulo="Já cobertos pelo custo das vendas">
-              <p className="mb-2 text-xs text-slate-500">Lançados no financeiro, mas fora do resultado para não contar duas vezes: o custo de cada venda já inclui produto, imposto e frete.</p>
+            <Card titulo="Fora do resultado (só para conferência)">
+              <p className="mb-2 text-xs text-slate-500">Lançados no financeiro, mas fora do resultado para não contar duas vezes: o custo de cada venda já inclui produto, imposto e frete, e de cada empréstimo só os juros são despesa.</p>
               <div className="space-y-1 text-sm">
                 {data.informativo.map((i) => (
                   <div key={i.nome} className="flex justify-between"><span className="text-slate-600">{i.nome}</span><span className="num">{moeda(i.valor)}</span></div>

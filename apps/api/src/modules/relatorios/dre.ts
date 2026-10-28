@@ -8,6 +8,8 @@
  *   Desde 28/10/2026 o resultado usa o CUSTO DE CADA VENDA (comum/custos-venda.ts): produto (CMV), imposto
  *   (alíquota em deduções), taxa de cartão e frete (despesas operacionais). As contas a pagar de compra de
  *   mercadoria, imposto sobre vendas e logística ficam fora do resultado (já cobertas) e saem em `informativo`.
+ * Empréstimos (módulo Financeiro › Empréstimos): o dinheiro que entra não é receita e, de cada devolução,
+ *   só a parte de juros entra no resultado financeiro; o principal também vai para `informativo`.
  * Regime CAIXA: receita = MovimentoFinanceiro ENTRADA por categoria; despesas = SAIDA por categoria.
  * Deduções: aliquotaSimplesPct × receita bruta + categorias DEDUCAO.
  */
@@ -100,6 +102,14 @@ function lancarPorCategoria(ac: Acumulado, cat: Cat | null | undefined, valor: n
   }
 }
 
+/** Parcela/pagamento de empréstimo: juros vão para o resultado financeiro, o principal só para o informativo. */
+function lancarEmprestimo(ac: Acumulado, valor: number, e: { juros: number; valorDevolver: number }) {
+  const fator = e.valorDevolver > 0 ? Math.min(1, Math.max(0, e.juros / e.valorDevolver)) : 0;
+  const juros = valor * fator;
+  if (juros) add(ac.resultFin, 'Juros de empréstimos', -juros);
+  if (valor - juros) add(ac.informativo, 'Devolução de empréstimos (principal)', valor - juros);
+}
+
 async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>): Promise<Acumulado> {
   const ac = novoAcumulado();
   const [sitVenda, sitOs] = await Promise.all([
@@ -143,10 +153,15 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
       situacao: { not: 'CANCELADO' },
       OR: [{ competencia: { gte: compIni, lte: compFim } }, { competencia: null, vencimento: { gte: ini, lte: fim } }],
     },
-    select: { valor: true, categoriaId: true, origemTipo: true },
+    select: { valor: true, categoriaId: true, origemTipo: true, emprestimo: { select: { juros: true, valorDevolver: true } } },
   });
   for (const c of contas) {
     const cat = c.categoriaId ? cats.get(c.categoriaId) : null;
+    // devolução de empréstimo: no resultado só os juros; o principal é só a volta do dinheiro emprestado
+    if (c.emprestimo) {
+      lancarEmprestimo(ac, c.valor, c.emprestimo);
+      continue;
+    }
     const coberta = cobertaPeloCustoDaVenda(cat, c.origemTipo);
     if (coberta) {
       add(ac.informativo, coberta, c.valor, cat?.id ?? null);
@@ -161,9 +176,13 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
       origemTipo: { notIn: ['VENDA', 'OS'] },
       OR: [{ competencia: { gte: compIni, lte: compFim } }, { competencia: null, vencimento: { gte: ini, lte: fim } }],
     },
-    select: { valor: true, categoriaId: true },
+    select: { valor: true, categoriaId: true, emprestimoId: true },
   });
   for (const r of receitas) {
+    if (r.emprestimoId) {
+      add(ac.informativo, 'Empréstimos recebidos (dinheiro que entrou)', r.valor);
+      continue;
+    }
     const cat = r.categoriaId ? cats.get(r.categoriaId) : null;
     if (cat?.grupoDre === 'RECEITA_BRUTA') {
       if (/servi/i.test(cat.nome)) ac.receitaServicos += r.valor;
@@ -178,10 +197,18 @@ async function acumularCaixa(ini: Date, fim: Date, cats: Map<number, Cat>): Prom
   const movs = await prisma.movimentoFinanceiro.findMany({
     // transferências entre contas e ajustes de saldo não entram no DRE; NULL precisa ser incluído explicitamente
     where: { data: { gte: ini, lte: fim }, tipo: { in: ['ENTRADA', 'SAIDA'] }, OR: [{ observacoes: null }, { observacoes: { notIn: OBS_FORA_DO_RESULTADO } }] },
-    select: { tipo: true, valor: true, categoriaId: true, contaReceberId: true, contaPagarId: true },
+    select: { tipo: true, valor: true, categoriaId: true, contaReceberId: true, contaPagarId: true, contaReceber: { select: { emprestimoId: true } }, contaPagar: { select: { emprestimo: { select: { juros: true, valorDevolver: true } } } } },
   });
   for (const m of movs) {
     const cat = m.categoriaId ? cats.get(m.categoriaId) : null;
+    if (m.tipo === 'ENTRADA' && m.contaReceber?.emprestimoId) {
+      add(ac.informativo, 'Empréstimos recebidos (dinheiro que entrou)', m.valor);
+      continue;
+    }
+    if (m.tipo === 'SAIDA' && m.contaPagar?.emprestimo) {
+      lancarEmprestimo(ac, m.valor, m.contaPagar.emprestimo);
+      continue;
+    }
     if (m.tipo === 'ENTRADA') {
       if (!cat || cat.grupoDre === 'RECEITA_BRUTA') {
         if (cat && /servi/i.test(cat.nome)) ac.receitaServicos += m.valor;

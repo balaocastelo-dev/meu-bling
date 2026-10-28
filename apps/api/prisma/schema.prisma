@@ -296,14 +296,16 @@ model Contato {
   criadoEm        DateTime  @default(now())
   atualizadoEm    DateTime  @updatedAt
 
-  vendas           Venda[]        @relation("VendaContato")
-  compras          Compra[]
-  ordens           OrdemServico[]
-  contasReceber    ContaReceber[]
-  contasPagar      ContaPagar[]
-  notas            NotaFiscal[]
-  notificacoes     Notificacao[]
-  transportesVenda Venda[]        @relation("VendaTransportadora")
+  vendas             Venda[]        @relation("VendaContato")
+  compras            Compra[]
+  ordens             OrdemServico[]
+  contasReceber      ContaReceber[]
+  contasPagar        ContaPagar[]
+  notas              NotaFiscal[]
+  notificacoes       Notificacao[]
+  transportesVenda   Venda[]        @relation("VendaTransportadora")
+  emprestimosCredor  Emprestimo[]   @relation("EmprestimoCredor")
+  emprestimosCliente Emprestimo[]   @relation("EmprestimoCliente")
 
   @@index([nome])
   @@index([documento])
@@ -638,9 +640,10 @@ model Venda {
   criadoEm              DateTime             @default(now())
   atualizadoEm          DateTime             @updatedAt
 
-  itens     VendaItem[]
-  parcelas  VendaParcela[]
-  comissoes Comissao[]
+  itens       VendaItem[]
+  parcelas    VendaParcela[]
+  comissoes   Comissao[]
+  emprestimos Emprestimo[]
 
   @@unique([tipo, numero])
   @@index([data])
@@ -973,6 +976,10 @@ model ContaReceber {
   criadoEm          DateTime             @default(now())
   atualizadoEm      DateTime             @updatedAt
 
+  /// entrada do dinheiro de um empréstimo (não é receita: fica fora do DRE)
+  emprestimo   Emprestimo? @relation(fields: [emprestimoId], references: [id])
+  emprestimoId Int?
+
   vendaParcela VendaParcela?
   osParcela    OrdemServicoParcela?
   lancamentos  MovimentoFinanceiro[]
@@ -1012,11 +1019,61 @@ model ContaPagar {
   criadoEm          DateTime             @default(now())
   atualizadoEm      DateTime             @updatedAt
 
+  /// devolução de um empréstimo: no DRE entra só a parte de juros
+  emprestimo   Emprestimo? @relation(fields: [emprestimoId], references: [id])
+  emprestimoId Int?
+
   compraParcela CompraParcela?
   comissoes     Comissao[]
   lancamentos   MovimentoFinanceiro[]
 
   @@index([vencimento, situacao])
+}
+
+/// Empréstimos e antecipações (ex.: Lumicred). O dinheiro entra na conta e devolve-se o valor + juros.
+///   REPASSE      → o cliente paga o boleto para a loja e a loja repassa ao credor
+///   DIRETO       → o cliente paga o boleto direto ao credor; a loja paga só a diferença (juros)
+///   CAPITAL_GIRO → sem cliente: a loja devolve tudo
+model Emprestimo {
+  id                    Int      @id @default(autoincrement())
+  numero                Int      @unique
+  /// código da operação no credor (ex.: E-161)
+  codigo                String?
+  descricao             String?
+  credor                Contato  @relation("EmprestimoCredor", fields: [credorId], references: [id])
+  credorId              Int
+  modalidade            String   @default("REPASSE")
+  cliente               Contato? @relation("EmprestimoCliente", fields: [clienteId], references: [id])
+  clienteId             Int?
+  venda                 Venda?   @relation(fields: [vendaId], references: [id])
+  vendaId               Int?
+  /// recebível do cliente (boleto) que garante a operação
+  contaReceberClienteId Int?
+  dataOperacao          DateTime
+  valorRecebido         Float
+  taxaPct               Float    @default(6)
+  juros                 Float
+  valorDevolver         Float
+  prazoDias             Int      @default(30)
+  vencimento            DateTime
+  parcelas              Int      @default(1)
+  /// conta onde o dinheiro entrou
+  contaFinanceiraId     Int?
+  /// ABERTO | CANCELADO (quitado/vencido é calculado pelas contas a pagar)
+  situacao              String   @default("ABERTO")
+  /// operação trazida do histórico (pedidos de compra / pagamentos do Bling)
+  importado             Boolean  @default(false)
+  /// juros calculados pela taxa padrão (valor recebido real não informado)
+  jurosEstimado         Boolean  @default(false)
+  observacoes           String?
+  criadoEm              DateTime @default(now())
+  atualizadoEm          DateTime @updatedAt
+
+  contasPagar   ContaPagar[]
+  contasReceber ContaReceber[]
+
+  @@index([situacao, vencimento])
+  @@index([credorId])
 }
 
 /// Lançamentos efetivos nas contas (caixa/banco) — base do fluxo de caixa
