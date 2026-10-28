@@ -4,7 +4,7 @@
  * - Crediário fica em aberto no contas a receber.
  * - Editar a venda refaz o recebimento com o novo valor; cancelar tira o dinheiro do caixa.
  * - Ajustar saldo acerta a conta com o valor real e NÃO entra no DRE.
- * - DRE competência: CMV = compras reais (contas a pagar de mercadoria); demais despesas todas entram.
+ * - DRE competência: custo de cada venda; compra de mercadoria fica no informativo; demais despesas entram.
  *   npx tsx testes/pago-na-hora.ts http://localhost:3333
  */
 import { aguardar, encerrar, entrar, hoje, igual, secao, SUF, verifica } from './lib.js';
@@ -65,17 +65,19 @@ async function main() {
   const temAjuste = JSON.stringify(dreCaixa.linhas).includes('Ajuste de saldo');
   verifica(!temAjuste, 'DRE (caixa) não mostra o ajuste de saldo', dreCaixa.linhas);
 
-  secao('DRE competência: compra de mercadoria vira CMV; outras despesas entram');
+  secao('DRE competência: compra de mercadoria fica de fora (custo vem de cada venda); outras despesas entram');
   const cats: any[] = await adm.get('/categorias-financeiras');
   const cmv = cats.find((c) => c.grupoDre === 'CMV');
-  const oper = cats.find((c) => c.grupoDre === 'DESPESA_OPERACIONAL');
+  const oper = cats.find((c) => c.grupoDre === 'DESPESA_OPERACIONAL' && !/log[ií]stica|frete|entrega/i.test(c.nome));
   const dre0: any = await adm.get(`/relatorios/dre?dataInicial=${hoje()}&dataFinal=${hoje()}&regime=competencia&comparar=false`);
   if (cmv) await adm.post('/contas-pagar', { descricao: `Compra mercadoria ${SUF}`, vencimento: hoje(), valor: 1234, categoriaId: cmv.id }, 201);
   if (oper) await adm.post('/contas-pagar', { descricao: `Aluguel teste ${SUF}`, vencimento: hoje(), valor: 432, categoriaId: oper.id }, 201);
   await adm.post('/contas-pagar', { descricao: `Despesa sem categoria ${SUF}`, vencimento: hoje(), valor: 100 }, 201);
   const dre1: any = await adm.get(`/relatorios/dre?dataInicial=${hoje()}&dataFinal=${hoje()}&regime=competencia&comparar=false`);
   const linha = (d: any, c: string) => d.linhas.find((l: any) => l.codigo === c)?.valor || 0;
-  if (cmv) verifica(igual(linha(dre1, '4') - linha(dre0, '4'), 1234), 'CMV subiu 1.234 (compra real de mercadoria)', { antes: linha(dre0, '4'), depois: linha(dre1, '4') });
+  const info = (d: any) => (d.informativo || []).reduce((s: number, i: any) => s + i.valor, 0);
+  if (cmv) verifica(igual(linha(dre1, '4') - linha(dre0, '4'), 0), 'compra de mercadoria NÃO entra no CMV (o custo vem de cada venda)', { antes: linha(dre0, '4'), depois: linha(dre1, '4') });
+  if (cmv) verifica(igual(info(dre1) - info(dre0), 1234), 'compra de mercadoria aparece no informativo (1.234)', dre1.informativo);
   verifica(igual(linha(dre1, '6') - linha(dre0, '6'), (oper ? 432 : 0) + 100), 'despesas operacionais subiram (aluguel + sem categoria)', { antes: linha(dre0, '6'), depois: linha(dre1, '6') });
 
   encerrar('Venda paga na hora / ajuste de saldo / DRE');

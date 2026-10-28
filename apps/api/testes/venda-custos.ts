@@ -5,7 +5,7 @@
  * - Contas a pagar: vencidas primeiro, depois a vencer, pagas por último (por vencimento).
  *   npx tsx testes/venda-custos.ts http://localhost:3333
  */
-import { diasAtras, encerrar, entrar, hoje, igual, secao, SUF, verifica } from './lib.js';
+import { falhar, diasAtras, encerrar, entrar, hoje, igual, secao, SUF, verifica } from './lib.js';
 
 const amanha = () => {
   const d = new Date();
@@ -47,7 +47,9 @@ async function main() {
   verifica(igual(iA.custoUnitario, 280) && iA.custoInformado === true, 'item A: custo 280 informado pelo vendedor', iA);
   verifica(igual(iB.custoUnitario, 40) && iB.custoInformado === false, 'item B: custo 40 do cadastro', iB);
   verifica(igual(v.custoTotal, 360) && igual(v.custoLogistica, 30), 'custo dos produtos 360 + logística 30', { custoTotal: v.custoTotal, log: v.custoLogistica });
-  verifica(v.fechamento && igual(v.fechamento.custoTotal, 390) && igual(v.fechamento.lucro, 310), 'fechamento: custo 390, lucro 310', v.fechamento);
+  const extra = (f: any) => (f?.imposto || 0) + (f?.taxaCartao || 0);
+  verifica(v.fechamento && igual(v.fechamento.imposto, 700 * (v.fechamento.impostoPct / 100)), 'fechamento: imposto = alíquota sobre 700', v.fechamento);
+  verifica(v.fechamento && igual(v.fechamento.custoTotal, 390 + extra(v.fechamento)) && igual(v.fechamento.lucro, 310 - extra(v.fechamento)), 'fechamento: custo 390 + imposto + cartão; lucro 310 - imposto - cartão', v.fechamento);
 
   secao('Nada de custo para o cliente');
   const html: string = String(await adm.get(`/vendas/${v.id}/imprimir`, [200]));
@@ -75,7 +77,7 @@ async function main() {
   const iB2 = ajustada.itens.find((i: any) => i.produtoId === prodB.id);
   verifica(igual(iB2.custoUnitario, 35) && iB2.custoInformado === true, 'custo do item B corrigido para 35 com a venda fechada', iB2);
   verifica(igual(ajustada.custoTotal, 350) && igual(ajustada.custoLogistica, 45), 'custo produtos 350 + logística 45', { ct: ajustada.custoTotal, l: ajustada.custoLogistica });
-  verifica(igual(ajustada.fechamento.lucro, 305), 'lucro recalculado = 700 - 395 = 305', ajustada.fechamento);
+  verifica(igual(ajustada.fechamento.lucro, 305 - extra(ajustada.fechamento)), 'lucro recalculado = 700 - 395 - imposto - cartão', ajustada.fechamento);
   verifica(igual(ajustada.total, 700) && ajustada.estoqueLancado === fechada.estoqueLancado, 'total e lançamentos não mudam', ajustada.total);
   // PUT parcial não zera campos de transporte (bug antigo dos defaults)
   await adm.put(`/vendas/${v.id}`, { pesoBruto: 1.5, quantidadeVolumes: 2, fretePorConta: 0 });
@@ -84,13 +86,40 @@ async function main() {
   // continua bloqueado mexer em preço/quantidade
   await adm.put(`/vendas/${v.id}`, { ...corpo, itens: corpo.itens.map((i: any) => ({ ...i, quantidade: i.quantidade + 1 })) }, 422);
 
+  secao('Taxa do cartão: crédito 1x = 5%, 12x = 12%, débito = 5%, dinheiro = 0');
+  const formas: any[] = await adm.get('/formas-pagamento');
+  const fp = (t: string) => formas.find((f) => f.tipo === t && /cr[eé]dito|d[eé]bito|dinheiro/i.test(f.nome))?.id ?? formas.find((f) => f.tipo === t)?.id;
+  const parc = (n: number, forma: number) => Array.from({ length: n }, () => ({ dataVencimento: hoje(), valor: 1000 / n, formaPagamentoId: forma }));
+  const casos: [string, number, string, number][] = [['crédito 1x', 1, 'CARTAO_CREDITO', 50], ['crédito 12x', 12, 'CARTAO_CREDITO', 120], ['crédito 6x', 6, 'CARTAO_CREDITO', 1000 * (5 + 7 * 5 / 11) / 100], ['débito', 1, 'CARTAO_DEBITO', 50], ['dinheiro', 1, 'DINHEIRO', 0]];
+  const dre0 = await adm.get(`/relatorios/dre?dataInicial=${hoje()}&dataFinal=${hoje()}&regime=competencia&comparar=false`);
+  const criadasTaxa: any[] = [];
+  for (const [nome, n, tipo, esperado] of casos) {
+    const vc = await adm.post('/vendas', { contatoId: cli.id, depositoId: dep, data: hoje(), itens: [{ descricao: `Item taxa ${nome} ${SUF}`, quantidade: 1, valorUnitario: 1000, custoUnitario: 500 }], parcelas: parc(n, fp(tipo)) }, 201);
+    criadasTaxa.push(vc);
+    verifica(Math.abs((vc.fechamento?.taxaCartao ?? -1) - esperado) < 0.05, `taxa do cartão ${nome} = ${esperado.toFixed(2)}`, vc.fechamento);
+  }
+  for (const nome of ['Em aberto', 'Fechada']) if (sit(nome)) for (const vc of criadasTaxa) await adm.post(`/vendas/${vc.id}/situacao`, { situacaoId: sit(nome) }, [200, 422]);
+  const dre1 = await adm.get(`/relatorios/dre?dataInicial=${hoje()}&dataFinal=${hoje()}&regime=competencia&comparar=false`);
+  const fechadas = (await Promise.all(criadasTaxa.map((x) => adm.get(`/vendas/${x.id}`)))).filter((x: any) => x.situacao?.final && !x.situacao?.cancelamento);
+  if (fechadas.length) {
+    const ln = (d: any, c: string) => d.linhas.find((l: any) => l.codigo === c)?.valor || 0;
+    const soma = (k: string) => fechadas.reduce((s: number, x: any) => s + (x.fechamento?.[k] || 0), 0);
+    verifica(igual(ln(dre1, '4') - ln(dre0, '4'), soma('custoProdutos')), 'DRE: CMV sobe pelo custo dos produtos das vendas', { delta: ln(dre1, '4') - ln(dre0, '4'), esperado: soma('custoProdutos') });
+    verifica(igual(ln(dre1, '6') - ln(dre0, '6'), soma('taxaCartao') + soma('frete')), 'DRE: despesas operacionais sobem pela taxa do cartão + frete das vendas', { delta: ln(dre1, '6') - ln(dre0, '6'), esperado: soma('taxaCartao') + soma('frete') });
+    verifica(igual(ln(dre1, '2') - ln(dre0, '2'), soma('imposto')), 'DRE: deduções sobem pelo imposto das vendas', { delta: ln(dre1, '2') - ln(dre0, '2'), esperado: soma('imposto') });
+    verifica(igual(ln(dre1, '11') - ln(dre0, '11'), soma('lucro')), 'DRE: resultado líquido sobe exatamente o lucro das vendas', { delta: ln(dre1, '11') - ln(dre0, '11'), esperado: soma('lucro') });
+  } else falhar('nenhuma venda de teste ficou Fechada para conferir o DRE');
+
   secao('Dashboards usam a logística no lucro');
   const dv = await adm.get(`/dashboard/vendas?dataInicial=${hoje()}&dataFinal=${hoje()}&comparar=false`);
   verifica(typeof dv.resumo.semCusto === 'number', 'dashboard de vendas conta vendas sem custo', dv.resumo.semCusto);
   const semV = await adm.post('/vendas', { contatoId: cli.id, depositoId: dep, data: hoje(), itens: [{ descricao: `Item avulso sem custo ${SUF}`, quantidade: 1, valorUnitario: 50 }] }, 201);
   const dv2 = await adm.get(`/dashboard/vendas?dataInicial=${hoje()}&dataFinal=${hoje()}&comparar=false`);
   verifica(dv2.resumo.semCusto === dv.resumo.semCusto + 1, 'venda com item sem custo aparece no aviso', { antes: dv.resumo.semCusto, depois: dv2.resumo.semCusto });
-  verifica(igual(dv2.resumo.lucroBruto - dv.resumo.lucroBruto, 50), 'lucro da venda sem custo = 50 (sem descontar nada)', dv2.resumo.lucroBruto - dv.resumo.lucroBruto);
+  const semVAdm = await adm.get(`/vendas/${semV.id}`);
+  verifica(semVAdm.fechamento?.custoProdutoEstimado === true && semVAdm.fechamento.custoProdutoPct >= 40 && semVAdm.fechamento.custoProdutoPct <= 70, 'venda sem custo recebe custo estimado entre 40% e 70%', semVAdm.fechamento);
+  verifica(igual(semVAdm.fechamento?.frete, 10), 'venda sem logística lançada recebe frete padrão de R$ 10', semVAdm.fechamento);
+  verifica(igual(dv2.resumo.lucroBruto - dv.resumo.lucroBruto, semVAdm.fechamento.lucro), 'dashboard desconta o custo completo da venda sem custo (estimado + imposto + frete)', { delta: dv2.resumo.lucroBruto - dv.resumo.lucroBruto, f: semVAdm.fechamento });
   const pano = await adm.get(`/dashboard/panorama?dataInicial=${hoje()}&dataFinal=${hoje()}`);
   verifica(igual(pano.resumo.vendas.lucro, dv2.resumo.lucroBruto), 'panorama e dashboard de vendas com o mesmo lucro', { p: pano.resumo.vendas.lucro, v: dv2.resumo.lucroBruto });
   await adm.del(`/vendas/${semV.id}`, [200, 204]);
@@ -112,7 +141,7 @@ async function main() {
   const vvGet = await V.get(`/vendas/${vv.id}`);
   verifica(vvGet.fechamento === null, 'GET do vendedor também sem lucro');
   const vvAdm = await adm.get(`/vendas/${vv.id}`);
-  verifica(vvAdm.fechamento && igual(vvAdm.fechamento.lucro, 62), 'ADMIN vê o lucro dessa venda (100 - 38 = 62)', vvAdm.fechamento);
+  verifica(vvAdm.fechamento && igual(vvAdm.fechamento.lucro, 62 - extra(vvAdm.fechamento)), 'ADMIN vê o lucro dessa venda (100 - 38 - imposto - cartão)', vvAdm.fechamento);
 
   secao('Contas a pagar: vencidas → a vencer → pagas, por vencimento');
   const tag = `ordem ${SUF}`;

@@ -75,7 +75,7 @@ export async function vendaCompleta(id: number) {
  * + logística. Nunca vai para impressão, PDF, link público, e-mail ou WhatsApp.
  */
 export function fechamentoVenda(
-  v: VendaParaCusto & { itens: { custoUnitario: number; quantidade: number; custoInformado?: boolean; produtoId?: number | null }[] },
+  v: Omit<VendaParaCusto, 'itens'> & { itens: { custoUnitario: number; quantidade: number; custoInformado?: boolean; produtoId?: number | null }[] },
   cfg: CfgCustos,
 ) {
   // custo completo: produto + imposto + taxa de cartão + frete (mesma regra do DRE e dos dashboards)
