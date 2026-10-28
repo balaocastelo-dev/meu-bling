@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Plus, Save, Trash2, UserPlus, X } from 'lucide-react';
+import { Plus, Save, Trash2, UserPlus, UserRound, X } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { useCategoriasFinanceiras, useDepositos, useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { useAuth } from '@/stores/auth';
@@ -190,6 +190,17 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
     onError: (e) => toast.error(mensagemErro(e)),
   });
 
+  const usarConsumidorFinal = async () => {
+    try {
+      const c = await api.get<Contato>('/vendas/consumidor-final');
+      setForm((f) => ({ ...f, contatoId: c.id }));
+      setClienteNome(c.nome);
+      setCliente(c);
+    } catch (e) {
+      toast.error(mensagemErro(e));
+    }
+  };
+
   const validar = (): boolean => {
     const e: Record<string, string> = {};
     if (!form.contatoId) e.contatoId = 'Selecione o cliente';
@@ -256,9 +267,14 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                 setCliente((op?.dados as Contato) ?? null);
               }}
               rodape={
-                <button type="button" onClick={() => setDrawerCliente(true)} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-brand-600 hover:bg-brand-50">
-                  <UserPlus className="h-4 w-4" /> Cadastrar novo cliente
-                </button>
+                <>
+                  <button type="button" onClick={usarConsumidorFinal} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
+                    <UserRound className="h-4 w-4" /> Consumidor final (sem cadastro)
+                  </button>
+                  <button type="button" onClick={() => setDrawerCliente(true)} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-brand-600 hover:bg-brand-50">
+                    <UserPlus className="h-4 w-4" /> Cadastrar novo cliente
+                  </button>
+                </>
               }
             />
             <Select className="xl:col-span-3" label="Vendedor" value={form.vendedorId ?? ''} onChange={(e) => set('vendedorId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(vendedores)} placeholder="—" disabled={bloqueado} />

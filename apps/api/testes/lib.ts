@@ -104,3 +104,32 @@ export function encerrar(nome: string) {
   console.log(`\n${nome}: ${placar.ok} ok, ${placar.falhas} falhas`);
   process.exit(placar.falhas ? 1 : 0);
 }
+
+/** CPF válido (dígitos verificadores corretos) a partir de um sufixo. */
+export function cpfTeste(suf: string): string {
+  const base = `987${suf}`.replace(/\D/g, '').padEnd(9, '0').slice(0, 9);
+  const dv = (s: string, n: number) => {
+    let t = 0;
+    for (let i = 0; i < n; i++) t += Number(s[i]) * (n + 1 - i);
+    const r = (t * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  const d1 = dv(base, 9);
+  return base + d1 + dv(base + d1, 10);
+}
+
+/** Dados de cliente completos (o que a venda exige para ser finalizada). */
+export const clienteCompleto = (nome: string, suf = SUF) => ({
+  nome,
+  tipoPessoa: 'F',
+  documento: cpfTeste(suf),
+  celular: '19999990000',
+  email: `cli${suf}@example.com`,
+  logradouro: 'Av. Anchieta',
+  numero: '789',
+  bairro: 'Cambuí',
+  municipio: 'Campinas',
+  codigoMunicipio: '3509502',
+  uf: 'SP',
+  cep: '13025000',
+});

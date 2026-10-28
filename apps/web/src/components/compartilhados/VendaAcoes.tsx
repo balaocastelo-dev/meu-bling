@@ -30,6 +30,7 @@ import { useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { Button, ConfirmDialog, MenuAcoes, Modal, Select, Textarea, type ItemMenu } from '@/components/ui';
 import { NotificarModal } from './NotificarModal';
 import { EmitirNfModal } from './EmitirNfModal';
+import { FinalizarVendaModal } from './FinalizarVenda';
 import type { CanalNotificacao, Venda, VendaResumo } from '@/types';
 
 type VendaAlvo = Pick<VendaResumo, 'id' | 'tipo' | 'numero' | 'situacao' | 'nota' | 'estoqueLancado' | 'contasLancadas' | 'vendedorId' | 'vendaGerada' | 'aprovadoEm'> & {
@@ -63,6 +64,7 @@ export function VendaAcoes({ venda, contexto = 'lista' }: Props) {
   const [cancelar, setCancelar] = useState(false);
   const [excluir, setExcluir] = useState(false);
   const [converter, setConverter] = useState(false);
+  const [finalizar, setFinalizar] = useState(false);
 
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: ['vendas'] });
@@ -171,6 +173,7 @@ export function VendaAcoes({ venda, contexto = 'lista' }: Props) {
     { rotulo: `Ver venda nº ${venda.vendaGerada?.numero ?? ''}`, icone: <ShoppingCart className="h-4 w-4" />, onClick: () => nav(`/vendas/${venda.vendaGerada?.id}`), oculto: !orcamento || !convertido, separar: true },
     { rotulo: 'Marcar como aprovado', icone: <CheckCircle2 className="h-4 w-4" />, onClick: () => aprovar.mutate(), oculto: !orcamento || convertido || !!venda.aprovadoEm || jaCancelada },
     // ---- venda
+    { rotulo: 'Finalizar venda', icone: <CheckCircle2 className="h-4 w-4" />, onClick: () => setFinalizar(true), oculto: orcamento || (!!(venda.situacao as { final?: boolean }).final && !jaCancelada), separar: true },
     {
       rotulo: notaAtiva ? `Ver NF-e nº ${venda.nota?.numero}` : 'Emitir NF de venda',
       icone: <FileText className="h-4 w-4" />,
@@ -221,6 +224,8 @@ export function VendaAcoes({ venda, contexto = 'lista' }: Props) {
         destinatarios={{ email: venda.contato?.email, celular: venda.contato?.celular }}
         onEnviado={invalidar}
       />
+
+      {!orcamento && <FinalizarVendaModal vendaId={venda.id} numero={venda.numero} aberto={finalizar} onFechar={() => setFinalizar(false)} />}
 
       <EmitirNfModal
         aberto={!!nfe}

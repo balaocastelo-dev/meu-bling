@@ -10,7 +10,8 @@ import { BadgeCor } from './Badge';
 import { Button } from './Button';
 import { Modal } from './Modal';
 import { Textarea } from './Input';
-import type { Modulo, SituacaoRef } from '@/types';
+import type { Modulo, PendenciaFinalizacao, SituacaoRef } from '@/types';
+import { ListaPendencias } from '@/components/compartilhados/FinalizarVenda';
 
 export function StatusBadge({ situacao, tamanho }: { situacao?: SituacaoRef | null; tamanho?: 'sm' | 'md' }) {
   if (!situacao) return <span className="text-slate-400">—</span>;
@@ -42,7 +43,7 @@ export function StatusChanger({ modulo, caminho, situacaoAtual, situacoesPermiti
   const ehAdmin = useAuth((s) => s.usuario?.perfil === 'ADMIN');
   const { data: todas } = useSituacoes(modulo);
   const [aberto, setAberto] = useState(false);
-  const [confirmar, setConfirmar] = useState<{ destino: SituacaoRef; forcar: boolean; erroPermitidas?: SituacaoRef[] } | null>(null);
+  const [confirmar, setConfirmar] = useState<{ destino: SituacaoRef; forcar: boolean; erroPermitidas?: SituacaoRef[]; pendencias?: { lista: PendenciaFinalizacao[]; vendaId: number; contatoId?: number } } | null>(null);
   const [observacao, setObservacao] = useState('');
   const raiz = useRef<HTMLDivElement>(null);
 
@@ -69,6 +70,12 @@ export function StatusChanger({ modulo, caminho, situacaoAtual, situacoesPermiti
         const det = (e.detalhes ?? {}) as { permitidas?: SituacaoRef[] };
         const destino = todas?.find((s) => s.id === vars.situacaoId);
         setConfirmar({ destino: destino ?? { id: vars.situacaoId, nome: '?', cor: '#64748b' }, forcar: true, erroPermitidas: det.permitidas ?? [] });
+        return;
+      }
+      if (e instanceof ApiError && e.status === 422 && e.code === 'VENDA_INCOMPLETA') {
+        const det = (e.detalhes ?? {}) as { pendencias?: PendenciaFinalizacao[]; vendaId?: number; contatoId?: number };
+        const destino = todas?.find((s) => s.id === vars.situacaoId) ?? confirmar?.destino;
+        setConfirmar({ destino: destino ?? { id: vars.situacaoId, nome: '?', cor: '#64748b' }, forcar: false, pendencias: { lista: det.pendencias ?? [], vendaId: det.vendaId ?? Number(caminho.split('/').pop()), contatoId: det.contatoId } });
         return;
       }
       toast.error(mensagemErro(e));
@@ -133,7 +140,7 @@ export function StatusChanger({ modulo, caminho, situacaoAtual, situacoesPermiti
             <Button variante="secundario" onClick={() => setConfirmar(null)}>
               Cancelar
             </Button>
-            {confirmar?.erroPermitidas && !ehAdmin ? null : (
+            {(confirmar?.erroPermitidas && !ehAdmin) || confirmar?.pendencias ? null : (
               <Button
                 variante={confirmar?.forcar ? 'primario' : 'sucesso'}
                 carregando={mutacao.isPending}
@@ -164,6 +171,7 @@ export function StatusChanger({ modulo, caminho, situacaoAtual, situacoesPermiti
                 </p>
               </div>
             )}
+            {confirmar.pendencias && <ListaPendencias pendencias={confirmar.pendencias.lista} vendaId={confirmar.pendencias.vendaId} contatoId={confirmar.pendencias.contatoId} onNavegar={() => setConfirmar(null)} />}
             {confirmar.forcar && !confirmar.erroPermitidas && (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Esta transição não está na matriz configurada. Será registrada como forçada (admin).</div>
             )}

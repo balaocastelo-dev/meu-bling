@@ -5,7 +5,7 @@
  * - Contas a pagar: vencidas primeiro, depois a vencer, pagas por último (por vencimento).
  *   npx tsx testes/venda-custos.ts http://localhost:3333
  */
-import { diasAtras, encerrar, entrar, hoje, igual, secao, SUF, verifica } from './lib.js';
+import { clienteCompleto, diasAtras, encerrar, entrar, hoje, igual, secao, SUF, verifica } from './lib.js';
 
 const amanha = () => {
   const d = new Date();
@@ -20,7 +20,7 @@ async function main() {
   const sit = (nome: string) => sitV.find((s) => s.nome === nome)?.id;
   const depositos: any[] = await adm.get('/depositos');
   const dep = depositos.find((d) => d.padrao)?.id ?? depositos[0].id;
-  const cli = await adm.post('/contatos', { nome: `Cliente Teste Venda ${SUF}`, tipoPessoa: 'F', celular: '19999991111', email: `cv${SUF}@example.com` }, 201);
+  const cli = await adm.post('/contatos', { ...clienteCompleto(`Cliente Teste Venda ${SUF}`), celular: '19999991111', email: `cv${SUF}@example.com` }, 201);
   const prodA = await adm.post('/produtos', { nome: `SSD TESTE A ${SUF}`, codigo: `CVA-${SUF}`, preco: 500, precoCusto: 300, ncm: '84717012', csosn: '102' }, 201);
   const prodB = await adm.post('/produtos', { nome: `MOUSE TESTE B ${SUF}`, codigo: `CVB-${SUF}`, preco: 100, precoCusto: 40, ncm: '84716053', csosn: '102' }, 201);
   await adm.post('/estoque/ajuste', { produtoId: prodA.id, depositoId: dep, tipo: 'ENTRADA', quantidade: 5, custoUnitario: 300 }, [200, 201]);
