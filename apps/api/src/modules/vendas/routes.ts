@@ -174,6 +174,8 @@ export default async function vendasRoutes(app: FastifyInstance) {
           estoqueLancado: true, contasLancadas: true, numeroPedidoLoja: true, criadoEm: true, vendedorId: true,
           vendaGerada: { select: { id: true, numero: true } },
           orcamento: { select: { id: true, numero: true } },
+          // selo do robô de NF na lista ("Pronto pra NF")
+          roboNf: { select: { status: true, erros: true } },
           ...includeLista,
         },
       }),

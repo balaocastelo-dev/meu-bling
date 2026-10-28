@@ -22,6 +22,8 @@ export interface PendenciaNfe {
   titulo: string;
   detalhe?: string;
   acoes?: AcaoPendencia[];
+  /** NCM sugerido pelo robô de NF: botão "Confirmar NCM" */
+  confirmarNcm?: { produtoId: number; ncm: string; produto: string };
 }
 export interface ChecagemNfe {
   podeEmitir: boolean;
@@ -56,7 +58,18 @@ function abrir(rota: string) {
   window.open(`${BASE_PATH}${rota}`, '_blank', 'noopener');
 }
 
-export function ListaPendenciasNfe({ checagem }: { checagem: ChecagemNfe }) {
+const fmtNcm = (n: string) => (n.length === 8 ? `${n.slice(0, 4)}.${n.slice(4, 6)}.${n.slice(6)}` : n);
+
+export function ListaPendenciasNfe({
+  checagem,
+  onConfirmarNcm,
+  confirmando,
+}: {
+  checagem: Pick<ChecagemNfe, 'pendencias' | 'ok'>;
+  /** quando informado, mostra o botão "Confirmar NCM" nas sugestões do robô */
+  onConfirmarNcm?: (c: NonNullable<PendenciaNfe['confirmarNcm']>) => void;
+  confirmando?: number | null;
+}) {
   return (
     <div className="space-y-3">
       {checagem.pendencias.map((p, i) => (
@@ -74,9 +87,14 @@ export function ListaPendenciasNfe({ checagem }: { checagem: ChecagemNfe }) {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{GRUPOS[p.grupo] || p.grupo}</p>
               <p className={p.nivel === 'erro' ? 'text-sm font-medium text-red-900' : 'text-sm font-medium text-amber-900'}>{p.titulo}</p>
               {p.detalhe && <p className="mt-0.5 text-xs text-gray-700">{p.detalhe}</p>}
-              {!!p.acoes?.length && (
+              {(!!p.acoes?.length || (p.confirmarNcm && onConfirmarNcm)) && (
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {p.acoes.map((a) => (
+                  {p.confirmarNcm && onConfirmarNcm && (
+                    <Button tamanho="sm" variante="sucesso" icone={<CheckCircle2 className="h-3.5 w-3.5" />} carregando={confirmando === p.confirmarNcm.produtoId} onClick={() => onConfirmarNcm(p.confirmarNcm!)}>
+                      Confirmar NCM {fmtNcm(p.confirmarNcm.ncm)}
+                    </Button>
+                  )}
+                  {(p.acoes || []).map((a) => (
                     <Button key={a.rota} tamanho="sm" variante={p.nivel === 'erro' ? 'primario' : 'secundario'} iconeDireita={<ExternalLink className="h-3.5 w-3.5" />} onClick={() => abrir(a.rota)}>
                       {a.rotulo}
                     </Button>
@@ -87,7 +105,7 @@ export function ListaPendenciasNfe({ checagem }: { checagem: ChecagemNfe }) {
           </div>
         </div>
       ))}
-      {checagem.ok.length > 0 && (
+      {checagem.ok?.length > 0 && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
           {checagem.ok.map((o) => (
             <p key={o} className="flex items-center gap-2 text-sm text-emerald-900">
