@@ -139,6 +139,7 @@ export type TipoFormaPagamento =
   | 'BOLETO'
   | 'TRANSFERENCIA'
   | 'CREDIARIO'
+  | 'CREDITO_BANCARIO'
   | 'OUTRO';
 
 export interface FormaPagamento {
@@ -153,6 +154,8 @@ export interface FormaPagamento {
   contaFinanceiraId?: number | null;
   /** bancos que podem receber esta forma */
   contasPermitidas?: number[];
+  /** CREDITO_BANCARIO: quem empresta (ex.: Lumicred) */
+  credorId?: number | null;
   ativo: boolean;
 }
 
@@ -375,6 +378,8 @@ export interface Parcela {
   formaPagamentoId: number | null;
   formaPagamento?: Ref | null;
   observacoes?: string | null;
+  /** forma "Crédito bancário": quem paga o credor */
+  creditoPagador?: 'CLIENTE' | 'LOJA' | null;
   contaReceber?: { id: number; situacao: string; valorRecebido: number } | null;
   contaPagar?: { id: number; situacao: string; valorPago: number } | null;
 }

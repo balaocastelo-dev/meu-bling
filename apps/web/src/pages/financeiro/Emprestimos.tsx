@@ -22,6 +22,9 @@ interface Emprestimo {
   credor: { id: number; nome: string };
   cliente: { id: number; nome: string } | null;
   venda: { id: number; numero: number } | null;
+  compra?: { id: number; numero: number; fornecedor?: { id: number; nome: string } | null } | null;
+  vendaParcelaId?: number | null;
+  compraParcelaId?: number | null;
   contaReceberClienteId: number | null;
   dataOperacao: string;
   valorRecebido: number;
@@ -80,7 +83,7 @@ export default function Emprestimos() {
 
   const colunas: Coluna<Emprestimo>[] = [
     { chave: 'num', titulo: 'Operação', noCartao: 'titulo', render: (e) => <div><p className="font-medium text-slate-900">Nº {e.numero}{e.codigo ? ` · ${e.codigo}` : ''}</p><p className="text-xs text-slate-400">{data(e.dataOperacao)} · {e.credor.nome.split(' ')[0]}</p></div> },
-    { chave: 'cli', titulo: 'Cliente / descrição', render: (e) => <div className="max-w-[260px]"><p className="truncate text-slate-700">{e.cliente?.nome ?? (e.modalidade === 'CAPITAL_GIRO' ? 'Capital de giro' : '—')}</p><p className="truncate text-xs text-slate-400">{e.venda ? `Venda nº ${e.venda.numero}` : e.descricao ?? ''}</p></div> },
+    { chave: 'cli', titulo: 'Cliente / descrição', render: (e) => <div className="max-w-[260px]"><p className="truncate text-slate-700">{e.cliente?.nome ?? (e.compra ? `Compra: ${e.compra.fornecedor?.nome ?? 'fornecedor'}` : e.modalidade === 'CAPITAL_GIRO' ? 'Capital de giro' : '—')}</p><p className="truncate text-xs text-slate-400">{e.venda ? `Venda nº ${e.venda.numero}` : e.compra ? `Compra nº ${e.compra.numero}` : e.descricao ?? ''}</p></div> },
     { chave: 'mod', titulo: 'Cenário', ocultarMobile: true, render: (e) => <Badge tom={e.modalidade === 'DIRETO' ? 'roxo' : e.modalidade === 'REPASSE' ? 'azul' : 'cinza'}>{nomeModalidade(e.modalidade)}</Badge> },
     { chave: 'rec', titulo: 'Recebido', direita: true, ocultarMobile: true, render: (e) => moeda(e.valorRecebido) },
     { chave: 'dev', titulo: 'A devolver', direita: true, render: (e) => <div><p>{moeda(e.valorDevolver)}</p><p className="text-[11px] text-slate-400">juros {moeda(e.juros)}{e.jurosEstimado ? ' (est.)' : ''}</p></div> },
@@ -256,7 +259,8 @@ function Detalhe({ id, onFechar }: { id: number | null; onFechar: () => void }) 
   const qc = useQueryClient();
   const { data: contasFin } = useContasFinanceiras();
   const { data: e, isLoading } = useQuery({ queryKey: ['emprestimo', id], enabled: !!id, queryFn: () => api.get<Emprestimo>(`/financeiro/emprestimos/${id}`) });
-  const [acao, setAcao] = useState<null | 'pagar' | 'direto' | 'corrigir'>(null);
+  const [acao, setAcao] = useState<null | 'pagar' | 'direto' | 'corrigir' | 'condicoes'>(null);
+  const [cond, setCond] = useState({ taxaPct: 6, prazoDias: 30, parcelas: 1 });
   const [valor, setValor] = useState(0);
   const [dataAcao, setDataAcao] = useState(hoje());
   const [conta, setConta] = useState<number | ''>('');
@@ -274,12 +278,14 @@ function Detalhe({ id, onFechar }: { id: number | null; onFechar: () => void }) 
   const pagar = useMutation({ mutationFn: () => api.post<Emprestimo>(`/financeiro/emprestimos/${id}/pagar`, { valor, data: dataAcao, contaFinanceiraId: conta }), onSuccess: (n) => atualizar(n, n.status === 'QUITADO' ? 'Operação quitada.' : 'Pagamento lançado.'), onError: (er) => toast.error(mensagemErro(er)) });
   const direto = useMutation({ mutationFn: () => api.post<Emprestimo>(`/financeiro/emprestimos/${id}/cliente-pagou-direto`, { valor, data: dataAcao }), onSuccess: (n) => atualizar(n, `Boleto do cliente baixado. Falta devolver ${moeda(n.saldoDevedor)}.`), onError: (er) => toast.error(mensagemErro(er)) });
   const corrigir = useMutation({ mutationFn: () => api.put<Emprestimo>(`/financeiro/emprestimos/${id}`, { valorRecebido: valor }), onSuccess: (n) => atualizar(n, `Valor corrigido: juros de ${moeda(n.juros)}.`), onError: (er) => toast.error(mensagemErro(er)) });
+  const condicoes = useMutation({ mutationFn: () => api.put<Emprestimo>(`/financeiro/emprestimos/${id}`, cond), onSuccess: (n) => atualizar(n, `Condições alteradas: devolver ${moeda(n.valorDevolver)}.`), onError: (er) => toast.error(mensagemErro(er)) });
   const cancelar = useMutation({ mutationFn: () => api.post<Emprestimo>(`/financeiro/emprestimos/${id}/cancelar`, {}), onSuccess: (n) => atualizar(n, 'Operação cancelada.'), onError: (er) => toast.error(mensagemErro(er)) });
 
   const ativo = e && (e.status === 'ABERTO' || e.status === 'VENCIDO');
   const podeDireto = ativo && e.boleto && e.boleto.saldo > 0;
-  const abrir = (a: 'pagar' | 'direto' | 'corrigir') => {
+  const abrir = (a: 'pagar' | 'direto' | 'corrigir' | 'condicoes') => {
     if (!e) return;
+    if (a === 'condicoes') setCond({ taxaPct: e.taxaPct, prazoDias: e.prazoDias, parcelas: e.parcelas });
     setDataAcao(hoje());
     setValor(a === 'pagar' ? e.saldoDevedor : a === 'direto' ? Math.min(e.boleto?.saldo ?? 0, e.saldoDevedor) : e.valorRecebido);
     setAcao(a);
@@ -311,11 +317,15 @@ function Detalhe({ id, onFechar }: { id: number | null; onFechar: () => void }) 
           <div className="grid gap-3 sm:grid-cols-2">
             <Card titulo="Cliente e boleto" className="!shadow-none">
               {e.modalidade === 'CAPITAL_GIRO' && !e.boleto ? (
-                <p className="text-sm text-slate-500">Capital de giro: sem boleto de cliente.</p>
+                <div className="space-y-1 text-sm text-slate-500">
+                  <p>{e.compra ? 'Compra paga com crédito bancário: a loja devolve tudo.' : 'Capital de giro: sem boleto de cliente.'}</p>
+                  {e.compra && <p><Link to={`/compras/${e.compra.id}`} className="text-brand-600 hover:underline">Compra nº {e.compra.numero}</Link>{e.compra.fornecedor ? ` · ${e.compra.fornecedor.nome}` : ''}</p>}
+                </div>
               ) : (
                 <div className="space-y-1 text-sm">
                   <p>{e.cliente ? <Link to={`/contatos/${e.cliente.id}`} className="text-brand-600 hover:underline">{e.cliente.nome}</Link> : '—'}</p>
                   {e.venda && <p><Link to={`/vendas/${e.venda.id}`} className="text-brand-600 hover:underline">Venda nº {e.venda.numero}</Link></p>}
+                  {e.compra && <p><Link to={`/compras/${e.compra.id}`} className="text-brand-600 hover:underline">Compra nº {e.compra.numero}</Link>{e.compra.fornecedor ? ` · ${e.compra.fornecedor.nome}` : ''} (fornecedor pago com o crédito)</p>}
                   {e.boleto ? (
                     <p className="text-slate-600">Boleto de {moeda(e.boleto.valor)} · vence {data(e.boleto.vencimento)} · <span className={e.boleto.situacao === 'RECEBIDO' ? 'text-emerald-700' : e.boleto.atrasado ? 'text-red-600' : ''}>{e.boleto.situacao === 'RECEBIDO' ? `pago em ${data(e.boleto.dataRecebimento)}` : e.boleto.atrasado ? 'atrasado' : 'em aberto'}</span></p>
                   ) : (
@@ -354,7 +364,8 @@ function Detalhe({ id, onFechar }: { id: number | null; onFechar: () => void }) 
             <div className="flex flex-wrap gap-2">
               {ativo && <Button variante="sucesso" icone={<BadgeDollarSign className="h-4 w-4" />} onClick={() => abrir('pagar')}>Pagar o credor</Button>}
               {podeDireto && <Button variante="secundario" icone={<Repeat2 className="h-4 w-4" />} onClick={() => abrir('direto')}>Cliente pagou direto ao credor</Button>}
-              <Button variante="secundario" icone={<Pencil className="h-4 w-4" />} onClick={() => abrir('corrigir')}>Corrigir valor recebido</Button>
+              {e.pago === 0 && !e.importado && <Button variante="secundario" icone={<CalendarClock className="h-4 w-4" />} onClick={() => abrir('condicoes')}>Alterar taxa, prazo e parcelas</Button>}
+              {!(e.vendaParcelaId || e.compraParcelaId) && <Button variante="secundario" icone={<Pencil className="h-4 w-4" />} onClick={() => abrir('corrigir')}>Corrigir valor recebido</Button>}
               {e.pago === 0 && <Button variante="perigo" icone={<Ban className="h-4 w-4" />} carregando={cancelar.isPending} onClick={() => { if (confirm('Cancelar esta operação? A entrada sai do caixa e a devolução é cancelada.')) cancelar.mutate(); }}>Cancelar</Button>}
             </div>
           )}
@@ -364,28 +375,39 @@ function Detalhe({ id, onFechar }: { id: number | null; onFechar: () => void }) 
       <Modal
         aberto={acao !== null}
         onFechar={() => setAcao(null)}
-        titulo={acao === 'pagar' ? 'Pagar o credor' : acao === 'direto' ? 'Cliente pagou direto ao credor' : 'Corrigir valor recebido'}
+        titulo={acao === 'pagar' ? 'Pagar o credor' : acao === 'direto' ? 'Cliente pagou direto ao credor' : acao === 'condicoes' ? 'Alterar taxa, prazo e parcelas' : 'Corrigir valor recebido'}
         descricao={acao === 'direto' ? 'Baixa o boleto do cliente e abate o mesmo valor da dívida, sem mexer no banco.' : acao === 'corrigir' ? 'Os juros passam a ser o que foi devolvido menos o que entrou.' : undefined}
         rodape={
           <>
             <Button variante="secundario" onClick={() => setAcao(null)}>Voltar</Button>
             <Button
               variante="sucesso"
-              carregando={pagar.isPending || direto.isPending || corrigir.isPending}
-              disabled={!(valor > 0) || (acao === 'pagar' && !conta)}
-              onClick={() => (acao === 'pagar' ? pagar.mutate() : acao === 'direto' ? direto.mutate() : corrigir.mutate())}
+              carregando={pagar.isPending || direto.isPending || corrigir.isPending || condicoes.isPending}
+              disabled={acao === 'condicoes' ? !(cond.parcelas >= 1) : !(valor > 0) || (acao === 'pagar' && !conta)}
+              onClick={() => (acao === 'pagar' ? pagar.mutate() : acao === 'direto' ? direto.mutate() : acao === 'condicoes' ? condicoes.mutate() : corrigir.mutate())}
             >
               Confirmar
             </Button>
           </>
         }
       >
+        {acao === 'condicoes' && e ? (
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <MoneyInput label="Taxa (%)" prefixo="" value={cond.taxaPct} onChange={(v) => setCond({ ...cond, taxaPct: v })} />
+              <Input label="Prazo (dias)" type="number" min={0} value={cond.prazoDias} onChange={(ev) => setCond({ ...cond, prazoDias: Number(ev.target.value) || 0 })} />
+              <Input label="Parcelas mensais" type="number" min={1} max={120} value={cond.parcelas} onChange={(ev) => setCond({ ...cond, parcelas: Math.max(1, Number(ev.target.value) || 1) })} />
+            </div>
+            <p className="text-sm text-slate-600">Recebido {moeda(e.valorRecebido)} → devolver <b>{moeda(e.valorRecebido * (1 + cond.taxaPct / 100))}</b>{cond.parcelas > 1 ? ` em ${cond.parcelas}x de ${moeda((e.valorRecebido * (1 + cond.taxaPct / 100)) / cond.parcelas)}` : ''}.</p>
+          </div>
+        ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           <MoneyInput label={acao === 'corrigir' ? 'Valor que entrou de verdade' : 'Valor'} value={valor} onChange={setValor} />
           {acao !== 'corrigir' && <DateInput label="Data" value={dataAcao} onChange={setDataAcao} />}
           {acao === 'pagar' && <Select label="Sai de qual conta" value={conta} onChange={(ev) => setConta(ev.target.value ? Number(ev.target.value) : '')} opcoes={opcoesDe(contasFin)} placeholder="—" />}
           {acao === 'corrigir' && e && <p className="self-end pb-2 text-sm text-slate-500"><Wallet className="mr-1 inline h-4 w-4" />Devolvido: {moeda(e.valorDevolver)} → juros {moeda(Math.max(0, e.valorDevolver - valor))}</p>}
         </div>
+        )}
       </Modal>
     </Drawer>
   );

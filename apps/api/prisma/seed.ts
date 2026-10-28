@@ -179,6 +179,8 @@ const FORMAS_PAGAMENTO = [
   { nome: 'Boleto', tipo: 'BOLETO', codigoFiscal: '15', diasRecebimento: 3 },
   { nome: 'Transferência bancária', tipo: 'TRANSFERENCIA', codigoFiscal: '18' },
   { nome: 'Crediário / A prazo', tipo: 'CREDIARIO', codigoFiscal: '05', maxParcelas: 12 },
+  // Lumicred: o credor deposita o valor e a loja devolve + 6% em 30 dias (módulo Empréstimos)
+  { nome: 'Crédito bancário', tipo: 'CREDITO_BANCARIO', codigoFiscal: '99', taxaPct: 6, diasRecebimento: 30, maxParcelas: 12 },
   { nome: 'Outros', tipo: 'OUTRO', codigoFiscal: '99' },
 ];
 

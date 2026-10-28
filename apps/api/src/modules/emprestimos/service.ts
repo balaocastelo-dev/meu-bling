@@ -22,7 +22,7 @@ import { prisma, type Tx } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { arredondar, competenciaDe, proximoNumero } from '../../lib/util.js';
 import { categoriaPadraoId } from '../comum/financeiro.js';
-import { baixarContaPagar, baixarContaReceber, estornarContaReceber, saldoContaPagar, saldoContaReceber } from '../financeiro/service.js';
+import { baixarContaPagar, baixarContaReceber, saldoContaPagar, saldoContaReceber } from '../financeiro/service.js';
 
 export const MODALIDADES = ['REPASSE', 'DIRETO', 'CAPITAL_GIRO'] as const;
 export type Modalidade = (typeof MODALIDADES)[number];
@@ -64,6 +64,10 @@ export interface NovoEmprestimo {
   /** conta onde o dinheiro entrou; vazio = ainda não entrou (lança só a dívida) */
   contaFinanceiraId?: number | null;
   observacoes?: string | null;
+  /** gerado pela forma de pagamento "Crédito bancário" de uma venda/compra */
+  compraId?: number | null;
+  vendaParcelaId?: number | null;
+  compraParcelaId?: number | null;
 }
 
 /** Descobre o boleto do cliente pela venda (primeira conta a receber em aberto). */
@@ -132,9 +136,15 @@ export async function criarEmprestimo(d: NovoEmprestimo) {
     const cf = await prisma.contaFinanceira.findUnique({ where: { id: d.contaFinanceiraId } });
     if (!cf || cf.tipo === TIPO_CONTA_COMPENSACAO) throw new AppError('Conta financeira inválida.', 422, 'CONTA_FINANCEIRA', { campo: 'contaFinanceiraId' });
   }
+  const id = await prisma.$transaction((tx) => criarEmprestimoTx(tx, d, credor.nome));
+  return emprestimoCompleto(id);
+}
+
+/** Cria a operação dentro de uma transação (usado também pela forma de pagamento "Crédito bancário"). */
+export async function criarEmprestimoTx(tx: Tx, d: NovoEmprestimo, credorNome: string) {
   const { juros, valorDevolver } = calcularDevolucao(d.valorRecebido, d.taxaPct);
   const vencimento = d.vencimento ?? addDays(d.dataOperacao, d.prazoDias);
-  const id = await prisma.$transaction(async (tx) => {
+  {
     const cli = await resolverCliente(tx, d);
     const numero = await proximoNumero('EMPRESTIMO', tx);
     const e = await tx.emprestimo.create({
@@ -157,15 +167,18 @@ export async function criarEmprestimo(d: NovoEmprestimo) {
         parcelas: Math.max(1, d.parcelas),
         contaFinanceiraId: d.contaFinanceiraId ?? null,
         observacoes: d.observacoes || null,
+        compraId: d.compraId ?? null,
+        vendaParcelaId: d.vendaParcelaId ?? null,
+        compraParcelaId: d.compraParcelaId ?? null,
       },
     });
-    await criarDevolucao(tx, e, credor.nome);
+    await criarDevolucao(tx, e, credorNome);
     // entrada do dinheiro: conta a receber já recebida (fora do DRE por estar ligada ao empréstimo)
     if (d.contaFinanceiraId) {
       const cr = await tx.contaReceber.create({
         data: {
           contatoId: d.credorId,
-          descricao: `${rotuloOperacao(e, credor.nome)} — dinheiro recebido`,
+          descricao: `${rotuloOperacao(e, credorNome)} — dinheiro recebido`,
           dataEmissao: d.dataOperacao,
           vencimento: d.dataOperacao,
           competencia: competenciaDe(d.dataOperacao),
@@ -178,8 +191,7 @@ export async function criarEmprestimo(d: NovoEmprestimo) {
       await baixarContaReceber({ id: cr.id, valor: e.valorRecebido, data: d.dataOperacao, contaFinanceiraId: d.contaFinanceiraId }, tx);
     }
     return e.id;
-  });
-  return emprestimoCompleto(id);
+  }
 }
 
 /** Cliente pagou o boleto direto ao credor: baixa o boleto e abate a dívida no encontro de contas. */
@@ -247,13 +259,27 @@ export async function cancelarEmprestimo(id: number) {
   if (e.contasPagar.some((c) => c.valorPago > 0)) {
     throw new AppError('Já há pagamento ao credor nesta operação. Estorne os pagamentos no contas a pagar antes de cancelar.', 422, 'TEM_PAGAMENTO');
   }
-  for (const cr of e.contasReceber) if (['RECEBIDO', 'PARCIAL'].includes(cr.situacao)) await estornarContaReceber(cr.id);
-  await prisma.$transaction(async (tx) => {
-    await tx.contaPagar.updateMany({ where: { emprestimoId: id }, data: { situacao: 'CANCELADO' } });
-    await tx.contaReceber.updateMany({ where: { emprestimoId: id }, data: { situacao: 'CANCELADO' } });
-    await tx.emprestimo.update({ where: { id }, data: { situacao: 'CANCELADO' } });
-  });
+  await prisma.$transaction((tx) => cancelarEmprestimoTx(tx, id));
   return emprestimoCompleto(id);
+}
+
+/** Cancela dentro de uma transação: tira a entrada do caixa e cancela a devolução (sem pagamentos ao credor). */
+export async function cancelarEmprestimoTx(tx: Tx, id: number) {
+  const e = await tx.emprestimo.findUnique({ where: { id }, include: { contasPagar: true, contasReceber: true } });
+  if (!e || e.situacao === 'CANCELADO') return;
+  if (e.contasPagar.some((c) => c.valorPago > 0)) {
+    throw new AppError(`O empréstimo nº ${e.numero} já tem pagamento ao credor. Estorne os pagamentos no contas a pagar antes.`, 422, 'TEM_PAGAMENTO', { emprestimoId: id });
+  }
+  for (const cr of e.contasReceber) {
+    const movs = await tx.movimentoFinanceiro.findMany({ where: { contaReceberId: cr.id } });
+    for (const m of movs) {
+      await tx.contaFinanceira.update({ where: { id: m.contaFinanceiraId }, data: { saldoAtual: { decrement: arredondar(m.valor) } } });
+      await tx.movimentoFinanceiro.delete({ where: { id: m.id } });
+    }
+  }
+  await tx.contaPagar.updateMany({ where: { emprestimoId: id }, data: { situacao: 'CANCELADO' } });
+  await tx.contaReceber.updateMany({ where: { emprestimoId: id }, data: { situacao: 'CANCELADO', valorRecebido: 0, dataRecebimento: null } });
+  await tx.emprestimo.update({ where: { id }, data: { situacao: 'CANCELADO' } });
 }
 
 /**
@@ -265,6 +291,10 @@ export async function alterarEmprestimo(id: number, d: Partial<NovoEmprestimo> &
   if (!e) throw new NotFound('Empréstimo');
   if (e.situacao === 'CANCELADO') throw new AppError('Empréstimo cancelado.', 422, 'SITUACAO_INVALIDA');
   const temPagamento = e.contasPagar.some((c) => c.valorPago > 0) || e.importado;
+  const daParcela = !!(e.vendaParcelaId || e.compraParcelaId);
+  if (daParcela && d.valorRecebido !== undefined && d.valorRecebido !== null && Math.abs(d.valorRecebido - e.valorRecebido) > 0.009) {
+    throw new AppError('O valor desta operação vem da parcela da venda/compra. Para mudar, altere a parcela.', 422, 'VALOR_DA_PARCELA', { campo: 'valorRecebido' });
+  }
   await prisma.$transaction(async (tx) => {
     const cli = d.vendaId !== undefined || d.contaReceberClienteId !== undefined || d.clienteId !== undefined
       ? await resolverCliente(tx, { ...(e as any), modalidade: d.modalidade ?? (e.modalidade as Modalidade), vendaId: d.vendaId ?? e.vendaId, clienteId: d.clienteId ?? e.clienteId, contaReceberClienteId: d.contaReceberClienteId ?? e.contaReceberClienteId })
@@ -316,6 +346,7 @@ const includeLista = {
   credor: { select: { id: true, nome: true, documento: true } },
   cliente: { select: { id: true, nome: true } },
   venda: { select: { id: true, numero: true, total: true, data: true } },
+  compra: { select: { id: true, numero: true, total: true, data: true, fornecedor: { select: { id: true, nome: true } } } },
   contasPagar: { orderBy: { vencimento: 'asc' as const }, select: { id: true, descricao: true, valor: true, valorPago: true, juros: true, desconto: true, situacao: true, vencimento: true, dataPagamento: true, parcela: true } },
   contasReceber: { select: { id: true, valor: true, valorRecebido: true, situacao: true, contaFinanceiraId: true, dataRecebimento: true } },
 } as const;
