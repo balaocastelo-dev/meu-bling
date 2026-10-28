@@ -34,6 +34,24 @@ export interface GerarNfeParams {
 }
 
 /**
+ * CFOP de cada item (emitente no Simples Nacional), decidido pela UF e pelo tipo de cliente:
+ *  - dentro do estado: 5xxx (o CFOP do produto, ou o padrão da empresa)
+ *  - fora do estado:   6xxx; para NÃO contribuinte (pessoa física / empresa sem IE) a venda comum vira 6108
+ *  - 5405 (mercadoria com ST já retida) fora do estado vira 6404
+ * Antes o CFOP do produto (5102) ia igual para cliente de outro estado e a SEFAZ rejeitava.
+ */
+export function cfopDoItem(cfopProduto: string | null | undefined, dentroUf: boolean, naoContribuinte: boolean, padraoDentro: string, padraoFora: string): string {
+  const d = (cfopProduto || '').replace(/\D/g, '');
+  if (dentroUf) {
+    if (d.length === 4) return d.startsWith('6') ? `5${d.slice(1)}` : d;
+    return padraoDentro;
+  }
+  let fora = d.length === 4 ? (d === '5405' ? '6404' : d.startsWith('5') ? `6${d.slice(1)}` : d) : padraoFora;
+  if (naoContribuinte && fora === '6102') fora = '6108';
+  return fora;
+}
+
+/**
  * Cria a NotaFiscal (tipo 1 saída) + itens, incrementando a numeração da empresa
  * atomicamente dentro da transação recebida. Devolve a nota criada.
  */
@@ -60,6 +78,8 @@ export async function criarNotaPendente(tx: Db, p: GerarNfeParams) {
   const numero = p.modelo === 65 ? atualizado.proximoNumeroNfce - 1 : atualizado.proximoNumeroNfe - 1;
 
   const dentroUf = !contato.uf || !empresa.uf || contato.uf.toUpperCase() === empresa.uf.toUpperCase();
+  // não contribuinte do ICMS: pessoa física ou empresa sem IE (mesma regra do indIEDest no XML)
+  const naoContribuinte = !((contato.documento || '').replace(/\D/g, '').length === 14 && !!contato.ie && !contato.ieIsento);
   const valorProdutos = arredondar(itensValidos.reduce((s, i) => s + i.quantidade * i.valorUnitario, 0));
   const descontoItens = arredondar(itensValidos.reduce((s, i) => s + (i.desconto || 0), 0));
   const valorDesconto = arredondar(descontoItens + (p.descontoGeral || 0));
@@ -78,7 +98,7 @@ export async function criarNotaPendente(tx: Db, p: GerarNfeParams) {
       contatoId: contato.id,
       naturezaOperacao: p.naturezaOperacao || empresa.naturezaOperacaoPadrao,
       finalidade: 1,
-      consumidorFinal: p.modelo === 65 || contato.tipoPessoa === 'F' ? 1 : 0,
+      consumidorFinal: p.modelo === 65 || naoContribuinte ? 1 : 0,
       indicadorPresenca: 1,
       valorProdutos,
       valorFrete,
@@ -99,7 +119,7 @@ export async function criarNotaPendente(tx: Db, p: GerarNfeParams) {
             descricao: i.descricao || pr.nome,
             ncm: pr.ncm || '00000000',
             cest: pr.cest || null,
-            cfop: pr.cfopPadrao || (dentroUf ? empresa.cfopPadraoDentroUf : empresa.cfopPadraoForaUf),
+            cfop: cfopDoItem(pr.cfopPadrao, dentroUf, naoContribuinte, empresa.cfopPadraoDentroUf, empresa.cfopPadraoForaUf),
             unidade: i.unidade || pr.unidade || 'UN',
             quantidade: i.quantidade,
             valorUnitario: i.valorUnitario,

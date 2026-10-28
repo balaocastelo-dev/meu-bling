@@ -406,6 +406,8 @@ export interface VendaResumo {
   totalProdutos: number;
   notaId?: number | null;
   nota?: NotaRef | null;
+  /** robô de NF: PRONTA acende o selo "Pronto pra NF" */
+  roboNf?: { status: 'PRONTA' | 'PENDENTE' | 'EMITIDA' | 'IGNORADA'; erros: number } | null;
   estoqueLancado: boolean;
   contasLancadas: boolean;
   origem?: OrigemVenda;

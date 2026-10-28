@@ -343,6 +343,9 @@ model Produto {
   ativo              Boolean           @default(true)
   // ---- Fiscal
   ncm                String?
+  /// de onde veio o NCM: null = digitado à mão · HISTORICO = notas já autorizadas (robô, confiável)
+  /// SUGERIDO = robô deduziu pelo nome/categoria e falta alguém confirmar · CONFIRMADO = alguém conferiu
+  ncmOrigem          String?
   cest               String?
   cfopPadrao         String?
   /// origem da mercadoria (0 nacional, 1 estrangeira importação direta, 2 estrangeira adquirida no mercado interno...)
@@ -630,6 +633,8 @@ model Venda {
   contasLancadas        Boolean              @default(false)
   nota                  NotaFiscal?          @relation(fields: [notaId], references: [id])
   notaId                Int?                 @unique
+  /// robô de NF: o que ele conferiu/preencheu e se a venda está "Pronta pra NF"
+  roboNf                VendaRoboNf?
   blingId               String?              @unique
   criadoEm              DateTime             @default(now())
   atualizadoEm          DateTime             @updatedAt
@@ -1391,4 +1396,25 @@ model EntregaWebhook {
 
   @@index([status, proximaTentativa])
   @@index([webhookId, criadoEm])
+}
+
+/// ROBÔ DE NF: estado de cada venda conferida pelo robô que roda 24h na API.
+/// Fica numa tabela à parte para o robô nunca mexer no "atualizadoEm" da venda.
+model VendaRoboNf {
+  id                Int      @id @default(autoincrement())
+  venda             Venda    @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+  vendaId           Int      @unique
+  /// PRONTA (botão "Pronto pra NF" aceso) | PENDENTE (falta algo que o robô não resolve) | EMITIDA | IGNORADA (orçamento/cancelada/só serviço)
+  status            String
+  erros             Int      @default(0)
+  avisos            Int      @default(0)
+  /// JSON: pendências (mesmo formato do checklist da NF, com os links de onde corrigir)
+  pendencias        String?
+  /// JSON: o que o robô preencheu sozinho (cliente, NCM...) — vai acumulando
+  preenchido        String?
+  /// atualizadoEm da venda quando foi conferida (mudou → confere de novo)
+  vendaAtualizadaEm DateTime
+  verificadoEm      DateTime @default(now())
+
+  @@index([status])
 }
