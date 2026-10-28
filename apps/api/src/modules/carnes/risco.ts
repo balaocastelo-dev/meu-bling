@@ -135,6 +135,8 @@ export async function carregarHistoricos(ids?: number[], agora = new Date(), db:
   });
   const contatosIds = ids ?? [...new Set(vendas.map((v) => v.contatoId!))];
   if (!contatosIds.length) return new Map();
+  // SQLite limita o tamanho do IN (com filtros de negação a consulta não se divide): lista grande → sem filtro, filtra na memória
+  const poucos = !!ids && ids.length <= 400;
   const contatos = await db.contato.findMany({ where: { id: { in: contatosIds } }, select: { id: true, nome: true, documento: true, telefone: true, celular: true } });
   const mapa = new Map<number, Historico>();
   for (const c of contatos) {
@@ -179,7 +181,7 @@ export async function carregarHistoricos(ids?: number[], agora = new Date(), db:
   }
   // contas a receber do cliente (vendas, OS, carnês) — pontualidade e atraso atual
   const contas = await db.contaReceber.findMany({
-    where: { contatoId: { in: contatosIds }, situacao: { not: 'CANCELADO' }, emprestimoId: null, vencimento: { lt: agora } },
+    where: { ...(poucos ? { contatoId: { in: contatosIds } } : { contatoId: { not: null } }), situacao: { not: 'CANCELADO' }, emprestimoId: null, vencimento: { lt: agora } },
     select: { contatoId: true, vencimento: true, dataRecebimento: true, situacao: true, valor: true, valorRecebido: true, juros: true, desconto: true, carneId: true },
   });
   const somaAtraso = new Map<number, number>();
@@ -214,7 +216,7 @@ export async function carregarHistoricos(ids?: number[], agora = new Date(), db:
   }
   // saldo em aberto dos carnês ativos (consome o limite)
   const abertos = await db.contaReceber.findMany({
-    where: { contatoId: { in: contatosIds }, carneId: { not: null }, situacao: { in: ['ABERTO', 'PARCIAL'] } },
+    where: { ...(poucos ? { contatoId: { in: contatosIds } } : {}), carneId: { not: null }, situacao: { in: ['ABERTO', 'PARCIAL'] } },
     select: { contatoId: true, valor: true, valorRecebido: true, juros: true, desconto: true },
   });
   for (const c of abertos) {
@@ -223,13 +225,16 @@ export async function carregarHistoricos(ids?: number[], agora = new Date(), db:
   }
   // crédito bancário (Lumicred) com o boleto do cliente pago
   const ops = await db.emprestimo.findMany({
-    where: { clienteId: { in: contatosIds }, situacao: { not: 'CANCELADO' }, contaReceberClienteId: { not: null } },
+    where: { ...(poucos ? { clienteId: { in: contatosIds } } : { clienteId: { not: null } }), situacao: { not: 'CANCELADO' }, contaReceberClienteId: { not: null } },
     select: { clienteId: true, contaReceberClienteId: true },
   });
   if (ops.length) {
     const crs = await db.contaReceber.findMany({ where: { id: { in: ops.map((o) => o.contaReceberClienteId!) }, situacao: 'RECEBIDO' }, select: { id: true } });
     const pagos = new Set(crs.map((c) => c.id));
-    for (const o of ops) if (pagos.has(o.contaReceberClienteId!)) mapa.get(o.clienteId!)!.creditosPagos++;
+    for (const o of ops) {
+      const h = mapa.get(o.clienteId!);
+      if (h && pagos.has(o.contaReceberClienteId!)) h.creditosPagos++;
+    }
   }
   for (const h of mapa.values()) {
     h.gasto24m = arredondar(h.gasto24m);
