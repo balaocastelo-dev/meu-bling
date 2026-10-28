@@ -41,6 +41,11 @@ import {
   receberVendaPagaNaHora,
   soRecebimentoAutomatico,
   vendaCompleta,
+  consumidorFinalId,
+  exigirVendaCompleta,
+  mensagemFinalizacao,
+  pendenciasFinalizacao,
+  situacaoFinalizar,
 } from './service.js';
 import { acoesBody, aprovarBody, CAMPOS_LIVRES, converterBody, gerarNfeBody, gerarParcelasBody, listaQuery, notificarBody, situacaoBody, transferirVendedorBody, vendaSchema } from './schemas.js';
 import { htmlVenda } from './imprimir.js';
@@ -184,6 +189,15 @@ export default async function vendasRoutes(app: FastifyInstance) {
       // lido do banco (o vínculo pode ter mudado depois do login; vendedor sem cadastro ganha um)
       const proprio = await vendedorDoUsuario(req.user.id);
       if (proprio) body.vendedorId = proprio;
+    }
+    // criar já numa situação final (Fechada / NF emitida) exige a venda completa
+    if (body.tipo !== 'ORCAMENTO' && body.situacaoId) {
+      const sit = await prisma.situacao.findUnique({ where: { id: body.situacaoId } });
+      if (sit?.final && !sit.cancelamento) {
+        const prep = await prepararVenda(prisma, body);
+        const pend = pendenciasFinalizacao({ tipo: body.tipo, vendedorId: body.vendedorId ?? null, contato: prep.contato, itens: prep.itens as any, parcelas: prep.parcelas as any });
+        if (pend.length) throw new AppError(mensagemFinalizacao(pend), 422, 'VENDA_INCOMPLETA', { pendencias: pend, contatoId: body.contatoId });
+      }
     }
     const venda = await criarVenda(body, req.user.id);
     await auditar(req, body.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', venda.id, 'CRIAR', { numero: venda.numero, total: venda.total });
@@ -360,9 +374,47 @@ export default async function vendasRoutes(app: FastifyInstance) {
     if (body.forcar && req.user.perfil !== 'ADMIN' && req.user.perfil !== 'GERENTE') throw new AppError('Somente ADMIN/GERENTE pode forçar transições.', 403, 'SEM_PERMISSAO');
     const atual = await prisma.venda.findUnique({ where: { id }, select: { tipo: true } });
     if (!atual) throw new NotFound('Venda');
-    const r = await mudarSituacao({ modulo: moduloDe(atual.tipo), entidadeId: id, situacaoDestinoId: body.situacaoId, usuarioId: req.user.id, observacao: body.observacao, forcar: body.forcar });
+    let forcar = body.forcar;
+    if (atual.tipo !== 'ORCAMENTO') {
+      const destino = await prisma.situacao.findUnique({ where: { id: body.situacaoId } });
+      // finalizar (Fechada / NF emitida): só com a venda completa, e vale a partir de qualquer situação, para qualquer perfil
+      if (destino?.modulo === 'VENDA' && destino.final && !destino.cancelamento) {
+        await exigirVendaCompleta(id);
+        forcar = true;
+      }
+    }
+    const r = await mudarSituacao({ modulo: moduloDe(atual.tipo), entidadeId: id, situacaoDestinoId: body.situacaoId, usuarioId: req.user.id, observacao: body.observacao, forcar });
     await auditar(req, 'Venda', id, 'SITUACAO', { para: r.situacao.nome, acoes: r.acoes });
     return { situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor }, acoesExecutadas: r.acoes, alterado: r.alterado };
+  });
+
+  // ---------------------------------------------------------------- finalizar venda
+  /** O que falta para finalizar (a tela pergunta "Deseja finalizar?" ou mostra a lista com links). */
+  app.get('/api/v1/vendas/:id/finalizacao', async (req) => {
+    const id = idDe(req);
+    const v = await carregarVenda(prisma, id);
+    const pendencias = pendenciasFinalizacao(v as any);
+    const destino = await situacaoFinalizar();
+    return { podeFinalizar: !pendencias.length, pendencias, jaFinalizada: !!v.situacao.final && !v.situacao.cancelamento, situacaoAtual: { id: v.situacao.id, nome: v.situacao.nome }, destino: { id: destino.id, nome: destino.nome, cor: destino.cor }, contatoId: v.contatoId };
+  });
+
+  /** Finaliza (vai para "Fechada") a partir de qualquer situação, desde que a venda esteja completa. */
+  app.post('/api/v1/vendas/:id/finalizar', async (req) => {
+    const id = idDe(req);
+    const body = z.object({ observacao: z.string().max(500).nullish() }).parse(req.body ?? {});
+    const v = await exigirVendaCompleta(id);
+    exigirPedido(v, 'ser finalizado');
+    const destino = await situacaoFinalizar();
+    if (v.situacao.final && !v.situacao.cancelamento) return { situacao: { id: v.situacao.id, nome: v.situacao.nome, cor: v.situacao.cor }, acoesExecutadas: [], alterado: false };
+    const r = await mudarSituacao({ modulo: 'VENDA', entidadeId: id, situacaoDestinoId: destino.id, usuarioId: req.user.id, observacao: body.observacao || 'Venda finalizada', forcar: true });
+    await auditar(req, 'Venda', id, 'SITUACAO', { para: r.situacao.nome, acoes: r.acoes, finalizar: true });
+    return { situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor }, acoesExecutadas: r.acoes, alterado: r.alterado };
+  });
+
+  /** Contato "Consumidor Final" (cria se não existir) — botão da tela de venda. */
+  app.get('/api/v1/vendas/consumidor-final', async () => {
+    const id = await consumidorFinalId();
+    return prisma.contato.findUnique({ where: { id } });
   });
 
   app.post('/api/v1/vendas/:id/acoes', async (req) => {

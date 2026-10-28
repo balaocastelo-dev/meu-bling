@@ -13,6 +13,7 @@ import { NotificacoesLista } from '@/components/compartilhados/NotificacoesLista
 import { data, dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { Contato, Venda } from '@/types';
 import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/ProdutoSite';
+import { FinalizarVendaModal } from '@/components/compartilhados/FinalizarVenda';
 
 /** Detalhe do pedido de venda com abas e ações */
 export default function VendaDetalhe() {
@@ -22,6 +23,7 @@ export default function VendaDetalhe() {
   const [aba, setAba] = useState('itens');
   const [notificar, setNotificar] = useState(false);
   const [converter, setConverter] = useState(false);
+  const [finalizar, setFinalizar] = useState(false);
   const [nfe, setNfe] = useState<{ modelo: 55 | 65; info: string } | null>(null);
 
   const { data: venda, isLoading, error } = useQuery({ queryKey: ['venda', id], queryFn: () => api.get<Venda>(`/vendas/${id}`) });
@@ -79,6 +81,7 @@ export default function VendaDetalhe() {
   const Nome = orcamento ? 'Orçamento' : 'Venda';
   const convertido = !!venda.vendaGerada;
   const fechado = !!(venda.situacao as { cancelamento?: boolean }).cancelamento;
+  const jaFinalizada = !!(venda.situacao as { final?: boolean }).final && !fechado;
   const vencido = orcamento && !convertido && !!venda.validade && new Date(venda.validade).getTime() < Date.now() - 86400000;
 
   return (
@@ -103,6 +106,11 @@ export default function VendaDetalhe() {
                   Editar
                 </Button>
               </Link>
+            )}
+            {!orcamento && !jaFinalizada && (
+              <Button variante="sucesso" icone={<CheckCircle2 className="h-4 w-4" />} onClick={() => setFinalizar(true)}>
+                Finalizar venda
+              </Button>
             )}
             {orcamento && !convertido && (
               <Button variante="primario" icone={<ShoppingCart className="h-4 w-4" />} onClick={() => setConverter(true)} disabled={fechado}>
@@ -401,6 +409,7 @@ export default function VendaDetalhe() {
         }}
       />
 
+      {!orcamento && <FinalizarVendaModal vendaId={venda.id} numero={venda.numero} aberto={finalizar} onFechar={() => setFinalizar(false)} />}
     </div>
   );
 }

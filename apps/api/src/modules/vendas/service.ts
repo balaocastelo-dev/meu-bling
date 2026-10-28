@@ -65,8 +65,15 @@ export async function carregarVenda(db: Db, id: number) {
 export async function vendaCompleta(id: number) {
   const v = await carregarVenda(prisma, id);
   const modulo = moduloDe(v.tipo);
-  const [hist, permitidas] = await Promise.all([historico(modulo, id), situacoesPermitidas(modulo, v.situacaoId)]);
-  return { ...v, fechamento: fechamentoVenda(v), historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
+  const [hist, permitidasCfg] = await Promise.all([historico(modulo, id), situacoesPermitidas(modulo, v.situacaoId)]);
+  // venda pode ser finalizada a partir de qualquer situação: "Fechada" sempre aparece como destino
+  let permitidas = permitidasCfg;
+  if (modulo === 'VENDA') {
+    const fechada = await situacaoFinalizar().catch(() => null);
+    if (fechada && fechada.id !== v.situacaoId && !permitidas.some((s) => s.id === fechada.id)) permitidas = [...permitidas, fechada].sort((a, b) => a.ordem - b.ordem);
+  }
+  const pendencias = modulo === 'VENDA' ? pendenciasFinalizacao(v as any) : [];
+  return { ...v, fechamento: fechamentoVenda(v), historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), finalizacao: { podeFinalizar: !pendencias.length, pendencias }, tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
 }
 
 /**
@@ -752,4 +759,107 @@ export async function criarVenda(body: VendaInput, usuarioId: number | null, obs
   eventos.emitir('venda.alterada', { vendaId: venda.id, data: venda.data, tipo: venda.tipo });
 
   return venda;
+}
+
+// ---------------------------------------------------------------- finalização (regra do Balão, 28/10/2026)
+/**
+ * Uma venda só pode ser FINALIZADA (ir para uma situação final: "Fechada" ou "NF emitida") com tudo preenchido:
+ *  - cliente "Consumidor final" OU cliente com nome, CPF/CNPJ, telefone, e-mail e endereço completo;
+ *  - ao menos um produto, todos com custo;
+ *  - forma de pagamento em todas as parcelas;
+ *  - vendedor responsável.
+ * Pode ser finalizada a partir de qualquer situação (inclusive Cancelada).
+ */
+export interface PendenciaFinalizacao {
+  campo: string;
+  mensagem: string;
+  /** onde corrigir: 'venda' (editar a venda) ou 'cliente' (editar o cadastro do cliente) */
+  onde: 'venda' | 'cliente';
+}
+
+const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+/** "Consumidor final" é o cliente genérico do balcão (sem documento). */
+export function ehConsumidorFinal(c: { nome?: string | null; documento?: string | null } | null | undefined) {
+  if (!c?.nome) return false;
+  const n = semAcento(c.nome);
+  return (n === 'consumidor final' || n === 'cliente final') && !(c.documento || '').replace(/\D/g, '');
+}
+
+/** Contato "Consumidor Final" (cria se não existir) — usado pelo botão da tela de venda. */
+export async function consumidorFinalId(db: Db = prisma): Promise<number> {
+  const achado = await db.contato.findFirst({
+    where: { nome: { in: ['Consumidor Final', 'Consumidor final', 'CONSUMIDOR FINAL'] }, OR: [{ documento: null }, { documento: '' }] },
+    orderBy: { id: 'asc' },
+  });
+  if (achado) {
+    if (!achado.ativo) await db.contato.update({ where: { id: achado.id }, data: { ativo: true } });
+    return achado.id;
+  }
+  return (await db.contato.create({ data: { nome: 'Consumidor Final', tipoPessoa: 'F', tipo: 'CLIENTE' } })).id;
+}
+
+type VendaParaFinalizar = {
+  tipo: string;
+  vendedorId: number | null;
+  contato: { nome: string; documento: string | null; telefone: string | null; celular: string | null; email: string | null; logradouro: string | null; numero: string | null; bairro: string | null; municipio: string | null; uf: string | null; cep: string | null } | null;
+  itens: { descricao: string; produtoId: number | null; custoUnitario: number; quantidade: number }[];
+  parcelas: { formaPagamentoId: number | null }[];
+};
+
+export function pendenciasFinalizacao(v: VendaParaFinalizar): PendenciaFinalizacao[] {
+  const p: PendenciaFinalizacao[] = [];
+  if (v.tipo === 'ORCAMENTO') return [{ campo: 'tipo', mensagem: 'Orçamento não é finalizado: converta em venda primeiro.', onde: 'venda' }];
+
+  const c = v.contato;
+  if (!c) p.push({ campo: 'cliente', mensagem: 'Selecione o cliente (ou "Consumidor final").', onde: 'venda' });
+  else if (!ehConsumidorFinal(c)) {
+    const vazio = (x: string | null | undefined) => !x || !String(x).trim();
+    const doc = (c.documento || '').replace(/\D/g, '');
+    if (vazio(c.nome)) p.push({ campo: 'cliente.nome', mensagem: 'Cliente sem nome.', onde: 'cliente' });
+    if (doc.length !== 11 && doc.length !== 14) p.push({ campo: 'cliente.cpf', mensagem: 'Cliente sem CPF (ou CNPJ) válido.', onde: 'cliente' });
+    if (vazio(c.celular) && vazio(c.telefone)) p.push({ campo: 'cliente.telefone', mensagem: 'Cliente sem telefone.', onde: 'cliente' });
+    if (vazio(c.email) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(c.email).trim())) p.push({ campo: 'cliente.email', mensagem: 'Cliente sem e-mail válido.', onde: 'cliente' });
+    const endFaltando = [
+      ['logradouro', 'rua'],
+      ['numero', 'número'],
+      ['bairro', 'bairro'],
+      ['municipio', 'cidade'],
+      ['uf', 'UF'],
+      ['cep', 'CEP'],
+    ].filter(([k]) => vazio((c as any)[k])).map(([, r]) => r);
+    if (endFaltando.length) p.push({ campo: 'cliente.endereco', mensagem: `Endereço do cliente incompleto (falta: ${endFaltando.join(', ')}).`, onde: 'cliente' });
+  }
+
+  if (!v.itens.length) p.push({ campo: 'itens', mensagem: 'A venda não tem nenhum produto.', onde: 'venda' });
+  const semCusto = v.itens.map((i, idx) => ({ i, idx })).filter(({ i }) => !(i.custoUnitario > 0));
+  if (semCusto.length) {
+    const nomes = semCusto.slice(0, 3).map(({ i, idx }) => `${idx + 1}. ${i.descricao}`).join('; ');
+    p.push({ campo: 'itens.custo', mensagem: `${semCusto.length === 1 ? 'Produto sem custo' : `${semCusto.length} produtos sem custo`}: ${nomes}${semCusto.length > 3 ? '…' : ''}.`, onde: 'venda' });
+  }
+
+  if (!v.parcelas.length || v.parcelas.some((x) => !x.formaPagamentoId)) p.push({ campo: 'pagamento', mensagem: 'Informe a forma de pagamento.', onde: 'venda' });
+  if (!v.vendedorId) p.push({ campo: 'vendedor', mensagem: 'Informe o vendedor responsável.', onde: 'venda' });
+  return p;
+}
+
+export function mensagemFinalizacao(p: PendenciaFinalizacao[]) {
+  return `Não dá para finalizar a venda ainda. Falta: ${p.map((x) => x.mensagem.replace(/\.$/, '')).join('; ')}.`;
+}
+
+/** Lança 422 VENDA_INCOMPLETA com a lista do que falta (a tela mostra com links para corrigir). */
+export async function exigirVendaCompleta(id: number, db: Db = prisma) {
+  const v = await carregarVenda(db, id);
+  const pend = pendenciasFinalizacao(v as any);
+  if (pend.length) throw new AppError(mensagemFinalizacao(pend), 422, 'VENDA_INCOMPLETA', { pendencias: pend, contatoId: v.contatoId, vendaId: id });
+  return v;
+}
+
+/** Situação "Fechada" do módulo VENDA (a que o botão "Finalizar venda" usa). */
+export async function situacaoFinalizar(db: Db = prisma) {
+  const s =
+    (await db.situacao.findFirst({ where: { modulo: 'VENDA', nome: 'Fechada', ativo: true } })) ||
+    (await db.situacao.findFirst({ where: { modulo: 'VENDA', final: true, cancelamento: false, ativo: true, NOT: { acoes: { contains: 'gerarNfe' } } }, orderBy: { ordem: 'asc' } }));
+  if (!s) throw new AppError('Não há situação "Fechada" cadastrada para vendas.', 500, 'SITUACAO');
+  return s;
 }
