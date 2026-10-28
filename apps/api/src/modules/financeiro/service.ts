@@ -329,7 +329,7 @@ export async function ajustarSaldoConta(p: { contaFinanceiraId: number; saldoRea
   });
 }
 
-export async function transferirEntreContas(p: { origemId: number; destinoId: number; valor: number; data: Date; descricao?: string | null }) {
+export async function transferirEntreContas(p: { origemId: number; destinoId: number; valor: number; data: Date; descricao?: string | null; caixinhaId?: number | null }) {
   if (p.origemId === p.destinoId) throw new AppError('Conta de origem e destino devem ser diferentes.', 422, 'CONTAS_IGUAIS');
   return prisma.$transaction(async (tx) => {
     const origem = await tx.contaFinanceira.findUnique({ where: { id: p.origemId } });
@@ -344,6 +344,12 @@ export async function transferirEntreContas(p: { origemId: number; destinoId: nu
       { contaFinanceiraId: destino.id, data: p.data, tipo: 'ENTRADA', valor: p.valor, descricao: `${desc} ← ${origem.nome}`, observacoes: OBS_TRANSFERENCIA },
       tx,
     );
+    // caixinha: a entrada (guardar) ou a saída (retirar) da conta da caixinha fica marcada
+    if (p.caixinhaId) {
+      const cx = await tx.caixinha.findUnique({ where: { id: p.caixinhaId }, select: { contaFinanceiraId: true } });
+      if (cx?.contaFinanceiraId === destino.id) await tx.movimentoFinanceiro.update({ where: { id: entrada.id }, data: { caixinhaId: p.caixinhaId } });
+      if (cx?.contaFinanceiraId === origem.id) await tx.movimentoFinanceiro.update({ where: { id: saida.id }, data: { caixinhaId: p.caixinhaId } });
+    }
     return { saida, entrada };
   });
 }

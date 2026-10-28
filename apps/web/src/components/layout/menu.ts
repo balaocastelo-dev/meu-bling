@@ -3,6 +3,7 @@
  */
 import type { LucideIcon } from 'lucide-react';
 import {
+  PiggyBank,
   FileSignature,
   Banknote,
   Bell,
@@ -99,6 +100,7 @@ export const MENU: GrupoMenu[] = [
       { rotulo: 'Contas a pagar', para: '/financeiro/pagar', icone: Banknote, perfis: FIN },
       { rotulo: 'Bancos & conciliação', para: '/financeiro/bancos', icone: Landmark, perfis: FIN },
       { rotulo: 'Fluxo de caixa', para: '/financeiro/fluxo-caixa', icone: ChartLine, perfis: FIN },
+      { rotulo: 'Caixinhas', para: '/financeiro/caixinhas', icone: PiggyBank, perfis: FIN },
       { rotulo: 'Comissões', para: '/comissoes', icone: Percent, perfis: [...FIN, 'VENDEDOR', 'TECNICO'] },
     ],
   },

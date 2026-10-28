@@ -43,6 +43,8 @@ const ContasReceber = lazy(() => import('@/pages/financeiro/ContasReceber'));
 const ContasPagar = lazy(() => import('@/pages/financeiro/ContasPagar'));
 const Bancos = lazy(() => import('@/pages/financeiro/Bancos'));
 const FluxoCaixa = lazy(() => import('@/pages/financeiro/FluxoCaixa'));
+const Caixinhas = lazy(() => import('@/pages/financeiro/Caixinhas'));
+const InicioGerente = lazy(() => import('@/pages/dashboard/InicioGerente'));
 const Comissoes = lazy(() => import('@/pages/financeiro/Comissoes'));
 
 const NotasLista = lazy(() => import('@/pages/fiscal/NotasLista'));
@@ -101,6 +103,7 @@ function Inicio() {
   if (perfil === 'TECNICO') return <Navigate to="/ordens-servico" replace />;
   if (perfil === 'FINANCEIRO') return <Navigate to="/financeiro/receber" replace />;
   if (perfil === 'VENDEDOR') return <Navigate to="/meu-painel" replace />;
+  if (perfil === 'GERENTE') return S(<InicioGerente />);
   return <Navigate to="/vendas" replace />;
 }
 const ADMIN = (el: ReactNode) => S(<Somente perfis={['ADMIN']}>{el}</Somente>);
@@ -159,6 +162,7 @@ export const router = createBrowserRouter(
       { path: 'financeiro/pagar', element: FIN(<ContasPagar />) },
       { path: 'financeiro/bancos', element: FIN(<Bancos />) },
       { path: 'financeiro/fluxo-caixa', element: FIN(<FluxoCaixa />) },
+      { path: 'financeiro/caixinhas', element: FIN(<Caixinhas />) },
       { path: 'comissoes', element: S(<Comissoes />) },
 
       { path: 'notas-fiscais', element: S(<NotasLista />) },

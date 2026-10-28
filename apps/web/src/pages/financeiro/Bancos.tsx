@@ -28,6 +28,7 @@ export default function Bancos() {
   const [transfAberta, setTransfAberta] = useState(false);
   const [lancAberto, setLancAberto] = useState(false);
   const [ajusteAberto, setAjusteAberto] = useState(false);
+  const [saldosAberto, setSaldosAberto] = useState(false);
 
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: ['contas-financeiras'] });
@@ -111,6 +112,7 @@ export default function Bancos() {
             <Button variante="secundario" icone={<ArrowRightLeft className="h-4 w-4" />} onClick={() => setTransfAberta(true)}>Transferência</Button>
             <Button variante="secundario" icone={<Plus className="h-4 w-4" />} onClick={() => setLancAberto(true)}>Lançamento avulso</Button>
             <Button variante="secundario" icone={<Scale className="h-4 w-4" />} onClick={() => setAjusteAberto(true)}>Ajustar saldo</Button>
+            <Button variante="secundario" icone={<Scale className="h-4 w-4" />} onClick={() => setSaldosAberto(true)}>Acertar saldos iniciais</Button>
             <Button variante="secundario" icone={<RefreshCw className={clsx('h-4 w-4', sincronizar.isPending && 'animate-spin')} />} onClick={() => sincronizar.mutate(undefined)} disabled={sincronizar.isPending || !of?.ativo}>Sincronizar todas</Button>
             <Button variante="primario" icone={<PlugZap className="h-4 w-4" />} carregando={conectar.isPending} onClick={() => conectar.mutate()} disabled={of ? !of.configurado : false} title={of && !of.configurado ? 'Configure o Open Finance em Configurações' : undefined}>
               Conectar banco (Open Finance)
@@ -165,6 +167,7 @@ export default function Bancos() {
       <TransferenciaModal aberto={transfAberta} onFechar={() => setTransfAberta(false)} contas={contas ?? []} onConcluido={invalidar} />
       <LancamentoModal aberto={lancAberto} onFechar={() => setLancAberto(false)} contas={contas ?? []} onConcluido={invalidar} />
       <AjusteSaldoModal aberto={ajusteAberto} onFechar={() => setAjusteAberto(false)} contas={contas ?? []} onConcluido={invalidar} />
+      {saldosAberto && <SaldosIniciaisModal onFechar={() => setSaldosAberto(false)} contas={contas ?? []} onConcluido={invalidar} />}
     </div>
   );
 }
@@ -456,6 +459,62 @@ function AjusteSaldoModal({ aberto, onFechar, contas, onConcluido }: { aberto: b
             Saldo no sistema: <b>{moeda(conta.saldoAtual)}</b> · diferença a lançar: <b className={diferenca < 0 ? 'text-red-600' : 'text-emerald-600'}>{moeda(diferenca)}</b>
           </p>
         )}
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Acertar os saldos de TODAS as contas de uma vez: informa quanto tem de verdade em cada banco hoje.
+ * A diferença é lançada como ajuste (fora do DRE); daí para frente o saldo segue os novos lançamentos.
+ */
+function SaldosIniciaisModal({ onFechar, contas, onConcluido }: { onFechar: () => void; contas: ContaFinanceira[]; onConcluido: () => void }) {
+  const ativas = contas.filter((c) => c.ativo);
+  const [reais, setReais] = useState<Record<number, number>>(() => Object.fromEntries(ativas.map((c) => [c.id, Math.round(c.saldoAtual * 100) / 100])));
+  const [dia, setDia] = useState(hoje());
+  const mudou = ativas.filter((c) => Math.abs((reais[c.id] ?? 0) - c.saldoAtual) >= 0.01);
+  const m = useMutation({
+    mutationFn: async () => {
+      for (const c of mudou) await api.post(`/contas-financeiras/${c.id}/ajustar-saldo`, { saldoReal: reais[c.id], data: dia, descricao: `Saldo inicial acertado: ${c.nome}` });
+    },
+    onSuccess: () => {
+      toast.success(`${mudou.length} saldo${mudou.length > 1 ? 's' : ''} acertado${mudou.length > 1 ? 's' : ''}.`);
+      onConcluido();
+      onFechar();
+    },
+    onError: (e) => {
+      toast.error(mensagemErro(e));
+      onConcluido();
+    },
+  });
+  const total = ativas.reduce((s, c) => s + (reais[c.id] ?? 0), 0);
+  return (
+    <Modal
+      aberto
+      onFechar={onFechar}
+      tamanho="lg"
+      titulo="Acertar saldos iniciais"
+      descricao="Digite quanto tem de verdade em cada banco hoje. O sistema lança só a diferença (fora do DRE) e, daqui para frente, o saldo acompanha os novos lançamentos."
+      rodape={<><Button variante="secundario" onClick={onFechar}>Cancelar</Button><Button variante="primario" carregando={m.isPending} disabled={!mudou.length} onClick={() => m.mutate()}>Acertar {mudou.length || ''} saldo{mudou.length === 1 ? '' : 's'}</Button></>}
+    >
+      <div className="space-y-3">
+        <DateInput label="Saldo na data de" value={dia} onChange={setDia} className="w-48" />
+        <div className="divide-y divide-slate-100 rounded-md border border-slate-200">
+          {ativas.map((c) => {
+            const dif = Math.round(((reais[c.id] ?? 0) - c.saldoAtual) * 100) / 100;
+            return (
+              <div key={c.id} className="grid items-center gap-2 p-2.5 sm:grid-cols-[1fr_9rem_10rem]">
+                <div className="text-sm">
+                  <p className="font-medium text-slate-800">{c.nome}</p>
+                  <p className="text-xs text-slate-500">no sistema: {moeda(c.saldoAtual)}</p>
+                </div>
+                <MoneyInput aria-label={`Saldo real ${c.nome}`} value={reais[c.id] ?? 0} onChange={(v) => setReais({ ...reais, [c.id]: v })} />
+                <span className={clsx('num text-right text-xs', Math.abs(dif) < 0.01 ? 'text-slate-400' : dif < 0 ? 'text-red-600' : 'text-emerald-600')}>{Math.abs(dif) < 0.01 ? 'sem ajuste' : `ajuste ${moeda(dif)}`}</span>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-right text-sm text-slate-600">Total em contas: <b className="num">{moeda(total)}</b></p>
       </div>
     </Modal>
   );

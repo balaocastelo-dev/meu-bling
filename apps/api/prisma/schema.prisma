@@ -495,6 +495,7 @@ model ContaFinanceira {
   pagamentos  ContaPagar[]
   lancamentos MovimentoFinanceiro[]
   formasPagamento FormaPagamento[]
+  caixinhas       Caixinha[]
   transacoes  TransacaoBancaria[]
 }
 
@@ -1036,6 +1037,9 @@ model MovimentoFinanceiro {
   conciliado        Boolean              @default(false)
   transacao         TransacaoBancaria?   @relation(fields: [transacaoId], references: [id])
   transacaoId       Int?                 @unique
+  /// caixinha (guardar dinheiro para um compromisso) a que este movimento pertence
+  caixinha          Caixinha?            @relation(fields: [caixinhaId], references: [id])
+  caixinhaId        Int?
   observacoes       String?
   criadoEm          DateTime             @default(now())
 
@@ -1334,4 +1338,26 @@ model EntregaWebhook {
 
   @@index([status, proximaTentativa])
   @@index([webhookId, criadoEm])
+}
+
+// ---------------------------------------------------------------------
+// CAIXINHAS (Nubank): guardar dinheiro para compromissos grandes
+// ---------------------------------------------------------------------
+model Caixinha {
+  id                Int                   @id @default(autoincrement())
+  /// para que é o dinheiro (ex.: 13º dos funcionários, IPTU, estoque Black Friday)
+  nome              String
+  valorMeta         Float
+  /// dia em que o dinheiro vai ser usado
+  dataUso           DateTime
+  dataInicio        DateTime              @default(now())
+  contaFinanceira   ContaFinanceira       @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId Int
+  observacoes       String?
+  /// false = já usada / arquivada
+  ativo             Boolean               @default(true)
+  usadaEm           DateTime?
+  criadoEm          DateTime              @default(now())
+  atualizadoEm      DateTime              @updatedAt
+  movimentos        MovimentoFinanceiro[]
 }

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { AvisosImportantes } from '@/components/compartilhados/AvisosImportantes';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import clsx from 'clsx';
@@ -200,6 +201,11 @@ export default function DashboardGeral() {
           <AlertCircle className="h-4 w-4" /> A rota do dashboard ainda não está disponível na API. Os indicadores aparecerão assim que o backend responder.
         </Aparecer>
       )}
+
+      {/* avisos mais importantes (caixinhas no prazo, contas vencidas, OS atrasadas) */}
+      <Aparecer>
+        <AvisosImportantes />
+      </Aparecer>
 
       {/* destaque: faturamento total do período */}
       <Aparecer>
