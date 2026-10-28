@@ -189,6 +189,16 @@ export default function Dre() {
               <Skeleton className="h-40" />
             )}
           </Card>
+          {!!data?.informativo?.length && (
+            <Card titulo="Já cobertos pelo custo das vendas">
+              <p className="mb-2 text-xs text-slate-500">Lançados no financeiro, mas fora do resultado para não contar duas vezes: o custo de cada venda já inclui produto, imposto e frete.</p>
+              <div className="space-y-1 text-sm">
+                {data.informativo.map((i) => (
+                  <div key={i.nome} className="flex justify-between"><span className="text-slate-600">{i.nome}</span><span className="num">{moeda(i.valor)}</span></div>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>

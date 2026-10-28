@@ -191,9 +191,18 @@ export default function VendaDetalhe() {
               const semCusto = venda.itens.filter((i) => !i.custoUnitario).length;
               return (
                 <>
-                  <div className="flex justify-between"><span className="text-slate-500">Custo dos produtos</span><ValorOculto className="num">{moeda(custoProdutos)}</ValorOculto></div>
-                  {semCusto > 0 && <p className="text-[11px] text-amber-700">{semCusto} {semCusto === 1 ? 'item' : 'itens'} sem custo</p>}
-                  <div className="flex justify-between"><span className="text-slate-500">Logística</span><ValorOculto className="num">{moeda(venda.custoLogistica ?? 0)}</ValorOculto></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Custo dos produtos</span><ValorOculto className="num">{moeda(custoProdutos)}{venda.fechamento?.custoProdutoPct ? ` (${numero(venda.fechamento.custoProdutoPct, 1)}%)` : ''}</ValorOculto></div>
+                  {venda.fechamento?.custoProdutoEstimado ? (
+                    <p className="text-[11px] text-amber-700">Custo estimado — informe o custo real em “Lançar”</p>
+                  ) : semCusto > 0 && <p className="text-[11px] text-amber-700">{semCusto} {semCusto === 1 ? 'item' : 'itens'} sem custo</p>}
+                  {venda.fechamento && (
+                    <>
+                      <div className="flex justify-between"><span className="text-slate-500">Imposto ({numero(venda.fechamento.impostoPct ?? 0, 1)}%)</span><ValorOculto className="num">{moeda(venda.fechamento.imposto ?? 0)}</ValorOculto></div>
+                      <div className="flex justify-between"><span className="text-slate-500">Taxa do cartão{venda.fechamento.taxaCartao ? ` (${venda.fechamento.parcelasCartao ?? 1}x · ${numero(venda.fechamento.taxaCartaoPct ?? 0, 2)}%)` : ''}</span><ValorOculto className="num">{moeda(venda.fechamento.taxaCartao ?? 0)}</ValorOculto></div>
+                    </>
+                  )}
+                  <div className="flex justify-between"><span className="text-slate-500">Frete / logística</span><ValorOculto className="num">{moeda(venda.fechamento?.frete ?? venda.custoLogistica ?? 0)}</ValorOculto></div>
+                  {venda.fechamento && <div className="flex justify-between font-medium"><span className="text-slate-600">Custo total</span><ValorOculto className="num">{moeda(venda.fechamento.custoTotal)}</ValorOculto></div>}
                 </>
               );
             })()}
