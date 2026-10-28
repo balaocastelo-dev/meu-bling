@@ -151,6 +151,8 @@ export interface FormaPagamento {
   maxParcelas: number;
   /** banco/conta onde o dinheiro desta forma cai */
   contaFinanceiraId?: number | null;
+  /** bancos que podem receber esta forma */
+  contasPermitidas?: number[];
   ativo: boolean;
 }
 
@@ -444,6 +446,9 @@ export interface Venda extends VendaResumo {
   categoriaFinanceira?: Ref | null;
   origem: OrigemVenda;
   numeroPedidoLoja?: string | null;
+  linkPagamentoUrl?: string | null;
+  linkPagamentoValor?: number | null;
+  linkPagamentoEm?: string | null;
   descontoTipo: 'REAL' | 'PERCENTUAL';
   descontoValor: number;
   frete: number;
@@ -1179,6 +1184,7 @@ export interface Empresa {
   whatsapp?: { ativo: boolean };
   openFinance?: { ativo: boolean; clientId?: string | null; temSecret: boolean };
   bling?: { temToken: boolean; expira?: string | null; clientId?: string | null; temSecret?: boolean };
+  mercadoPago?: { temToken: boolean };
   blingClientId?: string | null;
   temCscToken?: boolean;
 }

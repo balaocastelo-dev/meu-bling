@@ -217,6 +217,7 @@ export const ENDPOINTS: Endpoint[] = [
   { metodo: 'DELETE', caminho: '/vendas/{id}', recurso: 'vendas', resumo: 'Exclui pedido (só sem estoque/contas lançados e sem NF autorizada).' },
   { metodo: 'POST', caminho: '/vendas/{id}/situacao', recurso: 'vendas', resumo: 'Muda a situação (Fechada/NF emitida exigem a venda completa: 422 VENDA_INCOMPLETA). Fechada lança estoque, contas e comissão; Cancelada estorna. Erro 422 TRANSICAO_INVALIDA traz as permitidas.', corpo: SITUACAO },
   { metodo: 'GET', caminho: '/vendas/{id}/finalizacao', recurso: 'vendas', resumo: 'O que falta para finalizar a venda (cliente completo ou Consumidor final, produto, custo, forma de pagamento, vendedor).' },
+  { metodo: 'POST', caminho: '/vendas/{id}/link-pagamento', recurso: 'vendas', resumo: 'Gera o link de pagamento do Mercado Pago para o pedido (padrão: total da venda).', corpo: { valor: 199.9 } },
   { metodo: 'POST', caminho: '/vendas/{id}/finalizar', recurso: 'vendas', resumo: 'Finaliza a venda (vai para Fechada) a partir de qualquer situação. Erro 422 VENDA_INCOMPLETA traz as pendências.', corpo: { observacao: 'Cliente retirou na loja' } },
   { metodo: 'GET', caminho: '/vendas/consumidor-final', recurso: 'vendas', resumo: 'Cliente "Consumidor final" (criado se não existir) para vendas sem cadastro do cliente.' },
   { metodo: 'POST', caminho: '/vendas/{id}/acoes', recurso: 'vendas', resumo: 'Executa ações avulsas: lancarEstoque, estornarEstoque, lancarContas, estornarContas.', corpo: ACOES('lancarEstoque,lancarContas') },

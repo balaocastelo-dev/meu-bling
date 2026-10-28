@@ -97,6 +97,8 @@ model Empresa {
   blingAccessToken  String? // criptografado
   blingRefreshToken String? // criptografado
   blingTokenExpira  DateTime?
+  /// Mercado Pago (link de pagamento): Access Token de produção — criptografado
+  mercadoPagoAccessToken String?
 
   atualizadoEm DateTime @updatedAt
 }
@@ -430,6 +432,8 @@ model FormaPagamento {
   maxParcelas     Int     @default(1)
   ativo           Boolean @default(true)
   blingId         String? @unique
+  /// bancos/contas que podem receber esta forma (JSON com ids) — a tela de finalizar só mostra estes
+  contasPermitidas String?
   /// banco/conta onde o dinheiro desta forma cai (sugerido ao finalizar a venda e usado no "pago na hora")
   contaFinanceira   ContaFinanceira? @relation(fields: [contaFinanceiraId], references: [id])
   contaFinanceiraId Int?
@@ -595,6 +599,11 @@ model Venda {
   /// BALCAO | WHATSAPP | LOJA_VIRTUAL | TELEFONE | MARKETPLACE | OUTRO
   origem                String               @default("BALCAO")
   numeroPedidoLoja      String?
+  /// link de pagamento do Mercado Pago gerado pelo vendedor dentro do pedido
+  linkPagamentoUrl      String?
+  linkPagamentoId       String?
+  linkPagamentoValor    Float?
+  linkPagamentoEm       DateTime?
   totalProdutos         Float                @default(0)
   /// REAL | PERCENTUAL
   descontoTipo          String               @default("REAL")

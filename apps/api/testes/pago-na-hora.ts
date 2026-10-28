@@ -110,6 +110,26 @@ async function main() {
   const chk2: any = await adm.get(`/vendas/${vf.id}/finalizacao`);
   verifica(chk2.jaFinalizada && chk2.compraRegistrada?.id === fin.compra.compra.id, 'venda finalizada e compra ligada a ela', chk2);
 
+  secao('Fechamento troca a forma de pagamento e só aceita banco permitido');
+  const pix = formas.find((f) => f.tipo === 'PIX');
+  if (pix) {
+    await adm.put(`/formas-pagamento/${pix.id}`, { contasPermitidas: [bancoB.id], contaFinanceiraId: bancoB.id }, 200);
+    const v3 = await adm.post('/vendas', { contatoId: cf.id, vendedorId: vend.id, data: hoje(), itens: [{ produtoId: prod.id, quantidade: 1, valorUnitario: 100, custoUnitario: 60 }], parcelas: [{ dataVencimento: hoje(), valor: 100, formaPagamentoId: crediario?.id ?? dinheiro.id }] }, 201);
+    const c3: any = await adm.get(`/vendas/${v3.id}/finalizacao`);
+    const fp = c3.formas.find((f: any) => f.id === pix.id);
+    verifica(fp && fp.contasPermitidas.includes(bancoB.id), 'tela recebe os bancos permitidos da forma', fp);
+    await adm.post(`/vendas/${v3.id}/finalizar`, { recebimentos: [{ parcelaId: c3.parcelas[0].id, formaPagamentoId: pix.id, recebido: true, contaFinanceiraId: bancoA.id }], compra: null }, 422);
+    const ok3: any = await adm.post(`/vendas/${v3.id}/finalizar`, { recebimentos: [{ parcelaId: c3.parcelas[0].id, formaPagamentoId: pix.id, recebido: true, contaFinanceiraId: bancoB.id }] }, 200);
+    const v3d: any = await adm.get(`/vendas/${v3.id}`);
+    verifica(v3d.parcelas[0].formaPagamentoId === pix.id, 'parcela passou a ser PIX', v3d.parcelas[0]);
+    const cr3 = await receber(v3.id);
+    verifica(cr3.length === 1 && cr3[0].situacao === 'RECEBIDO' && cr3[0].contaFinanceiraId === bancoB.id, 'PIX recebido no banco permitido', { ok3, cr3 });
+  }
+
+  secao('Link de pagamento sem token do Mercado Pago avisa o que falta');
+  const semToken: any = await adm.post(`/vendas/${vf.id}/link-pagamento`, {}, 422);
+  verifica(semToken.code === 'MERCADOPAGO_SEM_TOKEN', 'erro diz para configurar o Mercado Pago', semToken);
+
   encerrar('Venda paga na hora / ajuste de saldo / DRE');
 }
 

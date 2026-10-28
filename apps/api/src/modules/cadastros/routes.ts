@@ -4,6 +4,7 @@
  * Listagens devolvem array simples (para selects). DELETE: se estiver em uso → ativo=false, senão exclui.
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { lerContasPermitidas } from '../comum/financeiro.js';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
@@ -186,6 +187,9 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
     },
   });
 
+  /** contasPermitidas é gravado como JSON; a API devolve a lista de ids */
+  const formaComContas = <T extends { contasPermitidas: string | null }>(f: T) => ({ ...f, contasPermitidas: lerContasPermitidas(f.contasPermitidas) });
+
   // ---------------- Formas de pagamento
   const TIPOS_FP = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA', 'CREDIARIO', 'OUTRO'] as const;
   const formaSchema = z.object({
@@ -197,6 +201,12 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
     maxParcelas: z.coerce.number().int().min(1).default(1),
     /** banco/conta onde o dinheiro desta forma cai */
     contaFinanceiraId: z.coerce.number().int().positive().nullable().optional(),
+    /** bancos que podem receber esta forma (a tela de finalizar só mostra estes) */
+    contasPermitidas: z
+      .array(z.coerce.number().int().positive())
+      .nullable()
+      .optional()
+      .transform((a) => (a === undefined ? undefined : a === null || !a.length ? null : JSON.stringify([...new Set(a)]))),
     ativo: z.boolean().default(true),
   });
   registrarCrud(app, {
@@ -205,10 +215,13 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
     schema: formaSchema,
     schemaUpdate: formaSchema.partial(),
     perfisMutacao: CONFIG,
-    listar: (q) => prisma.formaPagamento.findMany({ where: { ativo: q.ativo, ...nomeContains(q.pesquisa) }, orderBy: { nome: 'asc' } }),
-    obter: (id) => prisma.formaPagamento.findUnique({ where: { id } }),
-    criar: (d) => prisma.formaPagamento.create({ data: d }),
-    atualizar: (id, d) => prisma.formaPagamento.update({ where: { id }, data: d }),
+    listar: async (q) => (await prisma.formaPagamento.findMany({ where: { ativo: q.ativo, ...nomeContains(q.pesquisa) }, orderBy: { nome: 'asc' } })).map(formaComContas),
+    obter: async (id) => {
+      const f = await prisma.formaPagamento.findUnique({ where: { id } });
+      return f ? formaComContas(f) : null;
+    },
+    criar: async (d) => formaComContas(await prisma.formaPagamento.create({ data: d as any })),
+    atualizar: async (id, d) => formaComContas(await prisma.formaPagamento.update({ where: { id }, data: d as any })),
     emUso: async (id) =>
       (await prisma.vendaParcela.count({ where: { formaPagamentoId: id } })) > 0 ||
       (await prisma.compraParcela.count({ where: { formaPagamentoId: id } })) > 0 ||

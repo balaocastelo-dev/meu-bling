@@ -11,7 +11,7 @@ import { eventos } from '../../core/eventos.js';
 import { linkPublico, tokenPublico } from '../publico/token.js';
 import { depositoPadraoId, liberarReservas, movimentarEstoque, movimentaEstoque, reservarItens, reservasAtivas } from '../comum/estoque.js';
 import { acaoLancarContas as compraLancarContas, acaoLancarEstoque as compraLancarEstoque, alocarComprasParaVenda, desalocarComprasDaVenda, marcarCompraVendida } from '../compras/service.js';
-import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, recriarComissoes } from '../comum/financeiro.js';
+import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, lerContasPermitidas, recriarComissoes } from '../comum/financeiro.js';
 import { criarNotaPendente } from '../comum/nfe.js';
 import { hojeMeioDia } from '../comum/datas.js';
 import { carregarCfgCustos, custosVenda, type CfgCustos, type VendaParaCusto } from '../comum/custos-venda.js';
@@ -995,6 +995,8 @@ export async function registrarCompraDaVenda(vendaId: number, p: CompraDaVendaIn
 // ---------------------------------------------------------------- finalizar venda: recebimento em cada banco
 export interface RecebimentoFinalizacao {
   parcelaId: number;
+  /** forma de pagamento escolhida no fechamento (pode trocar a do pedido) */
+  formaPagamentoId?: number | null;
   /** o dinheiro desta parcela já entrou? (false = fica em aberto no contas a receber) */
   recebido: boolean;
   /** banco/conta onde o dinheiro entrou */
@@ -1039,8 +1041,23 @@ export async function aplicarRecebimentosFinalizacao(vendaId: number, lista: Rec
     let alterados = 0;
     for (const r of lista) {
       const p = await tx.vendaParcela.findFirst({ where: { id: r.parcelaId, vendaId }, include: { contaReceber: true } });
-      const cr = p?.contaReceber;
-      if (!p || !cr || cr.situacao === 'CANCELADO') continue;
+      if (!p) continue;
+      // forma de pagamento escolhida no fechamento
+      if (r.formaPagamentoId && r.formaPagamentoId !== p.formaPagamentoId) {
+        const forma = await tx.formaPagamento.findUnique({ where: { id: r.formaPagamentoId } });
+        if (!forma) throw new AppError(`Parcela ${p.numero}: forma de pagamento não encontrada.`, 422, 'FORMA_PAGAMENTO');
+        await tx.vendaParcela.update({ where: { id: p.id }, data: { formaPagamentoId: forma.id } });
+        if (p.contaReceberId) await tx.contaReceber.update({ where: { id: p.contaReceberId }, data: { formaPagamentoId: forma.id } });
+        p.formaPagamentoId = forma.id;
+      }
+      // banco tem de ser um dos que recebem esta forma (quando a forma tem a lista)
+      if (r.recebido && r.contaFinanceiraId && p.formaPagamentoId) {
+        const forma = await tx.formaPagamento.findUnique({ where: { id: p.formaPagamentoId }, select: { nome: true, contasPermitidas: true } });
+        const permitidas = lerContasPermitidas(forma?.contasPermitidas);
+        if (permitidas.length && !permitidas.includes(r.contaFinanceiraId)) throw new AppError(`Parcela ${p.numero}: ${forma?.nome} não entra nesse banco.`, 422, 'BANCO_NAO_PERMITIDO');
+      }
+      const cr = p.contaReceber ? await tx.contaReceber.findUnique({ where: { id: p.contaReceber.id } }) : null;
+      if (!cr || cr.situacao === 'CANCELADO') continue;
       const movs = await tx.movimentoFinanceiro.findMany({ where: { contaReceberId: cr.id } });
       const soAutomatico = movs.every((m) => m.observacoes === OBS_PAGO_NA_HORA);
       if (!soAutomatico) continue; // recebimento lançado à mão: respeita
@@ -1064,4 +1081,28 @@ export async function aplicarRecebimentosFinalizacao(vendaId: number, lista: Rec
     }
     return alterados;
   });
+}
+
+/** Formas de pagamento ativas com os bancos que recebem cada uma (tela de finalizar: forma → banco). */
+export async function formasParaFinalizar(db: Db = prisma) {
+  const formas = await db.formaPagamento.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, tipo: true, contaFinanceiraId: true, contasPermitidas: true } });
+  return formas.map((f) => ({ ...f, contasPermitidas: lerContasPermitidas(f.contasPermitidas) }));
+}
+
+/** Confere as escolhas do fechamento ANTES de lançar qualquer coisa (forma existe, banco escolhido e permitido). */
+export async function validarRecebimentosFinalizacao(vendaId: number, lista: RecebimentoFinalizacao[], db: Db = prisma) {
+  const parcelas = await db.vendaParcela.findMany({ where: { vendaId }, select: { id: true, numero: true, formaPagamentoId: true } });
+  for (const r of lista) {
+    const p = parcelas.find((x) => x.id === r.parcelaId);
+    if (!p) throw new AppError('Parcela não pertence a esta venda.', 422, 'PARCELA');
+    const formaId = r.formaPagamentoId || p.formaPagamentoId;
+    const forma = formaId ? await db.formaPagamento.findUnique({ where: { id: formaId }, select: { nome: true, contasPermitidas: true, ativo: true } }) : null;
+    if (!forma) throw new AppError(`Parcela ${p.numero}: escolha a forma de pagamento.`, 422, 'FORMA_PAGAMENTO');
+    if (!r.recebido) continue;
+    if (!r.contaFinanceiraId) throw new AppError(`Parcela ${p.numero}: escolha onde o dinheiro entrou.`, 422, 'SEM_CONTA_FINANCEIRA');
+    const conta = await db.contaFinanceira.findFirst({ where: { id: r.contaFinanceiraId, ativo: true }, select: { id: true } });
+    if (!conta) throw new AppError(`Parcela ${p.numero}: banco não encontrado.`, 422, 'SEM_CONTA_FINANCEIRA');
+    const permitidas = lerContasPermitidas(forma.contasPermitidas);
+    if (permitidas.length && !permitidas.includes(r.contaFinanceiraId)) throw new AppError(`Parcela ${p.numero}: ${forma.nome} não entra nesse banco.`, 422, 'BANCO_NAO_PERMITIDO');
+  }
 }

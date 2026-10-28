@@ -37,7 +37,10 @@ interface Checagem {
     contaSugeridaId: number | null;
     recebidoSugerido: boolean;
   }[];
+  formas: { id: number; nome: string; tipo: string; contaFinanceiraId: number | null; contasPermitidas: number[] }[];
 }
+
+const PAGO_NA_HORA = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'TRANSFERENCIA'];
 
 type Escolha = 'sim' | 'nao' | null;
 
@@ -89,7 +92,7 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
   });
 
   // recebimento de cada parcela
-  const [receb, setReceb] = useState<Record<number, { recebido: boolean; contaFinanceiraId: number | '' }>>({});
+  const [receb, setReceb] = useState<Record<number, { formaPagamentoId: number | ''; recebido: boolean; contaFinanceiraId: number | '' }>>({});
   // compra da mercadoria
   const [registrarCompra, setRegistrarCompra] = useState<Escolha>(null);
   const [fornecedorId, setFornecedorId] = useState<number | null>(null);
@@ -101,7 +104,7 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
   const contaPadrao = contasFin?.find((x) => x.padrao)?.id ?? contasFin?.[0]?.id ?? '';
   useEffect(() => {
     if (!c) return;
-    setReceb(Object.fromEntries(c.parcelas.map((p) => [p.id, { recebido: p.recebidoSugerido, contaFinanceiraId: p.contaSugeridaId ?? '' }])));
+    setReceb(Object.fromEntries(c.parcelas.map((p) => [p.id, { formaPagamentoId: p.formaPagamento?.id ?? '', recebido: p.recebidoSugerido, contaFinanceiraId: p.contaSugeridaId ?? '' }])));
     setRegistrarCompra(c.compraRegistrada || !(c.custoProdutos > 0) ? 'nao' : null);
     setCompraPaga(null);
   }, [c]);
@@ -113,7 +116,7 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
     mutationFn: () =>
       api.post<{ situacao: { nome: string }; compra?: { compra: { numero: number }; jaExistia: boolean; paga: boolean } | null }>(`/vendas/${vendaId}/finalizar`, {
         observacao: obs || undefined,
-        recebimentos: (c?.parcelas ?? []).map((p) => ({ parcelaId: p.id, recebido: !!receb[p.id]?.recebido, contaFinanceiraId: receb[p.id]?.contaFinanceiraId || null })),
+        recebimentos: (c?.parcelas ?? []).map((p) => ({ parcelaId: p.id, formaPagamentoId: receb[p.id]?.formaPagamentoId || null, recebido: !!receb[p.id]?.recebido, contaFinanceiraId: receb[p.id]?.contaFinanceiraId || null })),
         compra:
           registrarCompra === 'sim'
             ? { fornecedorId, paga: compraPaga === 'sim', contaFinanceiraId: compraPaga === 'sim' ? contaCompra || null : null, vencimento: compraPaga === 'sim' ? undefined : vencCompra }
@@ -135,7 +138,20 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
   });
 
   const pode = !!c?.podeFinalizar && !c.jaFinalizada;
-  const faltaBanco = (c?.parcelas ?? []).some((p) => receb[p.id]?.recebido && !receb[p.id]?.contaFinanceiraId);
+  const faltaBanco = (c?.parcelas ?? []).some((p) => !receb[p.id]?.formaPagamentoId || (receb[p.id]?.recebido && !receb[p.id]?.contaFinanceiraId));
+  const formaDe = (id: number | '' | undefined) => c?.formas.find((f) => f.id === id);
+  /** bancos que recebem a forma (se a forma não tem lista, todos) */
+  const bancosDa = (id: number | '' | undefined) => {
+    const f = formaDe(id);
+    const todas = contasFin ?? [];
+    return f && f.contasPermitidas.length ? todas.filter((x) => f.contasPermitidas.includes(x.id)) : todas;
+  };
+  const trocarForma = (parcelaId: number, formaId: number | '') => {
+    const f = formaDe(formaId);
+    const bancos = bancosDa(formaId);
+    const banco = f?.contaFinanceiraId && bancos.some((b) => b.id === f.contaFinanceiraId) ? f.contaFinanceiraId : bancos.length === 1 ? bancos[0].id : '';
+    setReceb({ ...receb, [parcelaId]: { formaPagamentoId: formaId, recebido: !!f && PAGO_NA_HORA.includes(f.tipo), contaFinanceiraId: banco } });
+  };
   const faltaCompra = registrarCompra === null || (registrarCompra === 'sim' && (compraPaga === null || (compraPaga === 'sim' && !contaCompra)));
   const opcoesContas = opcoesDe(contasFin);
   return (
@@ -169,23 +185,45 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
 
           <section>
             <h3 className="mb-2 text-sm font-semibold text-slate-800">1. Recebimento da venda</h3>
+            <p className="mb-2 text-xs text-slate-500">Escolha a forma de pagamento e depois onde o dinheiro entrou.</p>
             <div className="divide-y divide-slate-100 rounded-md border border-slate-200">
               {c.parcelas.map((p) => {
-                const r = receb[p.id] ?? { recebido: false, contaFinanceiraId: '' };
+                const r = receb[p.id] ?? { formaPagamentoId: '', recebido: false, contaFinanceiraId: '' };
+                const bancos = bancosDa(r.formaPagamentoId);
                 return (
-                  <div key={p.id} className="grid items-center gap-2 p-2.5 sm:grid-cols-[1fr_auto_14rem]">
-                    <div className="text-sm">
-                      <b className="num">{moeda(p.valor)}</b> <span className="text-slate-500">· {p.formaPagamento?.nome ?? 'sem forma'}{c.parcelas.length > 1 ? ` · parcela ${p.numero}` : ''}</span>
+                  <div key={p.id} className="space-y-2 p-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                      <span>
+                        <b className="num">{moeda(p.valor)}</b>
+                        {c.parcelas.length > 1 && <span className="text-slate-500"> · parcela {p.numero}</span>}
+                      </span>
+                      <label className="flex items-center gap-2 text-slate-700">
+                        <input type="checkbox" className="h-4 w-4" checked={r.recebido} onChange={(e) => setReceb({ ...receb, [p.id]: { ...r, recebido: e.target.checked } })} />
+                        Já recebido
+                      </label>
                     </div>
-                    <label className="flex items-center gap-2 text-sm text-slate-700">
-                      <input type="checkbox" className="h-4 w-4" checked={r.recebido} onChange={(e) => setReceb({ ...receb, [p.id]: { ...r, recebido: e.target.checked } })} />
-                      Já recebido
-                    </label>
-                    {r.recebido ? (
-                      <Select aria-label="Banco onde o dinheiro entrou" value={r.contaFinanceiraId} onChange={(e) => setReceb({ ...receb, [p.id]: { ...r, contaFinanceiraId: e.target.value ? Number(e.target.value) : '' } })} opcoes={opcoesContas} placeholder="Banco onde entrou…" />
-                    ) : (
-                      <span className="text-xs text-slate-500">fica no contas a receber</span>
-                    )}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <Select aria-label="Forma de pagamento" label="Forma de pagamento" value={r.formaPagamentoId} onChange={(e) => trocarForma(p.id, e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(c.formas)} placeholder="Escolha…" />
+                      {r.recebido ? (
+                        <div>
+                          <span className="mb-1 block text-xs font-medium text-slate-600">Onde o dinheiro entrou</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {bancos.map((b) => (
+                              <button
+                                key={b.id}
+                                type="button"
+                                onClick={() => setReceb({ ...receb, [p.id]: { ...r, contaFinanceiraId: b.id } })}
+                                className={r.contaFinanceiraId === b.id ? 'rounded-md border border-brand-600 bg-brand-600 px-3 py-1.5 text-sm font-medium text-white' : 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50'}
+                              >
+                                {b.nome}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="self-end pb-2 text-xs text-slate-500">Fica no contas a receber.</p>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -232,7 +270,7 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
           </section>
 
           <Textarea label="Observação (opcional)" rows={2} value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Fica no histórico da venda" />
-          {(faltaBanco || faltaCompra) && <p className="text-xs text-amber-700">{faltaBanco ? 'Escolha o banco de cada parcela recebida. ' : ''}{faltaCompra ? 'Responda as perguntas da compra.' : ''}</p>}
+          {(faltaBanco || faltaCompra) && <p className="text-xs text-amber-700">{faltaBanco ? 'Escolha a forma e o banco de cada parcela recebida. ' : ''}{faltaCompra ? 'Responda as perguntas da compra.' : ''}</p>}
         </div>
       )}
     </Modal>
