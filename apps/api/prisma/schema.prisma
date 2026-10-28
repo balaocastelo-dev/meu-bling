@@ -487,6 +487,8 @@ model ContaFinanceira {
   agencia              String?
   conta                String?
   saldoInicial         Float     @default(0)
+  /// taxa que o banco/maquininha desconta de cada recebimento (ex.: Mercado Pago 5%): cai o valor − taxa
+  taxaRecebimentoPct   Float     @default(0)
   saldoAtual           Float     @default(0)
   /// saldo informado pelo banco via Open Finance (ao vivo)
   saldoBanco           Float?

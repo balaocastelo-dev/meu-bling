@@ -244,9 +244,19 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
                                 className={r.contaFinanceiraId === b.id ? 'rounded-md border border-brand-600 bg-brand-600 px-3 py-1.5 text-sm font-medium text-white' : 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50'}
                               >
                                 {b.nome}
+                                {(b.taxaRecebimentoPct ?? 0) > 0 && <span className="ml-1 text-[11px] opacity-80">(−{String(b.taxaRecebimentoPct).replace('.', ',')}%)</span>}
                               </button>
                             ))}
                           </div>
+                          {(() => {
+                            const banco = bancos.find((b) => b.id === r.contaFinanceiraId);
+                            const t = banco?.taxaRecebimentoPct ?? 0;
+                            return t > 0 ? (
+                              <p className="mt-1 text-xs font-medium text-amber-700">
+                                Cai no {banco!.nome}: {moeda(p.valor * (1 - t / 100))} (taxa de {moeda(p.valor * (t / 100))})
+                              </p>
+                            ) : null;
+                          })()}
                         </div>
                       ) : (
                         <p className="self-end pb-2 text-xs text-slate-500">Fica no contas a receber.</p>
