@@ -462,6 +462,8 @@ export interface Venda extends VendaResumo {
   comissoes: Comissao[];
   historico: HistoricoSituacao[];
   situacoesPermitidas: SituacaoRef[];
+  /** o que falta para finalizar a venda (vazio = pode finalizar) */
+  finalizacao?: { podeFinalizar: boolean; pendencias: PendenciaFinalizacao[] };
   contato: Contato | Ref;
   linkPublico?: string;
   tokenPublico?: string;
@@ -1373,4 +1375,11 @@ export interface Desafio {
   situacao: 'EM_ANDAMENTO' | 'AGENDADO' | 'FINALIZADO' | 'ENCERRADO';
   participantes: { vendedorId: number; nome: string; atingido: number; pct: number; conquistou: boolean; conquistadoEm?: string | null; premioStatus?: Comissao['status'] | null }[];
   totalPremios: number;
+}
+
+/** Item que falta para finalizar uma venda (regra: cliente completo ou consumidor final, produto, custo, pagamento, vendedor). */
+export interface PendenciaFinalizacao {
+  campo: string;
+  mensagem: string;
+  onde: 'venda' | 'cliente';
 }

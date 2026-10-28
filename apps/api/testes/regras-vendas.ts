@@ -4,7 +4,7 @@
  * em produção (ex.: venda "Em aberto" que não aparecia no painel da vendedora, 22/10/2026).
  *   npx tsx testes/regras-vendas.ts http://localhost:3333
  */
-import { aguardar, diasAtras, encerrar, entrar, espera, hoje, igual, secao, Sessao, SUF, verifica } from './lib.js';
+import { aguardar, clienteCompleto, diasAtras, encerrar, entrar, espera, hoje, igual, secao, Sessao, SUF, verifica } from './lib.js';
 
 async function main() {
   const adm = await entrar('admin@balao.info', 'admin123');
@@ -17,7 +17,7 @@ async function main() {
   const formas: any[] = await adm.get('/formas-pagamento');
   const depositos: any[] = await adm.get('/depositos');
   const dep = depositos.find((d) => d.padrao)?.id ?? depositos[0].id;
-  const cli = await adm.post('/contatos', { nome: `Cliente Regras ${SUF}`, tipoPessoa: 'F' }, 201);
+  const cli = await adm.post('/contatos', clienteCompleto(`Cliente Regras ${SUF}`), 201);
   const cat = await adm.post('/categorias-produto', { nome: `Categoria Regras ${SUF}` }, [200, 201]);
   const prod = await adm.post('/produtos', { nome: `NOTEBOOK REGRAS ${SUF}`, codigo: `RG-${SUF}`, preco: 1000, precoCusto: 700, categoriaId: cat.id }, 201);
   const prod2 = await adm.post('/produtos', { nome: `MOUSE REGRAS ${SUF}`, codigo: `RM-${SUF}`, preco: 50, precoCusto: 20 }, 201);
@@ -36,7 +36,7 @@ async function main() {
   B.nome = 'Vendedor B';
 
   const vender = async (s: Sessao, valor: number, extra: Record<string, unknown> = {}) =>
-    s.post('/vendas', { contatoId: cli.id, data: hoje(), itens: [{ descricao: 'Item avulso regras', quantidade: 1, valorUnitario: valor }], parcelas: [{ dataVencimento: hoje(), valor, formaPagamentoId: formas[0].id }], ...extra }, 201);
+    s.post('/vendas', { contatoId: cli.id, data: hoje(), itens: [{ descricao: 'Item avulso regras', quantidade: 1, valorUnitario: valor, custoUnitario: Math.round(valor * 0.5) }], parcelas: [{ dataVencimento: hoje(), valor, formaPagamentoId: formas[0].id }], ...extra }, 201);
   const painel = (s: Sessao, q = '') => s.get('/painel-vendedor' + q);
   const hojeDe = (p: any) => p?.periodos?.find((x: any) => x.chave === 'hoje');
 
@@ -228,6 +228,53 @@ async function main() {
   await A.post('/vendas', { contatoId: cli.id, itens: [] }, [400, 422]);
   await A.post('/vendas', { contatoId: 99999999, itens: [{ descricao: 'x', quantidade: 1, valorUnitario: 1 }] }, [400, 404, 422]);
   await A.post('/vendas', { contatoId: cli.id, itens: [{ descricao: 'x', quantidade: -1, valorUnitario: 1 }] }, [400, 422]);
+
+  // ================================================================== finalizar venda (28/10/2026)
+  secao('Finalizar venda: de qualquer situação, só com cliente/produto/custo/pagamento/vendedor (28/10)');
+  const cliIncompleto = await adm.post('/contatos', { nome: `Cliente Incompleto ${SUF}`, tipoPessoa: 'F' }, 201);
+  const vInc = await A.post('/vendas', { contatoId: cliIncompleto.id, data: hoje(), itens: [{ descricao: 'Item sem custo', quantidade: 1, valorUnitario: 100 }], parcelas: [{ dataVencimento: hoje(), valor: 100, formaPagamentoId: formas[0].id }] }, 201);
+  const chk = await A.get(`/vendas/${vInc.id}/finalizacao`);
+  const campos = (chk.pendencias as any[]).map((p) => p.campo);
+  verifica(chk.podeFinalizar === false, 'venda incompleta não pode ser finalizada', chk);
+  for (const c of ['cliente.cpf', 'cliente.telefone', 'cliente.email', 'cliente.endereco', 'itens.custo'])
+    verifica(campos.includes(c), `aponta o que falta: ${c}`, campos);
+  verifica((chk.pendencias as any[]).some((p) => p.onde === 'cliente') && chk.contatoId === cliIncompleto.id, 'pendência do cliente leva ao cadastro do cliente', chk);
+  const det = await A.get(`/vendas/${vInc.id}`);
+  verifica(det.finalizacao?.podeFinalizar === false && det.finalizacao.pendencias.length >= 5, 'detalhe da venda já traz o que falta', det.finalizacao);
+  await A.post(`/vendas/${vInc.id}/finalizar`, {}, 422);
+  await A.post(`/vendas/${vInc.id}/situacao`, { situacaoId: sit('Fechada') }, 422);
+  await adm.post(`/vendas/${vInc.id}/situacao`, { situacaoId: sit('Fechada'), forcar: true }, 422);
+  await A.post('/vendas', { contatoId: cliIncompleto.id, situacaoId: sit('Fechada'), data: hoje(), itens: [{ descricao: 'x', quantidade: 1, valorUnitario: 10, custoUnitario: 5 }] }, 422);
+  verifica((await A.get(`/vendas/${vInc.id}`)).situacao.nome !== 'Fechada', 'continua sem finalizar');
+
+  // sem vendedor e sem forma de pagamento
+  const semVend = await adm.post('/vendas', { contatoId: cli.id, vendedorId: null, data: hoje(), itens: [{ descricao: 'Com custo', quantidade: 1, valorUnitario: 100, custoUnitario: 50 }], parcelas: [{ dataVencimento: hoje(), valor: 100, formaPagamentoId: null }] }, 201);
+  const chk2 = await adm.get(`/vendas/${semVend.id}/finalizacao`);
+  const c2 = (chk2.pendencias as any[]).map((p) => p.campo);
+  verifica(c2.includes('vendedor') && c2.includes('pagamento') && !c2.some((c: string) => c.startsWith('cliente')), 'exige vendedor e forma de pagamento (cliente completo ok)', c2);
+
+  // consumidor final dispensa os dados do cliente
+  const cf = await A.get('/vendas/consumidor-final');
+  verifica(/consumidor final/i.test(cf.nome), 'existe o cliente "Consumidor final"', cf);
+  const vCf = await A.post('/vendas', { contatoId: cf.id, data: hoje(), itens: [{ produtoId: prod2.id, quantidade: 1, valorUnitario: 50 }], parcelas: [{ dataVencimento: hoje(), valor: 50, formaPagamentoId: formas[0].id }] }, 201);
+  const chkCf = await A.get(`/vendas/${vCf.id}/finalizacao`);
+  verifica(chkCf.podeFinalizar === true, 'consumidor final + produto com custo do cadastro + pagamento + vendedor → pode finalizar', chkCf);
+
+  // de qualquer situação: Em andamento, Cancelada → Fechada (vendedor, sem "forçar")
+  await A.post(`/vendas/${vCf.id}/situacao`, { situacaoId: sit('Em andamento') });
+  const fin = await A.post(`/vendas/${vCf.id}/finalizar`, {});
+  verifica(fin.situacao?.nome === 'Fechada' && fin.alterado, 'vendedor finaliza a partir de "Em andamento"', fin);
+  const fin2 = await A.post(`/vendas/${vCf.id}/finalizar`, {});
+  verifica(fin2.alterado === false, 'finalizar de novo não faz nada (não lança em dobro)', fin2);
+  await A.post(`/vendas/${vCf.id}/situacao`, { situacaoId: cancelada });
+  const fin3 = await A.post(`/vendas/${vCf.id}/finalizar`, {});
+  verifica(fin3.situacao?.nome === 'Fechada', 'finaliza a partir de "Cancelada"', fin3);
+
+  // "Fechada" sempre aparece como opção no seletor de situação, mesmo sem transição cadastrada
+  const vNf = await A.post('/vendas', { contatoId: cf.id, data: hoje(), itens: [{ produtoId: prod2.id, quantidade: 1, valorUnitario: 50 }], parcelas: [{ dataVencimento: hoje(), valor: 50, formaPagamentoId: formas[0].id }] }, 201);
+  verifica((await A.get(`/vendas/${vNf.id}`)).situacoesPermitidas.some((s: any) => s.nome === 'Fechada'), '"Fechada" aparece entre as situações permitidas');
+  await A.post(`/vendas/${vNf.id}/situacao`, { situacaoId: sit('Fechada') });
+  verifica((await A.get(`/vendas/${vNf.id}`)).situacao.nome === 'Fechada', 'vendedor fecha pelo seletor de situação');
 
   encerrar('Regras de vendas, painel, metas e desafios');
 }

@@ -261,7 +261,7 @@ async function main() {
   const desafio = await req('POST', '/desafios', { titulo: `Desafio smoke ${SUF}`, tipo: 'VALOR', alvo: 500, premio: 50, inicio: hoje, fim: hoje, regra: 'TODOS', todosVendedores: false, vendedoresIds: [vd.id] }, 201);
   await req('POST', '/desafios', { titulo: 'x', tipo: 'VALOR', alvo: 1, premio: 1, inicio: hoje, fim: hoje }, 400);
   const vendaVd = async () => {
-    const v = await req('POST', '/vendas', { contatoId: cli.id, vendedorId: vd.id, data: hoje, itens: [{ descricao: 'Item avulso smoke', quantidade: 1, valorUnitario: 300 }], parcelas: [{ dataVencimento: hoje, valor: 300, formaPagamentoId: formas[0].id }] }, 201);
+    const v = await req('POST', '/vendas', { contatoId: cli.id, vendedorId: vd.id, data: hoje, itens: [{ descricao: 'Item avulso smoke', quantidade: 1, valorUnitario: 300, custoUnitario: 150 }], parcelas: [{ dataVencimento: hoje, valor: 300, formaPagamentoId: formas[0].id }] }, 201);
     await req('POST', `/vendas/${v.id}/situacao`, { situacaoId: s(sitV, 'Fechada') }, 200, true);
     return v;
   };
