@@ -145,7 +145,7 @@ async function main() {
     await pg.waitForURL((u) => !u.pathname.endsWith('/login'), { timeout: 15000 }).catch(() => undefined);
     for (const c of [`/vendas/${ids.vendas}`, `/produtos/${ids.produtos}`, '/produtos', '/estoque', `/ordens-servico/${ids['ordens-servico']}`]) {
       await visitar(pg, RAIZ + c);
-      const olhos = pg.locator('button[aria-label="Mostrar valor"]');
+      const olhos = pg.locator('button[aria-label="Mostrar valor"]:visible');
       const n = await olhos.count();
       if (!n) {
         falhar(`[custos] ${c}: nenhum custo escondido com olhinho`);
@@ -155,7 +155,7 @@ async function main() {
       await olhos.first().click();
       await pg.waitForTimeout(150);
       const depois = await pg.locator('body').innerText();
-      const mostrou = (await pg.locator('button[aria-label="Esconder valor"]').count()) > 0 && depois.split('****').length < antes.split('****').length;
+      const mostrou = (await pg.locator('button[aria-label="Esconder valor"]:visible').count()) > 0 && depois.split('****').length < antes.split('****').length;
       if (!antes.includes('****')) falhar(`[custos] ${c}: custo não aparece como ****`);
       else if (!mostrou) falhar(`[custos] ${c}: o olhinho não mostrou o valor`);
       else {
