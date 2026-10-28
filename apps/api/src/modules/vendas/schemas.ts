@@ -30,6 +30,8 @@ export const parcelaSchema = z.object({
   valor: z.coerce.number().min(0),
   formaPagamentoId: z.coerce.number().int().positive().nullable().optional(),
   observacoes: texto,
+  /** forma "Crédito bancário": quem paga o credor (CLIENTE = direto; LOJA = cliente paga a loja e a loja repassa) */
+  creditoPagador: z.enum(['CLIENTE', 'LOJA']).nullable().optional(),
 });
 
 export const vendaSchema = z.object({

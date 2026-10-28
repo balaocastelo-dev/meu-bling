@@ -92,11 +92,11 @@ model Empresa {
   openFinanceAtivo        Boolean @default(false)
 
   // ---- Bling (migração)
-  blingClientId     String?
-  blingClientSecret String? // criptografado
-  blingAccessToken  String? // criptografado
-  blingRefreshToken String? // criptografado
-  blingTokenExpira  DateTime?
+  blingClientId          String?
+  blingClientSecret      String? // criptografado
+  blingAccessToken       String? // criptografado
+  blingRefreshToken      String? // criptografado
+  blingTokenExpira       DateTime?
   /// Mercado Pago (link de pagamento): Access Token de produção — criptografado
   mercadoPagoAccessToken String?
 
@@ -426,22 +426,24 @@ model MovimentoEstoque {
 }
 
 model FormaPagamento {
-  id              Int     @id @default(autoincrement())
-  nome            String
+  id                Int              @id @default(autoincrement())
+  nome              String
   /// DINHEIRO | PIX | CARTAO_CREDITO | CARTAO_DEBITO | BOLETO | TRANSFERENCIA | CREDIARIO | OUTRO
-  tipo            String  @default("OUTRO")
+  tipo              String           @default("OUTRO")
   /// tPag da NF-e: 01 dinheiro, 02 cheque, 03 crédito, 04 débito, 15 boleto, 16 depósito, 17 PIX, 18 transferência, 90 sem pagamento, 99 outros
-  codigoFiscal    String  @default("99")
-  taxaPct         Float   @default(0)
-  diasRecebimento Int     @default(0)
-  maxParcelas     Int     @default(1)
-  ativo           Boolean @default(true)
-  blingId         String? @unique
+  codigoFiscal      String           @default("99")
+  taxaPct           Float            @default(0)
+  diasRecebimento   Int              @default(0)
+  maxParcelas       Int              @default(1)
+  ativo             Boolean          @default(true)
+  blingId           String?          @unique
   /// bancos/contas que podem receber esta forma (JSON com ids) — a tela de finalizar só mostra estes
-  contasPermitidas String?
+  contasPermitidas  String?
   /// banco/conta onde o dinheiro desta forma cai (sugerido ao finalizar a venda e usado no "pago na hora")
   contaFinanceira   ContaFinanceira? @relation(fields: [contaFinanceiraId], references: [id])
   contaFinanceiraId Int?
+  /// CREDITO_BANCARIO: quem empresta o dinheiro (ex.: Lumicred). Taxa = taxaPct, prazo = diasRecebimento
+  credorId          Int?
 
   vendaParcelas  VendaParcela[]
   compraParcelas CompraParcela[]
@@ -496,12 +498,12 @@ model ContaFinanceira {
   ultimaSincronizacao  DateTime?
   blingId              String?   @unique
 
-  movimentos  ContaReceber[]
-  pagamentos  ContaPagar[]
-  lancamentos MovimentoFinanceiro[]
+  movimentos      ContaReceber[]
+  pagamentos      ContaPagar[]
+  lancamentos     MovimentoFinanceiro[]
   formasPagamento FormaPagamento[]
   caixinhas       Caixinha[]
-  transacoes  TransacaoBancaria[]
+  transacoes      TransacaoBancaria[]
 }
 
 // ---------------------------------------------------------------------
@@ -687,6 +689,8 @@ model VendaParcela {
   formaPagamento   FormaPagamento? @relation(fields: [formaPagamentoId], references: [id])
   formaPagamentoId Int?
   observacoes      String?
+  /// forma CREDITO_BANCARIO: quem paga o credor — CLIENTE (paga direto) ou LOJA (cliente paga a loja e a loja repassa)
+  creditoPagador   String?
   contaReceber     ContaReceber?   @relation(fields: [contaReceberId], references: [id])
   contaReceberId   Int?            @unique
 }
@@ -725,8 +729,9 @@ model Compra {
   criadoEm              DateTime             @default(now())
   atualizadoEm          DateTime             @updatedAt
 
-  itens    CompraItem[]
-  parcelas CompraParcela[]
+  itens       CompraItem[]
+  parcelas    CompraParcela[]
+  emprestimos Emprestimo[]
 
   @@index([data])
   @@index([fornecedorId])
@@ -1049,6 +1054,12 @@ model Emprestimo {
   clienteId             Int?
   venda                 Venda?   @relation(fields: [vendaId], references: [id])
   vendaId               Int?
+  /// compra paga com crédito bancário
+  compra                Compra?  @relation(fields: [compraId], references: [id])
+  compraId              Int?
+  /// parcela da venda/compra paga com a forma "Crédito bancário" que gerou a operação
+  vendaParcelaId        Int?
+  compraParcelaId       Int?
   /// recebível do cliente (boleto) que garante a operação
   contaReceberClienteId Int?
   dataOperacao          DateTime

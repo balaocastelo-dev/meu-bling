@@ -74,7 +74,7 @@ function deVenda(v: Venda): VendaPayload {
     quantidadeVolumes: v.quantidadeVolumes,
     pesoBruto: v.pesoBruto,
     itens: v.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct, custoUnitario: i.custoUnitario ?? 0, custoInformado: !!i.custoInformado, numeroSerie: i.numeroSerie ?? null, imagemUrl: i.produto?.imagemUrl ?? null, prontaEntrega: Boolean(i.produto?.prontaEntrega) })),
-    parcelas: v.parcelas.map((p) => ({ dataVencimento: dataIso(p.dataVencimento), valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes ?? '' })),
+    parcelas: v.parcelas.map((p) => ({ dataVencimento: dataIso(p.dataVencimento), valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes ?? '', creditoPagador: p.creditoPagador ?? null })),
   };
 }
 
@@ -512,7 +512,7 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
           descricao={orcamento ? 'Aparecem no PDF do orçamento e passam para a venda ao converter.' : 'Sem parcelas a API gera uma à vista. Ao lançar contas, cada parcela vira uma conta a receber.'}
         >
           {erros.parcelas && <p className="mb-2 text-xs text-red-600">{erros.parcelas}</p>}
-          <ParcelasEditor parcelas={form.parcelas} onChange={(p) => set('parcelas', p)} total={totais.total} disabled={bloqueado} />
+          <ParcelasEditor parcelas={form.parcelas} onChange={(p) => set('parcelas', p)} total={totais.total} disabled={bloqueado} pagadorCredito />
         </Secao>
       </div>
 

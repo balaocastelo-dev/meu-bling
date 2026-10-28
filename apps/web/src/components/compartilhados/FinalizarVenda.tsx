@@ -36,6 +36,7 @@ interface Checagem {
     recebida: boolean;
     contaSugeridaId: number | null;
     recebidoSugerido: boolean;
+    creditoPagador?: 'CLIENTE' | 'LOJA' | null;
   }[];
   formas: { id: number; nome: string; tipo: string; contaFinanceiraId: number | null; contasPermitidas: number[] }[];
 }
@@ -43,6 +44,8 @@ interface Checagem {
 const PAGO_NA_HORA = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'TRANSFERENCIA'];
 
 type Escolha = 'sim' | 'nao' | null;
+type Pagador = 'CLIENTE' | 'LOJA';
+type EscolhaCompra = 'sim' | 'nao' | 'credito' | null;
 
 function SimNao({ valor, onChange }: { valor: Escolha; onChange: (v: Escolha) => void }) {
   return (
@@ -92,19 +95,19 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
   });
 
   // recebimento de cada parcela
-  const [receb, setReceb] = useState<Record<number, { formaPagamentoId: number | ''; recebido: boolean; contaFinanceiraId: number | '' }>>({});
+  const [receb, setReceb] = useState<Record<number, { formaPagamentoId: number | ''; recebido: boolean; contaFinanceiraId: number | ''; creditoPagador?: Pagador }>>({});
   // compra da mercadoria
   const [registrarCompra, setRegistrarCompra] = useState<Escolha>(null);
   const [fornecedorId, setFornecedorId] = useState<number | null>(null);
   const [fornecedorNome, setFornecedorNome] = useState<string | null>(null);
-  const [compraPaga, setCompraPaga] = useState<Escolha>(null);
+  const [compraPaga, setCompraPaga] = useState<EscolhaCompra>(null);
   const [contaCompra, setContaCompra] = useState<number | ''>('');
   const [vencCompra, setVencCompra] = useState(hoje());
 
   const contaPadrao = contasFin?.find((x) => x.padrao)?.id ?? contasFin?.[0]?.id ?? '';
   useEffect(() => {
     if (!c) return;
-    setReceb(Object.fromEntries(c.parcelas.map((p) => [p.id, { formaPagamentoId: p.formaPagamento?.id ?? '', recebido: p.recebidoSugerido, contaFinanceiraId: p.contaSugeridaId ?? '' }])));
+    setReceb(Object.fromEntries(c.parcelas.map((p) => [p.id, { formaPagamentoId: p.formaPagamento?.id ?? '', recebido: p.recebidoSugerido, contaFinanceiraId: p.contaSugeridaId ?? '', creditoPagador: (p.creditoPagador ?? 'CLIENTE') as Pagador }])));
     setRegistrarCompra(c.compraRegistrada || !(c.custoProdutos > 0) ? 'nao' : null);
     setCompraPaga(null);
   }, [c]);
@@ -116,14 +119,18 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
     mutationFn: () =>
       api.post<{ situacao: { nome: string }; compra?: { compra: { numero: number }; jaExistia: boolean; paga: boolean } | null }>(`/vendas/${vendaId}/finalizar`, {
         observacao: obs || undefined,
-        recebimentos: (c?.parcelas ?? []).map((p) => ({ parcelaId: p.id, formaPagamentoId: receb[p.id]?.formaPagamentoId || null, recebido: !!receb[p.id]?.recebido, contaFinanceiraId: receb[p.id]?.contaFinanceiraId || null })),
+        recebimentos: (c?.parcelas ?? []).map((p) => {
+          const credito = ehCredito(receb[p.id]?.formaPagamentoId);
+          return { parcelaId: p.id, formaPagamentoId: receb[p.id]?.formaPagamentoId || null, recebido: !credito && !!receb[p.id]?.recebido, contaFinanceiraId: credito ? null : receb[p.id]?.contaFinanceiraId || null, creditoPagador: credito ? receb[p.id]?.creditoPagador ?? 'CLIENTE' : null };
+        }),
         compra:
           registrarCompra === 'sim'
-            ? { fornecedorId, paga: compraPaga === 'sim', contaFinanceiraId: compraPaga === 'sim' ? contaCompra || null : null, vencimento: compraPaga === 'sim' ? undefined : vencCompra }
+            ? { fornecedorId, paga: compraPaga === 'sim', creditoBancario: compraPaga === 'credito', contaFinanceiraId: compraPaga === 'sim' ? contaCompra || null : null, vencimento: compraPaga === 'nao' ? vencCompra : undefined }
             : undefined,
       }),
     onSuccess: (r) => {
-      const compra = r.compra && !r.compra.jaExistia ? ` Compra nº ${r.compra.compra.numero} registrada${r.compra.paga ? ' e paga' : ' (a pagar)'}.` : '';
+      const compra = r.compra && !r.compra.jaExistia ? ` Compra nº ${r.compra.compra.numero} registrada${compraPaga === 'credito' ? ' e paga com o crédito bancário' : r.compra.paga ? ' e paga' : ' (a pagar)'}.` : '';
+      if (Object.values(receb).some((x) => ehCredito(x.formaPagamentoId)) || compraPaga === 'credito') qc.invalidateQueries({ queryKey: ['emprestimos'] });
       toast.success(`Venda nº ${numero} finalizada (${r.situacao.nome}).${compra}`);
       ['vendas', 'compras', 'dashboard-geral', 'painel-vendedor', 'contas-receber', 'contas-pagar', 'caixa', 'contas-financeiras', 'movimentos-fin'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       qc.invalidateQueries({ queryKey: ['venda', String(vendaId)] });
@@ -138,8 +145,10 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
   });
 
   const pode = !!c?.podeFinalizar && !c.jaFinalizada;
-  const faltaBanco = (c?.parcelas ?? []).some((p) => !receb[p.id]?.formaPagamentoId || (receb[p.id]?.recebido && !receb[p.id]?.contaFinanceiraId));
   const formaDe = (id: number | '' | undefined) => c?.formas.find((f) => f.id === id);
+  const ehCredito = (id: number | '' | undefined) => formaDe(id)?.tipo === 'CREDITO_BANCARIO';
+  const temFormaCredito = !!c?.formas.some((f) => f.tipo === 'CREDITO_BANCARIO');
+  const faltaBanco = (c?.parcelas ?? []).some((p) => !receb[p.id]?.formaPagamentoId || (!ehCredito(receb[p.id]?.formaPagamentoId) && receb[p.id]?.recebido && !receb[p.id]?.contaFinanceiraId));
   /** bancos que recebem a forma (se a forma não tem lista, todos) */
   const bancosDa = (id: number | '' | undefined) => {
     const f = formaDe(id);
@@ -150,7 +159,7 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
     const f = formaDe(formaId);
     const bancos = bancosDa(formaId);
     const banco = f?.contaFinanceiraId && bancos.some((b) => b.id === f.contaFinanceiraId) ? f.contaFinanceiraId : bancos.length === 1 ? bancos[0].id : '';
-    setReceb({ ...receb, [parcelaId]: { formaPagamentoId: formaId, recebido: !!f && PAGO_NA_HORA.includes(f.tipo), contaFinanceiraId: banco } });
+    setReceb({ ...receb, [parcelaId]: { formaPagamentoId: formaId, recebido: !!f && PAGO_NA_HORA.includes(f.tipo), contaFinanceiraId: banco, creditoPagador: receb[parcelaId]?.creditoPagador ?? 'CLIENTE' } });
   };
   const faltaCompra = registrarCompra === null || (registrarCompra === 'sim' && (compraPaga === null || (compraPaga === 'sim' && !contaCompra)));
   const opcoesContas = opcoesDe(contasFin);
@@ -190,6 +199,7 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
               {c.parcelas.map((p) => {
                 const r = receb[p.id] ?? { formaPagamentoId: '', recebido: false, contaFinanceiraId: '' };
                 const bancos = bancosDa(r.formaPagamentoId);
+                const credito = ehCredito(r.formaPagamentoId);
                 return (
                   <div key={p.id} className="space-y-2 p-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -197,14 +207,30 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
                         <b className="num">{moeda(p.valor)}</b>
                         {c.parcelas.length > 1 && <span className="text-slate-500"> · parcela {p.numero}</span>}
                       </span>
-                      <label className="flex items-center gap-2 text-slate-700">
-                        <input type="checkbox" className="h-4 w-4" checked={r.recebido} onChange={(e) => setReceb({ ...receb, [p.id]: { ...r, recebido: e.target.checked } })} />
-                        Já recebido
-                      </label>
+                      {!credito && (
+                        <label className="flex items-center gap-2 text-slate-700">
+                          <input type="checkbox" className="h-4 w-4" checked={r.recebido} onChange={(e) => setReceb({ ...receb, [p.id]: { ...r, recebido: e.target.checked } })} />
+                          Já recebido
+                        </label>
+                      )}
                     </div>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <Select aria-label="Forma de pagamento" label="Forma de pagamento" value={r.formaPagamentoId} onChange={(e) => trocarForma(p.id, e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(c.formas)} placeholder="Escolha…" />
-                      {r.recebido ? (
+                      {credito ? (
+                        <div>
+                          <span className="mb-1 block text-xs font-medium text-slate-600">Quem paga o crédito bancário?</span>
+                          <div className="inline-flex overflow-hidden rounded-md border border-slate-300 text-sm">
+                            {(['CLIENTE', 'LOJA'] as const).map((v) => (
+                              <button key={v} type="button" onClick={() => setReceb({ ...receb, [p.id]: { ...r, creditoPagador: v } })} className={(r.creditoPagador ?? 'CLIENTE') === v ? 'bg-brand-600 px-3 py-1.5 font-medium text-white' : 'bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-50'}>
+                                {v === 'CLIENTE' ? 'O cliente' : 'A loja'}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {(r.creditoPagador ?? 'CLIENTE') === 'CLIENTE' ? 'O cliente paga o boleto direto ao credor.' : 'O cliente paga a loja e a loja repassa ao credor.'} O valor entra no banco da forma e a devolução + juros vai para o contas a pagar.
+                          </p>
+                        </div>
+                      ) : r.recebido ? (
                         <div>
                           <span className="mb-1 block text-xs font-medium text-slate-600">Onde o dinheiro entrou</span>
                           <div className="flex flex-wrap gap-1.5">
@@ -259,8 +285,15 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
                     />
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-sm text-slate-700">A compra já está paga?</span>
-                      <SimNao valor={compraPaga} onChange={setCompraPaga} />
+                      <div className="inline-flex overflow-hidden rounded-md border border-slate-300 text-sm">
+                        {([['sim', 'Sim'], ['nao', 'Não'], ...(temFormaCredito ? [['credito', 'Crédito bancário']] : [])] as [EscolhaCompra, string][]).map(([v, rot]) => (
+                          <button key={v} type="button" onClick={() => setCompraPaga(v)} className={compraPaga === v ? 'bg-brand-600 px-3 py-1.5 font-medium text-white' : 'bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-50'}>
+                            {rot}
+                          </button>
+                        ))}
+                      </div>
                     </div>
+                    {compraPaga === 'credito' && <p className="text-xs text-slate-500">O credor paga o fornecedor e a devolução + juros vai para o contas a pagar (Financeiro › Empréstimos).</p>}
                     {compraPaga === 'sim' && <Select label="Banco de onde saiu o pagamento" value={contaCompra} onChange={(e) => setContaCompra(e.target.value ? Number(e.target.value) : '')} opcoes={opcoesContas} placeholder="—" />}
                     {compraPaga === 'nao' && <DateInput label="Vencimento do pagamento" value={vencCompra} onChange={setVencCompra} />}
                   </>

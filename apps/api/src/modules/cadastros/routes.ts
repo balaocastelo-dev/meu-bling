@@ -58,8 +58,11 @@ function registrarCrud<TC, TU>(app: FastifyInstance, def: CrudDef<TC, TU>) {
   app.put(`${base}/:id`, pre, async (req) => {
     const id = idDe(req);
     if (!(await def.obter(id))) throw new NotFound(def.entidade);
-    const body = def.schemaUpdate.parse(req.body);
-    await def.atualizar(id, body, req);
+    const lido = def.schemaUpdate.parse(req.body) as Record<string, unknown>;
+    // .partial() ainda aplica os defaults do schema: grava só o que veio no corpo (senão um PUT parcial zera campos)
+    const enviados = req.body && typeof req.body === 'object' ? new Set(Object.keys(req.body as object)) : null;
+    const body = (enviados ? Object.fromEntries(Object.entries(lido).filter(([k]) => enviados.has(k))) : lido) as typeof lido;
+    await def.atualizar(id, body as any, req);
     await auditar(req, def.entidade, id, 'ALTERAR', body);
     return def.obter(id);
   });
@@ -191,7 +194,7 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
   const formaComContas = <T extends { contasPermitidas: string | null }>(f: T) => ({ ...f, contasPermitidas: lerContasPermitidas(f.contasPermitidas) });
 
   // ---------------- Formas de pagamento
-  const TIPOS_FP = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA', 'CREDIARIO', 'OUTRO'] as const;
+  const TIPOS_FP = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA', 'CREDIARIO', 'CREDITO_BANCARIO', 'OUTRO'] as const;
   const formaSchema = z.object({
     nome: z.string().trim().min(2),
     tipo: z.enum(TIPOS_FP).default('OUTRO'),
@@ -201,6 +204,8 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
     maxParcelas: z.coerce.number().int().min(1).default(1),
     /** banco/conta onde o dinheiro desta forma cai */
     contaFinanceiraId: z.coerce.number().int().positive().nullable().optional(),
+    /** CREDITO_BANCARIO: quem empresta (ex.: Lumicred). Taxa = taxaPct, prazo = diasRecebimento */
+    credorId: z.coerce.number().int().positive().nullable().optional(),
     /** bancos que podem receber esta forma (a tela de finalizar só mostra estes) */
     contasPermitidas: z
       .array(z.coerce.number().int().positive())

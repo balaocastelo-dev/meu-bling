@@ -12,13 +12,15 @@ interface Props {
   onChange: (p: Parcela[]) => void;
   total: number;
   disabled?: boolean;
+  /** venda: na forma "Crédito bancário" pergunta quem paga o credor (cliente ou loja) */
+  pagadorCredito?: boolean;
 }
 
 /**
  * Editor de parcelas com gerador (nº, forma, 1º vencimento, intervalo).
  * Valida que a soma das parcelas = total.
  */
-export function ParcelasEditor({ parcelas, onChange, total, disabled }: Props) {
+export function ParcelasEditor({ parcelas, onChange, total, disabled, pagadorCredito }: Props) {
   const { data: formas } = useFormasPagamento();
   const [qtd, setQtd] = useState(1);
   const [formaId, setFormaId] = useState<number | ''>('');
@@ -119,6 +121,18 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled }: Props) {
                       </option>
                     ))}
                   </select>
+                  {pagadorCredito && formas?.find((f) => f.id === p.formaPagamentoId)?.tipo === 'CREDITO_BANCARIO' && (
+                    <select
+                      disabled={disabled}
+                      aria-label="Quem paga o crédito bancário"
+                      value={p.creditoPagador ?? 'CLIENTE'}
+                      onChange={(e) => atualizar(i, { creditoPagador: e.target.value as 'CLIENTE' | 'LOJA' })}
+                      className="input-base mt-1 h-8 py-0 text-xs"
+                    >
+                      <option value="CLIENTE">Cliente paga o credor</option>
+                      <option value="LOJA">Loja paga o credor</option>
+                    </select>
+                  )}
                 </td>
                 <td data-rotulo="Observações">
                   <input disabled={disabled} value={p.observacoes ?? ''} onChange={(e) => atualizar(i, { observacoes: e.target.value })} className="input-base h-8 py-0" placeholder="opcional" />

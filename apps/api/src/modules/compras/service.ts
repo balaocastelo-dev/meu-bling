@@ -11,6 +11,7 @@ import { historico, situacoesPermitidas, type ContextoAcao } from '../../core/si
 import { depositoPadraoId, movimentarEstoque, movimentaEstoque } from '../comum/estoque.js';
 import { cancelarContasPagar, categoriaPadraoId } from '../comum/financeiro.js';
 import { hojeMeioDia } from '../comum/datas.js';
+import { estornarCreditoBancarioCompra, lancarCreditoBancarioCompra } from '../emprestimos/credito.js';
 
 type Db = Tx | typeof prisma;
 
@@ -209,6 +210,8 @@ export async function acaoLancarContas(ctx: ContextoAcao) {
     await tx.compraParcela.update({ where: { id: p.id }, data: { contaPagarId: cp.id } });
   }
   await tx.compra.update({ where: { id }, data: { contasLancadas: true } });
+  // parcelas pagas com "Crédito bancário": o credor paga o fornecedor; a devolução + taxa vai para o contas a pagar
+  await lancarCreditoBancarioCompra(tx, id);
 }
 
 export async function acaoEstornarContas(ctx: ContextoAcao) {
@@ -216,6 +219,8 @@ export async function acaoEstornarContas(ctx: ContextoAcao) {
   const compra = await tx.compra.findUnique({ where: { id } });
   if (!compra) throw new NotFound('Compra');
   if (!compra.contasLancadas) return;
+  // crédito bancário: desfaz o pagamento ao fornecedor feito com o crédito e cancela a operação
+  await estornarCreditoBancarioCompra(tx, id);
   await cancelarContasPagar(tx, 'COMPRA', id);
   await tx.compra.update({ where: { id }, data: { contasLancadas: false } });
 }

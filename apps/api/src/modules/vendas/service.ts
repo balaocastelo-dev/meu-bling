@@ -14,6 +14,7 @@ import { acaoLancarContas as compraLancarContas, acaoLancarEstoque as compraLanc
 import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, lerContasPermitidas, recriarComissoes } from '../comum/financeiro.js';
 import { criarNotaPendente } from '../comum/nfe.js';
 import { hojeMeioDia } from '../comum/datas.js';
+import { estornarCreditoBancarioVenda, formaCreditoBancario, lancarCreditoBancarioVenda, TIPO_CREDITO_BANCARIO } from '../emprestimos/credito.js';
 import { carregarCfgCustos, custosVenda, type CfgCustos, type VendaParaCusto } from '../comum/custos-venda.js';
 import { baixarContaPagar, baixarContaReceber, saldoContaPagar, saldoContaReceber } from '../financeiro/service.js';
 import type { ItemInput, ParcelaInput, TipoVenda, VendaInput } from './schemas.js';
@@ -190,7 +191,7 @@ export function calcularTotais(itens: ItemCalculado[], v: { descontoTipo: string
 export async function montarParcelas(db: Db, parcelas: ParcelaInput[], total: number, dataBase: Date) {
   if (!parcelas.length) {
     const fp = await db.formaPagamento.findFirst({ where: { ativo: true }, orderBy: { id: 'asc' } });
-    return [{ numero: 1, dataVencimento: dataBase, valor: total, formaPagamentoId: fp?.id ?? null, observacoes: null as string | null }];
+    return [{ numero: 1, dataVencimento: dataBase, valor: total, formaPagamentoId: fp?.id ?? null, observacoes: null as string | null, creditoPagador: null as string | null }];
   }
   const lista = parcelas.map((p, i) => ({
     numero: i + 1,
@@ -198,6 +199,7 @@ export async function montarParcelas(db: Db, parcelas: ParcelaInput[], total: nu
     valor: arredondar(p.valor),
     formaPagamentoId: p.formaPagamentoId ?? null,
     observacoes: p.observacoes ?? null,
+    creditoPagador: p.creditoPagador ?? null,
   }));
   const soma = arredondar(lista.reduce((s, p) => s + p.valor, 0));
   const diff = arredondar(total - soma);
@@ -513,6 +515,8 @@ export async function acaoLancarContas(ctx: ContextoAcao) {
     ]);
   }
   await tx.venda.update({ where: { id }, data: { contasLancadas: true } });
+  // parcelas pagas com "Crédito bancário" (Lumicred) viram empréstimo: dinheiro no banco, devolução no contas a pagar
+  await lancarCreditoBancarioVenda(tx, id);
 }
 
 export async function acaoEstornarContas(ctx: ContextoAcao) {
@@ -522,6 +526,8 @@ export async function acaoEstornarContas(ctx: ContextoAcao) {
   if (!venda.contasLancadas) return;
   // recebimentos automáticos ("pago na hora") são desfeitos junto; baixas manuais continuam bloqueando
   await desfazerRecebimentoPagoNaHora(tx, id);
+  // crédito bancário: cancela a operação (bloqueia se o credor já foi pago)
+  await estornarCreditoBancarioVenda(tx, id);
   await cancelarContasReceber(tx, 'VENDA', id);
   await cancelarComissoes(tx, { origemTipo: 'VENDA', vendaId: id });
   await tx.venda.update({ where: { id }, data: { contasLancadas: false } });
@@ -916,6 +922,8 @@ export interface CompraDaVendaInput {
   contaFinanceiraId?: number | null;
   /** vencimento quando ainda não foi paga (padrão: hoje) */
   vencimento?: Date | null;
+  /** paga com a forma "Crédito bancário": o credor paga o fornecedor e a devolução + taxa vai para o contas a pagar */
+  creditoBancario?: boolean | null;
 }
 
 /**
@@ -937,7 +945,10 @@ export async function registrarCompraDaVenda(vendaId: number, p: CompraDaVendaIn
   if (p.fornecedorId && !(await prisma.contato.findUnique({ where: { id: p.fornecedorId }, select: { id: true } }))) throw new AppError('Fornecedor não encontrado.', 422, 'FORNECEDOR');
   const fornecedorId = p.fornecedorId || (await fornecedorNaoInformadoId(prisma));
   const hoje = hojeMeioDia();
-  const vencimento = p.paga ? hoje : p.vencimento || hoje;
+  const formaCredito = p.creditoBancario ? await formaCreditoBancario() : null;
+  if (p.creditoBancario && !formaCredito) throw new AppError('Cadastre a forma de pagamento "Crédito bancário" para pagar a compra com o crédito.', 422, 'FORMA_PAGAMENTO', { link: '/configuracoes/formas-pagamento' });
+  if (formaCredito) p = { ...p, paga: false };
+  const vencimento = p.paga || formaCredito ? hoje : p.vencimento || hoje;
   const marca = marcaCompraDaVenda(venda.numero);
 
   const compra = await prisma.$transaction(async (tx) => {
@@ -955,7 +966,7 @@ export async function registrarCompraDaVenda(vendaId: number, p: CompraDaVendaIn
         total,
         observacoesInternas: marca,
         itens: { create: linhas },
-        parcelas: { create: [{ numero: 1, dataVencimento: vencimento, valor: total }] },
+        parcelas: { create: [{ numero: 1, dataVencimento: vencimento, valor: total, formaPagamentoId: formaCredito?.id ?? null }] },
       },
     });
     await tx.historicoSituacao.create({ data: { entidadeTipo: 'COMPRA', entidadeId: c.id, paraSituacaoId: fechado.id, paraSituacao: fechado.nome, usuarioId, observacao: marca } });
@@ -1003,6 +1014,8 @@ export interface RecebimentoFinalizacao {
   recebido: boolean;
   /** banco/conta onde o dinheiro entrou */
   contaFinanceiraId?: number | null;
+  /** forma "Crédito bancário": quem paga o credor */
+  creditoPagador?: 'CLIENTE' | 'LOJA' | null;
 }
 
 /** Parcelas da venda com a conta sugerida (banco da forma de pagamento) e onde já foi recebida, para a tela de finalizar. */
@@ -1025,6 +1038,8 @@ export async function parcelasParaFinalizar(vendaId: number, db: Db = prisma) {
       recebida,
       contaAtualId: recebida ? p.contaReceber!.contaFinanceiraId : null,
       contaSugeridaId: (recebida ? p.contaReceber!.contaFinanceiraId : null) || p.formaPagamento?.contaFinanceiraId || contaPadrao,
+      /** forma "Crédito bancário": quem paga o credor */
+      creditoPagador: p.creditoPagador ?? 'CLIENTE',
       /** o que a tela já deixa marcado: pago na hora (dinheiro/PIX/cartão/transferência) = recebido */
       recebidoSugerido: recebida || pagoNaHora,
     };
@@ -1063,6 +1078,18 @@ export async function aplicarRecebimentosFinalizacao(vendaId: number, lista: Rec
       const movs = await tx.movimentoFinanceiro.findMany({ where: { contaReceberId: cr.id } });
       const soAutomatico = movs.every((m) => m.observacoes === OBS_PAGO_NA_HORA);
       if (!soAutomatico) continue; // recebimento lançado à mão: respeita
+      // crédito bancário: o dinheiro vem do credor (empréstimo); o boleto do cliente fica em aberto
+      const formaAtual = p.formaPagamentoId ? await tx.formaPagamento.findUnique({ where: { id: p.formaPagamentoId }, select: { tipo: true } }) : null;
+      if (formaAtual?.tipo === TIPO_CREDITO_BANCARIO) {
+        await tx.vendaParcela.update({ where: { id: p.id }, data: { creditoPagador: r.creditoPagador ?? p.creditoPagador ?? 'CLIENTE' } });
+        for (const m of movs) {
+          await tx.contaFinanceira.update({ where: { id: m.contaFinanceiraId }, data: { saldoAtual: { decrement: arredondar(m.valor) } } });
+          await tx.movimentoFinanceiro.delete({ where: { id: m.id } });
+        }
+        if (movs.length) await tx.contaReceber.update({ where: { id: cr.id }, data: { valorRecebido: 0, juros: 0, desconto: 0, situacao: 'ABERTO', dataRecebimento: null } });
+        alterados++;
+        continue;
+      }
       const contaId = r.contaFinanceiraId || null;
       const jaCerto = r.recebido ? cr.situacao === 'RECEBIDO' && movs.length > 0 && movs.every((m) => m.contaFinanceiraId === contaId) : movs.length === 0;
       if (jaCerto) continue;
@@ -1081,6 +1108,8 @@ export async function aplicarRecebimentosFinalizacao(vendaId: number, lista: Rec
       }
       alterados++;
     }
+    // parcelas que ficaram com "Crédito bancário" viram empréstimo (ou mudam de quem paga)
+    await lancarCreditoBancarioVenda(tx, vendaId);
     return alterados;
   });
 }
@@ -1098,9 +1127,10 @@ export async function validarRecebimentosFinalizacao(vendaId: number, lista: Rec
     const p = parcelas.find((x) => x.id === r.parcelaId);
     if (!p) throw new AppError('Parcela não pertence a esta venda.', 422, 'PARCELA');
     const formaId = r.formaPagamentoId || p.formaPagamentoId;
-    const forma = formaId ? await db.formaPagamento.findUnique({ where: { id: formaId }, select: { nome: true, contasPermitidas: true, ativo: true } }) : null;
+    const forma = formaId ? await db.formaPagamento.findUnique({ where: { id: formaId }, select: { nome: true, tipo: true, contasPermitidas: true, ativo: true } }) : null;
     if (!forma) throw new AppError(`Parcela ${p.numero}: escolha a forma de pagamento.`, 422, 'FORMA_PAGAMENTO');
-    if (!r.recebido) continue;
+    // crédito bancário: o banco é o da forma (o dinheiro vem do credor), não há "já recebido"
+    if (!r.recebido || forma.tipo === TIPO_CREDITO_BANCARIO) continue;
     if (!r.contaFinanceiraId) throw new AppError(`Parcela ${p.numero}: escolha onde o dinheiro entrou.`, 422, 'SEM_CONTA_FINANCEIRA');
     const conta = await db.contaFinanceira.findFirst({ where: { id: r.contaFinanceiraId, ativo: true }, select: { id: true } });
     if (!conta) throw new AppError(`Parcela ${p.numero}: banco não encontrado.`, 422, 'SEM_CONTA_FINANCEIRA');

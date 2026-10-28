@@ -422,11 +422,13 @@ export default async function vendasRoutes(app: FastifyInstance) {
             paga: z.boolean(),
             contaFinanceiraId: z.coerce.number().int().positive().nullish(),
             vencimento: dataSchema.nullish(),
+            /** compra paga com a forma "Crédito bancário" (Lumicred paga; devolução + taxa no contas a pagar) */
+            creditoBancario: z.boolean().nullish(),
           })
           .nullish(),
         /** onde entrou o dinheiro de cada parcela (ou se fica em aberto) */
         recebimentos: z
-          .array(z.object({ parcelaId: z.coerce.number().int().positive(), formaPagamentoId: z.coerce.number().int().positive().nullish(), recebido: z.boolean(), contaFinanceiraId: z.coerce.number().int().positive().nullish() }))
+          .array(z.object({ parcelaId: z.coerce.number().int().positive(), formaPagamentoId: z.coerce.number().int().positive().nullish(), recebido: z.boolean(), contaFinanceiraId: z.coerce.number().int().positive().nullish(), creditoPagador: z.enum(['CLIENTE', 'LOJA']).nullish() }))
           .nullish(),
       })
       .parse(req.body ?? {});
@@ -654,7 +656,7 @@ function mesclarComAtual(atual: Awaited<ReturnType<typeof carregarVenda>>, body:
     quantidadeVolumes: atual.quantidadeVolumes,
     pesoBruto: atual.pesoBruto,
     itens: atual.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct, custoUnitario: i.custoInformado ? i.custoUnitario : null })),
-    parcelas: atual.parcelas.map((p) => ({ dataVencimento: p.dataVencimento, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes })),
+    parcelas: atual.parcelas.map((p) => ({ dataVencimento: p.dataVencimento, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes, creditoPagador: p.creditoPagador })),
   };
   const { situacaoId: _s, tipo: _t, ...resto } = body;
   for (const [k, v] of Object.entries(resto)) if (v !== undefined) base[k] = v;
