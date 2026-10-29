@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 1220" width="860" height="1220" role="img" aria-label="Tablet">
+  <defs>
+    <linearGradient id="corpo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4b5663"/>
+      <stop offset=".28" stop-color="#2f3843"/>
+      <stop offset=".62" stop-color="#242c35"/>
+      <stop offset="1" stop-color="#394350"/>
+    </linearGradient>
+    <linearGradient id="chanfro" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".55"/>
+      <stop offset=".35" stop-color="#ffffff" stop-opacity=".06"/>
+      <stop offset=".7" stop-color="#ffffff" stop-opacity=".04"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity=".4"/>
+    </linearGradient>
+    <linearGradient id="luzTopo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".18"/>
+      <stop offset=".12" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="lente" cx=".36" cy=".3" r=".75">
+      <stop offset="0" stop-color="#6d8294"/>
+      <stop offset=".45" stop-color="#1b2229"/>
+      <stop offset="1" stop-color="#05080b"/>
+    </radialGradient>
+    <linearGradient id="moldura" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#000000" stop-opacity=".55"/>
+      <stop offset=".5" stop-color="#000000" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#000000" stop-opacity=".45"/>
+    </linearGradient>
+    <filter id="sombra" x="-20%" y="-12%" width="140%" height="130%">
+      <feDropShadow dx="0" dy="26" stdDeviation="26" flood-color="#0f172a" flood-opacity=".32"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#0f172a" flood-opacity=".25"/>
+    </filter>
+    <filter id="interna" x="-10%" y="-6%" width="120%" height="115%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- corpo do aparelho -->
+  <g filter="url(#sombra)">
+    <rect x="22" y="16" width="816" height="1188" rx="58" fill="url(#corpo)"/>
+    <rect x="22" y="16" width="816" height="1188" rx="58" fill="url(#luzTopo)"/>
+    <!-- chanfro: a quina polida que pega a luz -->
+    <rect x="23.25" y="17.25" width="813.5" height="1185.5" rx="57" fill="none" stroke="url(#chanfro)" stroke-width="2.5"/>
+    <rect x="26" y="20" width="808" height="1180" rx="55" fill="none" stroke="#0b1016" stroke-opacity=".5" stroke-width="1"/>
+  </g>
+
+  <!-- recorte do vidro: a tela entra por cima, no HTML -->
+  <rect x="56" y="50" width="748" height="1120" rx="26" fill="#0b1016"/>
+  <rect x="56" y="50" width="748" height="1120" rx="26" fill="none" stroke="url(#moldura)" stroke-width="6" filter="url(#interna)"/>
+  <rect x="57.5" y="51.5" width="745" height="1117" rx="25" fill="none" stroke="#ffffff" stroke-opacity=".07" stroke-width="1.5"/>
+
+  <!-- câmera e microfone -->
+  <circle cx="430" cy="33" r="8.5" fill="#10161d"/>
+  <circle cx="430" cy="33" r="6.5" fill="url(#lente)"/>
+  <circle cx="427.6" cy="30.8" r="1.7" fill="#cfe2ef" opacity=".65"/>
+  <circle cx="462" cy="33" r="2.2" fill="#0d131a"/>
+
+  <!-- botões da lateral: liga/desliga e volume -->
+  <rect x="836" y="150" width="4" height="64" rx="2" fill="#5a6775"/>
+  <rect x="836" y="250" width="4" height="46" rx="2" fill="#4e5a67"/>
+  <rect x="836" y="310" width="4" height="46" rx="2" fill="#4e5a67"/>
+</svg>

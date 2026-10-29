@@ -11,7 +11,44 @@
  * leva um ou dois segundos —, mas dá para conversar sem tocar no teclado.
  */
 
+import { api } from '@/lib/api';
+
 export const TTS_DISPONIVEL = typeof window !== 'undefined' && 'speechSynthesis' in window;
+
+// ---------------------------------------------------------------- a voz do Thiago
+/**
+ * A primeira escolha é a voz clonada dele, gerada no PC-servidor da loja e entregue
+ * pelo próprio sistema. Se o PC não responder, cai na voz do navegador sem drama —
+ * o JARVIS continua falando, só que com a voz de fábrica.
+ */
+let audioAtual: HTMLAudioElement | null = null;
+/** Quando a voz clonada falhou, espera um pouco antes de tentar de novo. */
+let semClonadaAte = 0;
+
+async function falarClonada(texto: string): Promise<boolean> {
+  if (Date.now() < semClonadaAte) return false;
+  const blob = await api.blobPost('/jarvis/voz', { texto });
+  if (!blob || blob.size < 100) {
+    semClonadaAte = Date.now() + 5 * 60_000; // não insiste a cada frase
+    return false;
+  }
+  semClonadaAte = 0;
+
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  audioAtual = audio;
+  await new Promise<void>((resolve) => {
+    const fim = () => {
+      URL.revokeObjectURL(url);
+      if (audioAtual === audio) audioAtual = null;
+      resolve();
+    };
+    audio.onended = fim;
+    audio.onerror = fim;
+    audio.play().catch(fim);
+  });
+  return true;
+}
 
 type RecCtor = new () => any;
 const RecognitionCtor: RecCtor | null =
@@ -114,19 +151,29 @@ export function prepararFala(texto: string): string {
 
 export function pararDeFalar() {
   if (TTS_DISPONIVEL) window.speechSynthesis.cancel();
+  if (audioAtual) {
+    audioAtual.pause();
+    audioAtual.onended?.(new Event('ended'));
+    audioAtual = null;
+  }
 }
 
 export function estaFalando(): boolean {
+  if (audioAtual && !audioAtual.paused) return true;
   return TTS_DISPONIVEL && window.speechSynthesis.speaking;
 }
 
 /** Fala um texto. A promessa resolve quando termina (ou se for interrompido). */
-export function falar(texto: string, opcoes: { velocidade?: number } = {}): Promise<void> {
-  if (!TTS_DISPONIVEL || !texto.trim()) return Promise.resolve();
+export async function falar(texto: string, opcoes: { velocidade?: number } = {}): Promise<void> {
+  if (!texto.trim()) return;
   pararDeFalar();
 
+  const pronto = prepararFala(texto);
+  if (await falarClonada(pronto)) return;
+  if (!TTS_DISPONIVEL) return;
+
   return new Promise((resolve) => {
-    const fala = new SpeechSynthesisUtterance(prepararFala(texto));
+    const fala = new SpeechSynthesisUtterance(pronto);
     const voz = escolherVoz();
     if (voz) fala.voice = voz;
     fala.lang = voz?.lang || 'pt-BR';

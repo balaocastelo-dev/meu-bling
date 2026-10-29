@@ -43,7 +43,10 @@ const EXEMPLOS = [
   'Onde estou perdendo margem?',
 ];
 
-export default function ChatJarvis() {
+/** O que a página de fora pode mandar o chat fazer (os atalhos do JARVIS). */
+export type ControleChat = { perguntar: (texto: string) => void; ligar: () => void };
+
+export default function ChatJarvis({ controle }: { controle?: { current: ControleChat | null } } = {}) {
   const qc = useQueryClient();
   const [conversaId, setConversaId] = useState<number | null>(null);
   const [texto, setTexto] = useState('');
@@ -244,6 +247,24 @@ export default function ChatJarvis() {
     if (p.length < 3 || enviar.isPending) return;
     enviar.mutate(p);
   };
+
+  // deixa os atalhos da página pedirem as coisas por aqui
+  useEffect(() => {
+    if (!controle) return;
+    controle.current = {
+      perguntar: (t: string) => {
+        if (enviar.isPending) {
+          toast.info('Espera ele terminar de responder.');
+          return;
+        }
+        enviar.mutate(t);
+      },
+      ligar: () => atender(),
+    };
+    return () => {
+      controle.current = null;
+    };
+  });
 
   return (
     <CardV18

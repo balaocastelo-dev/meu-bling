@@ -4,20 +4,37 @@
  * o feed de sugestões com Aceitar/Adiar/Recusar, o modo pergunta e o placar do JARVIS.
  * Estilo V18/Power BI: o mais importante no topo, detalhes embaixo.
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Bot, Clock, Landmark, RefreshCw, Send, Settings, Target, TrendingUp, Wallet } from 'lucide-react';
+import {
+  Bot,
+  CalendarClock,
+  Clock,
+  HandCoins,
+  Landmark,
+  PackageSearch,
+  PhoneCall,
+  RefreshCw,
+  Send,
+  Settings,
+  Tag,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
+} from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { Button, EmptyState, Input, Skeleton } from '@/components/ui';
 import { Aparecer, CardV18, FaixaKpis, KpiV18, PaginaV18, SecaoDetalhes, listaVariants } from '@/components/dashboard/v18';
 import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
 import { CORES, TooltipPadrao, eixoMoeda } from '@/components/compartilhados/graficos';
 import { CartaoSugestao, type SugestaoJarvis } from '@/components/dashboard/SugestoesJarvis';
-import ChatJarvis from '@/components/dashboard/ChatJarvis';
+import ChatJarvis, { type ControleChat } from '@/components/dashboard/ChatJarvis';
+import tabletPng from './tablet.svg';
 import { dataHora, moeda, percentual } from '@/lib/format';
 import './jarvis.css';
 
@@ -56,40 +73,114 @@ interface Placar {
   medidas: { regra: string; titulo: string; impactoEstimado: number | null; resultadoReal: number | null }[];
 }
 
+/** Os nove atalhos: o que o gestor mais pede, a um toque. */
+const ATALHOS: { icone: typeof Wallet; cor: string; titulo: string; dica: string; pergunta?: string; acao?: 'rodar' | 'ligar' }[] = [
+  {
+    icone: Wallet,
+    cor: 'bg-emerald-50 text-emerald-600',
+    titulo: 'Caixa livre',
+    dica: 'quanto sobra hoje',
+    pergunta: 'Quanto tenho de caixa livre hoje e o que mudou nos últimos 7 dias? Seja curto.',
+  },
+  {
+    icone: Target,
+    cor: 'bg-brand-50 text-brand-600',
+    titulo: 'O que fazer',
+    dica: '3 ações de maior impacto',
+    pergunta: 'Quais são as 3 ações de maior impacto no caixa que eu deveria fazer agora? Diga o valor estimado de cada uma.',
+  },
+  {
+    icone: HandCoins,
+    cor: 'bg-amber-50 text-amber-600',
+    titulo: 'Atrasados',
+    dica: 'crediário vencido',
+    pergunta: 'Quem está em atraso no crediário, quanto soma e quem são os 5 maiores? Pode preparar a cobrança por WhatsApp.',
+  },
+  {
+    icone: PackageSearch,
+    cor: 'bg-sky-50 text-sky-600',
+    titulo: 'Estoque parado',
+    dica: 'dinheiro preso',
+    pergunta: 'Qual estoque está parado há mais tempo e quanto dinheiro está preso nele? Sugira o que fazer com os 5 piores.',
+  },
+  {
+    icone: Tag,
+    cor: 'bg-violet-50 text-violet-600',
+    titulo: 'Avaliar usado',
+    dica: 'quanto pagar',
+    pergunta: 'Vou avaliar um usado para comprar no balcão. Me pergunte o que precisa saber e depois calcule quanto pagar pelas minhas regras.',
+  },
+  {
+    icone: CalendarClock,
+    cor: 'bg-rose-50 text-rose-600',
+    titulo: 'Contas da semana',
+    dica: 'o que vence em 7 dias',
+    pergunta: 'O que vence nos próximos 7 dias, quanto soma e sobra caixa para pagar tudo?',
+  },
+  {
+    icone: TrendingDown,
+    cor: 'bg-orange-50 text-orange-600',
+    titulo: 'Margem baixa',
+    dica: 'onde estou perdendo',
+    pergunta: 'Onde estou perdendo margem? Liste os produtos e vendas com margem mais baixa do mês.',
+  },
+  { icone: RefreshCw, cor: 'bg-slate-100 text-slate-600', titulo: 'Nova análise', dica: 'olhar a loja agora', acao: 'rodar' },
+  { icone: PhoneCall, cor: 'bg-emerald-50 text-emerald-600', titulo: 'Ligar', dica: 'conversar por voz', acao: 'ligar' },
+];
+
 /**
- * O aparelho onde o JARVIS atende.
- *
- * O chat é o mesmo componente do dashboard — aqui ele ganha corpo: bisel de
- * alumínio, vidro embutido, câmera e barra de status. Nada de imagem: tudo é
- * desenhado em CSS, para ficar nítido em qualquer tela.
+ * O posto do JARVIS: o aparelho em pé com a conversa dentro, e ao lado os nove
+ * atalhos. O tablet é uma imagem (tablet.svg) — o vidro é só um recorte por onde
+ * o chat aparece, nas medidas exatas do desenho.
  */
-function Tablet({ children }: { children: ReactNode }) {
+function PostoJarvis({ rodar, rodando }: { rodar: () => void; rodando: boolean }) {
   const [hora, setHora] = useState(() => new Date());
+  const controle = useRef<ControleChat | null>(null);
   useEffect(() => {
     const t = setInterval(() => setHora(new Date()), 30_000);
     return () => clearInterval(t);
   }, []);
 
+  const acionar = (a: (typeof ATALHOS)[number]) => {
+    if (a.acao === 'rodar') return rodar();
+    if (a.acao === 'ligar') return controle.current?.ligar();
+    if (a.pergunta) controle.current?.perguntar(a.pergunta);
+  };
+
   return (
-    <div className="jv-tablet">
-      <span className="jv-tablet-camera" aria-hidden>
-        <i />
-        <i />
-      </span>
-      <div className="jv-tablet-vidro">
-        <div className="jv-tablet-barra">
-          <span>
-            <b>JARVIS</b> · Balão da Informática
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="jv-tablet-hora">{hora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-            <span className="jv-tablet-ponto" aria-hidden />
-            <span>agente ativo</span>
-          </span>
+    <div className="jv-posto">
+      <div className="jv-aparelho">
+        <img src={tabletPng} alt="" />
+        <div className="jv-tela">
+          <div className="jv-barra">
+            <span>
+              <b>JARVIS</b> · Balão
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="jv-hora">{hora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+              <span className="jv-ponto" aria-hidden />
+            </span>
+          </div>
+          <ChatJarvis controle={controle} />
         </div>
-        {children}
       </div>
-      <div className="jv-tablet-home" aria-hidden />
+
+      <div>
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Atalhos</p>
+        <div className="jv-atalhos">
+          {ATALHOS.map((a) => (
+            <button key={a.titulo} type="button" className="jv-atalho" onClick={() => acionar(a)} disabled={a.acao === 'rodar' && rodando}>
+              <span className={`jv-icone ${a.cor}`}>
+                <a.icone className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <b className="block">{a.titulo}</b>
+                <span className="block">{a.dica}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -252,7 +343,7 @@ export default function Jarvis() {
 
   const blocos = [
     ...cheios.slice(0, 1),
-    { chave: 'chat', conteudo: <Tablet><ChatJarvis /></Tablet> },
+    { chave: 'chat', conteudo: <PostoJarvis rodar={() => rodar.mutate()} rodando={rodar.isPending} /> },
     ...cheios.slice(1),
     ...(vazios.length
       ? [{ chave: 'divisor', conteudo: <SecaoDetalhes titulo="Ainda sem dados" dica="assim que houver, sobem para o topo" /> }]
