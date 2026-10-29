@@ -4,9 +4,9 @@ Endereço: **www.balao.info/sistema/auditoria** (menu Configurações → Painel
 
 ## A senha do dia
 
-`56676009` + a data de hoje em **DDMMAAAA**, no fuso de São Paulo. Em 29/10/2026 a senha é `5667600929102026`; em 30/10/2026, `5667600930102026`. Depois da senha certa a aba fica liberada por 4 h (token próprio no cabeçalho `x-auditoria`, guardado só naquela aba do navegador). Cada tentativa, certa ou errada, fica registrada na própria trilha; 10 tentativas por minuto no máximo; três erradas no dia viram achado alto.
+O **prefixo combinado com o Thiago** + a data de hoje em **DDMMAAAA**, no fuso de São Paulo (ex.: prefixo `1234` em 30/10/2026 → `123430102026`). Depois da senha certa a aba fica liberada por 4 h (token próprio no cabeçalho `x-auditoria`, guardado só naquela aba do navegador). Cada tentativa, certa ou errada, fica registrada na própria trilha; 10 tentativas por minuto no máximo; três erradas no dia viram achado alto.
 
-- Trocar o prefixo: `Configuracao` chave `auditoria.prefixoSenha`, ou a variável `AUDITORIA_PREFIXO_SENHA` no `/etc/meu-bling.env`.
+- O prefixo padrão está em `modules/auditoria/acesso.ts`; para trocar sem mexer no código: `Configuracao` chave `auditoria.prefixoSenha`, ou a variável `AUDITORIA_PREFIXO_SENHA` no `/etc/meu-bling.env`.
 - Chave de API (outros sistemas, agentes MCP) **nunca** abre o painel, mesmo com permissão de "sistema". Gerente, vendedor, técnico e financeiro também não, nem com a senha.
 
 ## O que o painel mostra
