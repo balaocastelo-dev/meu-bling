@@ -120,6 +120,30 @@ async function main() {
   verifica(fechadaSozinha?.status === 'RESOLVIDA', 'resolvida fora do robô some da lista', fechadaSozinha?.status);
   await db.venda.update({ where: { id: v3.id }, data: { vendedorId: vend.id } }); // deixa o banco limpo para a integridade
 
+  secao('Pedido em aberto antigo que veio do Bling: "Marcar como Fechada" sem mexer no caixa');
+  const vb = await V.post('/vendas', { contatoId: cli.id, data: hoje(), itens: [{ produtoId: prod.id, descricao: prod.nome, quantidade: 1, valorUnitario: 50 }], parcelas: [{ dataVencimento: hoje(), valor: 50, formaPagamentoId: pix.id }] }, 201);
+  await new Promise((r) => setTimeout(r, 800));
+  // como veio da importação: em aberto, sem nada lançado, data antiga
+  await db.contaReceber.deleteMany({ where: { origemTipo: 'VENDA', origemId: vb.id } });
+  await db.vendaParcela.updateMany({ where: { vendaId: vb.id }, data: { contaReceberId: null } });
+  const emAberto = await db.situacao.findFirst({ where: { modulo: 'VENDA', final: false, cancelamento: false, ativo: true }, orderBy: { ordem: 'asc' } });
+  await db.venda.update({ where: { id: vb.id }, data: { blingId: `BLING-SAUDE-${SUF}`, situacaoId: emAberto!.id, contasLancadas: false, estoqueLancado: false, data: new Date(Date.now() - 40 * 86400000) } });
+  for (const c of await db.contaFinanceira.findMany()) {
+    const somas = await db.movimentoFinanceiro.groupBy({ by: ['tipo'], where: { contaFinanceiraId: c.id }, _sum: { valor: true } });
+    const movs = somas.reduce((t, s) => t + (s.tipo === 'ENTRADA' ? 1 : -1) * (s._sum.valor || 0), 0);
+    await db.contaFinanceira.update({ where: { id: c.id }, data: { saldoAtual: Math.round((c.saldoInicial + movs) * 100) / 100 } });
+  }
+  p = await adm.post('/robo-saude/rodar');
+  const sb = (p.abertas as any[]).find((a) => a.chave === `venda-aberta-antiga:venda:${vb.id}`);
+  const fb = sb?.acoes?.find((a: any) => a.codigo === 'fechar-bling');
+  verifica(fb && fb.lote && sb.acoes[0].codigo === 'fechar-bling', 'botão principal é "Marcar como Fechada" (cancelar fica em segundo)', sb?.acoes);
+  if (sb) await adm.post(`/robo-saude/avisos/${sb.id}/executar`, { acao: 'fechar-bling' });
+  await new Promise((r) => setTimeout(r, 800));
+  const vb2 = await db.venda.findUnique({ where: { id: vb.id }, include: { situacao: true } });
+  const crb = await db.contaReceber.count({ where: { origemTipo: 'VENDA', origemId: vb.id } });
+  verifica(vb2?.situacao.final && !vb2.situacao.cancelamento, 'venda do Bling ficou Fechada', vb2?.situacao.nome);
+  verifica(!vb2?.contasLancadas && !vb2?.estoqueLancado && crb === 0, 'sem lançar caixa nem estoque de novo', { contas: vb2?.contasLancadas, estoque: vb2?.estoqueLancado, crb });
+
   secao('Desligar e religar');
   await adm.put('/robo-saude/config', { autoCorrigir: false });
   verifica((await adm.get('/robo-saude')).config.autoCorrigir === false, 'auto-correção desligada');

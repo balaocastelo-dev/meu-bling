@@ -486,22 +486,43 @@ const corretores: Corretor[] = [
       const { cancel, final } = await situacoesVenda();
       const vs = await prisma.venda.findMany({
         where: { tipo: 'PEDIDO', situacaoId: { notIn: [...cancel, ...final] }, data: { lt: new Date(Date.now() - 7 * 86400000) } },
-        select: { id: true, numero: true, data: true, total: true, situacao: { select: { nome: true } } },
+        select: { id: true, numero: true, data: true, total: true, blingId: true, situacao: { select: { nome: true } } },
         orderBy: { data: 'asc' },
-        take: 60,
+        take: 300,
       });
       return vs.map((v) => ({
         alvo: `venda:${v.id}`,
         nivel: 'aviso',
         area: 'Vendas',
-        titulo: `Venda nº ${v.numero} "${v.situacao.nome}" desde ${v.data.toLocaleDateString('pt-BR')} (${brl(v.total)})`,
-        mensagem: 'Feche (abre a venda para finalizar) ou cancele com um clique.',
+        titulo: `Venda nº ${v.numero} "${v.situacao.nome}" desde ${v.data.toLocaleDateString('pt-BR')} (${brl(v.total)})${v.blingId ? ' — veio do Bling' : ''}`,
+        mensagem: v.blingId
+          ? 'Pedido em aberto que veio do Bling: pela regra da migração conta como fechado. Um clique marca "Fechada" sem mexer no caixa nem no estoque (o dinheiro já entrou na data dele).'
+          : 'Feche (abre a venda para finalizar) ou cancele com um clique.',
         link: `/vendas/${v.id}`,
-        dados: { vendaId: v.id, numero: v.numero },
+        dados: { vendaId: v.id, numero: v.numero, bling: !!v.blingId },
       }));
     },
-    acoes: (a) => [{ codigo: 'cancelar', rotulo: 'Cancelar venda', estilo: 'perigo', confirmar: `Cancelar a venda nº ${a.dados!.numero}? (estoque e contas são estornados)` }],
+    acoes: (a) => [
+      ...(a.dados!.bling ? [{ codigo: 'fechar-bling', rotulo: 'Marcar como Fechada', estilo: 'primario' as const, lote: true }] : []),
+      { codigo: 'cancelar', rotulo: 'Cancelar venda', estilo: 'perigo', confirmar: `Cancelar a venda nº ${a.dados!.numero}? (estoque e contas são estornados)` },
+    ],
     executar: async (codigo, d, usuarioId) => {
+      if (codigo === 'fechar-bling') {
+        // regra da migração: pedido em aberto do Bling = fechado. Só troca a situação (sem lançar contas/estoque:
+        // o caixa da data já veio na importação) e registra no histórico da venda.
+        const v = await prisma.venda.findUnique({ where: { id: Number(d.vendaId) }, include: { situacao: true } });
+        if (!v?.blingId) throw new AppError('Só vale para pedido que veio do Bling.', 422);
+        const fechada = await prisma.situacao.findFirst({ where: { modulo: 'VENDA', nome: 'Fechada', ativo: true } })
+          ?? await prisma.situacao.findFirst({ where: { modulo: 'VENDA', final: true, cancelamento: false, ativo: true }, orderBy: { ordem: 'asc' } });
+        if (!fechada) throw new AppError('Não há situação "Fechada" cadastrada.', 422);
+        if (v.situacaoId === fechada.id) return `Venda nº ${d.numero} já estava Fechada.`;
+        await prisma.$transaction(async (tx) => {
+          await tx.venda.update({ where: { id: v.id }, data: { situacaoId: fechada.id } });
+          await tx.historicoSituacao.create({ data: { entidadeTipo: 'VENDA', entidadeId: v.id, deSituacaoId: v.situacaoId, deSituacao: v.situacao.nome, paraSituacaoId: fechada.id, paraSituacao: fechada.nome, usuarioId, observacao: `${ROBO}: pedido em aberto do Bling marcado como Fechado (regra da migração; sem lançar caixa/estoque)` } });
+        });
+        // sem emitir 'venda.alterada': o "pago na hora" lançaria de novo um dinheiro que já entrou na importação
+        return `Venda nº ${d.numero} (do Bling) marcada como Fechada.`;
+      }
       if (codigo !== 'cancelar') throw new AppError('Ação desconhecida.', 422);
       const { destinoCancelar } = await situacoesVenda();
       if (!destinoCancelar) throw new AppError('Não há situação de cancelamento cadastrada.', 422);
