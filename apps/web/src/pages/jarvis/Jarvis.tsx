@@ -17,15 +17,19 @@ import { Aparecer, CardV18, FaixaKpis, KpiV18, PaginaV18, SecaoDetalhes, listaVa
 import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
 import { CORES, TooltipPadrao, eixoMoeda } from '@/components/compartilhados/graficos';
 import { CartaoSugestao, type SugestaoJarvis } from '@/components/dashboard/SugestoesJarvis';
+import ChatJarvis from '@/components/dashboard/ChatJarvis';
 import { dataHora, moeda, percentual } from '@/lib/format';
 
 interface Painel {
   caixaLivre: number;
+  compromissosTotais: number;
   saldoBancos: number;
   saldoCaixa: number;
   aPagar30d: number;
-  caixinhas: number;
-  emprestimos: number;
+  caixinhasDevidas: number;
+  caixinhasFuturas: number;
+  emprestimos30d: number;
+  emprestimosDepois: number;
   meta: number;
   falta: number;
   percentual: number;
@@ -55,8 +59,6 @@ export default function Jarvis() {
   const qc = useQueryClient();
   const nav = useNavigate();
   const { periodo, setPeriodo, custom, setCustom, dataInicial, dataFinal, faixa } = usePeriodoDashboard('30d');
-  const [pergunta, setPergunta] = useState('');
-  const [resposta, setResposta] = useState<string | null>(null);
 
   const { data: p, isLoading } = useQuery({
     queryKey: ['jarvis-painel'],
@@ -85,20 +87,14 @@ export default function Jarvis() {
 
   const decidirM = useMutation({
     mutationFn: ({ id, o }: { id: number; o: 'aceitar' | 'adiar' | 'recusar' }) =>
-      api.post(`/jarvis/sugestoes/${id}/${o}`, o === 'adiar' ? { dias: 7 } : {}),
-    onSuccess: () => {
+      api.post<{ feito?: string | null }>(`/jarvis/sugestoes/${id}/${o}`, o === 'adiar' ? { dias: 7 } : {}),
+    onSuccess: (r, v) => {
+      // quando a sugestão tem ação (cobrar, dar desconto), o JARVIS conta o que fez
+      if (r?.feito) toast.success(r.feito, { duration: 8000 });
+      else toast.success(v.o === 'aceitar' ? 'Aceita.' : v.o === 'adiar' ? 'Adiada por 7 dias.' : 'Recusada.');
       qc.invalidateQueries({ queryKey: ['jarvis-painel'] });
       qc.invalidateQueries({ queryKey: ['jarvis-placar'] });
       qc.invalidateQueries({ queryKey: ['jarvis-feed'] });
-    },
-    onError: (e) => toast.error(mensagemErro(e)),
-  });
-
-  const perguntar = useMutation({
-    mutationFn: () => api.post<{ resposta: string }>('/jarvis/perguntar', { pergunta }),
-    onSuccess: (r) => {
-      setResposta(r.resposta);
-      setPergunta('');
     },
     onError: (e) => toast.error(mensagemErro(e)),
   });
@@ -167,6 +163,14 @@ export default function Jarvis() {
         />
       </FaixaKpis>
 
+      {p && (p.caixinhasFuturas > 0 || p.emprestimosDepois > 0) && (
+        <Aparecer className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 ring-1 ring-slate-200">
+          Olhando além dos 30 dias, ainda há {moeda(p.caixinhasFuturas)} a guardar nas caixinhas e{' '}
+          {moeda(p.emprestimosDepois)} de empréstimos a devolver — com tudo isso na conta, os compromissos totais dão{' '}
+          <strong className={p.compromissosTotais < 0 ? 'text-rose-600' : 'text-slate-900'}>{moeda(p.compromissosTotais)}</strong>.
+        </Aparecer>
+      )}
+
       {/* ===== sugestões: o que fazer agora ===== */}
       <CardV18
         titulo="O que fazer agora"
@@ -194,31 +198,8 @@ export default function Jarvis() {
         )}
       </CardV18>
 
-      {/* ===== modo pergunta ===== */}
-      <CardV18 titulo="Perguntar ao JARVIS" descricao="Ex.: o que faço com R$ 20 mil que entraram hoje?" icone={<Send className="h-4 w-4" />}>
-        <div className="flex flex-wrap items-end gap-2">
-          <Input
-            className="min-w-0 flex-1"
-            label="Sua pergunta"
-            value={pergunta}
-            onChange={(e) => setPergunta(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && pergunta.trim().length > 2) perguntar.mutate();
-            }}
-            placeholder="O que faço com o dinheiro que entrou hoje?"
-          />
-          <Button
-            variante="primario"
-            icone={<Send className="h-4 w-4" />}
-            carregando={perguntar.isPending}
-            disabled={pergunta.trim().length < 3}
-            onClick={() => perguntar.mutate()}
-          >
-            Perguntar
-          </Button>
-        </div>
-        {resposta && <p className="mt-3 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-sm text-slate-700 ring-1 ring-slate-200">{resposta}</p>}
-      </CardV18>
+      {/* ===== chat ===== */}
+      <ChatJarvis />
 
       <SecaoDetalhes dica="role para ver a evolução e o placar" />
 
@@ -250,11 +231,17 @@ export default function Jarvis() {
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           <Conta rotulo="Saldo dos bancos" valor={p?.saldoBancos} tom="positivo" />
           <Conta rotulo="Caixa da loja" valor={p?.saldoCaixa} tom="positivo" />
-          <Conta rotulo="A pagar nos próximos 30 dias" valor={p?.aPagar30d} tom="negativo" />
-          <Conta rotulo="Ainda a guardar nas caixinhas" valor={p?.caixinhas} tom="negativo" />
-          <Conta rotulo="Empréstimos a devolver" valor={p?.emprestimos} tom="negativo" />
+          <Conta rotulo="Contas a pagar em 30 dias" valor={p?.aPagar30d} tom="negativo" />
+          <Conta rotulo="Caixinhas a usar em 30 dias (+ atraso das distantes)" valor={p?.caixinhasDevidas} tom="negativo" />
+          <Conta rotulo="Empréstimos que vencem em 30 dias" valor={p?.emprestimos30d} tom="negativo" />
           <Conta rotulo="= Caixa livre" valor={p?.caixaLivre} tom="total" />
         </div>
+        <p className="mt-3 text-xs text-slate-500">
+          O caixa livre olha os próximos 30 dias — é com ele que dá para decidir o que fazer hoje. Caixinha que será
+          usada nesse prazo entra inteira; as mais distantes entram só pelo que já deveria estar guardado. O resto
+          ({moeda(p?.caixinhasFuturas ?? 0)} de caixinhas e {moeda(p?.emprestimosDepois ?? 0)} de empréstimos) aparece
+          nos compromissos totais, logo abaixo dos números do topo.
+        </p>
       </CardV18>
 
       {/* ===== placar ===== */}

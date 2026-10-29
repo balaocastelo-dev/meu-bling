@@ -100,6 +100,21 @@ docker run -d \
   --memory="$MEMORIA" \
   "$CONTAINER"
 
+# Um QR Code só: o sistema precisa alcançar o servidor Evolution (que fica na rede do
+# compose dele). Sem isso, Configurações → WhatsApp não consegue falar com o servidor.
+REDE_EVOLUTION="${REDE_EVOLUTION:-balaoevo_default}"
+if docker network inspect "$REDE_EVOLUTION" >/dev/null 2>&1; then
+  if docker inspect "$CONTAINER" --format '{{json .NetworkSettings.Networks}}' | grep -q "$REDE_EVOLUTION"; then
+    echo "já está na rede $REDE_EVOLUTION"
+  else
+    docker network connect "$REDE_EVOLUTION" "$CONTAINER" 2>/dev/null \
+      && echo "ligado à rede $REDE_EVOLUTION (WhatsApp com um QR Code só)" \
+      || echo "não consegui ligar à rede $REDE_EVOLUTION — configure o endereço do servidor pelo IP em Configurações → WhatsApp"
+  fi
+else
+  echo "rede $REDE_EVOLUTION não existe nesta VPS — o WhatsApp segue com a sessão própria do sistema"
+fi
+
 msg "TURN (coturn) para as chamadas de voz/vídeo de fora da loja"
 # Servidor de passagem do WebRTC: quando o navegador de alguém na rua/em casa não consegue falar direto com o outro,
 # o áudio/vídeo passa por aqui. Credenciais temporárias (use-auth-secret) geradas pela API com o TURN_SECRET.

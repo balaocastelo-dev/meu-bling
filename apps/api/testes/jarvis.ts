@@ -55,13 +55,33 @@ async function main() {
   const longe = await adm.get('/jarvis/painel');
   verifica(igual(longe.aPagar30d, depois.aPagar30d), 'conta para daqui a 90 dias fica de fora dos 30 dias', longe.aPagar30d);
 
-  // caixinha ainda por completar também segura o caixa livre
+  // caixinha para daqui a 20 dias: o dinheiro sai dentro da janela de 30 dias, então já não é livre
   await adm.post('/caixinhas', { nome: `JARVIS 13º ${SUF}`, valorMeta: 3_000, dataUso: daqui(20), contaFinanceiraId: banco.id }, 201);
   const comCaixinha = await adm.get('/jarvis/painel');
   verifica(
-    igual(comCaixinha.caixinhas - longe.caixinhas, 3_000) && igual(longe.caixaLivre - comCaixinha.caixaLivre, 3_000),
-    'caixinha de 3.000 por completar sai do caixa livre',
-    { caixinhas: comCaixinha.caixinhas, caixaLivre: comCaixinha.caixaLivre },
+    igual(longe.caixaLivre - comCaixinha.caixaLivre, 3_000),
+    'caixinha que será usada dentro de 30 dias sai inteira do caixa livre',
+    { antes: longe.caixaLivre, depois: comCaixinha.caixaLivre, atrasadas: comCaixinha.caixinhasDevidas },
+  );
+
+  // caixinha distante (6 meses): só o ritmo já vencido pesa hoje; o resto fica para depois
+  const antesLonge = await adm.get('/jarvis/painel');
+  await adm.post('/caixinhas', { nome: `JARVIS Reforma ${SUF}`, valorMeta: 12_000, dataUso: daqui(180), contaFinanceiraId: banco.id }, 201);
+  const comLonge = await adm.get('/jarvis/painel');
+  verifica(
+    igual(comLonge.caixaLivre, antesLonge.caixaLivre),
+    'caixinha de 6 meses, recém-criada, não mexe no caixa livre de hoje',
+    { antes: antesLonge.caixaLivre, depois: comLonge.caixaLivre },
+  );
+  verifica(
+    igual(comLonge.caixinhasFuturas - antesLonge.caixinhasFuturas, 12_000),
+    'mas os 12.000 ficam como compromisso para depois',
+    { futuras: comLonge.caixinhasFuturas },
+  );
+  verifica(
+    igual(antesLonge.compromissosTotais - comLonge.compromissosTotais, 12_000),
+    'e entram nos compromissos totais',
+    { antes: antesLonge.compromissosTotais, depois: comLonge.compromissosTotais },
   );
 
   secao('Mapa do milhão: falta e ritmo por dia útil');
@@ -80,6 +100,26 @@ async function main() {
   const mapa = painel.sugestoes.find((s: any) => s.regra === 'MAPA_MILHAO');
   verifica(!!mapa, 'o mapa do milhão aparece todo dia', mapa?.titulo);
 
+  secao('Caixa livre: curto prazo e compromissos totais são leituras diferentes');
+  verifica(
+    typeof comCaixinha.compromissosTotais === 'number' && comCaixinha.compromissosTotais <= comCaixinha.caixaLivre,
+    'compromissos totais nunca passam do caixa livre (eles descontam o que vem depois)',
+    { caixaLivre: comCaixinha.caixaLivre, totais: comCaixinha.compromissosTotais },
+  );
+
+  secao('Cobrar por WhatsApp: aceitar a sugestão enfileira a cobrança de verdade');
+  const painelC = await adm.get('/jarvis/painel');
+  const cobranca = painelC.sugestoes.find((x: any) => x.acao === 'COBRAR_WHATSAPP');
+  if (cobranca) {
+    const antesFila = await adm.get('/notificacoes?limite=1');
+    const r2 = await adm.post(`/jarvis/sugestoes/${cobranca.id}/aceitar`, {});
+    verifica(typeof r2.feito === 'string' && r2.feito.length > 0, 'o JARVIS conta o que fez ao aceitar', r2.feito);
+    const depoisFila = await adm.get('/notificacoes?limite=50&canal=WHATSAPP');
+    const lista = depoisFila?.data ?? depoisFila;
+    verifica(Array.isArray(lista) && lista.length > 0, 'há cobrança na fila de notificações', Array.isArray(lista) ? lista.length : lista);
+    void antesFila;
+  }
+
   secao('Rodar de novo não duplica a mesma sugestão');
   const quantasAntes = painel.sugestoes.length;
   await adm.post('/jarvis/rodar', {});
@@ -90,12 +130,14 @@ async function main() {
   });
 
   secao('Aceitar, adiar e recusar');
-  const alvo = painel2.sugestoes[0];
+  // pega sugestões sem ação executável, para testar só a mudança de situação
+  const semAcao = painel2.sugestoes.filter((x: any) => !x.acao || x.acao === 'NENHUMA' || x.acao === 'ABRIR_TELA');
+  const alvo = semAcao[0] ?? painel2.sugestoes[0];
   const aceita = await adm.post(`/jarvis/sugestoes/${alvo.id}/aceitar`, {});
   verifica(aceita.situacao === 'ACEITA', 'sugestão aceita', aceita.situacao);
   await adm.post(`/jarvis/sugestoes/${alvo.id}/aceitar`, {}, 422); // não decide duas vezes
 
-  const outra = painel2.sugestoes[1];
+  const outra = semAcao[1] ?? painel2.sugestoes[1];
   if (outra) {
     const adiada = await adm.post(`/jarvis/sugestoes/${outra.id}/adiar`, { dias: 5 });
     verifica(adiada.situacao === 'ADIADA' && !!adiada.adiadaAte, 'sugestão adiada por 5 dias', adiada.adiadaAte);
@@ -103,7 +145,7 @@ async function main() {
     verifica(!painel3.sugestoes.some((s: any) => s.id === outra.id), 'adiada some do painel', painel3.sugestoes.length);
   }
 
-  const terceira = painel2.sugestoes[2];
+  const terceira = semAcao[2] ?? painel2.sugestoes[2];
   if (terceira) {
     const recusada = await adm.post(`/jarvis/sugestoes/${terceira.id}/recusar`, { motivo: 'não quero agora' });
     verifica(recusada.situacao === 'RECUSADA', 'sugestão recusada', recusada.situacao);
@@ -116,9 +158,27 @@ async function main() {
   const placar = await adm.get('/jarvis/placar');
   verifica(placar.aceitas >= 1 && typeof placar.estimado === 'number', 'o placar conta as aceitas', placar);
 
-  secao('Modo pergunta sem chave boa responde com erro claro, não com 500');
-  await adm.post('/jarvis/perguntar', { pergunta: 'O que faço com o dinheiro de hoje?' }, 422);
+  secao('Chat: conversa com fio, mesmo sem a IA configurada');
+  const c1 = await adm.post('/jarvis/perguntar', { pergunta: 'O que faço com o dinheiro de hoje?' });
+  verifica(!!c1.conversaId && typeof c1.resposta === 'string' && c1.resposta.length > 0, 'abre a conversa e sempre responde algo', c1.titulo);
+  const c2 = await adm.post('/jarvis/perguntar', { pergunta: 'E amanhã?', conversaId: c1.conversaId });
+  verifica(c2.conversaId === c1.conversaId, 'a segunda mensagem continua na mesma conversa', c2.conversaId);
+
+  const conv = await adm.get(`/jarvis/conversas/${c1.conversaId}`);
+  verifica(conv.mensagens.length === 4, 'duas perguntas e duas respostas guardadas', conv.mensagens.length);
+  verifica(
+    conv.mensagens[0].papel === 'usuario' && conv.mensagens[1].papel === 'jarvis',
+    'as falas vêm na ordem certa',
+    conv.mensagens.map((m: any) => m.papel),
+  );
+
+  const listaConv = await adm.get('/jarvis/conversas');
+  verifica((listaConv.data ?? []).some((x: any) => x.id === c1.conversaId), 'a conversa aparece na lista', listaConv.data?.length);
+
   await adm.post('/jarvis/perguntar', { pergunta: 'oi' }, 400); // pergunta curta demais
+  await adm.del(`/jarvis/conversas/${c1.conversaId}`);
+  const listaDepois = await adm.get('/jarvis/conversas');
+  verifica(!(listaDepois.data ?? []).some((x: any) => x.id === c1.conversaId), 'conversa apagada sai da lista', listaDepois.data?.length);
 
   secao('Perfis: o painel é só do ADMIN; o feed é de todo mundo');
   const senha = 'Senha@12345';

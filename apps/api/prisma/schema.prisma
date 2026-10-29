@@ -1940,16 +1940,34 @@ model JarvisSugestao {
 }
 
 /// Modo pergunta do painel: o gestor pergunta, a IA responde com os números do dia
+/// Uma conversa do gestor com o JARVIS (o fio da prosa, que dá para retomar depois)
 model JarvisConversa {
-  id        Int      @id @default(autoincrement())
-  em        DateTime @default(now())
-  usuarioId Int?
-  pergunta  String
-  resposta  String
-  /// JSON com os números que a IA recebeu (e o custo em tokens)
-  contexto  String?
+  id           Int      @id @default(autoincrement())
+  em           DateTime @default(now())
+  atualizadaEm DateTime @updatedAt
+  usuarioId    Int?
+  /// resumo curto para a lista de conversas (vem da primeira pergunta)
+  titulo       String
+  arquivada    Boolean  @default(false)
 
-  @@index([em])
+  mensagens JarvisMensagem[]
+
+  @@index([usuarioId, atualizadaEm])
+}
+
+/// Cada fala da conversa. 'usuario' é o gestor; 'jarvis' é a resposta da IA.
+model JarvisMensagem {
+  id         Int            @id @default(autoincrement())
+  conversa   JarvisConversa @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId Int
+  em         DateTime       @default(now())
+  /// usuario | jarvis
+  papel      String
+  texto      String
+  /// JSON: números que a IA recebeu, ferramentas usadas e custo em tokens
+  contexto   String?
+
+  @@index([conversaId, em])
 }
 
 /// Configuração do JARVIS (uma linha só, id = 1). Segredos criptografados com APP_SECRET.

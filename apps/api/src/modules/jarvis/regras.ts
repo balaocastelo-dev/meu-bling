@@ -290,7 +290,7 @@ async function caixinhaAtrasada(): Promise<Sugestao[]> {
 
     // o ritmo esperado até hoje: quanto já deveria ter sido guardado
     const totalDias = Math.max(1, Math.ceil((cx.dataUso.getTime() - cx.dataInicio.getTime()) / 86_400_000));
-    const decorridos = Math.max(0, Math.min(totalDias, Math.ceil((Date.now() - cx.dataInicio.getTime()) / 86_400_000)));
+    const decorridos = Math.max(0, Math.min(totalDias, Math.floor((Date.now() - cx.dataInicio.getTime()) / 86_400_000)));
     const esperado = arred((cx.valorMeta * decorridos) / totalDias);
     const atrasada = guardado < esperado - 0.01;
 
@@ -436,6 +436,235 @@ async function oportunidadeCompra(caixaLivre: number): Promise<Sugestao[]> {
   ];
 }
 
+
+// ------------------------------------------------------------------ EMPRESTIMO_VENCIDO
+/** Empréstimo cujo prazo com o credor já passou e ainda tem saldo: o mais caro de deixar correr. */
+async function emprestimoVencido(): Promise<Sugestao[]> {
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  const emprestimos = await prisma.emprestimo.findMany({
+    where: { situacao: 'ABERTO' },
+    select: {
+      id: true,
+      numero: true,
+      importado: true,
+      vencimento: true,
+      valorDevolver: true,
+      credor: { select: { nome: true } },
+      contasPagar: { select: { valor: true, valorPago: true, situacao: true, vencimento: true } },
+    },
+  });
+
+  const vencidos = emprestimos
+    .map((e) => {
+      const contas = e.contasPagar.filter((c) => c.situacao !== 'CANCELADO');
+      const abertas = contas.filter((c) => ['ABERTO', 'PARCIAL'].includes(c.situacao));
+      const saldo = abertas.reduce((t, c) => t + Math.max(0, c.valor - c.valorPago), 0);
+      // sem contas lançadas o vencimento da operação manda
+      const vence = abertas.length ? abertas.map((c) => c.vencimento).sort((a, b) => +a - +b)[0] : e.vencimento;
+      const falta = contas.length ? saldo : e.valorDevolver;
+      const atraso = Math.floor((hoje.getTime() - new Date(vence).getTime()) / 86_400_000);
+      return { id: e.id, numero: e.numero, credor: e.credor?.nome ?? 'Credor', falta: arred(falta), atraso, importado: e.importado };
+    })
+    .filter((e) => e.falta > 0 && e.atraso > 0)
+    .sort((a, b) => b.atraso - a.atraso);
+
+  if (vencidos.length === 0) return [];
+
+  const total = arred(vencidos.reduce((s, e) => s + e.falta, 0));
+  const antigos = vencidos.filter((e) => e.atraso > 90);
+  const out: Sugestao[] = [
+    {
+      regra: 'EMPRESTIMO_VENCIDO',
+      chave: 'EMPRESTIMO_VENCIDO:geral',
+      perfis: 'ADMIN',
+      titulo: `${vencidos.length} empréstimo(s) vencido(s): ${reais(total)} em atraso com o credor`,
+      texto:
+        `${reais(total)} em ${vencidos.length} operação(ões) passaram do prazo com o credor ` +
+        `(a mais antiga há ${vencidos[0].atraso} dias). Quite ou renegocie antes que vire juros sobre juros.`,
+      impactoEstimado: total,
+      prioridade: 1,
+      dados: { total, emprestimos: vencidos.slice(0, 30) },
+      acao: 'ABRIR_TELA',
+      link: '/financeiro/emprestimos',
+    },
+  ];
+
+  // muitos em atraso antigo costuma ser baixa que não foi feita no sistema
+  if (antigos.length >= 5) {
+    out.push({
+      regra: 'EMPRESTIMO_VENCIDO',
+      chave: 'EMPRESTIMO_VENCIDO:acertar-cadastro',
+      perfis: 'ADMIN',
+      titulo: `${antigos.length} empréstimo(s) parados há mais de 90 dias`,
+      texto:
+        `${antigos.length} operações estão em aberto há mais de 90 dias, somando ${reais(arred(antigos.reduce((s, e) => s + e.falta, 0)))}. ` +
+        `Se já foram pagas, dar baixa deixa o caixa livre mostrar a verdade; se não foram, são a conta mais urgente da loja.`,
+      impactoEstimado: null,
+      prioridade: 2,
+      dados: { emprestimos: antigos.slice(0, 30) },
+      acao: 'ABRIR_TELA',
+      link: '/financeiro/emprestimos',
+    });
+  }
+
+  return out;
+}
+
+// ------------------------------------------------------------------ EMPRESTIMO_SEM_CONTA
+/**
+ * Empréstimo sem nenhuma conta a pagar lançada fica "ABERTO" para sempre no cadastro —
+ * o sistema só considera quitado quando as contas estão pagas. São quase sempre operações
+ * trazidas do histórico do Bling que já foram pagas lá fora.
+ */
+async function emprestimoSemConta(semContas: number, abertos: number): Promise<Sugestao[]> {
+  if (semContas < 3) return [];
+
+  const lista = await prisma.emprestimo.findMany({
+    where: { situacao: 'ABERTO' },
+    select: {
+      id: true,
+      numero: true,
+      importado: true,
+      valorDevolver: true,
+      dataOperacao: true,
+      credor: { select: { nome: true } },
+      contasPagar: { select: { situacao: true } },
+    },
+  });
+  const fantasmas = lista
+    .filter((e) => e.contasPagar.filter((c) => c.situacao !== 'CANCELADO').length === 0)
+    .map((e) => ({
+      id: e.id,
+      numero: e.numero,
+      credor: e.credor?.nome ?? 'Credor',
+      valor: arred(e.valorDevolver),
+      data: e.dataOperacao,
+      importado: e.importado,
+    }));
+  if (fantasmas.length === 0) return [];
+
+  const importados = fantasmas.filter((f) => f.importado).length;
+  const total = arred(fantasmas.reduce((s, f) => s + f.valor, 0));
+
+  return [
+    {
+      regra: 'EMPRESTIMO_SEM_CONTA',
+      chave: 'EMPRESTIMO_SEM_CONTA:geral',
+      perfis: 'ADMIN',
+      titulo: `${fantasmas.length} de ${abertos} empréstimo(s) sem conta a pagar lançada`,
+      texto:
+        `${fantasmas.length} operações (${reais(total)}${importados ? `, ${importados} vindas do histórico do Bling` : ''}) ` +
+        `não têm conta a pagar no sistema, então ficam "abertas" para sempre e sujam o número do caixa. ` +
+        `Cancele as que já foram pagas lá fora e lance as que ainda devem.`,
+      impactoEstimado: null,
+      prioridade: 2,
+      dados: { total, emprestimos: fantasmas.slice(0, 40), importados },
+      acao: 'ABRIR_TELA',
+      link: '/financeiro/emprestimos',
+    },
+  ];
+}
+
+// ------------------------------------------------------------------ MARGEM_BAIXA
+/** Categorias vendendo abaixo da margem média da loja nos últimos 90 dias. */
+async function margemBaixa(): Promise<Sugestao[]> {
+  const de90 = new Date(Date.now() - 90 * 86_400_000);
+
+  const itens = await prisma.vendaItem.findMany({
+    where: { venda: { tipo: 'PEDIDO', data: { gte: de90 } }, produtoId: { not: null } },
+    select: {
+      total: true,
+      quantidade: true,
+      custoUnitario: true,
+      produto: { select: { categoria: { select: { id: true, nome: true } } } },
+    },
+  });
+  if (itens.length < 20) return [];
+
+  const porCategoria = new Map<string, { nome: string; receita: number; custo: number }>();
+  let receitaTotal = 0;
+  let custoTotal = 0;
+
+  for (const i of itens) {
+    const custo = (i.custoUnitario || 0) * (i.quantidade || 0);
+    if (custo <= 0) continue; // sem custo lançado não dá para falar de margem
+    const nome = i.produto?.categoria?.nome ?? 'Sem categoria';
+    const atual = porCategoria.get(nome) ?? { nome, receita: 0, custo: 0 };
+    atual.receita += i.total || 0;
+    atual.custo += custo;
+    porCategoria.set(nome, atual);
+    receitaTotal += i.total || 0;
+    custoTotal += custo;
+  }
+  if (receitaTotal <= 0) return [];
+
+  const margemLoja = ((receitaTotal - custoTotal) / receitaTotal) * 100;
+  const fracas = [...porCategoria.values()]
+    .filter((c) => c.receita > receitaTotal * 0.03) // ignora categoria irrelevante
+    .map((c) => ({ ...c, margem: arred(((c.receita - c.custo) / c.receita) * 100), receita: arred(c.receita) }))
+    .filter((c) => c.margem < margemLoja - 5)
+    .sort((a, b) => a.margem - b.margem)
+    .slice(0, 5);
+
+  if (fracas.length === 0) return [];
+
+  // quanto renderia subir as fracas até a média da loja
+  const ganho = arred(fracas.reduce((s, c) => s + c.receita * ((margemLoja - c.margem) / 100), 0));
+
+  return [
+    {
+      regra: 'MARGEM_BAIXA',
+      chave: 'MARGEM_BAIXA:geral',
+      perfis: 'ADMIN',
+      titulo: `${fracas.length} categoria(s) vendendo abaixo da margem da loja`,
+      texto:
+        `A loja fecha ${fracas.length > 0 ? arred(margemLoja) : 0}% de margem, mas ${fracas[0].nome} está em ${fracas[0].margem}%` +
+        `${fracas[1] ? ` e ${fracas[1].nome} em ${fracas[1].margem}%` : ''}. ` +
+        `Subir essas categorias até a média da loja renderia perto de ${reais(ganho)} a cada 90 dias.`,
+      impactoEstimado: ganho,
+      prioridade: 3,
+      dados: { margemLoja: arred(margemLoja), categorias: fracas },
+      acao: 'NENHUMA',
+      link: '/relatorios/dre',
+    },
+  ];
+}
+
+// ------------------------------------------------------------------ VENDA_SEM_CUSTO
+/** Venda fechada sem custo lançado: o lucro do DRE e o próprio JARVIS ficam cegos. */
+async function vendaSemCusto(): Promise<Sugestao[]> {
+  const de30 = new Date(Date.now() - 30 * 86_400_000);
+
+  const vendas = await prisma.venda.findMany({
+    where: { tipo: 'PEDIDO', data: { gte: de30 }, custoTotal: { lte: 0 }, total: { gt: 0 } },
+    select: { id: true, numero: true, total: true, data: true, vendedor: { select: { nome: true } } },
+    orderBy: { data: 'desc' },
+    take: 100,
+  });
+  if (vendas.length === 0) return [];
+
+  const total = arred(vendas.reduce((s, v) => s + v.total, 0));
+
+  return [
+    {
+      regra: 'VENDA_SEM_CUSTO',
+      chave: 'VENDA_SEM_CUSTO:geral',
+      perfis: 'ADMIN,GERENTE',
+      titulo: `${vendas.length} venda(s) sem custo lançado nos últimos 30 dias`,
+      texto:
+        `${reais(total)} em ${vendas.length} venda(s) estão sem o custo do produto. ` +
+        `Enquanto isso o DRE mostra lucro maior do que o real e o JARVIS não consegue medir margem: peça aos vendedores para completar.`,
+      impactoEstimado: null,
+      prioridade: 2,
+      dados: { total, vendas: vendas.slice(0, 30).map((v) => ({ id: v.id, numero: v.numero, total: arred(v.total), vendedor: v.vendedor?.nome ?? null })) },
+      acao: 'ABRIR_TELA',
+      link: '/vendas',
+    },
+  ];
+}
+
 // ------------------------------------------------------------------ MAPA_MILHAO
 /** Uma vez por dia: onde estamos no caminho do R$ 1 milhão. */
 async function mapaMilhao(meta: number, caixa: Awaited<ReturnType<typeof calcularCaixaLivre>>): Promise<Sugestao[]> {
@@ -448,8 +677,9 @@ async function mapaMilhao(meta: number, caixa: Awaited<ReturnType<typeof calcula
       perfis: 'ADMIN',
       titulo: `Caixa livre hoje: ${reais(caixa.caixaLivre)}`,
       texto:
-        `Faltam ${reais(falta)} para o milhão. Hoje o que mais pesa contra: ${reais(caixa.aPagar30d)} a pagar em 30 dias, ` +
-        `${reais(caixa.emprestimos)} de empréstimos e ${reais(caixa.caixinhas)} ainda a guardar nas caixinhas.`,
+        `Faltam ${reais(falta)} para o milhão. Nos próximos 30 dias pesam ${reais(caixa.aPagar30d)} de contas, ` +
+        `${reais(caixa.emprestimos30d)} de empréstimos e ${reais(caixa.caixinhasDevidas)} que já deviam estar guardados nas caixinhas. ` +
+        `Somando o que vem depois, os compromissos totais dão ${reais(caixa.compromissosTotais)}.`,
       impactoEstimado: null,
       prioridade: 4,
       dados: caixa,
@@ -474,6 +704,10 @@ export async function rodarRegras(cfg: { diasEstoqueParado: number; metaCaixa: n
     caixinhaAtrasada().catch(() => []),
     taxaCartao().catch(() => []),
     oportunidadeCompra(caixa.caixaLivre).catch(() => []),
+    emprestimoVencido().catch(() => []),
+    emprestimoSemConta(caixa.detalhes.emprestimosSemContas, caixa.detalhes.emprestimosAbertos).catch(() => []),
+    margemBaixa().catch(() => []),
+    vendaSemCusto().catch(() => []),
     mapaMilhao(cfg.metaCaixa, caixa).catch(() => []),
   ]);
 
