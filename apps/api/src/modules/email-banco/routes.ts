@@ -25,7 +25,7 @@ import { auditar } from '../../lib/auditoria.js';
 import { encrypt, decrypt, mask } from '../../lib/crypto.js';
 import { registrarServico } from '../../core/servicos.js';
 import { paginacaoSchema, paginar, respostaPaginada } from '../../lib/util.js';
-import { lerCaixa } from '../../integracoes/email/index.js';
+import { lerCaixa } from '../../integracoes/email/leitor.js';
 import { obterConfig, rodarRobo } from './service.js';
 
 export const INTERVALO_MS = 30 * 60 * 1000; // 30 minutos, igual ao JARVIS

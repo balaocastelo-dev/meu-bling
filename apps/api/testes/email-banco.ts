@@ -9,7 +9,7 @@
  */
 import { encerrar, entrar, igual, secao, SUF, verifica } from './lib.js';
 import { parseSumUpPix, parseAsaas, valorBr, normalizarRemetente } from '../src/modules/email-banco/parsers.js';
-import { conferirAutenticacao, type MensagemEmail } from '../src/integracoes/email/index.js';
+import { conferirAutenticacao, type MensagemEmail } from '../src/integracoes/email/leitor.js';
 import { processarMensagem } from '../src/modules/email-banco/service.js';
 import { prisma } from '../src/lib/prisma.js';
 
@@ -183,7 +183,7 @@ async function main() {
   await adm.del(`/email-banco/regras/${regra.id}`);
   await adm.del(`/email-banco/caixas/${caixa.id}`);
 
-  encerrar();
+  encerrar('Robô de e-mail dos bancos');
 }
 
 main().catch((e) => {

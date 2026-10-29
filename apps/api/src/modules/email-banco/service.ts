@@ -15,7 +15,7 @@ import { subDays } from 'date-fns';
 import { prisma } from '../../lib/prisma.js';
 import { decrypt } from '../../lib/crypto.js';
 import { arredondar } from '../../lib/util.js';
-import { lerCaixa, type MensagemEmail } from '../../integracoes/email/index.js';
+import { lerCaixa, type MensagemEmail } from '../../integracoes/email/leitor.js';
 import { gravarTransacoes, sugerirConciliacao, conciliar } from '../bancos/service.js';
 import { aplicarParser, normalizarRemetente, type NomeParser, type EventoBancario } from './parsers.js';
 
