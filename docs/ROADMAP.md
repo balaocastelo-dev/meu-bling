@@ -9,6 +9,15 @@
 - [ ] Agendar backup diário (Agendador de Tarefas → `scripts\backup.ps1`).
 - [ ] Cadastrar usuários/perfis reais; trocar a senha do admin; guardar `apps/api/.env` em lugar seguro.
 
+## JARVIS — agente do gestor (R$ 1 milhão livres no caixa)
+Especificação completa em `docs/JARVIS.md`.
+- [x] **Etapa 1 (29/10/2026)** — caixa livre, worker de 30 min, 8 regras de sugestão, painel `/jarvis`,
+      bloco de sugestões nos Meu Dashboards, modo pergunta, placar, Configurações → JARVIS e deploy automático.
+- [ ] **Etapa 2** — Mercado Livre por API: OAuth, pesquisa de preço, avaliador de usado no pedido de compra,
+      botão "Anunciar no Mercado Livre", regras `PRECO_FORA_MERCADO` e repor estoque pelo preço de mercado.
+- [ ] **Etapa 3** — Central de Anúncios: site, blog, Facebook e Instagram por API; Google e OLX como kit pronto.
+- [ ] **Etapa 4** — evolução contínua: novas regras conforme o placar, relatório semanal "Caminho do milhão".
+
 ## Próximas entregas sugeridas
 1. **PDV (frente de caixa)** — tela rápida com leitor de código de barras, NFC-e em 1 clique, sangria/abertura de caixa.
 2. **Etiquetas e envios** — Correios/Melhor Envio/Jadlog (rastreio no WhatsApp).
