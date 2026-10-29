@@ -109,6 +109,18 @@ export const api = {
   /** Upload multipart (FormData) */
   upload: <T>(caminho: string, form: FormData, method: 'POST' | 'PUT' = 'POST') => requisicao<T>(method, caminho, form),
 
+  /** Manda um JSON e recebe um arquivo (usado pela voz do JARVIS). `null` = a rota recusou. */
+  blobPost: async (caminho: string, body: unknown): Promise<Blob | null> => {
+    const headers = headersAuth({ 'Content-Type': 'application/json' });
+    try {
+      const res = await fetch(`${API_BASE}${caminho}`, { method: 'POST', headers, body: JSON.stringify(body) });
+      if (!res.ok) return null;
+      return await res.blob();
+    } catch {
+      return null;
+    }
+  },
+
   /**
    * Baixa um arquivo autenticado (HTML de impressão, XML, PDF) como Blob.
    * Como o GET exige o header Authorization, não dá para abrir a URL direto.

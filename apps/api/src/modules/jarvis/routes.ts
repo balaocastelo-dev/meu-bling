@@ -14,6 +14,8 @@
  *   PUT  /api/v1/jarvis/config                 (ADMIN) meta, data-alvo, modelo, chave, percentuais
  *   POST /api/v1/jarvis/config/testar-ia       (ADMIN) testa a chave da Anthropic
  *   GET  /api/v1/jarvis/feed                   (TODOS) sugestões do perfil de quem está logado
+ *   GET  /api/v1/jarvis/voz/estado             (ADMIN) a voz clonada está no ar?
+ *   POST /api/v1/jarvis/voz                    (ADMIN) { texto } → WAV na voz do Thiago
  */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -30,6 +32,7 @@ import { conversar, lerConversa, listarConversas } from './chat.js';
 import { executarFerramenta } from './ferramentas.js';
 import { CANAIS, INFO_CANAIS, criarAnuncio, listarAnuncios, marcarPublicado, montarRascunho, publicarCanal, type Canal } from './anuncios.js';
 import { conectar as mlConectar, desconectar as mlDesconectar, situacao as mlSituacao, urlAutorizacao as mlUrlAutorizacao, urlCallback as mlUrlCallback } from './mercadolivre.js';
+import { falaDe, vozDisponivel } from './voz.js';
 
 // o worker de 30 min (ver worker.ts). Desliga com JARVIS=off
 registrarServico('jarvis', (app) => iniciarWorker(app));
@@ -512,5 +515,23 @@ export default async function jarvisRoutes(app: FastifyInstance) {
     await mlDesconectar();
     await auditar(req, 'JarvisConfig', 1, 'ACAO', { acao: 'ml_desconectar' });
     return { ok: true };
+  });
+
+  // ------------------------------------------------------------------ voz
+  // O navegador não fala com o PC da loja: pede o áudio aqui, já logado e em HTTPS.
+  app.get('/api/v1/jarvis/voz/estado', admin, async () => ({ disponivel: await vozDisponivel() }));
+
+  app.post('/api/v1/jarvis/voz', admin, async (req, reply) => {
+    const { texto } = z.object({ texto: z.string().min(1).max(2000) }).parse(req.body);
+    const wav = await falaDe(texto);
+    if (!wav) {
+      // o PC-servidor não respondeu: o navegador usa a própria voz
+      return reply.code(503).send({ erro: 'VOZ_INDISPONIVEL', mensagem: 'A voz clonada não respondeu agora.' });
+    }
+    return reply
+      .header('Content-Type', 'audio/wav')
+      .header('Content-Length', String(wav.length))
+      .header('Cache-Control', 'private, max-age=86400')
+      .send(wav);
   });
 }
