@@ -8,6 +8,9 @@
  *   Desde 28/10/2026 o resultado usa o CUSTO DE CADA VENDA (comum/custos-venda.ts): produto (CMV), imposto
  *   (alíquota em deduções), taxa de cartão e frete (despesas operacionais). As contas a pagar de compra de
  *   mercadoria, imposto sobre vendas e logística ficam fora do resultado (já cobertas) e saem em `informativo`.
+ *   Desde 29/10/2026 cada OS segue a MESMA regra (comum/custos-os.ts): custo das peças (CMV), taxa de cartão,
+ *   logística e mão de obra de terceiro (despesas operacionais); as contas a pagar de terceiros/laboratório
+ *   também ficam no informativo.
  * Empréstimos (módulo Financeiro › Empréstimos): o dinheiro que entra não é receita e, de cada devolução,
  *   só a parte de juros entra no resultado financeiro; o principal também vai para `informativo`.
  * Regime CAIXA: receita = MovimentoFinanceiro ENTRADA por categoria; despesas = SAIDA por categoria.
@@ -18,15 +21,18 @@ import { prisma } from '../../lib/prisma.js';
 import { arredondar } from '../../lib/util.js';
 import { OBS_FORA_DO_RESULTADO } from '../comum/financeiro.js';
 import { carregarCfgCustos, custosVenda, SELECT_CUSTO_VENDA } from '../comum/custos-venda.js';
+import { custosOs, SELECT_CUSTO_OS } from '../comum/custos-os.js';
 
 /**
- * Contas a pagar que o custo por venda já cobre (não entram no DRE para não contar duas vezes; aparecem
- * como informativo): compra de mercadoria (CMV / pedido de compra sem categoria), imposto sobre vendas e logística.
+ * Contas a pagar que o custo por venda/OS já cobre (não entram no DRE para não contar duas vezes; aparecem
+ * como informativo): compra de mercadoria (CMV / pedido de compra sem categoria), imposto sobre vendas, logística
+ * e mão de obra de terceiros da assistência (laboratório/técnico de fora, lançada em cada OS).
  */
 function cobertaPeloCustoDaVenda(cat: Cat | null | undefined, origemTipo: string | null): string | null {
   if (cat?.grupoDre === 'CMV' || (origemTipo === 'COMPRA' && !cat)) return cat?.nome || 'Compra de mercadorias (pedidos de compra)';
   if (cat && cat.grupoDre === 'DEDUCAO' && /imposto|simples|das\b/i.test(cat.nome)) return cat.nome;
   if (cat && /log[ií]stica|frete|entrega/i.test(cat.nome)) return cat.nome;
+  if (cat && /terceir|laborat[óo]rio/i.test(cat.nome)) return cat.nome;
   return null;
 }
 
@@ -140,15 +146,19 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
   }
   const ordens = await prisma.ordemServico.findMany({
     where: { dataEntrada: { gte: ini, lte: fim }, situacaoId: { in: sitOs.map((s) => s.id) } },
-    select: { totalServicos: true, totalPecas: true, descontoValor: true, custoPeca: true, itens: { select: { tipo: true, custoUnitario: true, quantidade: true } } },
+    select: { totalServicos: true, descontoValor: true, ...SELECT_CUSTO_OS },
   });
   for (const o of ordens) {
     ac.receitaServicos += o.totalServicos - Math.min(o.descontoValor, o.totalServicos);
     ac.receitaProdutos += o.totalPecas - Math.max(0, o.descontoValor - o.totalServicos);
-    // custo informado na OS (fechamento) tem prioridade sobre o custo das peças cadastradas.
-    // Logística e mão de obra de terceiros não entram aqui para não duplicar com contas a pagar.
-    const custoPecas = o.custoPeca > 0 ? o.custoPeca : o.itens.filter((i) => i.tipo === 'PECA').reduce((s, i) => s + i.custoUnitario * i.quantidade, 0);
-    if (custoPecas) add(ac.cmv, 'Custo das peças (OS)', custoPecas);
+    // custo completo de cada OS, igual à venda: peças (CMV) + taxa de cartão + logística + mão de obra de terceiro
+    // (despesas operacionais). O imposto já entra pela alíquota sobre a receita bruta (deduções).
+    // As contas a pagar de logística e de terceiros (laboratório) ficam fora do resultado para não contar duas vezes.
+    const c = custosOs(o, cfg);
+    if (c.pecas) add(ac.cmv, 'Custo das peças (OS)', c.pecas);
+    if (c.taxaCartao) add(ac.despOper, 'Taxas de cartão (OS)', c.taxaCartao);
+    if (c.logistica) add(ac.despOper, 'Logística das OS', c.logistica);
+    if (c.terceiros) add(ac.despOper, 'Mão de obra de terceiros (OS)', c.terceiros);
   }
   // TODAS as contas a pagar por competência (fallback: vencimento), exceto canceladas.
   // Compra de mercadoria (categoria CMV, ou gerada por pedido de compra sem outra categoria) vai para o CMV;

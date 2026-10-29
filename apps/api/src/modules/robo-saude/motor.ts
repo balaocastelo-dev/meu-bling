@@ -12,6 +12,11 @@
  *     estoque negativo;
  *   - o resto vira ALERTA com o link de onde resolver.
  * Tudo fica em RoboSaudeAviso e aparece no sino do topo e no dashboard do ADMIN.
+ *
+ * LEMBRETES PARA A EQUIPE (29/10/2026): o robô também monitora os custos das OS e das vendas. OS com peça sem
+ * custo vira lembrete para o TÉCNICO dela; venda com produto sem custo vira lembrete para o VENDEDOR. O lembrete
+ * tem destinatário (tecnicoId/vendedorId) e aparece no painel desse funcionário (GET /lembretes), além do painel
+ * do ADMIN. Some sozinho assim que o custo é preenchido. O DRE e os dashboards precisam desse custo real.
  */
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../lib/errors.js';
@@ -26,6 +31,7 @@ import { receberVendaPagaNaHora, transferirVendedor } from '../vendas/service.js
 import { sugerirNcm } from '../robo-nf/ncm.js';
 import { consultar, transmitir } from '../../integracoes/fiscal/service.js';
 import { diagnosticar, type Achado, type Nivel } from '../diagnostico/service.js';
+import { pecasSemCustoOs } from '../comum/custos-os.js';
 
 // ------------------------------------------------------------------ tipos
 export interface AcaoSugestao {
@@ -47,6 +53,9 @@ interface Alvo {
   mensagem: string;
   link?: string;
   dados?: Record<string, unknown>;
+  /** para quem é o lembrete: aparece no painel desse técnico/vendedor (além do ADMIN) */
+  tecnicoId?: number | null;
+  vendedorId?: number | null;
 }
 
 interface Corretor {
@@ -78,6 +87,8 @@ export interface Estado {
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const msg = (e: unknown) => String((e as Error)?.message || e).slice(0, 300);
 const ROBO = 'Robô da Saúde';
+/** Lembretes de custo: OS e vendas dos últimos N dias (as mais antigas não mudam mais o DRE do mês). */
+const JANELA_CUSTO_DIAS = 120;
 
 // ------------------------------------------------------------------ config/estado
 const CHAVE_CONFIG = 'roboSaude.config';
@@ -553,6 +564,61 @@ const corretores: Corretor[] = [
       return `Estoque de "${d.nome}" zerado.`;
     },
   },
+
+  // ---------------------------------------------------------------- OS com peça sem custo → lembrete para o técnico
+  {
+    id: 'os-sem-custo',
+    buscar: async () => {
+      const cancel = (await prisma.situacao.findMany({ where: { modulo: 'OS', cancelamento: true }, select: { id: true } })).map((s) => s.id);
+      const ordens = await prisma.ordemServico.findMany({
+        // OS lançadas no MEU BLING (as do Bling não têm custo por peça) e dos últimos meses
+        where: { blingId: null, situacaoId: { notIn: cancel }, dataEntrada: { gte: new Date(Date.now() - JANELA_CUSTO_DIAS * 86400000) }, custoPeca: { lte: 0 }, itens: { some: { tipo: 'PECA', custoUnitario: { lte: 0 } } } },
+        select: { id: true, numero: true, custoPeca: true, tecnicoId: true, tecnico: { select: { nome: true } }, situacao: { select: { nome: true, final: true } }, itens: { select: { tipo: true, descricao: true, custoUnitario: true, quantidade: true } } },
+        orderBy: { numero: 'desc' },
+        take: 200,
+      });
+      return ordens
+        .map((o) => ({ o, sem: pecasSemCustoOs(o) }))
+        .filter(({ sem }) => sem.length)
+        .map(({ o, sem }) => ({
+          alvo: `os:${o.id}`,
+          nivel: 'aviso' as Nivel,
+          area: 'Assistência',
+          titulo: `OS nº ${o.numero}${o.situacao.final ? ` (${o.situacao.nome})` : ''}: ${sem.length === 1 ? '1 peça sem custo' : `${sem.length} peças sem custo`}`,
+          mensagem: `${sem.slice(0, 3).map(({ i }) => i.descricao).join(', ')}${sem.length > 3 ? '…' : ''}. ${o.tecnico ? `${o.tecnico.nome.split(' ')[0]}, preencha` : 'Preencha'} o custo da peça na OS (coluna "Custo un.") para o lucro da assistência e o DRE ficarem certos.`,
+          link: `/ordens-servico/${o.id}/editar`,
+          dados: { osId: o.id, numero: o.numero, pecas: sem.length, tecnicoId: o.tecnicoId },
+          tecnicoId: o.tecnicoId,
+        }));
+    },
+  },
+
+  // ---------------------------------------------------------------- venda com produto sem custo → lembrete para o vendedor
+  {
+    id: 'venda-sem-custo',
+    buscar: async () => {
+      const { cancel } = await situacoesVenda();
+      const vendas = await prisma.venda.findMany({
+        where: { tipo: 'PEDIDO', blingId: null, situacaoId: { notIn: cancel }, data: { gte: new Date(Date.now() - JANELA_CUSTO_DIAS * 86400000) }, itens: { some: { custoUnitario: { lte: 0 }, OR: [{ produtoId: null }, { produto: { tipo: { not: 'S' } } }] } } },
+        select: { id: true, numero: true, total: true, vendedorId: true, vendedor: { select: { nome: true } }, situacao: { select: { nome: true, final: true } }, itens: { select: { descricao: true, custoUnitario: true, produto: { select: { tipo: true } } } } },
+        orderBy: { numero: 'desc' },
+        take: 200,
+      });
+      return vendas
+        .map((v) => ({ v, sem: v.itens.filter((i) => !(i.custoUnitario > 0) && i.produto?.tipo !== 'S') }))
+        .filter(({ sem }) => sem.length)
+        .map(({ v, sem }) => ({
+          alvo: `venda:${v.id}`,
+          nivel: 'aviso' as Nivel,
+          area: 'Vendas',
+          titulo: `Venda nº ${v.numero} (${brl(v.total)}): ${sem.length === 1 ? '1 produto sem custo' : `${sem.length} produtos sem custo`}`,
+          mensagem: `${sem.slice(0, 3).map((i) => i.descricao).join(', ')}${sem.length > 3 ? '…' : ''}. ${v.vendedor ? `${v.vendedor.nome.split(' ')[0]}, preencha` : 'Preencha'} o custo na venda (coluna "Custo un.") — sem ele o sistema usa uma estimativa e o DRE não fica real.`,
+          link: `/vendas/${v.id}/editar`,
+          dados: { vendaId: v.id, numero: v.numero, itens: sem.length, vendedorId: v.vendedorId },
+          vendedorId: v.vendedorId,
+        }));
+    },
+  },
 ];
 
 const porId = new Map(corretores.map((c) => [c.id, c]));
@@ -614,11 +680,11 @@ async function registrarCorrecao(c: Corretor, a: Alvo, texto: string) {
   await auditar(null, 'RoboSaude', null, 'ACAO', { correcao: c.id, alvo: a.alvo, texto });
 }
 
-async function abrirOuAtualizar(chave: string, p: { tipo: 'SUGESTAO' | 'ALERTA'; nivel: string; area: string; titulo: string; mensagem: string; link?: string | null; acoes?: AcaoSugestao[]; dados?: unknown }) {
+async function abrirOuAtualizar(chave: string, p: { tipo: 'SUGESTAO' | 'ALERTA'; nivel: string; area: string; titulo: string; mensagem: string; link?: string | null; acoes?: AcaoSugestao[]; dados?: unknown; tecnicoId?: number | null; vendedorId?: number | null }) {
   const aberta = await prisma.roboSaudeAviso.findFirst({ where: { chave, status: 'ABERTA' }, orderBy: { id: 'desc' } });
-  const data = { tipo: p.tipo, nivel: p.nivel, area: p.area, titulo: p.titulo, mensagem: p.mensagem, link: p.link ?? null, acoes: p.acoes?.length ? JSON.stringify(p.acoes) : null, dados: p.dados ? JSON.stringify(p.dados) : null };
+  const data = { tipo: p.tipo, nivel: p.nivel, area: p.area, titulo: p.titulo, mensagem: p.mensagem, link: p.link ?? null, acoes: p.acoes?.length ? JSON.stringify(p.acoes) : null, dados: p.dados ? JSON.stringify(p.dados) : null, tecnicoId: p.tecnicoId ?? null, vendedorId: p.vendedorId ?? null };
   if (aberta) {
-    const mudou = aberta.titulo !== data.titulo || aberta.mensagem !== data.mensagem || aberta.acoes !== data.acoes || aberta.dados !== data.dados || aberta.nivel !== data.nivel;
+    const mudou = aberta.titulo !== data.titulo || aberta.mensagem !== data.mensagem || aberta.acoes !== data.acoes || aberta.dados !== data.dados || aberta.nivel !== data.nivel || aberta.tecnicoId !== data.tecnicoId || aberta.vendedorId !== data.vendedorId;
     if (mudou) await prisma.roboSaudeAviso.update({ where: { id: aberta.id }, data });
     return false;
   }
@@ -686,6 +752,8 @@ export async function rodarRobo(origem = 'agendado', opts: { forcar?: boolean } 
           link: a.link,
           acoes,
           dados: a.dados,
+          tecnicoId: a.tecnicoId,
+          vendedorId: a.vendedorId,
         });
       }
       await fecharSumidos(`${c.id}:`, vivas);
@@ -774,7 +842,7 @@ export async function ignorarSugestao(id: number, usuario: { nome: string }) {
 }
 
 // ------------------------------------------------------------------ painel
-export function formatarAviso(a: { id: number; chave: string; tipo: string; nivel: string; area: string; titulo: string; mensagem: string; link: string | null; acoes: string | null; status: string; lida: boolean; resolvidoPor: string | null; resolvidoEm: Date | null; criadoEm: Date }) {
+export function formatarAviso(a: { id: number; chave: string; tipo: string; nivel: string; area: string; titulo: string; mensagem: string; link: string | null; acoes: string | null; status: string; lida: boolean; resolvidoPor: string | null; resolvidoEm: Date | null; criadoEm: Date; tecnicoId?: number | null; vendedorId?: number | null }) {
   return {
     id: a.id,
     chave: a.chave,
@@ -790,6 +858,39 @@ export function formatarAviso(a: { id: number; chave: string; tipo: string; nive
     resolvidoPor: a.resolvidoPor,
     resolvidoEm: a.resolvidoEm,
     criadoEm: a.criadoEm,
+    tecnicoId: a.tecnicoId ?? null,
+    vendedorId: a.vendedorId ?? null,
+  };
+}
+
+// ------------------------------------------------------------------ lembretes da equipe (qualquer perfil)
+/**
+ * Lembretes do robô endereçados a uma pessoa: os avisos abertos cujo técnico/vendedor é o do login.
+ * ADMIN e GERENTE recebem também "equipe": todos os lembretes com destinatário, com o nome de quem precisa agir.
+ */
+export async function lembretesDe(usuario: { perfil: string; tecnicoId?: number | null; vendedorId?: number | null }) {
+  const ou: { tecnicoId?: number; vendedorId?: number }[] = [];
+  if (usuario.tecnicoId) ou.push({ tecnicoId: usuario.tecnicoId });
+  if (usuario.vendedorId) ou.push({ vendedorId: usuario.vendedorId });
+  const meus = ou.length ? await prisma.roboSaudeAviso.findMany({ where: { status: 'ABERTA', OR: ou }, orderBy: [{ nivel: 'asc' }, { id: 'desc' }], take: 100 }) : [];
+  const gestao = usuario.perfil === 'ADMIN' || usuario.perfil === 'GERENTE';
+  const equipe = gestao ? await prisma.roboSaudeAviso.findMany({ where: { status: 'ABERTA', OR: [{ tecnicoId: { not: null } }, { vendedorId: { not: null } }] }, orderBy: [{ nivel: 'asc' }, { id: 'desc' }], take: 300 }) : [];
+  // nomes de quem precisa agir (para a gerência cobrar a pessoa certa)
+  const tecIds = [...new Set(equipe.map((a) => a.tecnicoId).filter((x): x is number => !!x))];
+  const vendIds = [...new Set(equipe.map((a) => a.vendedorId).filter((x): x is number => !!x))];
+  const [tecs, vends] = await Promise.all([
+    tecIds.length ? prisma.tecnico.findMany({ where: { id: { in: tecIds } }, select: { id: true, nome: true } }) : [],
+    vendIds.length ? prisma.vendedor.findMany({ where: { id: { in: vendIds } }, select: { id: true, nome: true } }) : [],
+  ]);
+  const nomeTec = new Map(tecs.map((t) => [t.id, t.nome]));
+  const nomeVend = new Map(vends.map((v) => [v.id, v.nome]));
+  const quem = (a: { tecnicoId: number | null; vendedorId: number | null }) => (a.tecnicoId ? nomeTec.get(a.tecnicoId) ?? 'Técnico' : a.vendedorId ? nomeVend.get(a.vendedorId) ?? 'Vendedor' : null);
+  const semDono = gestao ? await prisma.roboSaudeAviso.count({ where: { status: 'ABERTA', chave: { startsWith: 'os-sem-custo:' }, tecnicoId: null } }) : 0;
+  return {
+    meus: meus.map(formatarAviso),
+    equipe: equipe.map((a) => ({ ...formatarAviso(a), quem: quem(a) })),
+    /** OS sem técnico com peça sem custo: ninguém recebe o lembrete — a gerência precisa atribuir o técnico */
+    semDono,
   };
 }
 

@@ -9,6 +9,9 @@
  *   POST /api/v1/robo-saude/resolver-tudo           aperta o botão principal de todas as sugestões seguras
  *   POST /api/v1/robo-saude/marcar-lidas            zera o "novas correções"
  *   PUT  /api/v1/robo-saude/config                  { ligado, autoCorrigir }
+ *   GET  /api/v1/lembretes                          (qualquer perfil) lembretes do robô para quem está logado
+ *                                                   — OS com peça sem custo (técnico), venda sem custo (vendedor);
+ *                                                   ADMIN/GERENTE recebem também os da equipe, com o nome de quem age
  */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -17,7 +20,7 @@ import { AppError } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
 import { eventos } from '../../core/eventos.js';
 import { registrarServico } from '../../core/servicos.js';
-import { agendarRodada, executarSugestao, gravarConfig, ignorarSugestao, INTERVALO_MS, marcarLidas, painelRobo, resolverTudo, rodarRobo } from './motor.js';
+import { agendarRodada, executarSugestao, gravarConfig, ignorarSugestao, INTERVALO_MS, lembretesDe, marcarLidas, painelRobo, resolverTudo, rodarRobo } from './motor.js';
 
 const idDe = (req: any) => {
   const id = Number(req.params?.id);
@@ -32,6 +35,7 @@ eventos.ouvir('venda.alterada', depoisDeMovimento);
 eventos.ouvir('situacao.alterada', depoisDeMovimento);
 eventos.ouvir('compra.criada', depoisDeMovimento);
 eventos.ouvir('os.criada', depoisDeMovimento);
+eventos.ouvir('os.alterada', depoisDeMovimento);
 eventos.ouvir('nfe.autorizada', depoisDeMovimento);
 eventos.ouvir('nfe.cancelada', depoisDeMovimento);
 eventos.ouvir('conta.recebida', depoisDeMovimento);
@@ -98,5 +102,11 @@ export default async function roboSaudeRoutes(app: FastifyInstance) {
     const cfg = await gravarConfig(body);
     await auditar(req, 'RoboSaude', null, 'ALTERAR', { config: cfg });
     return cfg;
+  });
+
+  // ---------------------------------------------------------------- lembretes para a equipe (qualquer perfil logado)
+  app.get('/api/v1/lembretes', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE', 'VENDEDOR', 'TECNICO', 'FINANCEIRO') }, async (req) => {
+    const u = req.user as { perfil: string; tecnicoId?: number | null; vendedorId?: number | null };
+    return lembretesDe(u);
   });
 }
