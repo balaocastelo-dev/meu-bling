@@ -100,6 +100,127 @@ export default function Jarvis() {
   });
 
   const serie = evo?.serie ?? [];
+  const temSugestoes = (p?.sugestoes.length ?? 0) > 0;
+  const temEvolucao = serie.length > 0;
+  const temPlacar = (placar?.medidas.length ?? 0) > 0;
+  const temContas = !!p;
+
+  const cardSugestoes = (
+    <CardV18
+      titulo="O que fazer agora"
+      descricao={p ? `${p.sugestoes.length} sugestão(ões) aberta(s)` : undefined}
+      icone={<Bot className="h-4 w-4" />}
+      tom="azul"
+    >
+      {isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-20" />
+          <Skeleton className="h-20" />
+        </div>
+      ) : !temSugestoes ? (
+        <EmptyState
+          compacto
+          titulo="Nada pendente por aqui"
+          descricao="Quando o JARVIS achar dinheiro parado, conta vencida ou consignado no prazo, aparece aqui."
+        />
+      ) : (
+        <motion.div variants={listaVariants} initial="oculto" animate="visivel" className="space-y-2">
+          {p!.sugestoes.map((s) => (
+            <CartaoSugestao key={s.id} s={s} decidindo={decidirM.isPending} decidir={(id, o) => decidirM.mutate({ id, o })} />
+          ))}
+        </motion.div>
+      )}
+    </CardV18>
+  );
+
+  const cardEvolucao = (
+    <div className="space-y-4 sm:space-y-5">
+      <Aparecer className="flex flex-wrap items-end gap-2">
+        <FiltroPeriodo id="periodo-jarvis" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
+      </Aparecer>
+      <CardV18 titulo="Evolução do caixa livre" descricao={faixa} icone={<TrendingUp className="h-4 w-4" />} tom="verde">
+        {!temEvolucao ? (
+          <EmptyState compacto titulo="Ainda sem histórico" descricao="O JARVIS grava uma medição a cada 30 minutos; em algumas horas o gráfico aparece." />
+        ) : (
+          <div className="h-52 sm:h-64">
+            <ResponsiveContainer>
+              <AreaChart data={serie} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+                <CartesianGrid stroke={CORES.grade} strokeDasharray="3 4" vertical={false} />
+                <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} minTickGap={12} />
+                <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={52} />
+                <Tooltip content={<TooltipPadrao />} cursor={{ fill: 'rgba(148,163,184,0.12)' }} />
+                <Area type="monotone" dataKey="caixaLivre" stroke={CORES.lucro} fill={CORES.lucro} fillOpacity={0.15} strokeWidth={2.5} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </CardV18>
+    </div>
+  );
+
+  const cardContas = (
+    <CardV18 titulo="De onde sai o caixa livre" icone={<Landmark className="h-4 w-4" />}>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <Conta rotulo="Saldo dos bancos" valor={p?.saldoBancos} tom="positivo" />
+        <Conta rotulo="Caixa da loja" valor={p?.saldoCaixa} tom="positivo" />
+        <Conta rotulo="Contas a pagar em 30 dias" valor={p?.aPagar30d} tom="negativo" />
+        <Conta rotulo="Caixinhas a usar em 30 dias (+ atraso das distantes)" valor={p?.caixinhasDevidas} tom="negativo" />
+        <Conta rotulo="Empréstimos que vencem em 30 dias" valor={p?.emprestimos30d} tom="negativo" />
+        <Conta rotulo="= Caixa livre" valor={p?.caixaLivre} tom="total" />
+      </div>
+      <p className="mt-3 text-xs text-slate-500">
+        O caixa livre olha os próximos 30 dias — é com ele que dá para decidir o que fazer hoje. Caixinha que será
+        usada nesse prazo entra inteira; as mais distantes entram só pelo que já deveria estar guardado. O resto
+        ({moeda(p?.caixinhasFuturas ?? 0)} de caixinhas e {moeda(p?.emprestimosDepois ?? 0)} de empréstimos) aparece
+        nos compromissos totais, logo abaixo dos números do topo.
+      </p>
+    </CardV18>
+  );
+
+  const cardPlacar = (
+    <CardV18 titulo="Placar do JARVIS" descricao="O que ele estimou × o que entrou de verdade" icone={<Clock className="h-4 w-4" />}>
+      {!temPlacar ? (
+        <EmptyState compacto titulo="Sem medições ainda" descricao="Sete dias depois de aceitar uma sugestão, o JARVIS confere quanto ela rendeu." />
+      ) : (
+        <div className="space-y-2">
+          <p className="text-sm text-slate-600">
+            {placar!.aceitas} aceita(s) · {placar!.recusadas} recusada(s) · estimado {moeda(placar!.estimado)} · medido {moeda(placar!.real)}
+            {placar!.acerto !== null && ` · acerto ${placar!.acerto}%`}
+          </p>
+          {placar!.medidas.slice(0, 6).map((m, i) => (
+            <div key={i} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm">
+              <span className="min-w-0 flex-1 truncate text-slate-700">{m.titulo}</span>
+              <span className="text-slate-500">
+                {moeda(m.impactoEstimado ?? 0)} → <strong className="text-slate-800">{moeda(m.resultadoReal ?? 0)}</strong>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </CardV18>
+  );
+
+  // com informação primeiro; o divisor; depois os vazios. O chat fica sempre logo abaixo
+  // do que tem conteúdo, porque é por onde se pede as coisas.
+  const comConteudo = [
+    { chave: 'sugestoes', tem: temSugestoes, conteudo: cardSugestoes },
+    { chave: 'evolucao', tem: temEvolucao, conteudo: cardEvolucao },
+    { chave: 'contas', tem: temContas, conteudo: cardContas },
+    { chave: 'placar', tem: temPlacar, conteudo: cardPlacar },
+  ];
+  const cheios = comConteudo.filter((b) => b.tem);
+  const vazios = comConteudo.filter((b) => !b.tem);
+
+  const blocos = [
+    ...cheios.slice(0, 1),
+    { chave: 'chat', conteudo: <ChatJarvis /> },
+    ...cheios.slice(1),
+    ...(vazios.length
+      ? [{ chave: 'divisor', conteudo: <SecaoDetalhes titulo="Ainda sem dados" dica="assim que houver, sobem para o topo" /> }]
+      : []),
+    ...vazios,
+  ];
+
 
   return (
     <PaginaV18 className="space-y-4 sm:space-y-5">
@@ -171,100 +292,11 @@ export default function Jarvis() {
         </Aparecer>
       )}
 
-      {/* ===== sugestões: o que fazer agora ===== */}
-      <CardV18
-        titulo="O que fazer agora"
-        descricao={p ? `${p.sugestoes.length} sugestão(ões) aberta(s)` : undefined}
-        icone={<Bot className="h-4 w-4" />}
-        tom="azul"
-      >
-        {isLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-20" />
-            <Skeleton className="h-20" />
-          </div>
-        ) : (p?.sugestoes.length ?? 0) === 0 ? (
-          <EmptyState
-            compacto
-            titulo="Nada pendente por aqui"
-            descricao="Quando o JARVIS achar dinheiro parado, conta vencida ou consignado no prazo, aparece aqui."
-          />
-        ) : (
-          <motion.div variants={listaVariants} initial="oculto" animate="visivel" className="space-y-2">
-            {p!.sugestoes.map((s) => (
-              <CartaoSugestao key={s.id} s={s} decidindo={decidirM.isPending} decidir={(id, o) => decidirM.mutate({ id, o })} />
-            ))}
-          </motion.div>
-        )}
-      </CardV18>
-
-      {/* ===== chat ===== */}
-      <ChatJarvis />
-
-      <SecaoDetalhes dica="role para ver a evolução e o placar" />
-
-      {/* ===== evolução ===== */}
-      <Aparecer className="flex flex-wrap items-end gap-2">
-        <FiltroPeriodo id="periodo-jarvis" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
-      </Aparecer>
-
-      <CardV18 titulo="Evolução do caixa livre" descricao={faixa} icone={<TrendingUp className="h-4 w-4" />} tom="verde">
-        {serie.length === 0 ? (
-          <EmptyState compacto titulo="Ainda sem histórico" descricao="O JARVIS grava uma medição a cada 30 minutos; em algumas horas o gráfico aparece." />
-        ) : (
-          <div className="h-52 sm:h-64">
-            <ResponsiveContainer>
-              <AreaChart data={serie} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
-                <CartesianGrid stroke={CORES.grade} strokeDasharray="3 4" vertical={false} />
-                <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} minTickGap={12} />
-                <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={52} />
-                <Tooltip content={<TooltipPadrao />} cursor={{ fill: 'rgba(148,163,184,0.12)' }} />
-                <Area type="monotone" dataKey="caixaLivre" stroke={CORES.lucro} fill={CORES.lucro} fillOpacity={0.15} strokeWidth={2.5} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </CardV18>
-
-      {/* ===== de onde sai o número ===== */}
-      <CardV18 titulo="De onde sai o caixa livre" icone={<Landmark className="h-4 w-4" />}>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          <Conta rotulo="Saldo dos bancos" valor={p?.saldoBancos} tom="positivo" />
-          <Conta rotulo="Caixa da loja" valor={p?.saldoCaixa} tom="positivo" />
-          <Conta rotulo="Contas a pagar em 30 dias" valor={p?.aPagar30d} tom="negativo" />
-          <Conta rotulo="Caixinhas a usar em 30 dias (+ atraso das distantes)" valor={p?.caixinhasDevidas} tom="negativo" />
-          <Conta rotulo="Empréstimos que vencem em 30 dias" valor={p?.emprestimos30d} tom="negativo" />
-          <Conta rotulo="= Caixa livre" valor={p?.caixaLivre} tom="total" />
-        </div>
-        <p className="mt-3 text-xs text-slate-500">
-          O caixa livre olha os próximos 30 dias — é com ele que dá para decidir o que fazer hoje. Caixinha que será
-          usada nesse prazo entra inteira; as mais distantes entram só pelo que já deveria estar guardado. O resto
-          ({moeda(p?.caixinhasFuturas ?? 0)} de caixinhas e {moeda(p?.emprestimosDepois ?? 0)} de empréstimos) aparece
-          nos compromissos totais, logo abaixo dos números do topo.
-        </p>
-      </CardV18>
-
-      {/* ===== placar ===== */}
-      <CardV18 titulo="Placar do JARVIS" descricao="O que ele estimou × o que entrou de verdade" icone={<Clock className="h-4 w-4" />}>
-        {!placar || placar.medidas.length === 0 ? (
-          <EmptyState compacto titulo="Sem medições ainda" descricao="Sete dias depois de aceitar uma sugestão, o JARVIS confere quanto ela rendeu." />
-        ) : (
-          <div className="space-y-2">
-            <p className="text-sm text-slate-600">
-              {placar.aceitas} aceita(s) · {placar.recusadas} recusada(s) · estimado {moeda(placar.estimado)} · medido {moeda(placar.real)}
-              {placar.acerto !== null && ` · acerto ${placar.acerto}%`}
-            </p>
-            {placar.medidas.slice(0, 6).map((m, i) => (
-              <div key={i} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm">
-                <span className="min-w-0 flex-1 truncate text-slate-700">{m.titulo}</span>
-                <span className="text-slate-500">
-                  {moeda(m.impactoEstimado ?? 0)} → <strong className="text-slate-800">{moeda(m.resultadoReal ?? 0)}</strong>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardV18>
+      {/* Os blocos com informação sobem; os vazios descem (pedido do Thiago).
+          Os números do topo e o chat ficam sempre à mão. */}
+      {blocos.map((b) => (
+        <div key={b.chave}>{b.conteudo}</div>
+      ))}
     </PaginaV18>
   );
 }

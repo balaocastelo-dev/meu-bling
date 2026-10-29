@@ -180,6 +180,11 @@ async function main() {
   const listaDepois = await adm.get('/jarvis/conversas');
   verifica(!(listaDepois.data ?? []).some((x: any) => x.id === c1.conversaId), 'conversa apagada sai da lista', listaDepois.data?.length);
 
+  secao('Ferramentas: o JARVIS lê sozinho, mas não mexe em dinheiro sem confirmar');
+  // as ferramentas vêm do mesmo catálogo do MCP; aqui confere a faixa de risco
+  const semConfirmar = await adm.post('/jarvis/confirmar', { conversaId: 1, nome: 'ferramenta_que_nao_existe', argumentos: {} }, 422);
+  verifica(!!semConfirmar, 'ferramenta inexistente é recusada com erro claro, não 500', semConfirmar?.erro ?? semConfirmar);
+
   secao('Perfis: o painel é só do ADMIN; o feed é de todo mundo');
   const senha = 'Senha@12345';
   await adm.post('/usuarios', { nome: `Vend JARVIS ${SUF}`, email: `vjarvis${SUF}@teste.com`, senha, perfil: 'VENDEDOR' }, [201, 409]);

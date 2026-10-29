@@ -27,6 +27,7 @@ import { iaDisponivel, testarChave } from './ia.js';
 import { iniciarWorker, medirResultados, obterConfig, rodarJarvis } from './worker.js';
 import { executarAcao } from './acoes.js';
 import { conversar, lerConversa, listarConversas } from './chat.js';
+import { executarFerramenta } from './ferramentas.js';
 
 // o worker de 30 min (ver worker.ts). Desliga com JARVIS=off
 registrarServico('jarvis', (app) => iniciarWorker(app));
@@ -211,14 +212,35 @@ export default async function jarvisRoutes(app: FastifyInstance) {
       .object({ pergunta: z.string().min(3).max(2000), conversaId: z.coerce.number().int().positive().nullish() })
       .parse((req.body ?? {}) as any);
 
+
     const u = req.user as any;
-    const r = await conversar({
+    return conversar({
       conversaId: conversaId ?? null,
       pergunta,
       usuarioId: u?.id ?? null,
       usuarioNome: u?.nome ?? null,
+      app,
+      req,
     });
-    return r;
+  });
+
+  /** O gestor apertou "pode fazer": executa a ação que estava pendente. */
+  app.post('/api/v1/jarvis/confirmar', admin, async (req) => {
+    const { conversaId, nome, argumentos } = z
+      .object({
+        conversaId: z.coerce.number().int().positive(),
+        nome: z.string().min(1).max(80),
+        argumentos: z.record(z.string(), z.any()).default({}),
+      })
+      .parse((req.body ?? {}) as any);
+
+    const r = await executarFerramenta(app, req, nome, argumentos, { permitirTudo: true });
+    await auditar(req, 'JarvisFerramenta', conversaId, 'ACAO', { ferramenta: nome, confirmadaPeloGestor: true, ok: r.ok });
+
+    const texto = r.ok ? `Feito: ${r.texto.slice(0, 1000)}` : `Não consegui: ${r.texto.slice(0, 1000)}`;
+    await prisma.jarvisMensagem.create({ data: { conversaId, papel: 'jarvis', texto } });
+    if (!r.ok) throw new AppError(r.texto.slice(0, 300), 422, 'ACAO_FALHOU');
+    return { ok: true, texto };
   });
 
   app.get('/api/v1/jarvis/conversas', admin, async (req) => {

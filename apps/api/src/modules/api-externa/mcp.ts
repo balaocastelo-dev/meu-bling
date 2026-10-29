@@ -16,7 +16,7 @@ import { endpointsPermitidos } from './openapi.js';
 const VERSOES = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const MAX_TEXTO = 60_000;
 
-interface Ferramenta {
+export interface Ferramenta {
   name: string;
   title: string;
   description: string;
@@ -37,7 +37,7 @@ const obj = (props: Record<string, unknown>, required: string[] = []) => ({ type
 const str = (description: string) => ({ type: 'string', description });
 const int = (description: string) => ({ type: 'integer', description });
 
-function ferramentas(perm: Permissoes | null): Ferramenta[] {
+export function ferramentas(perm: Permissoes | null): Ferramenta[] {
   const todas: Ferramenta[] = [
     {
       name: 'listar_endpoints', title: 'Listar o que posso fazer', recurso: '*', nivel: 'LEITURA',
@@ -222,11 +222,11 @@ type Rpc = { jsonrpc?: string; id?: string | number | null; method?: string; par
 
 const erroRpc = (id: Rpc['id'], code: number, message: string) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
 
-function caminhoValido(c: unknown): c is string {
+export function caminhoValido(c: unknown): c is string {
   return typeof c === 'string' && c.startsWith('/') && !c.startsWith('//') && !c.includes('..') && !/^\/(mcp|api\/)/.test(c) && c.length < 2000;
 }
 
-async function chamarApi(app: FastifyInstance, req: FastifyRequest, metodo: string, caminho: string, corpo?: unknown) {
+export async function chamarApi(app: FastifyInstance, req: FastifyRequest, metodo: string, caminho: string, corpo?: unknown) {
   const headers: Record<string, string> = { 'x-meubling-origem': 'mcp' };
   if (req.chaveApi) headers['x-api-key'] = req.chaveApi.bruta;
   else if (req.headers.authorization) headers.authorization = String(req.headers.authorization);

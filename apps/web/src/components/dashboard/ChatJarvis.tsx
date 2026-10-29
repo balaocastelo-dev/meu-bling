@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Bot, MessageSquarePlus, Mic, Phone, PhoneOff, Send, Trash2, User, Volume2, VolumeX } from 'lucide-react';
+import { Bot, Check, MessageSquarePlus, Mic, Phone, PhoneOff, Send, ShieldAlert, Trash2, User, Volume2, VolumeX, Wrench } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { Button, EmptyState, Skeleton } from '@/components/ui';
 import { CardV18 } from '@/components/dashboard/v18';
@@ -47,6 +47,10 @@ export default function ChatJarvis() {
   const escuta = useRef<Escuta | null>(null);
   const ultimaFalada = useRef<number | null>(null);
 
+  // o que ele fez e o que está esperando a sua confirmação
+  const [fez, setFez] = useState<string[]>([]);
+  const [pendentes, setPendentes] = useState<{ nome: string; descricao: string; argumentos: Record<string, unknown> }[]>([]);
+
   const { data: conversas } = useQuery({
     queryKey: ['jarvis-conversas'],
     queryFn: () => api.get<{ data: ResumoConversa[] }>('/jarvis/conversas'),
@@ -84,10 +88,17 @@ export default function ChatJarvis() {
 
   const enviar = useMutation({
     mutationFn: (pergunta: string) =>
-      api.post<{ conversaId: number; resposta: string }>('/jarvis/perguntar', { pergunta, conversaId }),
+      api.post<{
+        conversaId: number;
+        resposta: string;
+        fez?: string[];
+        pendentes?: { nome: string; descricao: string; argumentos: Record<string, unknown> }[];
+      }>('/jarvis/perguntar', { pergunta, conversaId }),
     onSuccess: (r) => {
       setTexto('');
       setConversaId(r.conversaId);
+      setFez(r.fez ?? []);
+      setPendentes(r.pendentes ?? []);
       qc.invalidateQueries({ queryKey: ['jarvis-conversa', r.conversaId] });
       qc.invalidateQueries({ queryKey: ['jarvis-conversas'] });
       // na ligação ele sempre responde falando; fora dela, só se estiver marcado
@@ -160,6 +171,18 @@ export default function ChatJarvis() {
     void dizer(ultima.texto);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mensagens.length, falarSempre, emLigacao]);
+
+  const confirmar = useMutation({
+    mutationFn: (p: { nome: string; argumentos: Record<string, unknown> }) =>
+      api.post<{ texto: string }>('/jarvis/confirmar', { conversaId, nome: p.nome, argumentos: p.argumentos }),
+    onSuccess: (r, v) => {
+      toast.success(r.texto.slice(0, 160));
+      setPendentes((ps) => ps.filter((x) => x.nome !== v.nome));
+      qc.invalidateQueries({ queryKey: ['jarvis-conversa', conversaId] });
+      qc.invalidateQueries({ queryKey: ['jarvis-painel'] });
+    },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
 
   const apagar = useMutation({
     mutationFn: (id: number) => api.del(`/jarvis/conversas/${id}`),
@@ -286,6 +309,41 @@ export default function ChatJarvis() {
             >
               {e}
             </button>
+          ))}
+        </div>
+      )}
+
+      {fez.length > 0 && (
+        <div className="mt-3 rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-900 ring-1 ring-sky-200">
+          <p className="mb-1 flex items-center gap-1.5 font-medium">
+            <Wrench className="h-4 w-4" /> O que ele fez no sistema
+          </p>
+          <ul className="space-y-0.5 text-sky-800">
+            {fez.map((f, i) => (
+              <li key={i} className="break-words">· {f}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {pendentes.length > 0 && (
+        <div className="mt-3 space-y-2 rounded-xl bg-amber-50 px-3 py-2 ring-1 ring-amber-200">
+          <p className="flex items-center gap-1.5 text-sm font-medium text-amber-900">
+            <ShieldAlert className="h-4 w-4" /> Precisa da sua confirmação
+          </p>
+          {pendentes.map((p2, i) => (
+            <div key={i} className="flex flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0 flex-1 break-words text-sm text-amber-800">{p2.descricao}</span>
+              <Button
+                variante="primario"
+                tamanho="sm"
+                icone={<Check className="h-4 w-4" />}
+                carregando={confirmar.isPending}
+                onClick={() => confirmar.mutate({ nome: p2.nome, argumentos: p2.argumentos })}
+              >
+                Pode fazer
+              </Button>
+            </div>
           ))}
         </div>
       )}

@@ -15,6 +15,17 @@ const VERSAO = '2023-06-01';
 
 export type RespostaIa = { texto: string; tokens: number } | null;
 
+/** Uma volta da conversa com a IA, já com ferramentas. */
+export type Mensagem = { role: 'user' | 'assistant'; content: any };
+export type VoltaIa = {
+  texto: string;
+  tokens: number;
+  /** ferramentas que a IA quer usar nesta volta */
+  usos: { id: string; nome: string; argumentos: Record<string, any> }[];
+  /** a fala da IA, para devolver na próxima volta */
+  conteudo: any[];
+};
+
 async function configIa() {
   const cfg = await prisma.jarvisConfig.findUnique({ where: { id: 1 } });
   const chave = decrypt(cfg?.chaveAnthropic);
@@ -76,6 +87,57 @@ async function marcarErro(erro: string | null) {
 }
 
 /** Testa a chave na tela de configuração: devolve { ok, mensagem }. */
+/**
+ * Uma volta de conversa com ferramentas. Devolve o que a IA falou e o que ela quer usar.
+ * Quem chama executa as ferramentas e manda o resultado na volta seguinte.
+ */
+export async function conversarComFerramentas(p: {
+  sistema: string;
+  mensagens: Mensagem[];
+  ferramentas: { name: string; description: string; input_schema: Record<string, unknown> }[];
+  maxTokens?: number;
+  timeoutMs?: number;
+}): Promise<VoltaIa | null> {
+  const { chave, modelo } = await configIa();
+  if (!chave) return null;
+
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), p.timeoutMs ?? 120_000);
+  try {
+    const r = await fetch(URL_API, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { 'content-type': 'application/json', 'x-api-key': chave, 'anthropic-version': VERSAO },
+      body: JSON.stringify({
+        model: modelo,
+        max_tokens: p.maxTokens ?? 3000,
+        system: p.sistema,
+        tools: p.ferramentas,
+        messages: p.mensagens,
+      }),
+    });
+    if (!r.ok) {
+      const erro = await r.text().catch(() => '');
+      await marcarErro(`IA ${r.status}: ${erro.slice(0, 300)}`);
+      return null;
+    }
+    const j: any = await r.json();
+    const conteudo = Array.isArray(j?.content) ? j.content : [];
+    const texto = conteudo.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n').trim();
+    const usos = conteudo
+      .filter((c: any) => c.type === 'tool_use')
+      .map((c: any) => ({ id: String(c.id), nome: String(c.name), argumentos: c.input ?? {} }));
+    const tokens = (j?.usage?.input_tokens || 0) + (j?.usage?.output_tokens || 0);
+    await marcarErro(null);
+    return { texto, tokens, usos, conteudo };
+  } catch (e: any) {
+    await marcarErro(`IA indisponível: ${String(e?.message || e).slice(0, 200)}`);
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export async function testarChave(chave: string, modelo: string) {
   try {
     const r = await fetch(URL_API, {
@@ -106,3 +168,21 @@ Meta: R$ 1.000.000,00 livres no caixa. Você recebe os números reais da loja (c
 Responda em português do Brasil, em no máximo 6 linhas, sempre citando os números que recebeu, e termine com no máximo 3 ações práticas.
 Você sugere e calcula; quem decide onde colocar o dinheiro é o dono. Nunca invente números que não estão no contexto:
 se faltar um dado, diga qual falta.`;
+
+export const SISTEMA_CHAT = `Você é o JARVIS, o agente do Thiago, dono do Balão da Informática (loja de informática em Campinas-SP).
+Objetivo dele: R$ 1.000.000,00 livres no caixa da loja.
+
+Você tem FERRAMENTAS que mexem no sistema de verdade (o MEU BLING). Use-as sempre que a resposta
+depender de um dado que não está no resumo que você recebeu: consulte em vez de supor.
+
+Três faixas de risco, e elas não se negociam:
+- Consultar qualquer coisa: faça na hora, sem pedir licença.
+- Criar orçamento, cliente ou OS: pode fazer, e depois conte em uma linha o que criou (com o número).
+- Mexer em dinheiro (baixar conta), falar com cliente (WhatsApp), emitir pedido ou excluir algo:
+  NÃO faça sozinho. Explique o que pretende e deixe o Thiago confirmar. Se chamar a ferramenta
+  mesmo assim, ela volta pedindo confirmação — então prefira descrever antes.
+
+Jeito de falar: português do Brasil, direto, no máximo 6 linhas, sempre com os números.
+Nada de saudação longa, nada de emoji. Fale como um sócio prático. Quando usar ferramenta,
+não descreva a ferramenta: diga o que descobriu ou o que fez.
+Nunca invente número: se não achou, diga que não achou e o que falta.`;

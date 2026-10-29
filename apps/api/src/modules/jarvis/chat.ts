@@ -8,9 +8,12 @@
  * O JARVIS responde com o que sabe do sistema. Quando a pergunta pede um dado que ele não
  * tem na mão, ele diz qual falta em vez de inventar.
  */
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { prisma } from '../../lib/prisma.js';
+import { auditar } from '../../lib/auditoria.js';
 import { calcularCaixaLivre } from './caixa-livre.js';
-import { perguntarIa, SISTEMA_PERGUNTA } from './ia.js';
+import { conversarComFerramentas, SISTEMA_CHAT, type Mensagem as MensagemIa } from './ia.js';
+import { executarFerramenta, ferramentasParaIa } from './ferramentas.js';
 import { obterConfig } from './worker.js';
 
 /** Até onde o fio da conversa volta (mensagens, não pares). */
@@ -77,23 +80,32 @@ export type RespostaChat = {
   resposta: string;
   tokens: number;
   em: Date;
+  /** o que ele fez de fato nesta volta (ferramentas que mexeram no sistema) */
+  fez: string[];
+  /** o que ele quer fazer mas precisa da sua confirmação */
+  pendentes: { nome: string; descricao: string; argumentos: Record<string, unknown> }[];
 };
+
+/** Até quantas voltas de ferramenta numa resposta só (evita laço infinito e gasto). */
+const MAX_VOLTAS = 6;
 
 /**
  * Manda uma mensagem na conversa (criando-a se `conversaId` vier nulo) e devolve a resposta.
- * Lança erro de negócio quando a IA não está configurada — quem chama transforma em 422.
+ * O JARVIS pode consultar o sistema e criar coisas reversíveis sozinho; o que mexe em
+ * dinheiro ou fala com cliente volta como pendente, para o gestor confirmar.
  */
 export async function conversar(p: {
   conversaId: number | null;
   pergunta: string;
   usuarioId: number | null;
   usuarioNome?: string | null;
+  app?: FastifyInstance;
+  req?: FastifyRequest;
+  /** true quando o gestor apertou "pode fazer" para uma ação pendente */
+  permitirTudo?: boolean;
 }): Promise<RespostaChat> {
   let conversa = p.conversaId
-    ? await prisma.jarvisConversa.findUnique({
-        where: { id: p.conversaId },
-        include: { mensagens: { orderBy: { em: 'asc' }, take: MEMORIA_MENSAGENS } },
-      })
+    ? await prisma.jarvisConversa.findUnique({ where: { id: p.conversaId } })
     : null;
 
   if (!conversa) {
@@ -118,35 +130,83 @@ export async function conversar(p: {
     .map((m) => `${m.papel === 'usuario' ? (p.usuarioNome || 'Gestor') : 'JARVIS'}: ${m.texto}`)
     .join('\n');
 
-  const prompt =
-    `Números da loja agora:\n${JSON.stringify(contexto, null, 1).slice(0, 18_000)}\n\n` +
+  const abertura =
+    `Números da loja agora:\n${JSON.stringify(contexto, null, 1).slice(0, 14_000)}\n\n` +
     (historico ? `Conversa até aqui:\n${historico}\n\n` : '') +
     `${p.usuarioNome || 'Gestor'}: ${p.pergunta}`;
 
-  const r = await perguntarIa(SISTEMA_PERGUNTA, prompt, { maxTokens: 1500 });
+  const podeFerramentas = !!(p.app && p.req);
+  const mensagens: MensagemIa[] = [{ role: 'user', content: abertura }];
+  const fez: string[] = [];
+  const pendentes: RespostaChat['pendentes'] = [];
+  let texto = '';
+  let tokens = 0;
+  let semIa = false;
 
-  const texto =
-    r?.texto ??
-    'A IA não está respondendo agora. Confira a chave da Anthropic em Configurações → JARVIS — ' +
-      'enquanto isso, as sugestões do painel continuam sendo calculadas normalmente.';
+  for (let volta = 0; volta < MAX_VOLTAS; volta++) {
+    const r = await conversarComFerramentas({
+      sistema: SISTEMA_CHAT,
+      mensagens,
+      ferramentas: podeFerramentas ? ferramentasParaIa() : [],
+      maxTokens: 3000,
+    });
+
+    if (!r) {
+      semIa = true;
+      break;
+    }
+    tokens += r.tokens;
+    if (r.texto) texto = r.texto;
+    if (r.usos.length === 0) break;
+
+    // a IA pediu ferramentas: executa e devolve os resultados
+    mensagens.push({ role: 'assistant', content: r.conteudo });
+    const resultados: any[] = [];
+
+    for (const uso of r.usos) {
+      const res = await executarFerramenta(p.app!, p.req!, uso.nome, uso.argumentos, {
+        permitirTudo: p.permitirTudo,
+      });
+      if (res.pendente) pendentes.push(res.pendente);
+      else if (res.risco !== 'LIVRE' && res.ok) fez.push(`${uso.nome}: ${res.texto.slice(0, 160)}`);
+
+      if (res.risco !== 'LIVRE') {
+        await auditar(p.req ?? null, 'JarvisFerramenta', conversa.id, 'ACAO', {
+          ferramenta: uso.nome,
+          risco: res.risco,
+          executada: !res.pendente,
+          ok: res.ok,
+        });
+      }
+
+      resultados.push({
+        type: 'tool_result',
+        tool_use_id: uso.id,
+        is_error: !res.ok,
+        content: res.texto.slice(0, 20_000),
+      });
+    }
+    mensagens.push({ role: 'user', content: resultados });
+  }
+
+  if (!texto) {
+    texto = semIa
+      ? 'A IA não está respondendo agora. Confira a chave da Anthropic em Configurações → JARVIS — ' +
+        'enquanto isso, as sugestões do painel continuam sendo calculadas normalmente.'
+      : 'Fiz o que dava, mas não consegui montar uma resposta. Tente perguntar de outro jeito.';
+  }
 
   await prisma.jarvisMensagem.create({
     data: {
       conversaId: conversa.id,
       papel: 'jarvis',
       texto,
-      contexto: JSON.stringify({ caixaLivre: contexto.caixaLivre, tokens: r?.tokens ?? 0, semIa: !r }),
+      contexto: JSON.stringify({ caixaLivre: contexto.caixaLivre, tokens, semIa, fez, pendentes: pendentes.length }),
     },
   });
   await prisma.jarvisConversa.update({ where: { id: conversa.id }, data: { atualizadaEm: new Date() } });
 
-  return {
-    conversaId: conversa.id,
-    titulo: conversa.titulo,
-    resposta: texto,
-    tokens: r?.tokens ?? 0,
-    em: new Date(),
-  };
+  return { conversaId: conversa.id, titulo: conversa.titulo, resposta: texto, tokens, em: new Date(), fez, pendentes };
 }
 
 /** Lista as conversas do gestor, mais recentes primeiro. */
