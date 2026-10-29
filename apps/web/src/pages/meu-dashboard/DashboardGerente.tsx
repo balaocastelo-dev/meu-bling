@@ -12,6 +12,7 @@ import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAx
 import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, Banknote, ChevronRight, Clock, HardHat, History, Info, Landmark, PiggyBank, ShoppingCart, TrendingUp, TriangleAlert, Trophy, Users, Wallet, Wrench } from 'lucide-react';
 import { EmptyState, Skeleton } from '@/components/ui';
 import { Aparecer, Avatar, BarraAnimada, CardV18, FaixaKpis, KpiV18, LinhaV18, PaginaV18, SaldosContas, SecaoDetalhes, listaVariants } from '@/components/dashboard/v18';
+import { BlocosAlerta } from '@/components/dashboard/BlocosAlerta';
 import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import { textoAlvo } from '@/components/compartilhados/DesafioCard';
 import { data as fmtData, inteiro, moeda, numero } from '@/lib/format';
@@ -65,17 +66,7 @@ function AvisosGestao({ g, carregando }: { g?: BlocoGerenteDashboard; carregando
             </ul>
           )}
           {g?.avisos.length ? (
-            <ul className="divide-y divide-slate-100">
-              {g.avisos.map((a, i) => (
-                <li key={i}>
-                  <Link to={a.link} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50 sm:px-5">
-                    {icone(a.tipo)}
-                    <span className={clsx('flex-1', a.tipo === 'erro' ? 'font-medium text-red-800' : 'text-slate-700')}>{a.mensagem}</span>
-                    <ChevronRight className="h-4 w-4 text-slate-300" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <BlocosAlerta alertas={g.avisos} className="px-4 pb-4 pt-3 sm:px-5" />
           ) : (
             <p className="px-4 py-3 text-sm text-emerald-700 sm:px-5">Tudo em dia. Caixinhas no prazo e nenhuma conta vencida.</p>
           )}
