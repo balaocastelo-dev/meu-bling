@@ -46,8 +46,8 @@ export function CatalogoDoSite() {
 
   return (
     <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-sky-200 bg-sky-50/60 px-4 py-3 text-sm">
-      <Globe className="h-5 w-5 shrink-0 text-sky-600" />
-      <div className="min-w-0 flex-1">
+      <Globe className="h-5 w-5 shrink-0 self-start text-sky-600" />
+      <div className="min-w-0 flex-[1_1_16rem]">
         <p className="font-medium text-slate-900">
           Produtos do site www.balao.info: {numero(e.produtosDoSite)} ativos · {numero(e.prontaEntrega)} em pronta entrega
         </p>

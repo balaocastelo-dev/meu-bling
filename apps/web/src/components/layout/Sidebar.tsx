@@ -40,14 +40,14 @@ export function Sidebar({ aberta, onFechar }: { aberta: boolean; onFechar: () =>
   return (
     <>
       {/* fundo escuro no mobile */}
-      <div className={clsx('fixed inset-0 z-40 bg-slate-900/50 transition-opacity lg:hidden', aberta ? 'opacity-100' : 'pointer-events-none opacity-0')} onClick={onFechar} aria-hidden />
+      <div className={clsx('fixed inset-0 z-40 bg-slate-900/50 transition-opacity xl:hidden', aberta ? 'opacity-100' : 'pointer-events-none opacity-0')} onClick={onFechar} aria-hidden />
       <aside
         id="menu-lateral"
         aria-label="Menu principal"
         className={clsx(
           // gaveta no celular/tablet: no máximo 85% da tela, para sobrar uma faixa de fundo para tocar e fechar
-          'fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] flex-col bg-slate-950 text-slate-300 transition-transform duration-200 lg:max-w-none lg:translate-x-0',
-          aberta ? 'translate-x-0 shadow-2xl lg:shadow-none' : '-translate-x-full',
+          'fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] flex-col bg-slate-950 text-slate-300 transition-transform duration-200 xl:max-w-none xl:translate-x-0',
+          aberta ? 'translate-x-0 shadow-2xl xl:shadow-none' : '-translate-x-full',
         )}
         style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', paddingLeft: 'env(safe-area-inset-left)' }}
       >
@@ -57,7 +57,7 @@ export function Sidebar({ aberta, onFechar }: { aberta: boolean; onFechar: () =>
             <p className="text-sm font-bold tracking-wide text-white">MEU BLING</p>
             <p className="truncate text-[11px] text-slate-400">{empresa?.nomeFantasia || empresa?.razaoSocial || 'Balão da Informática'}</p>
           </div>
-          <button className="-mr-2 ml-auto inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-400 hover:bg-white/10 lg:hidden" onClick={onFechar} aria-label="Fechar menu">
+          <button className="-mr-2 ml-auto inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-400 hover:bg-white/10 xl:hidden" onClick={onFechar} aria-label="Fechar menu">
             <X className="h-5 w-5" />
           </button>
         </div>

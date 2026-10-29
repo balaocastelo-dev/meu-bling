@@ -76,7 +76,8 @@ export function ChipsSituacao({ situacoes, valor, onChange, contagens }: { situa
 /** Select pequeno para filtros */
 export function SelectFiltro({ valor, onChange, opcoes, placeholder, className, label }: { valor: string; onChange: (v: string) => void; opcoes: { valor: string | number; rotulo: string }[]; placeholder?: string; className?: string; label?: string }) {
   return (
-    <div className={clsx('flex min-w-0 flex-1 basis-[calc(50%-0.25rem)] flex-col gap-0.5 sm:flex-none sm:basis-auto', className)}>
+    // celular estreito: um por linha (dois lado a lado cortavam o texto: "Todas cate…"); a partir de 420 px, dois por linha
+    <div className={clsx('flex min-w-0 flex-1 basis-full flex-col gap-0.5 min-[420px]:basis-[calc(50%-0.25rem)] sm:flex-none sm:basis-auto', className)}>
       {label && <span className="text-[11px] font-medium text-slate-500">{label}</span>}
       <select value={valor} onChange={(e) => onChange(e.target.value)} className="input-base h-9 w-full min-w-0 py-0 pr-8 text-sm sm:h-8 sm:w-auto sm:min-w-[140px]">
         <option value="">{placeholder ?? 'Todos'}</option>
@@ -154,14 +155,15 @@ export function PeriodoFiltro({ inicial, final, onChange, label = 'Período', at
       {label && <span className="text-[11px] font-medium text-slate-500">{label}</span>}
       {atalhos ? (
         <div className="flex flex-wrap items-center gap-1.5">
-          <div className="inline-flex max-w-full flex-wrap rounded-full border border-slate-200 bg-white p-1 shadow-card" role="group" aria-label="Período">
+          {/* quando não cabe numa linha, as opções descem dentro de um bloco de cantos arredondados — nada cortado, nada de oval torta */}
+          <div className="inline-flex max-w-full flex-wrap gap-0.5 rounded-2xl border border-slate-200 bg-white p-1 shadow-card" role="group" aria-label="Período">
             {opcoes.map((o) => (
               <button
                 key={o.valor}
                 type="button"
                 onClick={() => escolher(o.valor)}
                 aria-pressed={o.valor === ativo}
-                className={clsx('relative h-7 whitespace-nowrap rounded-full px-3 text-xs font-medium transition-colors pointer-coarse:h-9', o.valor === ativo ? 'text-white' : 'text-slate-500 hover:text-slate-800')}
+                className={clsx('relative h-7 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-medium transition-colors pointer-coarse:h-9', o.valor === ativo ? 'text-white' : 'text-slate-500 hover:text-slate-800')}
               >
                 {o.valor === ativo && <motion.span layoutId={`periodo-${idPill}`} className="absolute inset-0 rounded-full bg-slate-900" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
                 <span className="relative">{o.rotulo}</span>
