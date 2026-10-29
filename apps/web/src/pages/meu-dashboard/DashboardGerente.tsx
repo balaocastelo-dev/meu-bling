@@ -16,6 +16,7 @@ import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/com
 import { textoAlvo } from '@/components/compartilhados/DesafioCard';
 import { data as fmtData, inteiro, moeda, numero } from '@/lib/format';
 import { quandoRelativo } from '@/pages/dashboard/UltimasAtividades';
+import { LembretesParaVoce } from '@/components/compartilhados/Lembretes';
 import type { BlocoGerenteDashboard } from '@/types';
 import { AlertasCorrija, Cabecalho, Lembretes } from './partes';
 import type { PropsRole } from './DashboardVendedor';
@@ -181,6 +182,8 @@ export default function DashboardGerente({ dados, carregando, faixa, filtros, ve
         <Lembretes lembretes={dados?.lembretes} carregando={carregando} usuarioId={dados?.usuario.id} verComo={dados?.verComo} />
       </div>
       <AlertasCorrija alertas={dados?.alertas} carregando={carregando} titulo="Alertas do sistema (loja inteira)" />
+      {/* lembretes do Robô da Saúde para a equipe (quem precisa preencher custo de peça/produto) — some quando não há nada */}
+      {!dados?.verComo && <Aparecer><LembretesParaVoce /></Aparecer>}
 
       {/* ===== equipe e desafios ===== */}
       <SecaoDetalhes titulo="Equipe" dica={g ? `metas de ${g.equipe.competencia.split('-').reverse().join('/')}` : undefined} />

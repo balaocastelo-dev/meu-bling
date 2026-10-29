@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { BadgeCheck, ExternalLink, FileText, Image as ImageIcon, Link2, Paperclip, Pencil, Printer, Send, Trash2, Undo2, Upload, Zap } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, ExternalLink, FileText, Image as ImageIcon, Link2, Paperclip, Pencil, Printer, Send, Trash2, Undo2, Upload, Zap } from 'lucide-react';
 import { abrirEmNovaAba, api, mensagemErro, urlUpload, BASE_PATH } from '@/lib/api';
 import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, PageHeader, StatusBadge, StatusChanger, Tabs, tomPorStatus, ValorOculto } from '@/components/ui';
 import { HistoricoSituacoes } from '@/components/compartilhados/HistoricoSituacoes';
@@ -151,6 +151,14 @@ export default function OsDetalhe() {
         }
       />
 
+      {/* lembrete: peça sem custo — o técnico preenche na edição; o Robô da Saúde cobra até entrar */}
+      {!!os.pendenciasCusto?.length && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> <span><strong>Falta o custo:</strong> {os.pendenciasCusto.map((p) => p.mensagem).join(' ')} Sem isso o lucro da assistência e o DRE não ficam reais.</span></span>
+          <Link to={`/ordens-servico/${os.id}/editar`}><Button tamanho="sm" variante="primario" icone={<Pencil className="h-3.5 w-3.5" />}>Preencher o custo</Button></Link>
+        </div>
+      )}
+
       {os.orcar && !os.orcamentoAprovado && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <span className="flex items-center gap-2"><BadgeCheck className="h-4 w-4" /> Orçamento de <strong className="num">{moeda(os.total)}</strong> aguardando aprovação do cliente.</span>
@@ -161,7 +169,7 @@ export default function OsDetalhe() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid items-start gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <Definicoes
             colunas={4}
@@ -190,9 +198,17 @@ export default function OsDetalhe() {
               <span>Custos internos</span>
               <Link to={`/ordens-servico/${os.id}/editar`} className="normal-case tracking-normal text-brand-600 hover:underline">Lançar</Link>
             </p>
-            <div className="flex justify-between"><span className="text-slate-500">Custo da peça{os.fechamento?.custoPecasOrigem === 'CADASTRO' && (os.fechamento?.custoPecas ?? 0) > 0 ? ' (cadastro)' : ''}</span><ValorOculto className="num">{moeda(os.fechamento ? os.fechamento.custoPecas : os.custoPeca)}</ValorOculto></div>
+            <div className="flex justify-between"><span className="text-slate-500">Custo das peças{os.fechamento?.custoPecasOrigem === 'INFORMADO' ? ' (total informado)' : ''}</span><ValorOculto className="num">{moeda(os.fechamento ? os.fechamento.custoPecas : os.custoPeca > 0 ? os.custoPeca : os.custoTotal ?? 0)}</ValorOculto></div>
+            {!!os.pendenciasCusto?.length && <p className="text-[11px] text-amber-700">{os.pendenciasCusto.map((p) => p.mensagem).join(' ')}</p>}
+            {os.fechamento && (
+              <>
+                <div className="flex justify-between"><span className="text-slate-500">Imposto ({numero(os.fechamento.impostoPct ?? 0, 1)}%)</span><ValorOculto className="num">{moeda(os.fechamento.imposto ?? 0)}</ValorOculto></div>
+                <div className="flex justify-between"><span className="text-slate-500">Taxa do cartão{os.fechamento.taxaCartao ? ` (${os.fechamento.parcelasCartao ?? 1}x · ${numero(os.fechamento.taxaCartaoPct ?? 0, 2)}%)` : ''}</span><ValorOculto className="num">{moeda(os.fechamento.taxaCartao ?? 0)}</ValorOculto></div>
+              </>
+            )}
             <div className="flex justify-between"><span className="text-slate-500">Logística</span><ValorOculto className="num">{moeda(os.custoLogistica)}</ValorOculto></div>
             <div className="flex justify-between"><span className="text-slate-500">Mão de obra de terceiro</span><ValorOculto className="num">{moeda(os.custoMaoObraTerceiro)}</ValorOculto></div>
+            {os.fechamento && <div className="flex justify-between font-medium"><span className="text-slate-600">Custo total</span><ValorOculto className="num">{moeda(os.fechamento.custoTotal)}</ValorOculto></div>}
             {os.fechamento && (
               <div className="mt-1 flex justify-between border-t border-slate-200 pt-1.5 text-sm">
                 <span className="font-semibold text-slate-700">Lucro</span>

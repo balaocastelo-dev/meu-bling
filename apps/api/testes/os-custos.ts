@@ -2,6 +2,7 @@
  * CUSTOS INTERNOS DA OS + DASHBOARD DE ASSISTÊNCIA TÉCNICA (26/10/2026)
  * Custo da peça, logística e mão de obra de terceiro: gravam na OS, podem ser lançados depois de concluída,
  * NÃO aparecem na impressão nem no link do cliente, e alimentam o dashboard de assistência (só ADMIN).
+ * Desde 29/10/2026 a OS tem o custo completo da venda: + imposto (alíquota) + taxa de cartão (pela forma das parcelas).
  *   npx tsx testes/os-custos.ts http://localhost:3333
  */
 import { encerrar, entrar, hoje, igual, secao, SUF, verifica } from './lib.js';
@@ -9,6 +10,10 @@ import { encerrar, entrar, hoje, igual, secao, SUF, verifica } from './lib.js';
 async function main() {
   const adm = await entrar('admin@balao.info', 'admin123');
   adm.nome = 'ADMIN';
+  // imposto da OS = alíquota do Simples × total (igual à venda); as OS deste teste não têm forma de pagamento → cartão 0
+  const emp = await adm.get('/empresa');
+  const aliq = Number(emp.aliquotaSimplesPct ?? 10);
+  const imposto = (total: number) => Math.round(total * aliq) / 100;
   const sitO: any[] = await adm.get('/situacoes?modulo=OS');
   const sit = (nome: string) => sitO.find((s) => s.nome === nome)?.id;
 
@@ -34,7 +39,8 @@ async function main() {
   );
   verifica(igual(os.total, 650), 'total da OS = 650 (200 serviço + 450 peça)', os.total);
   verifica(igual(os.custoPeca, 280) && igual(os.custoLogistica, 25) && igual(os.custoMaoObraTerceiro, 40), 'custos gravados na OS', os);
-  verifica(os.fechamento && igual(os.fechamento.custoTotal, 345) && igual(os.fechamento.lucro, 305), 'fechamento: custo 345, lucro 305', os.fechamento);
+  verifica(os.fechamento && igual(os.fechamento.custoTotal, 345 + imposto(650)) && igual(os.fechamento.lucro, 305 - imposto(650)), `fechamento: custo 345 + imposto ${imposto(650)}, lucro ${305 - imposto(650)}`, os.fechamento);
+  verifica(os.fechamento && igual(os.fechamento.imposto, imposto(650)) && igual(os.fechamento.taxaCartao, 0), 'fechamento traz imposto e taxa de cartão (0: sem forma de pagamento)', os.fechamento);
 
   secao('Custos não vão para o cliente');
   for (const via of ['cliente', 'tecnico', 'etiqueta']) {
@@ -50,14 +56,14 @@ async function main() {
   for (const nome of ['Em andamento', 'Concluída', 'Entregue']) if (sit(nome)) await adm.post(`/ordens-servico/${os.id}/situacao`, { situacaoId: sit(nome) });
   const os2 = await adm.put(`/ordens-servico/${os.id}`, { custoLogistica: 35 });
   verifica(igual(os2.custoLogistica, 35), 'logística alterada para 35 com a OS concluída', os2.custoLogistica);
-  verifica(igual(os2.fechamento.lucro, 295), 'lucro recalculado = 295', os2.fechamento?.lucro);
+  verifica(igual(os2.fechamento.lucro, 295 - imposto(650)), `lucro recalculado = 295 - imposto = ${295 - imposto(650)}`, os2.fechamento?.lucro);
 
   secao('Dashboard de assistência técnica');
   const d = await adm.get(`/dashboard/assistencia?dataInicial=${hoje()}&dataFinal=${hoje()}`);
   const linha = d.ordens?.find((o: any) => o.id === os.id);
   verifica(linha && igual(linha.valorEntrada, 650) && igual(linha.maoDeObra, 200) && igual(linha.pecas, 450), 'a OS aparece com valor de entrada, mão de obra e peças', linha);
-  verifica(linha && igual(linha.custoPecas, 280) && igual(linha.lucro, 295), 'a OS aparece com custo da peça e lucro', linha);
-  verifica(d.resumo && d.resumo.valorEntrada >= 650 && d.resumo.lucro >= 295 - 0.01, 'resumo soma a OS', d.resumo);
+  verifica(linha && igual(linha.custoPecas, 280) && igual(linha.lucro, 295 - imposto(650)), 'a OS aparece com custo da peça e lucro (já com imposto)', linha);
+  verifica(d.resumo && d.resumo.valorEntrada >= 650 && d.resumo.lucro >= 295 - imposto(650) - 0.01, 'resumo soma a OS', d.resumo);
   verifica(igual(d.resumo.valorEntrada, d.resumo.maoDeObra + d.resumo.pecas - d.resumo.descontos), 'valor de entrada = mão de obra + peças - descontos', d.resumo);
   verifica(igual(d.resumo.lucro, d.resumo.valorEntrada - d.resumo.custoTotal), 'lucro = entrada - custos', d.resumo);
   const dc = await adm.get(`/dashboard/assistencia?base=conclusao&dataInicial=${hoje()}&dataFinal=${hoje()}`);
@@ -65,7 +71,7 @@ async function main() {
 
   secao('Sem custo informado: usa o custo da peça cadastrada');
   const os3 = await adm.post('/ordens-servico', { contatoId: cli.id, dataEntrada: hoje(), equipamento: 'Desktop', defeitoRelatado: 'Não liga', itens: [{ tipo: 'SERVICO', descricao: 'Diagnóstico', quantidade: 1, valorUnitario: 80 }] }, 201);
-  verifica(os3.fechamento?.custoPecasOrigem === 'CADASTRO' && igual(os3.fechamento.lucro, 80), 'OS só de serviço sem custo: lucro = 80', os3.fechamento);
+  verifica(os3.fechamento?.custoPecasOrigem === 'CADASTRO' && igual(os3.fechamento.lucro, 80 - imposto(80)), `OS só de serviço sem custo: lucro = 80 - imposto = ${80 - imposto(80)}`, os3.fechamento);
 
   secao('Kanban de OS com filtro de data');
   const kHoje: any[] = await adm.get(`/ordens-servico/kanban?dataInicial=${hoje()}&dataFinal=${hoje()}`);

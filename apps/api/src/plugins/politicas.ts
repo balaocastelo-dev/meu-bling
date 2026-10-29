@@ -50,6 +50,8 @@ const REGRAS: Regra[] = [
   { metodos: MUT, teste: /^\/open-finance\/(connect-token|vincular|desvincular)/, perfis: ['ADMIN'] },
   { teste: /^\/auditoria(\/|$)/, perfis: GESTAO },
   { teste: /^\/diagnostico(\/|$)/, perfis: ['ADMIN'] },
+  // lembretes do Robô da Saúde para quem está logado (OS sem custo → técnico, venda sem custo → vendedor): todos
+  { teste: /^\/robo-saude\/lembretes$/, perfis: 'TODOS' },
   { teste: /^\/robo-saude(\/|$)/, perfis: ['ADMIN'] },
   { teste: /^\/notas-fiscais\/inutilizar/, perfis: GESTAO },
   { teste: /^\/whatsapp\/(conectar|desconectar)/, perfis: GESTAO },

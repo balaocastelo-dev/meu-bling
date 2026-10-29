@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { useWhatsappStatus } from '@/hooks/useEmpresa';
 import { iniciais, rotulo } from '@/lib/format';
 import { SinoRobo } from '@/components/compartilhados/RoboSaude';
+import { SinoLembretes } from '@/components/compartilhados/Lembretes';
 
 function MenuFlutuante({ aberto, onFechar, children, alinhar = 'right' }: { aberto: boolean; onFechar: () => void; children: React.ReactNode; alinhar?: 'left' | 'right' }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -53,7 +54,7 @@ export function Topbar({ menuAberto = false, onAbrirMenu, onAbrirBusca }: { menu
       style={{ paddingTop: 'env(safe-area-inset-top)', minHeight: 'calc(3.5rem + env(safe-area-inset-top))', paddingLeft: 'max(0.5rem, env(safe-area-inset-left))', paddingRight: 'max(0.5rem, env(safe-area-inset-right))' }}
     >
       <button
-        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 lg:hidden"
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 xl:hidden"
         onClick={onAbrirMenu}
         aria-label="Abrir menu"
         aria-controls="menu-lateral"
@@ -97,6 +98,7 @@ export function Topbar({ menuAberto = false, onAbrirMenu, onAbrirBusca }: { menu
         </div>
 
         <SinoRobo />
+        <SinoLembretes />
 
         <Link
           to="/comunicacao/whatsapp"

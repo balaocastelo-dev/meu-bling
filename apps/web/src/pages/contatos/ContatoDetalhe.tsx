@@ -78,7 +78,7 @@ export default function ContatoDetalhe() {
         <StatCard rotulo="Em aberto (a receber)" valor={moeda(totalReceber)} icone={<Wallet className="h-4 w-4" />} tom={totalReceber > 0 ? 'amarelo' : 'neutro'} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid items-start gap-4 lg:grid-cols-3">
         <Card titulo="Dados">
           <div className="space-y-3 text-sm">
             {(c.celular || c.telefone) && (

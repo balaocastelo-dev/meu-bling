@@ -35,7 +35,7 @@ export function AppShell() {
   useEffect(() => {
     if (!menuAberto) return;
     const tecla = (e: KeyboardEvent) => e.key === 'Escape' && setMenuAberto(false);
-    const telaGrande = window.matchMedia('(min-width: 1024px)');
+    const telaGrande = window.matchMedia('(min-width: 1280px)');
     const aoMudar = () => telaGrande.matches && setMenuAberto(false);
     document.addEventListener('keydown', tecla);
     telaGrande.addEventListener('change', aoMudar);
@@ -54,7 +54,7 @@ export function AppShell() {
     <MotionConfig reducedMotion="user">
     <div className="min-h-full">
       <Sidebar aberta={menuAberto} onFechar={() => setMenuAberto(false)} />
-      <div className="flex min-h-dvh min-w-0 flex-col lg:pl-64">
+      <div className="flex min-h-dvh min-w-0 flex-col xl:pl-64">
         <Topbar menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} onAbrirBusca={() => setBuscaAberta(true)} />
         {/* conteudo-seguro: margens laterais/inferior com env(safe-area-inset-*) (ver index.css) */}
         <main className="conteudo-seguro min-w-0 flex-1 pt-3 sm:pt-4 md:pt-6">

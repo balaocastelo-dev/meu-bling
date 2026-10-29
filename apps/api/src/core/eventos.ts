@@ -18,6 +18,8 @@ export interface EventosSistema {
   'venda.alterada': { vendaId: number; data: Date; tipo: string };
   'compra.criada': { compraId: number; usuarioId: number | null };
   'os.criada': { osId: number; usuarioId: number | null };
+  /** OS editada (itens, custos internos, campos livres) */
+  'os.alterada': { osId: number; usuarioId: number | null };
   'os.orcamento': { osId: number; usuarioId: number | null };
   'nfe.autorizada': { notaId: number };
   'nfe.cancelada': { notaId: number };

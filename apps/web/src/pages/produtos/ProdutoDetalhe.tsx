@@ -132,7 +132,7 @@ export default function ProdutoDetalhe() {
                     </tr>
                   ))}
                   {(p.saldos ?? []).length > 0 && (
-                    <tr className="font-semibold"><td>Total</td><td className="num text-right">{numero(total)}</td><td className="num text-right">{numero(reservado)}</td><td className="num text-right">{numero(total - reservado)}</td><td /></tr>
+                    <tr className="font-semibold"><td>Total</td><td className="num text-right" data-rotulo="Saldo">{numero(total)}</td><td className="num text-right" data-rotulo="Reservado">{numero(reservado)}</td><td className="num text-right" data-rotulo="Disponível">{numero(total - reservado)}</td><td /></tr>
                   )}
                 </tbody>
               </table>

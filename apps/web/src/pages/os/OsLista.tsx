@@ -7,9 +7,10 @@ import { Clock, Kanban, List, Plus, TriangleAlert, Wrench } from 'lucide-react';
 import { api, ApiError, mensagemErro } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useSituacoes, useTecnicos, opcoesDe } from '@/hooks/useListas';
-import { Badge, BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, PageHeader, Pagination, PeriodoFiltro, Segmentado, SelectFiltro, Skeleton, StatusBadge, Table, type Coluna } from '@/components/ui';
+import { Badge, BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, Modal, PageHeader, Pagination, PeriodoFiltro, Segmentado, SelectFiltro, Skeleton, StatusBadge, Table, type Coluna } from '@/components/ui';
+import { LembretesParaVoce } from '@/components/compartilhados/Lembretes';
 import { data, diasAtraso, moeda, rotulo, truncar } from '@/lib/format';
-import type { KanbanColuna, OsResumo, Paginado, SituacaoRef } from '@/types';
+import type { KanbanColuna, OsResumo, Paginado, PendenciaCusto, SituacaoRef } from '@/types';
 
 const PRIORIDADE_TOM: Record<string, 'neutro' | 'azul' | 'amarelo' | 'vermelho'> = { BAIXA: 'neutro', NORMAL: 'azul', ALTA: 'amarelo', URGENTE: 'vermelho' };
 
@@ -37,10 +38,11 @@ function CardOs({ os, onDragStart }: { os: OsResumo; onDragStart: (e: React.Drag
         </span>
         <span className="num font-medium text-slate-600">{moeda(os.total)}</span>
       </div>
-      {(os.tecnico || os.orcar) && (
-        <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
+      {(os.tecnico || os.orcar || !!os.pecasSemCusto) && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
           {os.tecnico && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">{os.tecnico.nome.split(' ')[0]}</span>}
           {os.orcar && <span className={clsx('rounded px-1.5 py-0.5', os.orcamentoAprovado ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>{os.orcamentoAprovado ? 'Orç. aprovado' : 'Orçar'}</span>}
+          {!!os.pecasSemCusto && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700" title="Peça sem custo: preencha o custo na OS">💲 custo?</span>}
         </div>
       )}
     </Link>
@@ -52,18 +54,25 @@ function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; da
   const qc = useQueryClient();
   const { data: colunas, isLoading, error } = useQuery({ queryKey: ['os-kanban', tecnicoId, dataInicial, dataFinal], queryFn: () => api.get<KanbanColuna[]>('/ordens-servico/kanban', { tecnicoId, dataInicial, dataFinal }), refetchInterval: 60_000 });
   const [sobre, setSobre] = useState<number | null>(null);
+  // lembrete no fechamento (arrastou para "Concluída/Entregue" com peça sem custo)
+  const [custoPendente, setCustoPendente] = useState<{ osId: number; situacaoId: number; numero?: number; lista: PendenciaCusto[] } | null>(null);
 
   const mover = useMutation({
-    mutationFn: (p: { osId: number; situacaoId: number; forcar?: boolean }) => api.post<{ situacao: SituacaoRef }>(`/ordens-servico/${p.osId}/situacao`, { situacaoId: p.situacaoId, forcar: p.forcar }),
+    mutationFn: (p: { osId: number; situacaoId: number; forcar?: boolean; confirmarCusto?: boolean }) => api.post<{ situacao: SituacaoRef }>(`/ordens-servico/${p.osId}/situacao`, { situacaoId: p.situacaoId, forcar: p.forcar, confirmarCusto: p.confirmarCusto }),
     onSuccess: (r) => {
       toast.success(`OS movida para "${r?.situacao?.nome ?? ''}"`);
+      setCustoPendente(null);
       qc.invalidateQueries({ queryKey: ['os-kanban'] });
       qc.invalidateQueries({ queryKey: ['ordens-servico'] });
+      qc.invalidateQueries({ queryKey: ['lembretes-robo'] });
     },
-    onError: (e) => {
+    onError: (e, vars) => {
       if (e instanceof ApiError && e.code === 'TRANSICAO_INVALIDA') {
         const det = (e.detalhes ?? {}) as { permitidas?: SituacaoRef[] };
         toast.error('Transição não permitida', { description: det.permitidas?.length ? `Permitidas: ${det.permitidas.map((p) => p.nome).join(', ')}` : e.message });
+      } else if (e instanceof ApiError && e.code === 'OS_CUSTO_PENDENTE') {
+        const det = (e.detalhes ?? {}) as { pendencias?: PendenciaCusto[]; numero?: number };
+        setCustoPendente({ osId: vars.osId, situacaoId: vars.situacaoId, numero: det.numero, lista: det.pendencias ?? [] });
       } else toast.error(mensagemErro(e));
     },
   });
@@ -72,6 +81,28 @@ function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; da
   if (error || !colunas) return <EmptyState titulo="Não foi possível carregar o kanban" descricao={error ? mensagemErro(error) : undefined} />;
 
   return (
+    <>
+    <Modal
+      aberto={!!custoPendente}
+      onFechar={() => setCustoPendente(null)}
+      titulo="Falta o custo das peças"
+      rodape={
+        <>
+          <Button variante="secundario" carregando={mover.isPending} onClick={() => custoPendente && mover.mutate({ osId: custoPendente.osId, situacaoId: custoPendente.situacaoId, confirmarCusto: true })}>Fechar assim mesmo</Button>
+          {custoPendente && <Link to={`/ordens-servico/${custoPendente.osId}/editar`} onClick={() => setCustoPendente(null)}><Button variante="primario">Preencher agora</Button></Link>}
+        </>
+      }
+    >
+      {custoPendente && (
+        <div className="space-y-3 text-sm text-slate-700">
+          <p className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>Antes de fechar a OS{custoPendente.numero ? ` nº ${custoPendente.numero}` : ''}: {custoPendente.lista.map((p) => p.mensagem).join(' ')}</span>
+          </p>
+          <p>Sem o custo da peça, o lucro da assistência e o DRE não ficam reais. Dá para fechar assim mesmo e preencher depois — o Robô da Saúde deixa o lembrete no seu painel até o custo entrar.</p>
+        </div>
+      )}
+    </Modal>
     <div className="-mx-3 flex snap-x gap-3 overflow-x-auto px-3 pb-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6">
       {colunas.map((col) => (
         <div
@@ -112,6 +143,7 @@ function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; da
         </div>
       ))}
     </div>
+    </>
   );
 }
 
@@ -211,6 +243,8 @@ export default function OsLista() {
           </>
         }
       />
+      {/* lembretes do Robô da Saúde para quem está logado (ex.: técnico com OS sem custo de peça) */}
+      <LembretesParaVoce className="mb-3" area="Assistência" />
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <PeriodoFiltro inicial={dataInicial} final={dataFinal} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />
         <span className="text-[11px] text-slate-400">{dataInicial || dataFinal ? 'OS que entraram no período' : visao === 'kanban' ? 'Tudo: abertas + finalizadas nos últimos 7 dias' : 'Todas as OS'}</span>

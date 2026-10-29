@@ -227,14 +227,15 @@ export async function alertasOs(f: Filtro = {}): Promise<Alerta[]> {
       itens: semTecnico.slice(0, MAX).map((o) => ({ rotulo: rotuloOs(o), link: linkOs(o, true) })),
     });
 
-  // ---- OS com peça sem custo (fechamento sai errado): abertas ou concluídas nos últimos 30 dias
+  // ---- OS com peça sem custo (fechamento sai errado): mesma regra do Robô da Saúde (comum/custos-os.ts) —
+  //      custo total das peças não informado E alguma peça com custo zero; só OS do MEU BLING (as do Bling não têm custo por peça)
   const semCusto = await prisma.ordemServico.findMany({
     where: {
       ...(f.tecnicoId ? { tecnicoId: f.tecnicoId } : {}),
+      blingId: null,
       situacaoId: { notIn: cancel },
-      totalPecas: { gt: 0 },
       custoPeca: { lte: 0 },
-      custoTotal: { lte: 0 },
+      itens: { some: { tipo: 'PECA', custoUnitario: { lte: 0 } } },
       OR: [{ situacaoId: { notIn: fechadas } }, { dataConclusao: { gte: subDays(agora, 30) } }],
     },
     select: selOs,

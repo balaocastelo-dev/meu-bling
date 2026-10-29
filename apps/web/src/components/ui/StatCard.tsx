@@ -41,8 +41,10 @@ export function ValorAnimado({ valor }: { valor: ReactNode }) {
   const [atual, setAtual] = useState<number | null>(null);
   const ultimo = useRef(0);
   useEffect(() => {
-    if (!visto || !Number.isFinite(alvo)) return;
+    if (!Number.isFinite(alvo)) return;
+    // sem animação (pedido do sistema, impressão, print): valor final na hora, mesmo fora da tela
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return setAtual(alvo);
+    if (!visto) return;
     const c = animate(ultimo.current, alvo, { duration: 0.9, ease: [0.16, 1, 0.3, 1], onUpdate: setAtual });
     ultimo.current = alvo;
     return () => c.stop();

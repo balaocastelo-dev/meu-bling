@@ -112,10 +112,10 @@ Orçamento = venda com `tipo: "ORCAMENTO"` (mesma tabela). Numeração própria 
 ## Ordens de serviço
 - `GET /ordens-servico?pesquisa=&situacaoId=&situacoes=&contatoId=&tecnicoId=&vendedorId=&prioridade=&dataInicial=&dataFinal=&pagina=&limite=` → `{id,numero,dataEntrada,dataPrevista,contato,tecnico,vendedor,situacao,equipamento,marca,modelo,defeitoRelatado,total,prioridade,orcar,orcamentoAprovado,atrasada}`
 - `GET /ordens-servico/kanban?tecnicoId=` → `[{situacao:{id,nome,cor,ordem}, ordens:[...resumo]}]` (todas as situações ativas do módulo OS, inclusive vazias; situações `final/cancelamento` só com OS dos últimos 7 dias)
-- `GET /ordens-servico/:id` → completa (`itens`, `parcelas`, `anexos`, `contato`, `tecnico`, `vendedor`, `situacao`, `historico`, `comissoes`, `situacoesPermitidas`, `nota`)
-- `POST /ordens-servico` body: dados da OS + `itens:[{tipo:'PECA'|'SERVICO', produtoId, descricao, quantidade, valorUnitario, desconto, comissaoVendedorPct, comissaoTecnicoPct, depositoId}]` + `parcelas`. Totais recalculados (`totalServicos`, `totalPecas`, `total = soma - desconto`).
-- `PUT /ordens-servico/:id`, `DELETE /ordens-servico/:id`
-- `POST /ordens-servico/:id/situacao`, `POST /ordens-servico/:id/acoes`
+- `GET /ordens-servico/:id` → completa (`itens`, `parcelas`, `anexos`, `contato`, `tecnico`, `vendedor`, `situacao`, `historico`, `comissoes`, `situacoesPermitidas`, `nota`, `pendenciasCusto`, `fechamento` só ADMIN/GERENTE)
+- `POST /ordens-servico` body: dados da OS + `itens:[{tipo:'PECA'|'SERVICO', produtoId, descricao, quantidade, valorUnitario, desconto, custoUnitario? (peça: custo interno; null = do cadastro), comissaoVendedorPct, comissaoTecnicoPct, depositoId}]` + `parcelas` + custos internos (`custoPeca` total das peças se diferente da soma, `custoLogistica`, `custoMaoObraTerceiro`). Totais recalculados (`totalServicos`, `totalPecas`, `total = soma - desconto`). `fechamento` = custo completo igual ao da venda (peças + imposto + taxa de cartão + logística + terceiro), lucro e margem. Lista/kanban trazem `pecasSemCusto`.
+- `PUT /ordens-servico/:id` (com a OS já baixada/lançada só os campos livres e o `custoUnitario` das peças), `DELETE /ordens-servico/:id`
+- `POST /ordens-servico/:id/situacao` `{situacaoId, observacao?, forcar?, confirmarCusto?}` — situação final com peça sem custo devolve `422 OS_CUSTO_PENDENTE` (`detalhes.pendencias`, `osId`, `numero`); com `confirmarCusto: true` fecha assim mesmo. `POST /ordens-servico/:id/acoes`
 - `POST /ordens-servico/:id/aprovar-orcamento` `{aprovadoPor?}` → marca `orcamentoAprovado` e muda para "Aprovada" se a transição existir
 - `POST /ordens-servico/:id/anexos` multipart → `{id,nome,url}`; `DELETE /ordens-servico/:id/anexos/:anexoId`
 - `GET /ordens-servico/:id/imprimir?via=cliente|tecnico|etiqueta` → HTML
