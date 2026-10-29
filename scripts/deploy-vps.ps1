@@ -1,5 +1,5 @@
 <#
-  MEU BLING — Publicar na VPS do Balão (Hostinger) em https://www.balao.info/sistema
+  MEU BLING - Publicar na VPS do Balão (Hostinger) em https://www.balao.info/sistema
   --------------------------------------------------------------------------------
   O que faz:
     1. Empacota o código desta pasta (git archive, sem node_modules) e envia por SSH para /opt/meu-bling na VPS
@@ -38,7 +38,7 @@ function NaVps([string]$script, [int]$espera = 15) {
   cmd.exe /c $c
 }
 
-Passo "Instalando na VPS (Docker + Caddy) — roda direto lá, não depende desta janela"
+Passo "Instalando na VPS (Docker + Caddy) - roda direto lá, não depende desta janela"
 # O instalador roda DESTACADO na VPS (nohup): se a conexão deste PC cair, cochilar ou a janela fechar,
 # a montagem continua lá até o fim. Aqui só acompanhamos o log. Se já houver uma instalação rodando, só acompanha.
 $LOG = '/root/meu-bling-deploy.log'
@@ -55,7 +55,7 @@ while ($null -eq $fim) {
   Start-Sleep -Seconds 15
   if (((Get-Date) - $inicio).TotalMinutes -gt 30) { throw "A instalação passou de 30 minutos. Confira na VPS: tail -50 $LOG" }
   $novas = NaVps "tail -n +$($vistas + 1) $LOG 2>/dev/null"
-  if ($LASTEXITCODE -ne 0) { Write-Host '  (sem conexão com a VPS agora; a instalação continua lá — tentando de novo)' -ForegroundColor DarkGray; continue }
+  if ($LASTEXITCODE -ne 0) { Write-Host '  (sem conexão com a VPS agora; a instalação continua lá - tentando de novo)' -ForegroundColor DarkGray; continue }
   foreach ($l in @($novas)) {
     if ($null -eq $l) { continue }
     $vistas++
