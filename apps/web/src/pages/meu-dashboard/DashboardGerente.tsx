@@ -19,6 +19,7 @@ import { quandoRelativo } from '@/pages/dashboard/UltimasAtividades';
 import { LembretesParaVoce } from '@/components/compartilhados/Lembretes';
 import type { BlocoGerenteDashboard } from '@/types';
 import { AlertasCorrija, Cabecalho, Lembretes } from './partes';
+import { MensagensCard } from '@/components/chat/MensagensCard';
 import type { PropsRole } from './DashboardVendedor';
 
 const ATALHOS = [
@@ -181,6 +182,7 @@ export default function DashboardGerente({ dados, carregando, faixa, filtros, ve
         <AvisosGestao g={g} carregando={carregando} />
         <Lembretes lembretes={dados?.lembretes} carregando={carregando} usuarioId={dados?.usuario.id} verComo={dados?.verComo} />
       </div>
+      <MensagensCard />
       <AlertasCorrija alertas={dados?.alertas} carregando={carregando} titulo="Alertas do sistema (loja inteira)" />
       {/* lembretes do Robô da Saúde para a equipe (quem precisa preencher custo de peça/produto) — some quando não há nada */}
       {!dados?.verComo && <Aparecer><LembretesParaVoce /></Aparecer>}

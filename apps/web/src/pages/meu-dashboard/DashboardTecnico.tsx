@@ -15,6 +15,7 @@ import { CORES, TooltipPadrao, rotuloPeriodo } from '@/components/compartilhados
 import { DesafioCard } from '@/components/compartilhados/DesafioCard';
 import { data as fmtData, inteiro, moeda, rotulo } from '@/lib/format';
 import { AlertasCorrija, Cabecalho, Lembretes, MetaDoMes, RankingDoMes } from './partes';
+import { MensagensCard } from '@/components/chat/MensagensCard';
 import { PeriodosRapidos, type PropsRole } from './DashboardVendedor';
 
 const PRIORIDADE_TOM: Record<string, 'vermelho' | 'amarelo' | 'neutro' | 'cinza'> = { URGENTE: 'vermelho', ALTA: 'amarelo', NORMAL: 'neutro', BAIXA: 'cinza' };
@@ -95,6 +96,8 @@ export default function DashboardTecnico({ dados, carregando, faixa, filtros, ve
       </Aparecer>
 
       {/* ===== alertas e lembretes ===== */}
+      <MensagensCard />
+
       <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
         <AlertasCorrija alertas={dados?.alertas} carregando={carregando} />
         <Lembretes lembretes={dados?.lembretes} carregando={carregando} usuarioId={dados?.usuario.id} verComo={dados?.verComo} />

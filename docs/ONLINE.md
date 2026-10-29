@@ -32,6 +32,8 @@ Guarde `/etc/meu-bling.env`: o `APP_SECRET` dele descriptografa o certificado A1
 
 Comandos úteis na VPS: `docker logs -f meu-bling` · `docker restart meu-bling` · `curl 127.0.0.1:3333/api/v1/saude` · `bash /opt/meu-bling/deploy/vps/backup.sh`.
 
+**Chat da equipe (29/10/2026):** o rewrite da Vercel não carrega WebSocket, então o navegador liga o tempo real direto na VPS (`CHAT_REALTIME_URL` em `/etc/meu-bling.env`, gravado pelo instalador) e, se não conseguir, cai para long polling. As chamadas de voz/vídeo usam o coturn (container `meu-bling-turn`, portas 3478 udp/tcp e 49160–49200 udp) como servidor de passagem para quem está fora da loja. Detalhes em `docs/CHAT.md`.
+
 ## Opção B — Servidor na nuvem (VPS) com Docker
 
 Para disponibilidade 24h independente da loja. Um VPS pequeno (2 vCPU / 2 GB, ex.: Hetzner, Contabo, Oracle Cloud Free, DigitalOcean) é suficiente.

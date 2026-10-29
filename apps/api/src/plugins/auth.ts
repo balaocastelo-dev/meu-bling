@@ -42,6 +42,8 @@ const ROTAS_PUBLICAS = [
   /^\/api\/v1\/webhooks\//,
   // porta do site (PDV): não usa login, exige a chave do site (modules/site/routes.ts)
   /^\/api\/v1\/integracoes\/site\//,
+  // WebSocket do chat da equipe: o navegador não manda cabeçalho; autentica pela 1ª mensagem (modules/chat/routes.ts)
+  /^\/api\/v1\/chat\/ws$/,
   /^\/uploads\//,
   /^\/$/,
 ];
