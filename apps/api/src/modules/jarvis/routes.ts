@@ -28,6 +28,7 @@ import { iniciarWorker, medirResultados, obterConfig, rodarJarvis } from './work
 import { executarAcao } from './acoes.js';
 import { conversar, lerConversa, listarConversas } from './chat.js';
 import { executarFerramenta } from './ferramentas.js';
+import { CANAIS, INFO_CANAIS, criarAnuncio, listarAnuncios, marcarPublicado, montarRascunho, publicarCanal, type Canal } from './anuncios.js';
 
 // o worker de 30 min (ver worker.ts). Desliga com JARVIS=off
 registrarServico('jarvis', (app) => iniciarWorker(app));
@@ -402,5 +403,60 @@ export default async function jarvisRoutes(app: FastifyInstance) {
       }));
 
     return { data: minhas };
+  });
+
+  // ---------------------------------------------------------------------
+  // CENTRAL DE ANÚNCIOS (docs/JARVIS.md §9)
+  // ---------------------------------------------------------------------
+
+  /** Catálogo dos canais: o que publica sozinho, o que é kit, e por quê. */
+  app.get('/api/v1/jarvis/anuncios/canais', admin, async () => Object.values(INFO_CANAIS));
+
+  app.get('/api/v1/jarvis/anuncios', admin, async (req) => {
+    const q = z.object({ limite: z.coerce.number().int().min(1).max(200).default(50) }).parse(req.query ?? {});
+    return { data: await listarAnuncios(q.limite) };
+  });
+
+  /** Monta o rascunho a partir do produto (IA quando há chave; texto padrão quando não há). */
+  app.post('/api/v1/jarvis/anuncios/rascunho', admin, async (req) => {
+    const b = z.object({
+      produtoId: z.number().int().positive(),
+      condicao: z.enum(['novo', 'usado']).default('novo'),
+    }).parse(req.body);
+    return montarRascunho(b.produtoId, b.condicao);
+  });
+
+  app.post('/api/v1/jarvis/anuncios', admin, async (req, reply) => {
+    const b = z.object({
+      produtoId: z.number().int().positive().nullish(),
+      titulo: z.string().min(3, 'O anúncio precisa de um título.'),
+      descricao: z.string().min(10, 'A descrição está curta demais.'),
+      preco: z.number().nonnegative(),
+      condicao: z.enum(['novo', 'usado']).default('novo'),
+      fotos: z.array(z.string()).default([]),
+      canais: z.array(z.enum(CANAIS)).min(1, 'Escolha pelo menos um canal.'),
+      porCanal: z.record(z.string(), z.string()).optional(),
+      geradoPorIa: z.boolean().default(false),
+    }).parse(req.body);
+    const criado = await criarAnuncio({ ...b, produtoId: b.produtoId ?? null, porCanal: b.porCanal as any });
+    await auditar(req, 'JarvisAnuncio', criado.id, 'CRIAR', { titulo: criado.titulo, canais: b.canais });
+    return reply.code(201).send(criado);
+  });
+
+  app.post('/api/v1/jarvis/anuncios/:id/publicar', admin, async (req) => {
+    const id = idDe(req);
+    const b = z.object({ canal: z.enum(CANAIS) }).parse(req.body);
+    const r = await publicarCanal(id, b.canal as Canal);
+    await auditar(req, 'JarvisAnuncio', id, 'ACAO', { acao: 'publicar', canal: b.canal, situacao: r.situacao });
+    return r;
+  });
+
+  /** Alguém publicou o kit à mão e está registrando onde ficou. */
+  app.post('/api/v1/jarvis/anuncios/:id/publiquei', admin, async (req) => {
+    const id = idDe(req);
+    const b = z.object({ canal: z.enum(CANAIS), url: z.string().nullish() }).parse(req.body);
+    const r = await marcarPublicado(id, b.canal as Canal, b.url ?? null, (req.user as any)?.nome ?? null);
+    await auditar(req, 'JarvisAnuncio', id, 'ACAO', { acao: 'publiquei', canal: b.canal, url: b.url });
+    return r;
   });
 }

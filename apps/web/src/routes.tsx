@@ -16,6 +16,7 @@ const DashboardVendas = lazy(() => import('@/pages/dashboard/DashboardVendas'));
 const DashboardAssistencia = lazy(() => import('@/pages/dashboard/DashboardAssistencia'));
 const DashboardConsignacao = lazy(() => import('@/pages/dashboard/DashboardConsignacao'));
 const Jarvis = lazy(() => import('@/pages/jarvis/Jarvis'));
+const JarvisAnuncios = lazy(() => import('@/pages/jarvis/Anuncios'));
 const MeuDashboard = lazy(() => import('@/pages/meu-dashboard/MeuDashboard'));
 const PainelVendedor = lazy(() => import('@/pages/vendedor/PainelVendedor'));
 const MetasDesafios = lazy(() => import('@/pages/vendedor/MetasDesafios'));
@@ -133,6 +134,7 @@ export const router = createBrowserRouter(
       { path: 'dashboard/assistencia', element: ADMIN(<DashboardAssistencia />) },
       { path: 'dashboard/consignacao', element: GESTAO(<DashboardConsignacao />) },
       { path: 'jarvis', element: ADMIN(<Jarvis />) },
+      { path: 'jarvis/anuncios', element: ADMIN(<JarvisAnuncios />) },
       { path: 'perfil', element: S(<Perfil />) },
       { path: 'meu-painel', element: S(<Somente perfis={['ADMIN', 'GERENTE', 'VENDEDOR', 'TECNICO']}><PainelVendedor /></Somente>) },
       { path: 'metas-desafios', element: GESTAO(<MetasDesafios />) },

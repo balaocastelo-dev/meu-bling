@@ -457,6 +457,8 @@ model Produto {
   nfItens     NotaFiscalItem[]
   consignacao Consignacao?
 
+  jarvisAnuncios JarvisAnuncio[]
+
   @@index([nome])
   @@index([prontaEntrega])
 }
@@ -2076,4 +2078,50 @@ model EmailBancoMensagem {
 
   @@index([situacao, recebidoEm])
   @@index([recebidoEm])
+}
+
+/// CENTRAL DE ANÚNCIOS (docs/JARVIS.md §9) — um anúncio montado uma vez, publicado por canal.
+/// Canal com API oficial publica sozinho; canal sem API vira "kit pronto" para alguém publicar
+/// em um minuto. Automatizar site logado por navegador derruba a conta — não é feito aqui.
+model JarvisAnuncio {
+  id           Int      @id @default(autoincrement())
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+  produto      Produto? @relation(fields: [produtoId], references: [id])
+  produtoId    Int?
+  titulo       String
+  descricao    String
+  preco        Float
+  /// novo | usado
+  condicao     String   @default("novo")
+  /// JSON: ["url1", "url2"]
+  fotos        String?
+  geradoPorIa  Boolean  @default(true)
+
+  canais JarvisAnuncioCanal[]
+
+  @@index([criadoEm])
+  @@index([produtoId])
+}
+
+/// Situação do anúncio em cada canal.
+model JarvisAnuncioCanal {
+  id           Int           @id @default(autoincrement())
+  anuncio      JarvisAnuncio @relation(fields: [anuncioId], references: [id], onDelete: Cascade)
+  anuncioId    Int
+  /// MERCADO_LIVRE | SITE | BLOG | FACEBOOK | INSTAGRAM | GOOGLE_MEU_NEGOCIO | OLX
+  canal        String
+  /// PENDENTE | PUBLICADO | KIT_PRONTO | PRECISA_CONFIGURAR | ERRO
+  situacao     String        @default("PENDENTE")
+  idExterno    String?
+  url          String?
+  erro         String?
+  /// texto já adaptado ao canal (o kit mostra isto para copiar)
+  texto        String?
+  publicadoEm  DateTime?
+  /// quem marcou "publiquei" num canal de kit
+  publicadoPor String?
+
+  @@unique([anuncioId, canal])
+  @@index([situacao])
 }
