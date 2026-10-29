@@ -786,7 +786,7 @@ export interface DashboardAssistencia {
     semCusto: number;
     realizado: TotaisAssistencia;
     previsto: TotaisAssistencia;
-    comparativo: TotaisAssistencia;
+    comparativo: TotaisAssistencia | null;
   };
   series: { periodo: string; valorEntrada: number; custo: number; lucro: number; qtd: number }[];
   porTecnico: { id: number | null; nome: string; qtd: number; valorEntrada: number; maoDeObra: number; pecas: number; custo: number; lucro: number }[];
@@ -1102,7 +1102,7 @@ export interface TotaisPanorama {
 
 export interface DashboardPanorama {
   periodo: { dataInicial: string; dataFinal: string; agrupar: 'dia' | 'semana' | 'mes'; base: 'entrada' | 'conclusao' };
-  resumo: TotaisPanorama & { comparativo: TotaisPanorama; osSemCusto: number; melhorPeriodo: { periodo: string; valor: number } | null };
+  resumo: TotaisPanorama & { comparativo: TotaisPanorama | null; osSemCusto: number; melhorPeriodo: { periodo: string; valor: number } | null };
   series: { periodo: string; vendas: number; assistencia: number; lucro: number; entradas: number; saidas: number }[];
   porVendedor: { id: number | null; nome: string; valor: number; qtd: number; lucro: number }[];
   porTecnico: { id: number | null; nome: string; valor: number; qtd: number; lucro: number }[];
@@ -1473,7 +1473,7 @@ export interface MetaTecnicoPainel extends Omit<MetaPainel, 'vendido'> {
 }
 
 export interface BlocoVendasDashboard extends PainelVendedor {
-  periodo: { faturamento: number; qtd: number; ticketMedio: number; comissao: number; anterior: { faturamento: number; qtd: number } };
+  periodo: { faturamento: number; qtd: number; ticketMedio: number; comissao: number; anterior: { faturamento: number; qtd: number } | null };
   serie: { periodo: string; valor: number; qtd: number }[];
   topProdutos: { produtoId: number | null; nome: string; qtd: number; valor: number }[];
 }
@@ -1481,7 +1481,7 @@ export interface BlocoVendasDashboard extends PainelVendedor {
 export interface BlocoAssistenciaDashboard {
   tecnico: Ref;
   agora: { comigo: number; emAndamento: number; aguardandoPeca: number; aguardandoAprovacao: number; prontas: number; atrasadas: number; semTecnico: number };
-  periodo: { entradas: number; concluidas: number; valorServicos: number; maoDeObra: number; pecas: number; ticketMedio: number; tempoMedioDias: number; anterior: { concluidas: number; valorServicos: number } };
+  periodo: { entradas: number; concluidas: number; valorServicos: number; maoDeObra: number; pecas: number; ticketMedio: number; tempoMedioDias: number; anterior: { concluidas: number; valorServicos: number } | null };
   meta: MetaTecnicoPainel;
   ranking: { competencia: string; posicao: number; total: number; lista: { posicao: number; tecnicoId: number; nome: string; eu: boolean; valor: number | null; qtd: number | null }[] };
   desafios: DesafioCard[];
@@ -1492,7 +1492,7 @@ export interface BlocoAssistenciaDashboard {
 
 export interface BlocoGerenteDashboard {
   financeiro: ResumoFinanceiro;
-  periodo: { receita: number; vendas: { valor: number; qtd: number }; assistencia: { valor: number; qtd: number }; entradas: number; saidas: number; anterior: { receita: number; vendas: number; assistencia: number } };
+  periodo: { receita: number; vendas: { valor: number; qtd: number }; assistencia: { valor: number; qtd: number }; entradas: number; saidas: number; anterior: { receita: number; vendas: number; assistencia: number } | null };
   avisos: { tipo: 'erro' | 'aviso' | 'info'; prioridade: number; mensagem: string; link: string }[];
   caixinhas: { lista: { id: number; nome: string; valorMeta: number; saldo: number; falta: number; pct: number; diasRestantes: number; sugestaoHoje: number; situacao: string; dataUso: string }[]; sugestaoHojeTotal: number };
   equipe: {
@@ -1509,7 +1509,7 @@ export interface BlocoGerenteDashboard {
 export interface MeuDashboard {
   usuario: { id: number; nome: string; perfil: Perfil };
   verComo: boolean;
-  periodo: { dataInicial: string; dataFinal: string; agrupar: 'dia' | 'semana' | 'mes' };
+  periodo: { dataInicial: string; dataFinal: string; agrupar: 'dia' | 'semana' | 'mes'; tudo?: boolean };
   lembretes: Lembrete[];
   alertas: AlertaDashboard[];
   vendas?: BlocoVendasDashboard | null;

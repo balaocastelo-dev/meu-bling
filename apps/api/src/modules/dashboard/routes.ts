@@ -241,7 +241,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         todas: z.enum(['true', 'false']).default('true'),
       })
       .parse(req.query);
-    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
     const agrupar: Agrupar = q.agrupar || agruparPadrao(ini, fim);
     const sitOk = await situacoesRealizadas('VENDA');
     const sitCanc = await situacoesCanceladas('VENDA');
@@ -278,7 +278,8 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       };
     };
     const resumo: any = resumoDe(vendas);
-    if (q.comparar === 'true') {
+    // "todo o período": não há período anterior para comparar
+    if (q.comparar === 'true' && !tudo) {
       const ant = periodoAnterior(ini, fim);
       const r = resumoDe(await carregar(ant.ini, ant.fim));
       resumo.comparativo = {
@@ -375,7 +376,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const q = z
       .object({ dataInicial: dataSchema, dataFinal: dataSchema, tecnicoId: z.coerce.number().int().optional(), agrupar: z.enum(['dia', 'semana', 'mes']).optional() })
       .parse(req.query);
-    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
     const agrupar: Agrupar = q.agrupar || agruparPadrao(ini, fim);
     const sitOk = await situacoesRealizadas('OS');
     const sitCanc = await situacoesCanceladas('OS');
@@ -453,7 +454,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         agrupar: z.enum(['dia', 'semana', 'mes']).optional(),
       })
       .parse(req.query);
-    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
     const agrupar: Agrupar = q.agrupar || agruparPadrao(ini, fim);
     const [sitOk, sitCanc] = await Promise.all([situacoesRealizadas('OS'), situacoesCanceladas('OS')]);
     const dataBase = (o: { dataEntrada: Date; dataConclusao: Date | null }) => (q.base === 'conclusao' ? o.dataConclusao || o.dataEntrada : o.dataEntrada);
@@ -476,9 +477,11 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       // concluídas com peça mas sem custo nenhum: o lucro delas está inflado
       semCusto: concluidas.filter((o) => o.totalPecas > 0 && fechamentoOs(o).custoPecas === 0).length,
     };
-    const ant = periodoAnterior(ini, fim);
-    const anteriores = (await carregar(ant.ini, ant.fim)).filter((o) => !sitCanc.includes(o.situacaoId));
-    resumo.comparativo = { ...somar(anteriores), periodo: { dataInicial: ant.ini, dataFinal: ant.fim } };
+    if (!tudo) {
+      const ant = periodoAnterior(ini, fim);
+      const anteriores = (await carregar(ant.ini, ant.fim)).filter((o) => !sitCanc.includes(o.situacaoId));
+      resumo.comparativo = { ...somar(anteriores), periodo: { dataInicial: ant.ini, dataFinal: ant.fim } };
+    } else resumo.comparativo = null; // "todo o período": não há período anterior
 
     const serie = new Map(listarPeriodos(ini, fim, agrupar).map((p) => [p, { periodo: p, valorEntrada: 0, custo: 0, lucro: 0, qtd: 0 }]));
     const porTecnico = new Map<number, { id: number | null; nome: string; qtd: number; valorEntrada: number; maoDeObra: number; pecas: number; custo: number; lucro: number }>();
@@ -552,7 +555,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const q = z
       .object({ dataInicial: dataSchema, dataFinal: dataSchema, base: z.enum(['entrada', 'conclusao']).default('entrada'), agrupar: z.enum(['dia', 'semana', 'mes']).optional() })
       .parse(req.query);
-    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
     const agrupar: Agrupar = q.agrupar || agruparPadrao(ini, fim);
     const [sitVendaCanc, sitOsOk, sitOsCanc] = await Promise.all([situacoesCanceladas('VENDA'), situacoesRealizadas('OS'), situacoesCanceladas('OS')]);
 
@@ -600,10 +603,12 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     };
 
     const [vendas, ordens, caixa] = await Promise.all([carregarVendas(ini, fim), carregarOs(ini, fim), carregarCaixa(ini, fim)]);
-    const ant = periodoAnterior(ini, fim);
-    const [vendasAnt, ordensAnt, caixaAnt] = await Promise.all([carregarVendas(ant.ini, ant.fim), carregarOs(ant.ini, ant.fim), carregarCaixa(ant.ini, ant.fim)]);
     const resumo: any = resumir(vendas, ordens, caixa);
-    resumo.comparativo = { ...resumir(vendasAnt, ordensAnt, caixaAnt), periodo: { dataInicial: ant.ini, dataFinal: ant.fim } };
+    if (!tudo) {
+      const ant = periodoAnterior(ini, fim);
+      const [vendasAnt, ordensAnt, caixaAnt] = await Promise.all([carregarVendas(ant.ini, ant.fim), carregarOs(ant.ini, ant.fim), carregarCaixa(ant.ini, ant.fim)]);
+      resumo.comparativo = { ...resumir(vendasAnt, ordensAnt, caixaAnt), periodo: { dataInicial: ant.ini, dataFinal: ant.fim } };
+    } else resumo.comparativo = null; // "todo o período": não há período anterior
     resumo.osSemCusto = ordens.filter((o) => sitOsOk.includes(o.situacaoId) && o.totalPecas > 0 && fechamentoOs(o).custoPecas === 0).length;
 
     // série: vendas x assistência x lucro x caixa
@@ -686,7 +691,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const b = pagarTecnicoSchema.parse(req.body);
     const tecnico = await prisma.tecnico.findUnique({ where: { id: b.tecnicoId } });
     if (!tecnico) throw new NotFound('Técnico');
-    const { ini, fim } = resolverPeriodo(b, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(b, 'mes');
     const [sitOk, sitCanc] = await Promise.all([situacoesRealizadas('OS'), situacoesCanceladas('OS')]);
     const todas = (await ordensAssistencia(ini, fim, b.base, b.filtroTecnicoId ?? undefined, sitOk)).filter((o) => !sitCanc.includes(o.situacaoId));
     const consideradas = b.escopo === 'TODAS' ? todas : todas.filter((o) => sitOk.includes(o.situacaoId));

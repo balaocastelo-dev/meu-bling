@@ -56,8 +56,8 @@ export default function DashboardTecnico({ dados, carregando, faixa, filtros, ve
 
       {/* ===== o que foi feito no período ===== */}
       <FaixaKpis colunas={4}>
-        <KpiV18 rotulo={`Receita de serviços · ${faixa}`} valor={p?.valorServicos} anterior={p?.anterior.valorServicos} formato={moeda} icone={<Wrench className="h-4 w-4" />} tom="verde" carregando={carregando} sub={p ? `mão de obra ${moeda(p.maoDeObra)} · peças ${moeda(p.pecas)}` : 'valor cobrado nas OS concluídas'} />
-        <KpiV18 rotulo="OS concluídas" valor={p?.concluidas} anterior={p?.anterior.concluidas} formato={(n) => inteiro(Math.round(n))} icone={<ListChecks className="h-4 w-4" />} tom="verde" carregando={carregando} sub="no período" />
+        <KpiV18 rotulo={`Receita de serviços · ${faixa}`} valor={p?.valorServicos} anterior={p?.anterior?.valorServicos} formato={moeda} icone={<Wrench className="h-4 w-4" />} tom="verde" carregando={carregando} sub={p ? `mão de obra ${moeda(p.maoDeObra)} · peças ${moeda(p.pecas)}` : 'valor cobrado nas OS concluídas'} />
+        <KpiV18 rotulo="OS concluídas" valor={p?.concluidas} anterior={p?.anterior?.concluidas} formato={(n) => inteiro(Math.round(n))} icone={<ListChecks className="h-4 w-4" />} tom="verde" carregando={carregando} sub="no período" />
         <KpiV18 rotulo="OS que entraram" valor={p?.entradas} formato={(n) => inteiro(Math.round(n))} icone={<Plus className="h-4 w-4" />} tom="azul" carregando={carregando} sub="comigo, no período" />
         <KpiV18 rotulo="Tempo médio" valor={p?.tempoMedioDias} formato={(n) => `${n.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} d`} icone={<Timer className="h-4 w-4" />} tom="neutro" carregando={carregando} sub="da entrada à conclusão" />
       </FaixaKpis>

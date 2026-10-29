@@ -1,7 +1,7 @@
 /**
  * Filtro de período dos dashboards (o mesmo no Dashboard e no de Assistência):
- * Hoje · Ontem · 7 dias · 30 dias · Este mês · Mês passado · Este ano · Ano passado · Últimos 12 meses · Período.
- * Sempre abre em "Hoje".
+ * Todo o período · Hoje · Ontem · 7 dias · 30 dias · Este mês · Mês passado · Este ano · Ano passado · Últimos 12 meses · Período.
+ * Sempre abre em "Hoje". "Todo o período" manda DESDE_SEMPRE..hoje e a API recua o início até o primeiro registro.
  */
 import { useMemo, useState } from 'react';
 import { format, startOfMonth } from 'date-fns';
@@ -17,8 +17,8 @@ export { OPCOES_PERIODO, intervaloPeriodo, type Periodo };
 export function usePeriodoDashboard(padrao: Periodo = 'hoje') {
   const [periodo, setPeriodo] = useState<Periodo>(padrao);
   const [custom, setCustom] = useState<{ i: string; f: string }>(() => ({ i: format(startOfMonth(new Date()), 'yyyy-MM-dd'), f: hoje() }));
-  const { dataInicial, dataFinal } = useMemo(() => intervaloPeriodo(periodo, custom), [periodo, custom]);
-  const faixa = dataInicial === dataFinal ? dataInicial.split('-').reverse().join('/') : `${dataInicial.split('-').reverse().join('/')} a ${dataFinal.split('-').reverse().join('/')}`;
+  const { dataInicial, dataFinal } = useMemo(() => intervaloPeriodo(periodo, custom, true), [periodo, custom]);
+  const faixa = periodo === 'tudo' ? 'todo o período' : dataInicial === dataFinal ? dataInicial.split('-').reverse().join('/') : `${dataInicial.split('-').reverse().join('/')} a ${dataFinal.split('-').reverse().join('/')}`;
   return { periodo, setPeriodo, custom, setCustom, dataInicial, dataFinal, faixa };
 }
 

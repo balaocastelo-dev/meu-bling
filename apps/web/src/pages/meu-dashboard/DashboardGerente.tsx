@@ -165,9 +165,9 @@ export default function DashboardGerente({ dados, carregando, faixa, filtros, ve
 
       {/* ===== receita e caixa do período ===== */}
       <FaixaKpis colunas={6}>
-        <KpiV18 destaque className="col-span-2" rotulo={`Receita · ${faixa}`} valor={p?.receita} anterior={p?.anterior.receita} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="vermelho" carregando={carregando} sub={p ? `vendas ${moeda(p.vendas.valor)} + assistência ${moeda(p.assistencia.valor)}` : 'vendas + assistência'} />
-        <KpiV18 rotulo="Vendas" valor={p?.vendas.valor} anterior={p?.anterior.vendas} formato={moeda} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={carregando} sub={p ? `${inteiro(p.vendas.qtd)} ${p.vendas.qtd === 1 ? 'venda' : 'vendas'}` : undefined} onClick={() => nav('/vendas')} />
-        <KpiV18 rotulo="Assistência" valor={p?.assistencia.valor} anterior={p?.anterior.assistencia} formato={moeda} icone={<Wrench className="h-4 w-4" />} tom="vermelho" carregando={carregando} sub={p ? `${inteiro(p.assistencia.qtd)} OS concluídas` : undefined} onClick={() => nav('/ordens-servico')} />
+        <KpiV18 destaque className="col-span-2" rotulo={`Receita · ${faixa}`} valor={p?.receita} anterior={p?.anterior?.receita} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="vermelho" carregando={carregando} sub={p ? `vendas ${moeda(p.vendas.valor)} + assistência ${moeda(p.assistencia.valor)}` : 'vendas + assistência'} />
+        <KpiV18 rotulo="Vendas" valor={p?.vendas.valor} anterior={p?.anterior?.vendas} formato={moeda} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={carregando} sub={p ? `${inteiro(p.vendas.qtd)} ${p.vendas.qtd === 1 ? 'venda' : 'vendas'}` : undefined} onClick={() => nav('/vendas')} />
+        <KpiV18 rotulo="Assistência" valor={p?.assistencia.valor} anterior={p?.anterior?.assistencia} formato={moeda} icone={<Wrench className="h-4 w-4" />} tom="vermelho" carregando={carregando} sub={p ? `${inteiro(p.assistencia.qtd)} OS concluídas` : undefined} onClick={() => nav('/ordens-servico')} />
         <KpiV18 rotulo="Entradas" valor={p?.entradas} formato={moeda} icone={<ArrowUpRight className="h-4 w-4" />} tom="verde" carregando={carregando} sub="dinheiro que entrou" onClick={() => nav('/financeiro/fluxo-caixa')} />
         <KpiV18 rotulo="Saídas" valor={p?.saidas} formato={moeda} icone={<ArrowDownRight className="h-4 w-4" />} tom="amarelo" carregando={carregando} sub="dinheiro que saiu" onClick={() => nav('/financeiro/fluxo-caixa')} />
       </FaixaKpis>
