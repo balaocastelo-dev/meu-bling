@@ -53,7 +53,7 @@ export interface ConfigAgentes {
   /** agentes desligados */
   desligados: string[];
 }
-export const CONFIG_PADRAO: ConfigAgentes = { ligado: true, horaInicio: 7, horaFim: 22, descontoMaxPct: 15, saidaManualAlerta: 500, modeloIa: 'claude-sonnet-5-5', desligados: [] };
+export const CONFIG_PADRAO: ConfigAgentes = { ligado: true, horaInicio: 7, horaFim: 22, descontoMaxPct: 15, saidaManualAlerta: 500, modeloIa: 'claude-fable-5-1', desligados: [] };
 const CHAVE_CONFIG = 'auditoria.config';
 export const INTERVALO_MS = 5 * 60 * 1000;
 

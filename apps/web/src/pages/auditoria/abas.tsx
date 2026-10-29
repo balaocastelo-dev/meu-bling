@@ -531,7 +531,7 @@ export function Agentes() {
                 remover chave
               </Button>
             )}
-            <Select label="Modelo" value={cfg.modeloIa ?? an.modelo} onChange={(e) => { setCfg({ ...cfg, modeloIa: e.target.value }); salvar.mutate({ modeloIa: e.target.value }); }} opcoes={[{ valor: 'claude-sonnet-5-5', rotulo: 'Claude Sonnet 5.5 (recomendado)' }, { valor: 'claude-haiku-5-5', rotulo: 'Claude Haiku 5.5 (mais barato)' }, { valor: 'claude-opus-5-5', rotulo: 'Claude Opus 5.5 (mais caro)' }]} />
+            <Select label="Modelo" value={cfg.modeloIa ?? an.modelo} onChange={(e) => { setCfg({ ...cfg, modeloIa: e.target.value }); salvar.mutate({ modeloIa: e.target.value }); }} opcoes={[{ valor: 'claude-fable-5-1', rotulo: 'Claude Fable 5.1 (mais atual, recomendado)' }, { valor: 'claude-sonnet-5-5', rotulo: 'Claude Sonnet 5.5' }, { valor: 'claude-haiku-5-5', rotulo: 'Claude Haiku 5.5 (mais barato)' }, { valor: 'claude-opus-5-5', rotulo: 'Claude Opus 5.5' }]} />
             <p className="text-[11px] text-slate-400">Vai para a IA só o resumo (nomes de funcionários, números de pedidos e valores) — nunca senhas, documentos ou dados de clientes.</p>
           </div>
           <div className="lg:col-span-2">

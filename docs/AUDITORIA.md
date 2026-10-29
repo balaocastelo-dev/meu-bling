@@ -44,7 +44,7 @@ Antes de confirmar o painel mostra a prévia (cada passo) e avisa quando alguém
 | Caçador de inconsistências | 7 dias (vendas: 30) | operação que gravou e terminou em erro 5xx; total da venda ≠ itens; venda duplicada; conta recebida sem lançamento; registro alterado 8+ vezes |
 | Analista de padrões da equipe | 30 dias | cada funcionário × média da equipe (cancelamentos, exclusões, descontos, fora do horário, ajustes, saídas manuais): z ≥ 2 ou 2,5× a média |
 
-Achados "de estado" (saldo negativo, total diferente, duplicada, recebida sem caixa, padrões) resolvem sozinhos quando a situação muda. Regras em Configuração `auditoria.config`: `horaInicio` (7), `horaFim` (22), `descontoMaxPct` (15), `saidaManualAlerta` (500), `modeloIa`, `desligados`. `AGENTES_AUDITORIA=off` desliga o serviço.
+Achados "de estado" (saldo negativo, total diferente, duplicada, recebida sem caixa, padrões) resolvem sozinhos quando a situação muda. Regras em Configuração `auditoria.config`: `horaInicio` (7), `horaFim` (22), `descontoMaxPct` (15), `saidaManualAlerta` (500), `modeloIa` (padrão `claude-fable-5-1`), `desligados`. `AGENTES_AUDITORIA=off` desliga o serviço.
 
 ### Analista (Claude) — opcional
 Com a chave da API da Anthropic (Painel → Agentes → Analista; fica criptografada em `Configuracao` `auditoria.analista.chave`, ou `ANTHROPIC_API_KEY`), uma vez por dia às 06:30 e quando o ADMIN pede, a IA recebe o resumo das últimas 24 h (operações por pessoa e categoria, movimentos ≥ R$ 500 e exclusões, achados abertos, últimas operações) e devolve resumo, pontos (viram achados do agente `analista`) e perguntas para investigar. Vai só o resumo — nunca senhas, documentos ou dados de clientes.
