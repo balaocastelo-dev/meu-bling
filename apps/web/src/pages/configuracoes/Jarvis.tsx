@@ -218,8 +218,16 @@ export default function ConfigJarvis() {
       <Secao
         titulo="Mercado Livre"
         descricao="Para o botão Anunciar publicar de verdade. Crie a aplicação em developers.mercadolivre.com.br e cole as credenciais aqui — o Client Secret é criptografado e nunca mais volta para esta tela."
-        acoes={ml ? <Badge tom={ml.conectado ? 'verde' : ml.configurado ? 'amarelo' : 'cinza'} ponto>{ml.conectado ? `Conectado${ml.apelido ? ` (${ml.apelido})` : ''}` : ml.configurado ? 'Falta conectar a conta' : 'Não configurado'}</Badge> : null}
       >
+        {/* em linha própria: no celular de 360px este selo não cabe ao lado do título */}
+        {ml ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Badge tom={ml.conectado ? 'verde' : ml.configurado ? 'amarelo' : 'cinza'} ponto>
+              {ml.conectado ? 'Conectado' : ml.configurado ? 'Falta conectar' : 'Não configurado'}
+            </Badge>
+            {ml.conectado && ml.apelido ? <span className="min-w-0 truncate text-xs text-slate-500">{ml.apelido}</span> : null}
+          </div>
+        ) : null}
         <div className="grid gap-3 md:grid-cols-2">
           <Input label="Client ID (ID do aplicativo)" value={form.mlClientId ?? ''} onChange={(e) => set({ mlClientId: e.target.value })} autoComplete="off" placeholder="3415778559288261" />
           <Input
