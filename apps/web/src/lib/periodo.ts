@@ -1,10 +1,11 @@
 /**
  * Períodos do filtro de data do sistema (dashboards e listas usam os mesmos):
- * Hoje · 7 dias · 30 dias · Este mês · Mês passado · Período (datas livres) — e "Tudo" nas listas.
+ * Hoje · 7 dias · 30 dias · Este mês · Mês passado · Este ano · Ano passado · Últimos 12 meses · Período (datas livres)
+ * — e "Tudo" nas listas. Pedido do Thiago (28/10/2026): todo filtro de data do sistema completo assim.
  */
-import { format, startOfMonth, subDays } from 'date-fns';
+import { addDays, format, startOfMonth, startOfYear, subDays, subMonths, subYears, endOfYear } from 'date-fns';
 
-export type Periodo = 'tudo' | 'hoje' | '7d' | '30d' | 'mes' | 'mesPassado' | 'custom';
+export type Periodo = 'tudo' | 'hoje' | '7d' | '30d' | 'mes' | 'mesPassado' | 'ano' | 'anoPassado' | '12m' | 'custom';
 
 export const OPCOES_PERIODO: { valor: Exclude<Periodo, 'tudo'>; rotulo: string }[] = [
   { valor: 'hoje', rotulo: 'Hoje' },
@@ -12,6 +13,9 @@ export const OPCOES_PERIODO: { valor: Exclude<Periodo, 'tudo'>; rotulo: string }
   { valor: '30d', rotulo: '30 dias' },
   { valor: 'mes', rotulo: 'Este mês' },
   { valor: 'mesPassado', rotulo: 'Mês passado' },
+  { valor: 'ano', rotulo: 'Este ano' },
+  { valor: 'anoPassado', rotulo: 'Ano passado' },
+  { valor: '12m', rotulo: 'Últimos 12 meses' },
   { valor: 'custom', rotulo: 'Período' },
 ];
 
@@ -33,6 +37,15 @@ export function intervaloPeriodo(p: Periodo, custom: { i: string; f: string } = 
       return { dataInicial: iso(startOfMonth(h)), dataFinal: iso(h) };
     case 'mesPassado':
       return { dataInicial: iso(startOfMonth(subDays(startOfMonth(h), 1))), dataFinal: iso(subDays(startOfMonth(h), 1)) };
+    case 'ano':
+      return { dataInicial: iso(startOfYear(h)), dataFinal: iso(h) };
+    case 'anoPassado': {
+      const a = subYears(h, 1);
+      return { dataInicial: iso(startOfYear(a)), dataFinal: iso(endOfYear(a)) };
+    }
+    case '12m':
+      // de hoje-12 meses (+1 dia) até hoje: 29/10/2025 a 28/10/2026
+      return { dataInicial: iso(addDays(subMonths(h, 12), 1)), dataFinal: iso(h) };
     default:
       return { dataInicial: custom.i, dataFinal: custom.f };
   }

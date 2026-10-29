@@ -120,7 +120,7 @@ export function atalhosPeriodo(hoje = new Date()): { id: string; nome: string; i
 }
 
 /**
- * Filtro de data do sistema — o mesmo dos dashboards: Tudo · Hoje · 7 dias · 30 dias · Este mês · Mês passado · Período.
+ * Filtro de data do sistema — o mesmo dos dashboards: Tudo · Hoje · 7 dias · 30 dias · Este mês · Mês passado · Este ano · Ano passado · Últimos 12 meses · Período.
  * "Tudo" só aparece onde o período é opcional (limpavel). Com atalhos=false mostra só as duas datas.
  */
 export function PeriodoFiltro({ inicial, final, onChange, label = 'Período', atalhos = true, limpavel = true }: { inicial: string; final: string; onChange: (i: string, f: string) => void; label?: string; atalhos?: boolean; /** false onde o período é obrigatório (DRE, relatórios) */ limpavel?: boolean }) {

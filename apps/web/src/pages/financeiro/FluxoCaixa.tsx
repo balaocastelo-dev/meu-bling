@@ -8,9 +8,10 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { endOfMonth, format, startOfMonth } from 'date-fns';
+import { format } from 'date-fns';
 import { ArrowDownRight, ArrowUpRight, CalendarClock, Landmark, Radio, Scale, TrendingUp, Wallet } from 'lucide-react';
 import { api } from '@/lib/api';
+import { intervaloPeriodo } from '@/lib/periodo';
 import { useContasFinanceiras, opcoesDe } from '@/hooks/useListas';
 import { EmptyState, PeriodoFiltro, SelectFiltro, Skeleton } from '@/components/ui';
 import { Aparecer, BarraAnimada, CardV18, Grupo, KpiV18, PaginaV18 } from '@/components/dashboard/v18';
@@ -63,7 +64,7 @@ function Ranking({ itens, cor, vazio }: { itens: Linha[]; cor: string; vazio: st
 
 export default function FluxoCaixa() {
   const nav = useNavigate();
-  const [periodo, setPeriodo] = useState({ i: format(startOfMonth(new Date()), 'yyyy-MM-dd'), f: format(endOfMonth(new Date()), 'yyyy-MM-dd') });
+  const [periodo, setPeriodo] = useState(() => { const r = intervaloPeriodo('mes'); return { i: r.dataInicial, f: r.dataFinal }; });
   const [agrupar, setAgrupar] = useState<'dia' | 'semana' | 'mes'>('dia');
   const [contaId, setContaId] = useState('');
   const { data: contasLista } = useContasFinanceiras();
