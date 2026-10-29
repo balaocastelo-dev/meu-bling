@@ -14,7 +14,7 @@ import { prisma } from '../../lib/prisma.js';
 import { arredondar, competenciaDe } from '../../lib/util.js';
 import { OBS_FORA_DO_RESULTADO } from '../comum/financeiro.js';
 import { avisosGestao } from '../comum/avisos-gestao.js';
-import { agruparPadrao, chavePeriodo, listarPeriodos, periodoAnterior, type Agrupar } from '../financeiro/periodos.js';
+import { agruparPadrao, chavePeriodo, desdeSempre, listarPeriodos, periodoAnterior, type Agrupar } from '../financeiro/periodos.js';
 import { ultimosAcontecimentos } from '../dashboard/atividades.js';
 import {
   desafiosDoParticipante,
@@ -27,7 +27,8 @@ import {
   situacoesQueContam,
 } from '../metas/service.js';
 
-export type Periodo = { ini: Date; fim: Date; agrupar: Agrupar };
+/** `tudo` = "todo o período" (início recuado até o primeiro registro; sem comparativo com o período anterior) */
+export type Periodo = { ini: Date; fim: Date; agrupar: Agrupar; tudo: boolean };
 
 function serieVazia<T extends object>(p: Periodo, molde: () => T) {
   return new Map(listarPeriodos(p.ini, p.fim, p.agrupar).map((k) => [k, { periodo: k, ...molde() }]));
@@ -42,7 +43,7 @@ export async function blocoVendas(vendedorId: number, p: Periodo, gestor: boolea
   const ant = periodoAnterior(p.ini, p.fim);
   const [atual, anterior, vendas, itens] = await Promise.all([
     resumoVendas(vendedorId, p.ini, p.fim),
-    resumoVendas(vendedorId, ant.ini, ant.fim),
+    p.tudo ? null : resumoVendas(vendedorId, ant.ini, ant.fim),
     prisma.venda.findMany({ where: { tipo: 'PEDIDO', vendedorId, situacaoId: { in: sitOk }, data: { gte: p.ini, lte: p.fim } }, select: { data: true, total: true } }),
     prisma.vendaItem.findMany({
       where: { venda: { tipo: 'PEDIDO', vendedorId, situacaoId: { in: sitOk }, data: { gte: p.ini, lte: p.fim } } },
@@ -65,7 +66,7 @@ export async function blocoVendas(vendedorId: number, p: Periodo, gestor: boolea
   }
   return {
     ...painel,
-    periodo: { ...atual, anterior: { faturamento: anterior.faturamento, qtd: anterior.qtd } },
+    periodo: { ...atual, anterior: anterior ? { faturamento: anterior.faturamento, qtd: anterior.qtd } : null },
     serie: ordenada(serie),
     topProdutos: [...porProduto.values()].sort((a, b) => b.valor - a.valor).slice(0, 6),
   };
@@ -93,7 +94,7 @@ export async function blocoAssistencia(tecnicoId: number, p: Periodo, gestor: bo
     }),
     prisma.ordemServico.count({ where: { tecnicoId: null, situacaoId: { notIn: fechadas } } }),
     resumoOsTecnico(tecnicoId, p.ini, p.fim),
-    resumoOsTecnico(tecnicoId, ant.ini, ant.fim),
+    p.tudo ? null : resumoOsTecnico(tecnicoId, ant.ini, ant.fim),
     prisma.ordemServico.findMany({ where: { tecnicoId, situacaoId: { in: sitOk }, dataConclusao: { gte: p.ini, lte: p.fim } }, select: { dataEntrada: true, dataConclusao: true, total: true } }),
     prisma.ordemServico.findMany({ where: { tecnicoId, dataEntrada: { gte: p.ini, lte: p.fim } }, select: { dataEntrada: true } }),
     progressoMetaTecnico(tecnicoId, agora),
@@ -131,7 +132,7 @@ export async function blocoAssistencia(tecnicoId: number, p: Periodo, gestor: bo
   return {
     tecnico,
     agora: agoraResumo,
-    periodo: { entradas: entradas.length, concluidas: atual.qtd, valorServicos: atual.valor, maoDeObra: atual.maoDeObra, pecas: atual.pecas, ticketMedio: atual.ticketMedio, tempoMedioDias: tempos.length ? arredondar(tempos.reduce((a, b) => a + b, 0) / tempos.length, 1) : 0, anterior: { concluidas: anterior.qtd, valorServicos: anterior.valor } },
+    periodo: { entradas: entradas.length, concluidas: atual.qtd, valorServicos: atual.valor, maoDeObra: atual.maoDeObra, pecas: atual.pecas, ticketMedio: atual.ticketMedio, tempoMedioDias: tempos.length ? arredondar(tempos.reduce((a, b) => a + b, 0) / tempos.length, 1) : 0, anterior: anterior ? { concluidas: anterior.qtd, valorServicos: anterior.valor } : null },
     meta: { ...meta, bonusDesafios: arredondar(bonus._sum.valor || 0) },
     ranking,
     desafios,
@@ -153,9 +154,9 @@ export async function blocoGerente(p: Periodo) {
   const [avisos, vendas, vendasAnt, ordens, ordensAnt, movimentos, vendedores, tecnicos, metasV, metasT, vendasMes, osMes, desafios, acontecimentos] = await Promise.all([
     avisosGestao(),
     prisma.venda.findMany({ where: { tipo: 'PEDIDO', situacaoId: { in: sitVenda }, data: { gte: p.ini, lte: p.fim } }, select: { data: true, total: true, vendedorId: true, vendedor: { select: { nome: true } } } }),
-    prisma.venda.aggregate({ where: { tipo: 'PEDIDO', situacaoId: { in: sitVenda }, data: { gte: ant.ini, lte: ant.fim } }, _sum: { total: true }, _count: { _all: true } }),
+    p.tudo ? null : prisma.venda.aggregate({ where: { tipo: 'PEDIDO', situacaoId: { in: sitVenda }, data: { gte: ant.ini, lte: ant.fim } }, _sum: { total: true }, _count: { _all: true } }),
     prisma.ordemServico.findMany({ where: { situacaoId: { in: sitOs }, dataConclusao: { gte: p.ini, lte: p.fim } }, select: { dataConclusao: true, total: true } }),
-    prisma.ordemServico.aggregate({ where: { situacaoId: { in: sitOs }, dataConclusao: { gte: ant.ini, lte: ant.fim } }, _sum: { total: true }, _count: { _all: true } }),
+    p.tudo ? null : prisma.ordemServico.aggregate({ where: { situacaoId: { in: sitOs }, dataConclusao: { gte: ant.ini, lte: ant.fim } }, _sum: { total: true }, _count: { _all: true } }),
     // dinheiro de verdade que entrou/saiu: fora transferências, ajustes de saldo, caixinhas e a conta de compensação dos empréstimos
     prisma.movimentoFinanceiro
       .findMany({ where: { data: { gte: p.ini, lte: p.fim }, tipo: { in: ['ENTRADA', 'SAIDA'] }, caixinhaId: null, contaFinanceira: { tipo: { not: 'COMPENSACAO' } } }, select: { data: true, tipo: true, valor: true, observacoes: true } })
@@ -239,7 +240,7 @@ export async function blocoGerente(p: Periodo) {
       assistencia: { valor: totalOs, qtd: ordens.length },
       entradas,
       saidas,
-      anterior: { receita: arredondar((vendasAnt._sum.total || 0) + (ordensAnt._sum.total || 0)), vendas: arredondar(vendasAnt._sum.total || 0), assistencia: arredondar(ordensAnt._sum.total || 0) },
+      anterior: vendasAnt && ordensAnt ? { receita: arredondar((vendasAnt._sum.total || 0) + (ordensAnt._sum.total || 0)), vendas: arredondar(vendasAnt._sum.total || 0), assistencia: arredondar(ordensAnt._sum.total || 0) } : null,
     },
     avisos: avisos.avisos,
     caixinhas: { lista: caixinhas, sugestaoHojeTotal },
@@ -261,11 +262,12 @@ export async function blocoGerente(p: Periodo) {
   };
 }
 
-/** Resolve dataInicial/dataFinal do filtro (padrão: hoje) e o agrupamento da série */
-export function periodoDe(q: { dataInicial?: Date | null; dataFinal?: Date | null }): Periodo {
+/** Resolve dataInicial/dataFinal do filtro (padrão: hoje) e o agrupamento da série; "todo o período" recua até o primeiro registro */
+export async function periodoDe(q: { dataInicial?: Date | null; dataFinal?: Date | null }): Promise<Periodo> {
   const hoje = new Date();
   let ini: Date = q.dataInicial ? startOfDay(q.dataInicial) : q.dataFinal ? startOfDay(q.dataFinal) : startOfDay(hoje);
   let fim: Date = q.dataFinal ? endOfDay(q.dataFinal) : q.dataInicial ? endOfDay(q.dataInicial) : endOfDay(hoje);
   if (fim < ini) [ini, fim] = [startOfDay(fim), endOfDay(ini)];
-  return { ini, fim, agrupar: agruparPadrao(ini, fim) };
+  const r = await desdeSempre(ini, fim);
+  return { ini: r.ini, fim: r.fim, agrupar: agruparPadrao(r.ini, r.fim), tudo: r.tudo };
 }

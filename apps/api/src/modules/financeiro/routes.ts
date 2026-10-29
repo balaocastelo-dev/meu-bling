@@ -434,7 +434,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
         agrupar: z.enum(['dia', 'semana', 'mes']).default('dia'),
       })
       .parse(req.query);
-    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
     const agrupar: Agrupar = q.agrupar;
     const filtroConta = q.contaFinanceiraId ? { contaFinanceiraId: q.contaFinanceiraId } : {};
 

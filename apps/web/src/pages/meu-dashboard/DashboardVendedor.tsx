@@ -75,8 +75,8 @@ export default function DashboardVendedor({ dados, carregando, faixa, filtros, v
 
       {/* ===== topo: as vendas do período ===== */}
       <FaixaKpis colunas={4}>
-        <KpiV18 destaque className="col-span-2" rotulo={`Minhas vendas · ${faixa}`} valor={p?.faturamento} anterior={p?.anterior.faturamento} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="vermelho" carregando={carregando} sub={p ? `${inteiro(p.qtd)} ${p.qtd === 1 ? 'venda' : 'vendas'} · período anterior ${moeda(p.anterior.faturamento)}` : undefined} onClick={() => nav('/vendas')} />
-        <KpiV18 rotulo="Vendas" valor={p?.qtd} anterior={p?.anterior.qtd} formato={(n) => inteiro(Math.round(n))} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={carregando} sub="no período" />
+        <KpiV18 destaque className="col-span-2" rotulo={`Minhas vendas · ${faixa}`} valor={p?.faturamento} anterior={p?.anterior?.faturamento} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="vermelho" carregando={carregando} sub={p ? `${inteiro(p.qtd)} ${p.qtd === 1 ? 'venda' : 'vendas'}${p.anterior ? ` · período anterior ${moeda(p.anterior.faturamento)}` : ' · desde o primeiro registro'}` : undefined} onClick={() => nav('/vendas')} />
+        <KpiV18 rotulo="Vendas" valor={p?.qtd} anterior={p?.anterior?.qtd} formato={(n) => inteiro(Math.round(n))} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={carregando} sub="no período" />
         <KpiV18 rotulo="Ticket médio" valor={p?.ticketMedio} formato={moeda} icone={<Receipt className="h-4 w-4" />} tom="neutro" carregando={carregando} sub={p ? `comissão ${moeda(p.comissao)}` : undefined} />
       </FaixaKpis>
 

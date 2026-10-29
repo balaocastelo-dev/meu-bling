@@ -42,7 +42,7 @@ export default async function relatoriosRoutes(app: FastifyInstance) {
     const q = z
       .object({ dataInicial: dataSchema, dataFinal: dataSchema, regime: z.enum(['competencia', 'caixa']).default('competencia'), comparar: z.enum(['true', 'false']).default('false'), formato: formatoSchema })
       .parse(req.query);
-    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
     const dre = await gerarDre({ ini, fim, regime: q.regime, comparar: q.comparar === 'true' });
     if (q.formato === 'csv') {
       const linhas: Record<string, any>[] = [];
@@ -60,7 +60,7 @@ export default async function relatoriosRoutes(app: FastifyInstance) {
     const q = z
       .object({ dataInicial: dataSchema, dataFinal: dataSchema, agrupar: z.enum(['dia', 'semana', 'mes']).optional(), vendedorId: z.coerce.number().int().optional(), todas: z.enum(['true', 'false']).default('true'), formato: formatoSchema })
       .parse(req.query);
-    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
     const agrupar: Agrupar = q.agrupar || agruparPadrao(ini, fim);
     const sit = await prisma.situacao.findMany({ where: { modulo: 'VENDA', ...(q.todas === 'true' ? { cancelamento: false } : { final: true, cancelamento: false }) }, select: { id: true } });
     const vendas = await prisma.venda.findMany({
@@ -92,7 +92,7 @@ export default async function relatoriosRoutes(app: FastifyInstance) {
   // ---- Produtos mais vendidos
   app.get('/api/v1/relatorios/produtos-mais-vendidos', { preHandler: leitura }, async (req, reply) => {
     const q = z.object({ dataInicial: dataSchema, dataFinal: dataSchema, limite: z.coerce.number().int().min(1).max(500).default(50), categoriaId: z.coerce.number().int().optional(), incluirOs: z.enum(['true', 'false']).default('true'), formato: formatoSchema }).parse(req.query);
-    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
     // vendas não canceladas (em aberto já conta), igual ao painel e ao dashboard de vendas
     const sitV = await prisma.situacao.findMany({ where: { modulo: 'VENDA', cancelamento: false }, select: { id: true } });
     const itens = await prisma.vendaItem.findMany({
@@ -178,7 +178,7 @@ export default async function relatoriosRoutes(app: FastifyInstance) {
     const where: any = {};
     if (q.competencia) where.competencia = q.competencia;
     else if (q.dataInicial || q.dataFinal) {
-      const { ini, fim } = resolverPeriodo(q, 'mes');
+      const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
       where.criadoEm = { gte: ini, lte: fim };
     } else where.competencia = chavePeriodo(new Date(), 'mes');
     if (q.tipo) where.tipo = q.tipo;
@@ -224,7 +224,7 @@ export default async function relatoriosRoutes(app: FastifyInstance) {
   // ---- Contas a receber/pagar (CSV simples para contador)
   app.get('/api/v1/relatorios/contas', { preHandler: gestao }, async (req, reply) => {
     const q = z.object({ tipo: z.enum(['receber', 'pagar']).default('receber'), dataInicial: dataSchema, dataFinal: dataSchema, situacao: z.string().optional(), formato: formatoSchema }).parse(req.query);
-    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
     const where: any = { vencimento: { gte: ini, lte: fim } };
     if (q.situacao) where.situacao = q.situacao;
     const data =

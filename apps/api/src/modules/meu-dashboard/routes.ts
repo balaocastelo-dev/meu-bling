@@ -43,7 +43,7 @@ export function semFinanceiroInterno<T>(obj: T): T {
 export default async function meuDashboardRoutes(app: FastifyInstance) {
   app.get('/api/v1/meu-dashboard', async (req) => {
     const q = z.object({ dataInicial: dataSchema, dataFinal: dataSchema, usuarioId: z.coerce.number().int().positive().optional() }).parse(req.query);
-    const p = periodoDe(q);
+    const p = await periodoDe(q);
     const gestor = req.user.perfil === 'ADMIN' || req.user.perfil === 'GERENTE';
 
     // ---- de quem é o dashboard (o meu, ou "ver como" alguém da equipe)
@@ -62,7 +62,7 @@ export default async function meuDashboardRoutes(app: FastifyInstance) {
     const base = {
       usuario: { id: alvo.id, nome: alvo.nome, perfil },
       verComo,
-      periodo: { dataInicial: p.ini, dataFinal: p.fim, agrupar: p.agrupar },
+      periodo: { dataInicial: p.ini, dataFinal: p.fim, agrupar: p.agrupar, tudo: p.tudo },
       lembretes: await lembretesPendentes(alvo.id),
     };
 

@@ -186,6 +186,15 @@ async function main() {
   const dp: any = await V.get('/meu-dashboard?dataInicial=2020-01-01&dataFinal=2020-01-31');
   verifica(dp.vendas.periodo.faturamento === 0 && dp.periodo.agrupar === 'dia', 'período sem vendas devolve zero', dp.vendas.periodo);
 
+  secao('"Todo o período" (desde sempre): começa no primeiro registro e não compara com o período anterior');
+  const dt_: any = await V.get(`/meu-dashboard?dataInicial=2000-01-01&dataFinal=${hoje()}`);
+  verifica(dt_.periodo.tudo === true && new Date(dt_.periodo.dataInicial).getFullYear() >= 2020, 'início recuado até o primeiro registro (não 2000)', dt_.periodo);
+  verifica(dt_.vendas.periodo.anterior === null && dt_.vendas.periodo.faturamento >= 2500, 'sem "período anterior"; soma tudo', dt_.vendas.periodo);
+  const pan: any = await adm.get(`/dashboard/panorama?dataInicial=2000-01-01&dataFinal=${hoje()}`);
+  verifica(pan.resumo.comparativo === null && pan.series.length > 0 && pan.series.length < 400, 'panorama do gestor: sem comparativo e série do tamanho certo', { comparativo: pan.resumo.comparativo, series: pan.series.length });
+  const dv_: any = await adm.get(`/dashboard/vendas?dataInicial=2000-01-01&dataFinal=${hoje()}&comparar=true`);
+  verifica(!dv_.resumo.comparativo && dv_.resumo.faturamento >= 2500, 'dashboard de vendas: sem comparativo, soma tudo', dv_.resumo.faturamento);
+
   encerrar('Meu Dashboard');
 }
 
