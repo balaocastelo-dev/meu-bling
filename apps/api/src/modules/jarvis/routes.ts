@@ -25,6 +25,7 @@ import { registrarServico } from '../../core/servicos.js';
 import { calcularCaixaLivre, mapaDoMilhao } from './caixa-livre.js';
 import { iaDisponivel, perguntarIa, testarChave, SISTEMA_PERGUNTA } from './ia.js';
 import { iniciarWorker, medirResultados, obterConfig, rodarJarvis } from './worker.js';
+import { executarAcao } from './acoes.js';
 
 // o worker de 30 min (ver worker.ts). Desliga com JARVIS=off
 registrarServico('jarvis', (app) => iniciarWorker(app));
@@ -139,22 +140,51 @@ export default async function jarvisRoutes(app: FastifyInstance) {
     return { data: lista.map(paraTela) };
   });
 
-  async function decidir(req: any, situacao: 'ACEITA' | 'ADIADA' | 'RECUSADA', extra: Record<string, unknown> = {}) {
+  async function decidir(
+    req: any,
+    situacao: 'ACEITA' | 'ADIADA' | 'RECUSADA',
+    extra: Record<string, unknown> = {},
+    opcoesAcao: { percentual?: number } = {},
+  ) {
     const id = idDe(req);
     const s = await prisma.jarvisSugestao.findUnique({ where: { id } });
     if (!s) throw new NotFound('Sugestão');
     if (s.situacao !== 'ABERTA' && s.situacao !== 'ADIADA')
       throw new AppError('Essa sugestão já foi decidida.', 422, 'SUGESTAO_DECIDIDA');
 
+    // aceitar é o JARVIS fazer o trabalho, não só marcar a sugestão
+    let resultado: { ok: boolean; mensagem: string; detalhes?: Record<string, unknown> } | null = null;
+    if (situacao === 'ACEITA' && s.acao && s.acao !== 'NENHUMA' && s.acao !== 'ABRIR_TELA') {
+      resultado = await executarAcao(s.acao, s.dados ? seguro(s.dados) : null, opcoesAcao);
+      if (!resultado.ok) throw new AppError(resultado.mensagem, 422, 'ACAO_SEM_EFEITO');
+    }
+
     const atualizada = await prisma.jarvisSugestao.update({
       where: { id },
-      data: { situacao, decididaEm: new Date(), decididaPor: req.user?.nome || 'ADMIN', ...extra },
+      data: {
+        situacao,
+        decididaEm: new Date(),
+        decididaPor: req.user?.nome || 'ADMIN',
+        motivo: resultado ? resultado.mensagem.slice(0, 400) : ((extra.motivo as string | null) ?? null),
+        ...extra,
+      },
     });
-    await auditar(req, 'JarvisSugestao', id, 'ACAO', { situacao, regra: s.regra, chave: s.chave });
-    return paraTela(atualizada);
+    await auditar(req, 'JarvisSugestao', id, 'ACAO', {
+      situacao,
+      regra: s.regra,
+      chave: s.chave,
+      acao: s.acao,
+      resultado: resultado?.detalhes ?? null,
+    });
+    return { ...paraTela(atualizada), feito: resultado?.mensagem ?? null };
   }
 
-  app.post('/api/v1/jarvis/sugestoes/:id/aceitar', admin, async (req) => decidir(req, 'ACEITA'));
+  app.post('/api/v1/jarvis/sugestoes/:id/aceitar', admin, async (req) => {
+    const { percentual } = z
+      .object({ percentual: z.coerce.number().int().min(1).max(60).optional() })
+      .parse((req.body ?? {}) as any);
+    return decidir(req, 'ACEITA', {}, { percentual });
+  });
 
   app.post('/api/v1/jarvis/sugestoes/:id/adiar', admin, async (req) => {
     const { dias } = z.object({ dias: z.coerce.number().int().min(1).max(90).default(7) }).parse((req.body ?? {}) as any);
@@ -195,9 +225,12 @@ export default async function jarvisRoutes(app: FastifyInstance) {
       falta: Math.max(0, cfg.metaCaixa - caixa.caixaLivre),
       saldoBancos: caixa.saldoBancos,
       saldoCaixa: caixa.saldoCaixa,
+      compromissosTotais: caixa.compromissosTotais,
       aPagarProximos30Dias: caixa.aPagar30d,
-      faltaGuardarCaixinhas: caixa.caixinhas,
-      emprestimosADevolver: caixa.emprestimos,
+      caixinhasAtrasadas: caixa.caixinhasDevidas,
+      caixinhasAGuardarDepois: caixa.caixinhasFuturas,
+      emprestimosVencendoEm30Dias: caixa.emprestimos30d,
+      emprestimosDepois: caixa.emprestimosDepois,
       contas: caixa.detalhes.contas,
       sugestoes: abertas,
     };

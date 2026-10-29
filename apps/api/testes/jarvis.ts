@@ -80,6 +80,26 @@ async function main() {
   const mapa = painel.sugestoes.find((s: any) => s.regra === 'MAPA_MILHAO');
   verifica(!!mapa, 'o mapa do milhão aparece todo dia', mapa?.titulo);
 
+  secao('Caixa livre: curto prazo e compromissos totais são leituras diferentes');
+  verifica(
+    typeof comCaixinha.compromissosTotais === 'number' && comCaixinha.compromissosTotais <= comCaixinha.caixaLivre,
+    'compromissos totais nunca passam do caixa livre (eles descontam o que vem depois)',
+    { caixaLivre: comCaixinha.caixaLivre, totais: comCaixinha.compromissosTotais },
+  );
+
+  secao('Cobrar por WhatsApp: aceitar a sugestão enfileira a cobrança de verdade');
+  const painelC = await adm.get('/jarvis/painel');
+  const cobranca = painelC.sugestoes.find((x: any) => x.acao === 'COBRAR_WHATSAPP');
+  if (cobranca) {
+    const antesFila = await adm.get('/notificacoes?limite=1');
+    const r2 = await adm.post(`/jarvis/sugestoes/${cobranca.id}/aceitar`, {});
+    verifica(typeof r2.feito === 'string' && r2.feito.length > 0, 'o JARVIS conta o que fez ao aceitar', r2.feito);
+    const depoisFila = await adm.get('/notificacoes?limite=50&canal=WHATSAPP');
+    const lista = depoisFila?.data ?? depoisFila;
+    verifica(Array.isArray(lista) && lista.length > 0, 'há cobrança na fila de notificações', Array.isArray(lista) ? lista.length : lista);
+    void antesFila;
+  }
+
   secao('Rodar de novo não duplica a mesma sugestão');
   const quantasAntes = painel.sugestoes.length;
   await adm.post('/jarvis/rodar', {});

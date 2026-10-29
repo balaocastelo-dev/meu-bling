@@ -21,11 +21,14 @@ import { dataHora, moeda, percentual } from '@/lib/format';
 
 interface Painel {
   caixaLivre: number;
+  compromissosTotais: number;
   saldoBancos: number;
   saldoCaixa: number;
   aPagar30d: number;
-  caixinhas: number;
-  emprestimos: number;
+  caixinhasDevidas: number;
+  caixinhasFuturas: number;
+  emprestimos30d: number;
+  emprestimosDepois: number;
   meta: number;
   falta: number;
   percentual: number;
@@ -85,8 +88,11 @@ export default function Jarvis() {
 
   const decidirM = useMutation({
     mutationFn: ({ id, o }: { id: number; o: 'aceitar' | 'adiar' | 'recusar' }) =>
-      api.post(`/jarvis/sugestoes/${id}/${o}`, o === 'adiar' ? { dias: 7 } : {}),
-    onSuccess: () => {
+      api.post<{ feito?: string | null }>(`/jarvis/sugestoes/${id}/${o}`, o === 'adiar' ? { dias: 7 } : {}),
+    onSuccess: (r, v) => {
+      // quando a sugestão tem ação (cobrar, dar desconto), o JARVIS conta o que fez
+      if (r?.feito) toast.success(r.feito, { duration: 8000 });
+      else toast.success(v.o === 'aceitar' ? 'Aceita.' : v.o === 'adiar' ? 'Adiada por 7 dias.' : 'Recusada.');
       qc.invalidateQueries({ queryKey: ['jarvis-painel'] });
       qc.invalidateQueries({ queryKey: ['jarvis-placar'] });
       qc.invalidateQueries({ queryKey: ['jarvis-feed'] });
@@ -166,6 +172,14 @@ export default function Jarvis() {
           sub={p?.emJogo ? `${moeda(p.emJogo)} em jogo nas sugestões` : undefined}
         />
       </FaixaKpis>
+
+      {p && (p.caixinhasFuturas > 0 || p.emprestimosDepois > 0) && (
+        <Aparecer className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 ring-1 ring-slate-200">
+          Olhando além dos 30 dias, ainda há {moeda(p.caixinhasFuturas)} a guardar nas caixinhas e{' '}
+          {moeda(p.emprestimosDepois)} de empréstimos a devolver — com tudo isso na conta, os compromissos totais dão{' '}
+          <strong className={p.compromissosTotais < 0 ? 'text-rose-600' : 'text-slate-900'}>{moeda(p.compromissosTotais)}</strong>.
+        </Aparecer>
+      )}
 
       {/* ===== sugestões: o que fazer agora ===== */}
       <CardV18
@@ -250,11 +264,16 @@ export default function Jarvis() {
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           <Conta rotulo="Saldo dos bancos" valor={p?.saldoBancos} tom="positivo" />
           <Conta rotulo="Caixa da loja" valor={p?.saldoCaixa} tom="positivo" />
-          <Conta rotulo="A pagar nos próximos 30 dias" valor={p?.aPagar30d} tom="negativo" />
-          <Conta rotulo="Ainda a guardar nas caixinhas" valor={p?.caixinhas} tom="negativo" />
-          <Conta rotulo="Empréstimos a devolver" valor={p?.emprestimos} tom="negativo" />
+          <Conta rotulo="Contas a pagar em 30 dias" valor={p?.aPagar30d} tom="negativo" />
+          <Conta rotulo="Caixinhas atrasadas (o que já devia estar guardado)" valor={p?.caixinhasDevidas} tom="negativo" />
+          <Conta rotulo="Empréstimos que vencem em 30 dias" valor={p?.emprestimos30d} tom="negativo" />
           <Conta rotulo="= Caixa livre" valor={p?.caixaLivre} tom="total" />
         </div>
+        <p className="mt-3 text-xs text-slate-500">
+          O caixa livre olha os próximos 30 dias — é com ele que dá para decidir o que fazer hoje. O que vem depois
+          ({moeda(p?.caixinhasFuturas ?? 0)} de caixinhas e {moeda(p?.emprestimosDepois ?? 0)} de empréstimos) entra nos
+          compromissos totais, logo abaixo dos números do topo.
+        </p>
       </CardV18>
 
       {/* ===== placar ===== */}
