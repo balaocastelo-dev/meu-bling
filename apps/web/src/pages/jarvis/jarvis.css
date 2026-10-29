@@ -1,223 +1,11 @@
 /* ---------------------------------------------------------------------
-   JARVIS — painel escuro, com identidade própria dentro do MEU BLING.
+   O TABLET do JARVIS.
 
-   A ideia não é "tela de hacker": é PAINEL DE INSTRUMENTO. O fundo é um
-   azul-petróleo profundo (não preto), as linhas são finas como trilhas de
-   placa, e o cobre aparece só onde há ação ou meta. Os números são o assunto,
-   então vêm grandes, tabulares e com respiro.
-
-   Tudo fica escopado em .jv para não vazar no resto do sistema, que é claro.
-   --------------------------------------------------------------------- */
-
-.jv {
-  --jv-fundo: #0a1118;
-  --jv-fundo-2: #0f1b25;
-  --jv-superficie: #13222e;
-  --jv-linha: #1d3344;
-  --jv-linha-forte: #2a4a61;
-  --jv-texto: #e4edf4;
-  --jv-suave: #7d97ac;
-  --jv-apagado: #51687a;
-  --jv-cobre: #e39b3c;
-  --jv-cobre-escuro: #b87a28;
-  --jv-menta: #46d3a3;
-  --jv-coral: #f2705d;
-
-  background: var(--jv-fundo);
-  color: var(--jv-texto);
-  font-family: 'Sora', 'Inter', ui-sans-serif, system-ui, sans-serif;
-  min-height: 100%;
-}
-
-/* o painel ocupa a tela toda, por cima do fundo claro do sistema */
-.jv-tela {
-  position: fixed;
-  inset: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  background:
-    radial-gradient(90rem 50rem at 15% -10%, #16313f 0%, transparent 55%),
-    radial-gradient(70rem 40rem at 110% 10%, #1a2c22 0%, transparent 50%),
-    var(--jv-fundo);
-}
-
-/* grade discreta de trilhas, como o verso de uma placa */
-.jv-grade::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(var(--jv-linha) 1px, transparent 1px),
-    linear-gradient(90deg, var(--jv-linha) 1px, transparent 1px);
-  background-size: 64px 64px;
-  opacity: 0.25;
-  mask-image: radial-gradient(60rem 40rem at 20% 0%, #000 0%, transparent 70%);
-}
-
-.jv-num {
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-
-/* ---- cartão */
-.jv-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)) var(--jv-fundo-2);
-  border: 1px solid var(--jv-linha);
-  border-radius: 14px;
-}
-.jv-card-destaque {
-  border-color: var(--jv-linha-forte);
-  box-shadow: 0 0 0 1px rgba(227, 155, 60, 0.08), 0 18px 40px -24px rgba(0, 0, 0, 0.9);
-}
-
-/* ---- trilho da meta: o instrumento principal */
-.jv-trilho {
-  position: relative;
-  height: 10px;
-  border-radius: 999px;
-  background: #0c1620;
-  border: 1px solid var(--jv-linha);
-  overflow: hidden;
-}
-.jv-trilho > i {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, var(--jv-cobre-escuro), var(--jv-cobre));
-  box-shadow: 0 0 18px rgba(227, 155, 60, 0.45);
-  transition: width 1.4s cubic-bezier(0.22, 1, 0.36, 1);
-}
-/* marcas de escala a cada 10% */
-.jv-trilho::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(90deg, var(--jv-linha) 1px, transparent 1px);
-  background-size: 10% 100%;
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-/* ---- campos */
-.jv-campo {
-  width: 100%;
-  background: #0c1620;
-  border: 1px solid var(--jv-linha);
-  border-radius: 10px;
-  color: var(--jv-texto);
-  padding: 0.7rem 0.9rem;
-  font-size: 0.95rem;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.jv-campo::placeholder {
-  color: var(--jv-apagado);
-}
-.jv-campo:focus {
-  outline: none;
-  border-color: var(--jv-cobre);
-  box-shadow: 0 0 0 3px rgba(227, 155, 60, 0.15);
-}
-
-/* ---- botões */
-.jv-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  border-radius: 10px;
-  padding: 0.65rem 1.1rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-  border: 1px solid transparent;
-  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.08s;
-  cursor: pointer;
-}
-.jv-btn:active {
-  transform: scale(0.985);
-}
-.jv-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.jv-btn-primario {
-  background: var(--jv-cobre);
-  color: #1a1206;
-}
-.jv-btn-primario:hover:not(:disabled) {
-  background: #f0a94a;
-}
-.jv-btn-quieto {
-  background: transparent;
-  border-color: var(--jv-linha-forte);
-  color: var(--jv-texto);
-}
-.jv-btn-quieto:hover:not(:disabled) {
-  background: var(--jv-superficie);
-  border-color: var(--jv-cobre);
-}
-.jv-btn-risco {
-  background: transparent;
-  border-color: rgba(242, 112, 93, 0.45);
-  color: var(--jv-coral);
-}
-.jv-btn-risco:hover:not(:disabled) {
-  background: rgba(242, 112, 93, 0.1);
-}
-
-.jv a:focus-visible,
-.jv button:focus-visible,
-.jv input:focus-visible,
-.jv select:focus-visible,
-.jv textarea:focus-visible {
-  outline: 2px solid var(--jv-cobre);
-  outline-offset: 2px;
-}
-
-/* ---- a única animação da tela: o trilho preenchendo ao entrar */
-@keyframes jv-acender {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.jv-acende {
-  animation: jv-acender 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .jv-acende {
-    animation: none;
-  }
-  .jv-trilho > i {
-    transition: none;
-  }
-}
-
-/* barra de rolagem combinando com o painel */
-.jv-tela::-webkit-scrollbar {
-  width: 10px;
-}
-.jv-tela::-webkit-scrollbar-track {
-  background: var(--jv-fundo);
-}
-.jv-tela::-webkit-scrollbar-thumb {
-  background: var(--jv-linha);
-  border-radius: 999px;
-}
-.jv-tela::-webkit-scrollbar-thumb:hover {
-  background: var(--jv-linha-forte);
-}
-
-/* ---------------------------------------------------------------------
-   O TABLET — o chat do JARVIS mora dentro de um aparelho, não de um cartão.
-
-   Nada de imagem: o aparelho é desenhado em CSS (corpo de grafite, vidro
-   embutido, câmera, barra de status e o risco do "home"). Assim ele escala
-   em qualquer tela, carrega leve e continua nítido em qualquer densidade.
+   O chat mora dentro de um aparelho, não de um cartão — pedido do Thiago.
+   O aparelho é desenhado em CSS (corpo de alumínio, vidro embutido, câmera,
+   barra de status e o risco do "home"): sem imagem, fica nítido em qualquer
+   tela e não pesa no carregamento. O resto da página segue claro, igual ao
+   sistema inteiro.
    --------------------------------------------------------------------- */
 .jv-tablet {
   position: relative;
@@ -225,12 +13,12 @@
   max-width: 62rem;
   padding: 18px;
   border-radius: 32px;
-  background: linear-gradient(145deg, #2b3a47 0%, #16222c 42%, #0d161e 100%);
+  background: linear-gradient(150deg, #f2f5f8 0%, #dde4ec 45%, #c6d0da 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.6),
-    0 2px 2px rgba(0, 0, 0, 0.5),
-    0 40px 70px -30px rgba(0, 0, 0, 0.95);
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 0 0 1px rgba(100, 116, 139, 0.25),
+    0 1px 1px rgba(15, 23, 42, 0.08),
+    0 26px 44px -26px rgba(15, 23, 42, 0.45);
 }
 
 /* a câmera, no topo do bisel */
@@ -248,15 +36,14 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #4e6d82, #080d12 70%);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: radial-gradient(circle at 35% 30%, #94a3b8, #334155 70%);
 }
 .jv-tablet-camera i:last-child {
   width: 3px;
   height: 3px;
-  background: var(--jv-menta);
-  box-shadow: 0 0 6px var(--jv-menta);
-  opacity: 0.55;
+  background: #22c55e;
+  box-shadow: 0 0 5px rgba(34, 197, 94, 0.8);
+  opacity: 0.75;
 }
 
 /* o vidro: é aqui que o chat acontece */
@@ -264,17 +51,17 @@
   position: relative;
   overflow: hidden;
   border-radius: 18px;
-  background: #0b141c;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.8), inset 0 1px 14px rgba(0, 0, 0, 0.7);
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.35);
 }
-/* reflexo discreto, só no canto, para o vidro parecer vidro */
+/* reflexo discreto no canto, para o vidro parecer vidro */
 .jv-tablet-vidro::before {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 3;
-  background: linear-gradient(118deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 32%);
+  background: linear-gradient(118deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 26%);
 }
 
 /* barra de status do aparelho */
@@ -285,25 +72,25 @@
   gap: 0.75rem;
   padding: 0.45rem 0.9rem;
   font-size: 0.7rem;
-  letter-spacing: 0.04em;
-  color: var(--jv-apagado);
-  background: #0a1219;
-  border-bottom: 1px solid #142230;
+  letter-spacing: 0.03em;
+  color: #94a3b8;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
 }
 .jv-tablet-barra b {
-  color: var(--jv-suave);
+  color: #475569;
   font-weight: 600;
+}
+.jv-tablet-hora {
+  font-variant-numeric: tabular-nums;
 }
 .jv-tablet-ponto {
   display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--jv-apagado);
-}
-.jv-tablet-ponto.vivo {
-  background: var(--jv-menta);
-  box-shadow: 0 0 8px var(--jv-menta);
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
 }
 
 /* o risco do "home", embaixo do vidro */
@@ -312,76 +99,14 @@
   width: 7rem;
   height: 4px;
   border-radius: 999px;
-  background: #22323e;
+  background: rgba(100, 116, 139, 0.35);
 }
 
-/* ---- o conteúdo claro do chat vira escuro dentro do vidro.
-   O chat é o mesmo componente do dashboard; aqui só a pele muda. */
-.jv-tablet-vidro .bg-white,
-.jv-tablet-vidro .bg-slate-100,
-.jv-tablet-vidro .bg-slate-200,
-.jv-tablet-vidro .bg-slate-50 {
-  background-color: #101c26 !important;
-}
-.jv-tablet-vidro .border-slate-200\/80,
-.jv-tablet-vidro .border-slate-200,
-.jv-tablet-vidro .border-slate-300 {
-  border-color: #1d3344 !important;
-}
-.jv-tablet-vidro .shadow-card {
+/* dentro do vidro o cartão não precisa de borda nem sombra: o aparelho já é a moldura */
+.jv-tablet-vidro > .min-w-0 {
+  border: 0 !important;
+  border-radius: 0 !important;
   box-shadow: none !important;
-}
-.jv-tablet-vidro .text-slate-900,
-.jv-tablet-vidro .text-slate-800,
-.jv-tablet-vidro .text-slate-700 {
-  color: var(--jv-texto) !important;
-}
-.jv-tablet-vidro .text-slate-500,
-.jv-tablet-vidro .text-slate-600 {
-  color: var(--jv-suave) !important;
-}
-.jv-tablet-vidro .text-slate-400 {
-  color: var(--jv-apagado) !important;
-}
-.jv-tablet-vidro .bg-emerald-50 {
-  background-color: rgba(70, 211, 163, 0.1) !important;
-}
-.jv-tablet-vidro .text-emerald-800,
-.jv-tablet-vidro .text-emerald-700,
-.jv-tablet-vidro .text-emerald-600 {
-  color: var(--jv-menta) !important;
-}
-.jv-tablet-vidro .bg-sky-50 {
-  background-color: rgba(110, 180, 230, 0.1) !important;
-}
-.jv-tablet-vidro .text-sky-900,
-.jv-tablet-vidro .text-sky-800 {
-  color: #9ecbe8 !important;
-}
-.jv-tablet-vidro .bg-amber-50 {
-  background-color: rgba(227, 155, 60, 0.12) !important;
-}
-.jv-tablet-vidro .text-amber-900,
-.jv-tablet-vidro .text-amber-800 {
-  color: var(--jv-cobre) !important;
-}
-.jv-tablet-vidro .bg-brand-600,
-.jv-tablet-vidro .bg-brand-500 {
-  background-color: var(--jv-cobre) !important;
-  color: #1a1206 !important;
-}
-.jv-tablet-vidro [class*='ring-slate'],
-.jv-tablet-vidro [class*='ring-emerald'],
-.jv-tablet-vidro [class*='ring-sky'],
-.jv-tablet-vidro [class*='ring-amber'] {
-  --tw-ring-color: #203748 !important;
-}
-.jv-tablet-vidro select,
-.jv-tablet-vidro textarea,
-.jv-tablet-vidro input {
-  background-color: #0c1620 !important;
-  color: var(--jv-texto) !important;
-  border-color: #1d3344 !important;
 }
 
 @media (max-width: 640px) {
@@ -391,5 +116,8 @@
   }
   .jv-tablet-vidro {
     border-radius: 14px;
+  }
+  .jv-tablet-home {
+    width: 5rem;
   }
 }
