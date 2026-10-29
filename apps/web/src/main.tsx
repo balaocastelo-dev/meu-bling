@@ -7,6 +7,11 @@ import { router } from './routes';
 import './index.css';
 
 // Cliente de cache: listagens não refazem fetch ao focar a janela; erros não repetem em cascata
+/** Erro HTTP 4xx da API (ApiError tem .status) */
+const erro4xx = (e: unknown) => {
+  const st = (e as { status?: number } | null)?.status ?? 0;
+  return st >= 400 && st < 500;
+};
 // qualquer gravação (venda salva, situação trocada, desafio lançado…) atualiza os números do painel do vendedor
 const queryClient: QueryClient = new QueryClient({
   mutationCache: new MutationCache({
@@ -15,7 +20,8 @@ const queryClient: QueryClient = new QueryClient({
     },
   }),
   defaultOptions: {
-    queries: { refetchOnWindowFocus: false, retry: 1, staleTime: 30 * 1000 },
+    // erro 4xx (sem permissão, não encontrado, venda de outro vendedor) não adianta repetir: mostra na hora
+    queries: { refetchOnWindowFocus: false, retry: (falhas, e) => falhas < 1 && !erro4xx(e), staleTime: 30 * 1000 },
     mutations: { retry: 0 },
   },
 });

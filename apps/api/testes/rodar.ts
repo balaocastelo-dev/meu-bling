@@ -91,6 +91,7 @@ async function main() {
     rodar('Fluxo completo de ponta a ponta (1ª rodada)', NPX, ['tsx', 'scripts/smoke.ts', base]);
     rodar('Fluxo completo (2ª rodada no mesmo banco: numeração/duplicidade)', NPX, ['tsx', 'scripts/smoke.ts', base]);
     rodar('Perfis de acesso', NPX, ['tsx', 'scripts/teste-perfis.ts', base]);
+    rodar('Vendas por vendedor: cada vendedor/técnico só vê as próprias vendas, sem total da loja; gerente e ADMIN veem todas', NPX, ['tsx', 'testes/vendas-por-vendedor.ts', base]);
     rodar('Regras de vendas, painel, metas e desafios', NPX, ['tsx', 'testes/regras-vendas.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Baixa parcial de contas a pagar (pagar em partes, histórico, estorno de um pagamento)', NPX, ['tsx', 'testes/baixa-parcial.ts', base]);
     rodar('OS: custos internos (peça, logística, terceiros) fora da impressão + dashboard de assistência', NPX, ['tsx', 'testes/os-custos.ts', base]);

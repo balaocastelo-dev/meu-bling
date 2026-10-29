@@ -6,6 +6,7 @@ import { Forbidden } from '../lib/errors.js';
 import { permitido, CAMPOS_EMPRESA_ADMIN } from './politicas.js';
 import { chaveDaUrl, chaveDoCabecalho, conferirChave, registrarChamada } from '../modules/api-externa/chaves.js';
 import { chavePode } from '../modules/api-externa/recursos.js';
+import { acessoNota, acessoVenda, CODIGO_VENDA_DE_OUTRO } from '../modules/comum/escopo-vendas.js';
 
 export type Perfil = 'ADMIN' | 'GERENTE' | 'VENDEDOR' | 'TECNICO' | 'FINANCEIRO';
 
@@ -105,6 +106,14 @@ export default fp(async function authPlugin(app: FastifyInstance) {
         erro: `Seu perfil (${req.user?.perfil}) não tem permissão para esta função. Peça ao administrador.`,
         code: 'SEM_PERMISSAO',
       });
+    }
+    // vendedor/técnico só acessam as próprias vendas (29/10/2026): vale para qualquer rota /vendas/:id...
+    // de qualquer módulo (venda, documentos, carnê, robô de NF) e para a nota fiscal ligada a uma venda
+    const venda = rota.match(/^\/vendas\/(\d+)(\/|$)/);
+    const nota = venda ? null : rota.match(/^\/notas-fiscais\/(\d+)(\/|$)/);
+    if (venda || nota) {
+      const r = venda ? await acessoVenda(req.user, Number(venda[1])) : await acessoNota(req.user, Number(nota![1]));
+      if (!r.ok) return reply.code(403).send({ erro: r.erro, code: CODIGO_VENDA_DE_OUTRO });
     }
   });
 

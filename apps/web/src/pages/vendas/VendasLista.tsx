@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { CheckCircle2, DollarSign, FileSignature, FileText, Package, Plus, ShoppingCart, Trophy } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/stores/auth';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { OPCOES_PERIODO, periodoDe } from '@/lib/periodo';
@@ -31,12 +32,14 @@ function nomePeriodo(i: string, f: string) {
 }
 
 /** Painel à direita do filtro: total, nº de vendas e vendedor destaque do que está filtrado */
-function PainelResumo({ r, periodo, orcamento, carregando }: { r?: ResumoLista; periodo: string; orcamento: boolean; carregando: boolean }) {
+function PainelResumo({ r, periodo, orcamento, carregando, soMinhas }: { r?: ResumoLista; periodo: string; orcamento: boolean; carregando: boolean; soMinhas: boolean }) {
+  // vendedor/técnico: a lista já vem só com as vendas dele — o painel mostra "Minhas vendas" e não existe "destaque"
+  const titulo = soMinhas ? (orcamento ? 'Meus orçamentos' : 'Minhas vendas') : orcamento ? 'Total orçado' : 'Total vendido';
   return (
     // faixa de 3 cartões na largura toda (no celular: total em cima, os outros dois lado a lado)
-    <div className={`grid w-full basis-full grid-cols-2 gap-2 transition-opacity md:grid-cols-3 ${carregando ? 'opacity-50' : ''}`} aria-live="polite">
-      <div className="col-span-2 min-w-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 md:col-span-1">
-        <div className="text-[11px] font-medium text-emerald-700">{orcamento ? 'Total orçado' : 'Total vendido'} · {periodo}</div>
+    <div className={`grid w-full basis-full grid-cols-2 gap-2 transition-opacity ${soMinhas ? 'md:grid-cols-2' : 'md:grid-cols-3'} ${carregando ? 'opacity-50' : ''}`} aria-live="polite">
+      <div className={`min-w-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 ${soMinhas ? '' : 'col-span-2 md:col-span-1'}`}>
+        <div className="text-[11px] font-medium text-emerald-700">{titulo} · {periodo}</div>
         <div className="num text-lg font-semibold leading-tight text-emerald-800">{r ? moeda(r.valor) : '—'}</div>
       </div>
       <div className="min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
@@ -44,6 +47,7 @@ function PainelResumo({ r, periodo, orcamento, carregando }: { r?: ResumoLista; 
         <div className="num text-lg font-semibold leading-tight text-slate-900">{r ? inteiro(r.quantidade) : '—'}</div>
         {r && r.quantidade > 0 && <div className="num text-[11px] text-slate-500">ticket {moeda(r.ticketMedio)}</div>}
       </div>
+      {!soMinhas && (
       <div className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5">
         <div className="flex items-center gap-1 text-[11px] font-medium text-amber-700">
           <Trophy className="h-3 w-3" /> Vendedor destaque
@@ -63,6 +67,7 @@ function PainelResumo({ r, periodo, orcamento, carregando }: { r?: ResumoLista; 
           <div className="text-sm text-slate-400">—</div>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -75,6 +80,10 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
   const base = rotaDe(tipo);
   const { data: situacoes } = useSituacoes(orcamento ? 'ORCAMENTO' : 'VENDA');
   const { data: vendedores } = useVendedores();
+  // vendedor e técnico só têm acesso às próprias vendas (regra do Thiago, 29/10/2026): o servidor já filtra;
+  // aqui some o filtro de vendedor e o painel vira "Minhas vendas"
+  const perfil = useAuth((s) => s.usuario?.perfil);
+  const soMinhas = perfil === 'VENDEDOR' || perfil === 'TECNICO';
 
   const params = { ...pg.filtros, tipo, pagina: pg.pagina, limite: pg.limite };
   const { data: resp, isLoading, isFetching } = useQuery({
@@ -170,8 +179,8 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
       ),
     },
   ];
-  // orçamento não lança estoque/contas: sem a coluna "Lanç."
-  const colunasVisiveis = orcamento ? colunas.filter((c) => c.chave !== 'flags') : colunas;
+  // orçamento não lança estoque/contas: sem a coluna "Lanç."; vendedor/técnico: sem a coluna "Vendedor" (é sempre ele)
+  const colunasVisiveis = colunas.filter((c) => !(orcamento && c.chave === 'flags') && !(soMinhas && c.chave === 'vendedor'));
   const titulo = orcamento ? 'Orçamentos' : 'Pedidos de venda';
   const novo = orcamento ? 'Novo orçamento' : 'Nova venda';
 
@@ -179,7 +188,7 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
     <div>
       <PageHeader
         titulo={titulo}
-        descricao={resp ? `${resp.meta.total} ${orcamento ? 'orçamentos' : 'pedidos'}${orcamento ? ' · envie por e-mail/WhatsApp e converta em venda quando o cliente aprovar' : ''}` : undefined}
+        descricao={resp ? `${resp.meta.total} ${orcamento ? 'orçamentos' : 'pedidos'}${soMinhas ? ' · só os seus' : ''}${orcamento ? ' · envie por e-mail/WhatsApp e converta em venda quando o cliente aprovar' : ''}` : undefined}
         acoes={
           <>
             {!orcamento && (
@@ -200,7 +209,7 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
       <Card semPadding>
         <BarraFiltros>
           <BuscaFiltro valor={pg.getFiltro('pesquisa')} onChange={(v) => pg.setFiltro('pesquisa', v)} placeholder="Nº, cliente, documento…" />
-          <SelectFiltro valor={pg.getFiltro('vendedorId')} onChange={(v) => pg.setFiltro('vendedorId', v)} opcoes={opcoesDe(vendedores)} placeholder="Todos os vendedores" />
+          {!soMinhas && <SelectFiltro valor={pg.getFiltro('vendedorId')} onChange={(v) => pg.setFiltro('vendedorId', v)} opcoes={opcoesDe(vendedores)} placeholder="Todos os vendedores" />}
           <PeriodoFiltro
             inicial={pg.getFiltro('dataInicial')}
             final={pg.getFiltro('dataFinal')}
@@ -213,7 +222,7 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
             placeholder="Todas as origens"
             opcoes={['BALCAO', 'WHATSAPP', 'LOJA_VIRTUAL', 'TELEFONE', 'MARKETPLACE', 'OUTRO'].map((o) => ({ valor: o, rotulo: rotulo(o) }))}
           />
-          <PainelResumo r={resp?.resumo} periodo={nomePeriodo(pg.getFiltro('dataInicial'), pg.getFiltro('dataFinal'))} orcamento={orcamento} carregando={isFetching} />
+          <PainelResumo r={resp?.resumo} periodo={nomePeriodo(pg.getFiltro('dataInicial'), pg.getFiltro('dataFinal'))} orcamento={orcamento} carregando={isFetching} soMinhas={soMinhas} />
         </BarraFiltros>
         <div className="border-b border-slate-100 px-3 py-2">
           <ChipsSituacao situacoes={situacoes ?? []} valor={pg.getFiltro('situacoes')} onChange={(v) => pg.setFiltro('situacoes', v)} />
