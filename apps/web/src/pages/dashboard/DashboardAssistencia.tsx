@@ -9,7 +9,7 @@ import { useTecnicos, opcoesDe } from '@/hooks/useListas';
 import { Button, EmptyState, SelectFiltro, Skeleton } from '@/components/ui';
 import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
 import { PagarTecnicoModal } from './PagarTecnico';
-import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, SegmentadoV18, listaVariants } from '@/components/dashboard/v18';
+import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, SegmentadoV18, listaVariants, FaixaKpis } from '@/components/dashboard/v18';
 import { data as fmtData, inteiro, moeda, numero, percentual } from '@/lib/format';
 import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import type { DashboardAssistencia as Dados, TotaisAssistencia } from '@/types';
@@ -88,7 +88,7 @@ export default function DashboardAssistencia() {
           <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Dashboard de assistência técnica</h1>
           <p className="text-sm text-slate-500">Entradas das OS, mão de obra x peças, custos e lucro dos serviços.</p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-end gap-2">
           <FiltroPeriodo id="periodo-assistencia" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
           <SegmentadoV18
             id="base-assistencia"
@@ -106,14 +106,17 @@ export default function DashboardAssistencia() {
 
       <PagarTecnicoModal aberto={pagarAberto} onFechar={() => setPagarAberto(false)} dataInicial={dataInicial} dataFinal={dataFinal} base={base} filtroTecnicoId={tecnicoId} />
 
-      <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <KpiV18 rotulo="Valor de entrada" valor={r?.valorEntrada} anterior={comp?.valorEntrada} formato={moeda} icone={<CircleDollarSign className="h-4 w-4" />} tom="azul" carregando={isLoading} sub="vs. período anterior" />
+      {/* topo (Power BI): entrada e lucro em destaque, o resto logo abaixo */}
+      <FaixaKpis colunas={4}>
+        <KpiV18 destaque className="col-span-2" rotulo={`Valor de entrada · ${faixa}`} valor={r?.valorEntrada} anterior={comp?.valorEntrada} formato={moeda} icone={<CircleDollarSign className="h-4 w-4" />} tom="azul" carregando={isLoading} sub="vs. período anterior" />
+        <KpiV18 destaque className="col-span-2" rotulo="Lucro dos serviços" valor={r?.lucro} anterior={comp?.lucro} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={isLoading} sub={r ? `margem ${percentual(r.margemPct)}` : undefined} />
+      </FaixaKpis>
+      <FaixaKpis colunas={4}>
         <KpiV18 rotulo={base === 'entrada' ? 'OS que entraram' : 'OS concluídas'} valor={r?.qtd} anterior={comp?.qtd} formato={qtd} icone={<ClipboardList className="h-4 w-4" />} tom="neutro" carregando={isLoading} onClick={() => nav('/ordens-servico')} sub={r ? `ticket médio ${moeda(r.ticketMedio)}` : undefined} />
         <KpiV18 rotulo="Mão de obra" valor={r?.maoDeObra} anterior={comp?.maoDeObra} formato={moeda} icone={<Wrench className="h-4 w-4" />} tom="vermelho" carregando={isLoading} />
         <KpiV18 rotulo="Peças" valor={r?.pecas} anterior={comp?.pecas} formato={moeda} icone={<Package className="h-4 w-4" />} tom="amarelo" carregando={isLoading} />
         <KpiV18 rotulo="Custos" valor={r?.custoTotal} anterior={comp?.custoTotal} inverter formato={moeda} icone={<Receipt className="h-4 w-4" />} tom="neutro" carregando={isLoading} sub="peças + logística + terceiros" />
-        <KpiV18 rotulo="Lucro dos serviços" valor={r?.lucro} anterior={comp?.lucro} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={isLoading} sub={r ? `margem ${percentual(r.margemPct)}` : undefined} />
-      </Grupo>
+      </FaixaKpis>
 
       {!!r?.semCusto && (
         <Aparecer className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -178,9 +181,9 @@ export default function DashboardAssistencia() {
 
       <CardV18 titulo="Entrada x lucro" descricao={faixa} icone={<BarChart3 className="h-4 w-4" />} tom="azul">
         {isLoading ? (
-          <Skeleton className="h-64" />
+          <Skeleton className="h-52 sm:h-64" />
         ) : series.some((s) => s.qtd > 0) ? (
-          <div className="h-64">
+          <div className="h-52 sm:h-64">
             <ResponsiveContainer>
               <AreaChart data={series} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                 <defs>
@@ -195,7 +198,7 @@ export default function DashboardAssistencia() {
                 </defs>
                 <CartesianGrid stroke={CORES.grade} strokeDasharray="3 4" vertical={false} />
                 <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={60} />
+                <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={52} />
                 <Tooltip content={<TooltipPadrao />} cursor={{ stroke: CORES.eixo, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="valorEntrada" name="Entrada" stroke={CORES.receita} fill="url(#gradEntradaOs)" strokeWidth={2.5} activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }} animationDuration={1100} />
                 <Area type="monotone" dataKey="custo" name="Custos" stroke={CORES.saida} fill="none" strokeWidth={1.5} strokeDasharray="4 3" animationDuration={1200} />
@@ -288,7 +291,7 @@ export default function DashboardAssistencia() {
         }
       >
         {isLoading ? (
-          <div className="p-4"><Skeleton className="h-64" /></div>
+          <div className="p-4"><Skeleton className="h-52 sm:h-64" /></div>
         ) : ordens.length ? (
           <div className="overflow-x-auto">
             <table className="tbl tbl-pilha">

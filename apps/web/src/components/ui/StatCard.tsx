@@ -59,6 +59,9 @@ export function ValorAnimado({ valor }: { valor: ReactNode }) {
   );
 }
 
+/** faixa lateral (padrão Power BI) — mesmas cores do sistema */
+const barras = { neutro: '#64748b', verde: '#16a34a', vermelho: '#dc2626', amarelo: '#f59e0b', azul: '#2563eb' };
+
 const tons = {
   neutro: 'text-slate-500 bg-slate-100',
   verde: 'text-emerald-600 bg-emerald-50',
@@ -73,16 +76,17 @@ export function StatCard({ rotulo, valor, sub, icone, tom = 'neutro', carregando
     <div
       onClick={onClick}
       className={clsx(
-        'v18-card flex min-w-0 items-start gap-2 rounded-2xl border border-slate-200/80 bg-gradient-to-b to-white to-60% p-3 shadow-card sm:gap-3 sm:p-4',
+        'v18-card relative flex min-w-0 items-start gap-2 overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br to-white to-60% p-3 pl-4 shadow-card sm:gap-3 sm:p-4 sm:pl-5',
         faixas[tom],
         onClick && 'v18-hover cursor-pointer active:scale-[0.98]',
         className,
       )}
     >
+      <span aria-hidden className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: barras[tom] }} />
       {icone && <div className={clsx('hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl min-[420px]:flex', tons[tom])}>{icone}</div>}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-slate-500" title={typeof rotulo === 'string' ? rotulo : undefined}>{rotulo}</p>
-        {carregando ? <Skeleton className="mt-1.5 h-6 w-24" /> : <p className="mt-0.5 break-words text-base font-semibold leading-tight tracking-tight text-slate-900 num sm:text-lg xl:text-xl" title={typeof valor === 'string' ? valor : undefined}><ValorAnimado valor={valor} /></p>}
+        <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]" title={typeof rotulo === 'string' ? rotulo : undefined}>{rotulo}</p>
+        {carregando ? <Skeleton className="mt-1.5 h-6 w-24" /> : <p className="mt-0.5 break-words text-lg font-bold leading-tight tracking-tight text-slate-900 num xl:text-xl" title={typeof valor === 'string' ? valor : undefined}><ValorAnimado valor={valor} /></p>}
         {sub && <p className="mt-0.5 truncate text-xs text-slate-400">{sub}</p>}
       </div>
     </div>

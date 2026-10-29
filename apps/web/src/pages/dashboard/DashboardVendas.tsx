@@ -9,7 +9,7 @@ import { useVendedores, opcoesDe } from '@/hooks/useListas';
 import { EmptyState, SelectFiltro, Skeleton } from '@/components/ui';
 import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
 import { FotoProduto } from '@/components/compartilhados/ProdutoSite';
-import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, listaVariants } from '@/components/dashboard/v18';
+import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, listaVariants, FaixaKpis } from '@/components/dashboard/v18';
 import { inteiro, moeda, numero, percentual } from '@/lib/format';
 import { CORES, PALETA, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import type { DashboardVendas as Dados } from '@/types';
@@ -45,20 +45,23 @@ export default function DashboardVendas() {
           <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Dashboard de vendas</h1>
           <p className="text-sm text-slate-500">Faturamento, vendedores, formas de pagamento e produtos mais vendidos.</p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-end gap-2">
           <FiltroPeriodo id="periodo-vendas" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
           <SelectFiltro valor={vendedorId} onChange={setVendedorId} opcoes={opcoesDe(vendedores)} placeholder="Todos os vendedores" />
         </div>
       </Aparecer>
 
-      <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <KpiV18 rotulo="Faturamento" valor={r?.faturamento} anterior={comp?.faturamento} formato={moeda} icone={<CircleDollarSign className="h-4 w-4" />} tom="verde" carregando={isLoading} sub="vs. período anterior" />
+      {/* topo (Power BI): faturamento e lucro em destaque, o resto logo abaixo */}
+      <FaixaKpis colunas={4}>
+        <KpiV18 destaque className="col-span-2" rotulo={`Faturamento · ${faixa}`} valor={r?.faturamento} anterior={comp?.faturamento} formato={moeda} icone={<CircleDollarSign className="h-4 w-4" />} tom="verde" carregando={isLoading} sub={r ? `${inteiro(r.qtdVendas)} ${r.qtdVendas === 1 ? 'venda' : 'vendas'} · vs. período anterior` : 'vs. período anterior'} />
+        <KpiV18 destaque className="col-span-2" rotulo="Lucro bruto" valor={r?.lucroBruto} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="azul" carregando={isLoading} sub={r ? `margem ${percentual(r.margemPct)}` : undefined} />
+      </FaixaKpis>
+      <FaixaKpis colunas={4}>
         <KpiV18 rotulo="Vendas" valor={r?.qtdVendas} anterior={comp?.qtdVendas} formato={qtd} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={isLoading} onClick={() => nav('/vendas')} />
         <KpiV18 rotulo="Ticket médio" valor={r?.ticketMedio} anterior={comp?.ticketMedio} formato={moeda} icone={<Receipt className="h-4 w-4" />} tom="vermelho" carregando={isLoading} />
         <KpiV18 rotulo="Itens vendidos" valor={r?.itensVendidos} formato={qtd} icone={<Package className="h-4 w-4" />} tom="neutro" carregando={isLoading} />
-        <KpiV18 rotulo="Lucro bruto" valor={r?.lucroBruto} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={isLoading} />
         <KpiV18 rotulo="Margem" valor={r?.margemPct} formato={(n) => percentual(n)} icone={<Percent className="h-4 w-4" />} tom="amarelo" carregando={isLoading} />
-      </Grupo>
+      </FaixaKpis>
 
       {!!r?.semCusto && (
         <Aparecer className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -71,9 +74,9 @@ export default function DashboardVendas() {
 
       <CardV18 titulo="Faturamento por dia" descricao={faixa} icone={<BarChart3 className="h-4 w-4" />} tom="azul">
         {isLoading ? (
-          <Skeleton className="h-64" />
+          <Skeleton className="h-52 sm:h-64" />
         ) : series.length ? (
-          <div className="h-64">
+          <div className="h-52 sm:h-64">
             <ResponsiveContainer>
               <AreaChart data={series} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                 <defs>
@@ -88,7 +91,7 @@ export default function DashboardVendas() {
                 </defs>
                 <CartesianGrid stroke={CORES.grade} strokeDasharray="3 4" vertical={false} />
                 <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={60} />
+                <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={52} />
                 <Tooltip content={<TooltipPadrao />} cursor={{ stroke: CORES.eixo, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="faturamento" name="Faturamento" stroke={CORES.receita} fill="url(#gradFat)" strokeWidth={2.5} activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }} animationDuration={1100} />
                 <Area type="monotone" dataKey="lucro" name="Lucro" stroke={CORES.lucro} fill="url(#gradLucro)" strokeWidth={1.5} strokeDasharray="4 3" animationDuration={1300} />

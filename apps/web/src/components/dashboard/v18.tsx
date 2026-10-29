@@ -157,7 +157,11 @@ export function Variacao({ atual, anterior, inverter }: { atual?: number | null;
   );
 }
 
-/** KPI do V18: chip do ícone, número grande que conta, variação e faixa de cor suave no topo */
+/**
+ * KPI no estilo Power BI: faixa de cor na lateral, rótulo em caixa alta, número grande que conta,
+ * variação e linha de apoio. Serve no celular (2 por linha), no tablet (3) e no computador (até 6).
+ * `destaque` deixa o cartão maior (saldo do banco, faturamento) — use com className="col-span-2" para ocupar a linha toda no celular.
+ */
 export function KpiV18({
   rotulo,
   valor,
@@ -169,6 +173,8 @@ export function KpiV18({
   tom = 'neutro',
   carregando,
   onClick,
+  destaque,
+  className,
 }: {
   rotulo: ReactNode;
   valor?: number | null;
@@ -180,7 +186,11 @@ export function KpiV18({
   tom?: Tom;
   carregando?: boolean;
   onClick?: () => void;
+  /** cartão grande (número principal da tela) */
+  destaque?: boolean;
+  className?: string;
 }) {
+  const negativo = typeof valor === 'number' && valor < 0;
   return (
     <motion.div
       variants={item}
@@ -188,27 +198,97 @@ export function KpiV18({
       whileTap={onClick ? { scale: 0.98 } : undefined}
       transition={{ type: 'spring', stiffness: 300, damping: 22 }}
       onClick={onClick}
+      data-kpi
       className={clsx(
-        'relative min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-b to-white to-60% p-3 shadow-card sm:p-4',
+        'relative min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br to-white to-60% shadow-card',
+        destaque ? 'p-4 sm:p-5' : 'p-3 sm:p-4',
         TONS[tom].faixa,
         onClick && 'cursor-pointer',
+        className,
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 truncate text-xs font-medium text-slate-500">{rotulo}</p>
-        {icone && <span className={clsx('hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl min-[420px]:flex', TONS[tom].chip)}>{icone}</span>}
+      {/* faixa lateral de cor (padrão Power BI) */}
+      <span aria-hidden className="absolute inset-y-0 left-0 w-1 rounded-l-2xl" style={{ backgroundColor: TONS[tom].barra }} />
+      <div className="flex items-start justify-between gap-2 pl-1">
+        <p className={clsx('min-w-0 truncate font-semibold uppercase tracking-wide text-slate-500', destaque ? 'text-[11px] sm:text-xs' : 'text-[10px] sm:text-[11px]')}>{rotulo}</p>
+        {icone && <span className={clsx('flex shrink-0 items-center justify-center rounded-xl', destaque ? 'h-9 w-9' : 'hidden h-8 w-8 min-[420px]:flex', TONS[tom].chip)}>{icone}</span>}
       </div>
       {carregando ? (
-        <Skeleton className="mt-2 h-7 w-24" />
+        <Skeleton className={clsx('ml-1 mt-2', destaque ? 'h-9 w-40' : 'h-7 w-24')} />
       ) : (
-        <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="break-words text-lg font-bold leading-tight tracking-tight text-slate-900 sm:text-2xl">
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 pl-1">
+          <span
+            className={clsx(
+              'break-words font-bold leading-tight tracking-tight',
+              negativo ? 'text-red-600' : 'text-slate-900',
+              destaque ? 'text-[26px] sm:text-3xl xl:text-4xl' : 'text-lg sm:text-xl xl:text-2xl',
+            )}
+          >
             <Contador valor={valor ?? 0} formato={formato} />
           </span>
           <Variacao atual={valor} anterior={anterior} inverter={inverter} />
         </div>
       )}
-      {sub && <p className="mt-1 truncate text-xs text-slate-400">{sub}</p>}
+      {sub && <p className={clsx('mt-1 truncate pl-1 text-slate-400', destaque ? 'text-xs sm:text-sm' : 'text-[11px] sm:text-xs')}>{sub}</p>}
+    </motion.div>
+  );
+}
+
+/**
+ * Faixa de KPIs no topo de todo dashboard (padrão Power BI).
+ * Celular: 2 por linha · tablet: 3 · computador: `colunas` (padrão 6).
+ */
+export function FaixaKpis({ children, colunas = 6, className }: { children: ReactNode; colunas?: 3 | 4 | 5 | 6; className?: string }) {
+  const lg = { 3: 'lg:grid-cols-3', 4: 'lg:grid-cols-4', 5: 'lg:grid-cols-5', 6: 'lg:grid-cols-3 xl:grid-cols-6' }[colunas];
+  const md = colunas === 4 ? 'md:grid-cols-4' : 'md:grid-cols-3';
+  return (
+    <motion.div className={clsx('grid grid-cols-2 gap-2.5 sm:gap-3', md, lg, className)} variants={lista}>
+      {children}
+    </motion.div>
+  );
+}
+
+/** Separador "Detalhes" — o que é menos importante fica daqui para baixo */
+export function SecaoDetalhes({ titulo = 'Detalhes', dica }: { titulo?: ReactNode; dica?: ReactNode }) {
+  return (
+    <motion.div variants={item} className="flex items-center gap-3 pt-1">
+      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{titulo}</span>
+      <span className="h-px flex-1 bg-slate-200" />
+      {dica && <span className="text-[11px] text-slate-400">{dica}</span>}
+    </motion.div>
+  );
+}
+
+/** Saldo de cada conta (bancos + caixa) — no celular rola de lado, no computador vira grade */
+export function SaldosContas({
+  contas,
+  carregando,
+  formato,
+  onClick,
+}: {
+  contas?: { id: number; nome: string; saldoAtual: number; cor?: string | null }[];
+  carregando?: boolean;
+  formato: (n: number) => string;
+  onClick?: (id: number) => void;
+}) {
+  if (carregando) return <Skeleton className="h-16 w-full rounded-2xl" />;
+  if (!contas?.length) return null;
+  return (
+    <motion.div variants={item} className="-mx-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex snap-x gap-2 sm:grid sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+        {contas.map((c, i) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={onClick ? () => onClick(c.id) : undefined}
+            className="relative min-w-[150px] shrink-0 snap-start overflow-hidden rounded-xl border border-slate-200/80 bg-white py-2 pl-3 pr-2 text-left shadow-card transition hover:-translate-y-0.5 sm:min-w-0"
+          >
+            <span aria-hidden className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: c.cor || PALETA[i % PALETA.length] }} />
+            <p className="truncate pl-1 text-[11px] font-medium text-slate-500">{c.nome}</p>
+            <p className={clsx('num truncate pl-1 text-sm font-bold sm:text-base', c.saldoAtual < 0 ? 'text-red-600' : 'text-slate-900')}>{formato(c.saldoAtual)}</p>
+          </button>
+        ))}
+      </div>
     </motion.div>
   );
 }
@@ -263,13 +343,13 @@ export const listaVariants = lista;
 /** Seletor segmentado com a "pílula" deslizando até a opção escolhida */
 export function SegmentadoV18<T extends string>({ opcoes, valor, onMudar, id }: { opcoes: { valor: T; rotulo: ReactNode }[]; valor: T; onMudar: (v: T) => void; id: string }) {
   return (
-    <div className="inline-flex max-w-full flex-wrap rounded-full border border-slate-200 bg-white p-1 shadow-card">
+    <div className="inline-flex min-w-0 max-w-full flex-nowrap overflow-x-auto rounded-full border border-slate-200 bg-white p-1 shadow-card [scrollbar-width:none] sm:flex-wrap [&::-webkit-scrollbar]:hidden">
       {opcoes.map((o) => (
         <button
           key={o.valor}
           type="button"
           onClick={() => onMudar(o.valor)}
-          className={clsx('relative h-7 whitespace-nowrap rounded-full px-3 text-xs font-medium transition-colors', o.valor === valor ? 'text-white' : 'text-slate-500 hover:text-slate-800')}
+          className={clsx('relative h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-medium transition-colors sm:h-7', o.valor === valor ? 'text-white' : 'text-slate-500 hover:text-slate-800')}
         >
           {o.valor === valor && <motion.span layoutId={`seg-${id}`} className="absolute inset-0 rounded-full bg-slate-900" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
           <span className="relative">{o.rotulo}</span>

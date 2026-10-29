@@ -45,7 +45,7 @@ export default function PainelVendedor() {
           gestor ? (
             <>
               <Select
-                className="w-56"
+                className="w-full sm:w-56"
                 value={vendedorId || String(p?.vendedor.id ?? '')}
                 onChange={(e) => setParams(e.target.value ? { vendedorId: e.target.value } : {})}
                 opcoes={opcoesDe(vendedores).map((o) => ({ valor: String(o.valor), rotulo: o.rotulo }))}
@@ -74,13 +74,15 @@ export default function PainelVendedor() {
       {!error && (
         <div className="space-y-4">
           {/* ---- vendas por período */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+          {/* topo (Power BI): vendas por período — "Hoje" em destaque */}
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 xl:grid-cols-6">
             {(p?.periodos ?? Array.from({ length: 6 }, () => null)).map((per, i) => (
-              <div key={per?.chave ?? i} className={clsx('v18-card v18-hover rounded-2xl border bg-white p-4 shadow-card', per?.chave === 'hoje' ? 'border-brand-200 ring-1 ring-brand-100' : 'border-slate-200')}>
+              <div key={per?.chave ?? i} className={clsx('v18-card v18-hover relative min-w-0 overflow-hidden rounded-2xl border bg-white p-3 pl-4 shadow-card sm:p-4 sm:pl-5', per?.chave === 'hoje' ? 'border-brand-200 ring-1 ring-brand-100' : 'border-slate-200')}>
+                <span aria-hidden className={clsx('absolute inset-y-0 left-0 w-1', per?.chave === 'hoje' ? 'bg-brand-600' : 'bg-slate-300')} />
                 {per ? (
                   <>
-                    <p className="text-xs font-medium text-slate-500">{per.rotulo}</p>
-                    <p className="mt-1 text-xl font-semibold tracking-tight text-slate-900 num">{moeda(per.faturamento)}</p>
+                    <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">{per.rotulo}</p>
+                    <p className="mt-1 break-words text-lg font-bold leading-tight tracking-tight text-slate-900 num sm:text-xl">{moeda(per.faturamento)}</p>
                     <p className="mt-0.5 text-xs text-slate-500 num">
                       {inteiro(per.qtd)} {per.qtd === 1 ? 'venda' : 'vendas'}
                       {per.qtd > 0 && <> · ticket {moeda(per.ticketMedio)}</>}
