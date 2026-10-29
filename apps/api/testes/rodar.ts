@@ -113,6 +113,7 @@ async function main() {
     rodar('Robô da Saúde: corrige sozinho, sugere com 1 clique, ignora, só ADMIN', NPX, ['tsx', 'testes/robo-saude.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
     rodar('Lembretes de custo: OS com os campos da venda, lembrete ao fechar, robô avisa técnicos e vendedores, DRE', NPX, ['tsx', 'testes/lembretes-custo.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
     rodar('JARVIS: caixa livre, regras, sugestões (aceitar/adiar/recusar), feed por perfil, só ADMIN', NPX, ['tsx', 'testes/jarvis.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
+    rodar('Robô de e-mail dos bancos: parsers reais (SumUp/Asaas), trava de DKIM, baixa 1:1, senha mascarada, só ADMIN', NPX, ['tsx', 'testes/email-banco.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
     rodar('Chat da equipe: direta, sala privada, áudio, lida, WebSocket/polling, chamadas de voz e vídeo, push, ADMIN lê tudo', NPX, ['tsx', 'testes/chat.ts', base]);
     rodar('Links: todo link do sistema leva a uma tela que existe', NPX, ['tsx', 'testes/links.ts', base]);
     rodar('Integridade dos dados depois dos testes (Saúde do sistema)', NPX, ['tsx', 'testes/integridade.ts', base]);

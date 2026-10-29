@@ -61,6 +61,8 @@ const REGRAS: Regra[] = [
   // JARVIS: o feed de sugestões aparece no Meu Dashboard de todo mundo; o resto é só do gestor
   { teste: /^\/jarvis\/feed$/, perfis: 'TODOS' },
   { teste: /^\/jarvis(\/|$)/, perfis: ['ADMIN'] },
+  // Robô de e-mail dos bancos: mexe em dinheiro, então é só do gestor
+  { teste: /^\/email-banco(\/|$)/, perfis: ['ADMIN'] },
   { teste: /^\/notas-fiscais\/inutilizar/, perfis: GESTAO },
   { teste: /^\/whatsapp\/(conectar|desconectar)/, perfis: GESTAO },
   { metodos: MUT, teste: /^\/templates-notificacao(\/|$)/, perfis: GESTAO },
