@@ -140,6 +140,7 @@ export type TipoFormaPagamento =
   | 'TRANSFERENCIA'
   | 'CREDIARIO'
   | 'CREDITO_BANCARIO'
+  | 'CARNE'
   | 'OUTRO';
 
 export interface FormaPagamento {
@@ -193,6 +194,8 @@ export interface ContaFinanceira {
   conta?: string | null;
   saldoInicial: number;
   saldoAtual: number;
+  /** taxa descontada de cada recebimento (ex.: Mercado Pago 5%) */
+  taxaRecebimentoPct?: number;
   saldoBanco?: number | null;
   saldoBancoEm?: string | null;
   padrao: boolean;

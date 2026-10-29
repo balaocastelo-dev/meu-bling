@@ -44,6 +44,8 @@ function linkOrigem(c: Conta): string | null {
       return `/comissoes`;
     case 'PAGAMENTO_TECNICO':
       return `/dashboard/assistencia`;
+    case 'CARNE':
+      return `/financeiro/carnes?id=${o.id}`;
     default:
       return null;
   }

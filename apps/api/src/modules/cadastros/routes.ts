@@ -194,7 +194,7 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
   const formaComContas = <T extends { contasPermitidas: string | null }>(f: T) => ({ ...f, contasPermitidas: lerContasPermitidas(f.contasPermitidas) });
 
   // ---------------- Formas de pagamento
-  const TIPOS_FP = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA', 'CREDIARIO', 'CREDITO_BANCARIO', 'OUTRO'] as const;
+  const TIPOS_FP = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA', 'CREDIARIO', 'CREDITO_BANCARIO', 'CARNE', 'OUTRO'] as const;
   const formaSchema = z.object({
     nome: z.string().trim().min(2),
     tipo: z.enum(TIPOS_FP).default('OUTRO'),
@@ -323,12 +323,13 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
     agencia: z.string().trim().nullable().optional(),
     conta: z.string().trim().nullable().optional(),
     saldoInicial: z.coerce.number().default(0),
+    taxaRecebimentoPct: z.coerce.number().min(0).max(100).default(0),
     padrao: z.boolean().default(false),
     ativo: z.boolean().default(true),
     cor: z.string().trim().nullable().optional(),
   });
   const selectConta = {
-    id: true, nome: true, tipo: true, banco: true, agencia: true, conta: true, saldoInicial: true, saldoAtual: true,
+    id: true, nome: true, tipo: true, banco: true, agencia: true, conta: true, saldoInicial: true, saldoAtual: true, taxaRecebimentoPct: true,
     saldoBanco: true, saldoBancoEm: true, padrao: true, ativo: true, cor: true, openFinanceStatus: true, openFinanceItemId: true, ultimaSincronizacao: true,
   } as const;
   const unicaPadrao = async (id: number, padrao?: boolean) => {

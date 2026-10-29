@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Award, FileText, Printer, Receipt, ScrollText } from 'lucide-react';
+import { Award, BookOpen, FileText, Printer, Receipt, ScrollText } from 'lucide-react';
 import { abrirEmNovaAba, api, mensagemErro } from '@/lib/api';
 import { Button, ConfirmDialog, MenuAcoes } from '@/components/ui';
 import type { EstadoRoboNf } from './RoboNf';
@@ -113,6 +113,7 @@ export function ImprimirVenda({ vendaId, orcamento, aoImprimirPedido }: { vendaI
           { rotulo: 'Recibo 80mm (térmica)', icone: <Receipt className="h-4 w-4" />, onClick: cupom },
           { rotulo: 'Recibo A4 + garantia', icone: <FileText className="h-4 w-4" />, onClick: a4 },
           { rotulo: 'NF A4 (DANFE) + garantia', icone: <ScrollText className="h-4 w-4" />, onClick: nfA4 },
+          { rotulo: 'Carnê (PIX, 3 por folha)', icone: <BookOpen className="h-4 w-4" />, onClick: () => abrirEmNovaAba(`/vendas/${vendaId}/carne/imprimir`).catch((e) => toast.error(mensagemErro(e))) },
           { rotulo: 'Só certificado e termo de garantia', icone: <Award className="h-4 w-4" />, onClick: () => abrir('garantia').catch((e) => toast.error(mensagemErro(e))), separar: true },
           { rotulo: 'Pedido de venda (modelo antigo)', icone: <Printer className="h-4 w-4" />, onClick: aoImprimirPedido },
         ]}

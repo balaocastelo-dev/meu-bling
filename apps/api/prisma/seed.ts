@@ -181,6 +181,8 @@ const FORMAS_PAGAMENTO = [
   { nome: 'Crediário / A prazo', tipo: 'CREDIARIO', codigoFiscal: '05', maxParcelas: 12 },
   // Lumicred: o credor deposita o valor e a loja devolve + 6% em 30 dias (módulo Empréstimos)
   { nome: 'Crédito bancário', tipo: 'CREDITO_BANCARIO', codigoFiscal: '99', taxaPct: 6, diasRecebimento: 30, maxParcelas: 12 },
+  // carnê próprio: o cliente paga cada parcela por PIX (QR Code) no Cora; juros pelo risco (módulo Carnês)
+  { nome: 'Carnê', tipo: 'CARNE', codigoFiscal: '05', maxParcelas: 24 },
   { nome: 'Outros', tipo: 'OUTRO', codigoFiscal: '99' },
 ];
 

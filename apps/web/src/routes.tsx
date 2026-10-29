@@ -42,11 +42,16 @@ const Estoque = lazy(() => import('@/pages/estoque/Estoque'));
 const ContasReceber = lazy(() => import('@/pages/financeiro/ContasReceber'));
 const ContasPagar = lazy(() => import('@/pages/financeiro/ContasPagar'));
 const Bancos = lazy(() => import('@/pages/financeiro/Bancos'));
+const ExtratoConta = lazy(() => import('@/pages/financeiro/ExtratoConta'));
 const FluxoCaixa = lazy(() => import('@/pages/financeiro/FluxoCaixa'));
 const Caixinhas = lazy(() => import('@/pages/financeiro/Caixinhas'));
 const InicioGerente = lazy(() => import('@/pages/dashboard/InicioGerente'));
 const Comissoes = lazy(() => import('@/pages/financeiro/Comissoes'));
 const Emprestimos = lazy(() => import('@/pages/financeiro/Emprestimos'));
+const Carnes = lazy(() => import('@/pages/financeiro/Carnes'));
+const ConsignacoesLista = lazy(() => import('@/pages/consignacoes/ConsignacoesLista'));
+const ConsignacaoForm = lazy(() => import('@/pages/consignacoes/ConsignacaoForm'));
+const ConsignacaoDetalhe = lazy(() => import('@/pages/consignacoes/ConsignacaoDetalhe'));
 
 const NotasLista = lazy(() => import('@/pages/fiscal/NotasLista'));
 const NotaDetalhe = lazy(() => import('@/pages/fiscal/NotaDetalhe'));
@@ -80,6 +85,7 @@ const BlingCallback = lazy(() => import('@/pages/configuracoes/BlingCallback'));
 
 const OsPublica = lazy(() => import('@/pages/publico/OsPublica'));
 const VendaPublica = lazy(() => import('@/pages/publico/VendaPublica'));
+const ConsignacaoPublica = lazy(() => import('@/pages/publico/ConsignacaoPublica'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
 
 const S = (el: ReactNode) => <Suspense fallback={<PaginaSkeleton />}>{el}</Suspense>;
@@ -116,6 +122,7 @@ export const router = createBrowserRouter(
   { path: '/login', element: S(<Login />) },
   { path: '/p/os/:token', element: S(<OsPublica />) },
   { path: '/p/venda/:token', element: S(<VendaPublica />) },
+  { path: '/p/consignacao/:token', element: S(<ConsignacaoPublica />) },
   {
     path: '/',
     element: <AppShell />,
@@ -142,6 +149,10 @@ export const router = createBrowserRouter(
       { path: 'compras/:id', element: S(<CompraDetalhe />) },
       { path: 'compras/:id/editar', element: S(<CompraForm />) },
 
+      { path: 'consignacoes', element: S(<ConsignacoesLista />) },
+      { path: 'consignacoes/nova', element: S(<ConsignacaoForm />) },
+      { path: 'consignacoes/:id', element: S(<ConsignacaoDetalhe />) },
+
       { path: 'ordens-servico', element: S(<OsLista />) },
       { path: 'ordens-servico/nova', element: S(<OsForm />) },
       { path: 'ordens-servico/:id', element: S(<OsDetalhe />) },
@@ -162,9 +173,11 @@ export const router = createBrowserRouter(
       { path: 'financeiro/receber', element: FIN(<ContasReceber />) },
       { path: 'financeiro/pagar', element: FIN(<ContasPagar />) },
       { path: 'financeiro/bancos', element: FIN(<Bancos />) },
+      { path: 'financeiro/bancos/:id', element: FIN(<ExtratoConta />) },
       { path: 'financeiro/fluxo-caixa', element: FIN(<FluxoCaixa />) },
       { path: 'financeiro/caixinhas', element: FIN(<Caixinhas />) },
       { path: 'financeiro/emprestimos', element: FIN(<Emprestimos />) },
+      { path: 'financeiro/carnes', element: FIN(<Carnes />) },
       { path: 'comissoes', element: S(<Comissoes />) },
 
       { path: 'notas-fiscais', element: S(<NotasLista />) },

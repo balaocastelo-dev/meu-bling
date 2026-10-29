@@ -54,7 +54,8 @@ async function main() {
   const vendedores = await req('GET', '/vendedores');
   const tecnicos = await req('GET', '/tecnicos');
   const depositos = await req('GET', '/depositos');
-  const formas = await req('GET', '/formas-pagamento');
+  // formas comuns (carnê e crédito bancário têm fluxo próprio, com testes próprios)
+  const formas = ((await req('GET', '/formas-pagamento')) as any[]).filter((f) => !['CARNE', 'CREDITO_BANCARIO'].includes(f.tipo));
   await req('GET', '/categorias-financeiras');
   await req('GET', '/contas-financeiras');
   const sitV = await req('GET', '/situacoes?modulo=VENDA');

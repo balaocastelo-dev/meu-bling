@@ -6,6 +6,7 @@
 import type { FastifyInstance } from 'fastify';
 import { criarLinkPagamento } from '../../integracoes/mercadopago/link.js';
 import { z } from 'zod';
+import { previaCarneVenda } from '../carnes/service.js';
 import { prisma } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
@@ -404,9 +405,13 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const v = await carregarVenda(prisma, id);
     const pendencias = pendenciasFinalizacao(v as any);
     const destino = await situacaoFinalizar();
-    const custoProdutos = arredondar(v.itens.reduce((s: number, i: any) => s + (i.custoUnitario || 0) * i.quantidade, 0));
+    // itens consignados: a compra já existe e o pagamento ao consignante sai pela consignação
+    const produtoIds = v.itens.map((i: any) => i.produtoId).filter((x: any): x is number => !!x);
+    const consignados = produtoIds.length ? await prisma.consignacao.findMany({ where: { produtoId: { in: produtoIds } }, select: { id: true, numero: true, descricao: true, valorConsignante: true, produtoId: true, status: true } }) : [];
+    const idsConsignados = new Set(consignados.map((c) => c.produtoId));
+    const custoProdutos = arredondar(v.itens.filter((i: any) => !idsConsignados.has(i.produtoId)).reduce((s: number, i: any) => s + (i.custoUnitario || 0) * i.quantidade, 0));
     const compraRegistrada = await compraDaVenda(v.numero);
-    return { podeFinalizar: !pendencias.length, pendencias, jaFinalizada: !!v.situacao.final && !v.situacao.cancelamento, situacaoAtual: { id: v.situacao.id, nome: v.situacao.nome }, destino: { id: destino.id, nome: destino.nome, cor: destino.cor }, contatoId: v.contatoId, custoProdutos, compraRegistrada, parcelas: await parcelasParaFinalizar(id), formas: await formasParaFinalizar() };
+    return { consignados: consignados.map(({ produtoId, ...c }) => c), podeFinalizar: !pendencias.length, pendencias, jaFinalizada: !!v.situacao.final && !v.situacao.cancelamento, situacaoAtual: { id: v.situacao.id, nome: v.situacao.nome }, destino: { id: destino.id, nome: destino.nome, cor: destino.cor }, contatoId: v.contatoId, custoProdutos, compraRegistrada, parcelas: await parcelasParaFinalizar(id), formas: await formasParaFinalizar(), carne: { ...(await previaCarneVenda(v.contatoId ?? null)), taxaEscolhida: (v as any).carneTaxaPct ?? null } };
   });
 
   /** Finaliza (vai para "Fechada") a partir de qualquer situação, desde que a venda esteja completa. */
@@ -430,6 +435,8 @@ export default async function vendasRoutes(app: FastifyInstance) {
         recebimentos: z
           .array(z.object({ parcelaId: z.coerce.number().int().positive(), formaPagamentoId: z.coerce.number().int().positive().nullish(), recebido: z.boolean(), contaFinanceiraId: z.coerce.number().int().positive().nullish(), creditoPagador: z.enum(['CLIENTE', 'LOJA']).nullish() }))
           .nullish(),
+        /** carnê próprio: juros ao mês escolhidos na hora (vazio = pelo risco do cliente) */
+        carne: z.object({ taxaPct: z.coerce.number().min(0).max(30).nullish() }).nullish(),
       })
       .parse(req.body ?? {});
     const v = await exigirVendaCompleta(id);
@@ -438,11 +445,12 @@ export default async function vendasRoutes(app: FastifyInstance) {
     if (v.situacao.final && !v.situacao.cancelamento) return { situacao: { id: v.situacao.id, nome: v.situacao.nome, cor: v.situacao.cor }, acoesExecutadas: [], alterado: false };
     // confere as escolhas de pagamento antes de lançar qualquer coisa
     if (body.recebimentos?.length) await validarRecebimentosFinalizacao(id, body.recebimentos);
+    if (body.carne) await prisma.venda.update({ where: { id }, data: { carneTaxaPct: body.carne.taxaPct ?? null } });
     // primeiro a compra (entra no estoque e fica ligada à venda), depois a venda baixa o estoque
     let compra: Awaited<ReturnType<typeof registrarCompraDaVenda>> | null = null;
     if (body.compra) {
       compra = await registrarCompraDaVenda(id, body.compra, req.user.id);
-      await auditar(req, 'Compra', compra.compra.id, 'CRIAR', { numero: compra.compra.numero, deVenda: v.numero, paga: compra.paga, jaExistia: compra.jaExistia });
+      if (compra.compra) await auditar(req, 'Compra', compra.compra.id, 'CRIAR', { numero: compra.compra.numero, deVenda: v.numero, paga: compra.paga, jaExistia: compra.jaExistia });
     }
     const r = await mudarSituacao({ modulo: 'VENDA', entidadeId: id, situacaoDestinoId: destino.id, usuarioId: req.user.id, observacao: body.observacao || 'Venda finalizada', forcar: true });
     await auditar(req, 'Venda', id, 'SITUACAO', { para: r.situacao.nome, acoes: r.acoes, finalizar: true });

@@ -15,7 +15,7 @@ import { registrarServico } from '../../core/servicos.js';
 import { enviarEmail, smtpConfigurado } from '../../integracoes/email/servico.js';
 import { enviarDocumento, enviarTexto, status as statusWhatsApp } from '../../integracoes/whatsapp/servico.js';
 
-export type OrigemTipo = 'VENDA' | 'COMPRA' | 'OS' | 'NFE' | 'CONTA' | 'MANUAL';
+export type OrigemTipo = 'VENDA' | 'COMPRA' | 'OS' | 'NFE' | 'CONTA' | 'MANUAL' | 'CONSIGNACAO';
 export type Canal = 'EMAIL' | 'WHATSAPP';
 
 export const EVENTOS_TEMPLATE = ['VENDA_SITUACAO', 'COMPRA_SITUACAO', 'OS_SITUACAO', 'VENDA_CRIADA', 'OS_CRIADA', 'NFE_AUTORIZADA', 'CONTA_VENCENDO', 'ORCAMENTO_OS', 'ORCAMENTO_VENDA', 'ORCAMENTO_SITUACAO'] as const;

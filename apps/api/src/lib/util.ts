@@ -37,6 +37,10 @@ async function maiorNumeroGravado(nome: string, tx: Tx | typeof prisma): Promise
       return (await db.ordemServico.aggregate({ _max: { numero: true } }))._max.numero ?? 0;
     case 'EMPRESTIMO':
       return (await db.emprestimo.aggregate({ _max: { numero: true } }))._max.numero ?? 0;
+    case 'CARNE':
+      return (await db.carne.aggregate({ _max: { numero: true } }))._max.numero ?? 0;
+    case 'CONSIGNACAO':
+      return (await db.consignacao.aggregate({ _max: { numero: true } }))._max.numero ?? 0;
     default:
       return null;
   }

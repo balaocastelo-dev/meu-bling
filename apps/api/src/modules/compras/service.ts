@@ -12,6 +12,7 @@ import { depositoPadraoId, movimentarEstoque, movimentaEstoque } from '../comum/
 import { cancelarContasPagar, categoriaPadraoId } from '../comum/financeiro.js';
 import { hojeMeioDia } from '../comum/datas.js';
 import { estornarCreditoBancarioCompra, lancarCreditoBancarioCompra } from '../emprestimos/credito.js';
+import { aoEstornarVendaConsignado, aoVenderConsignado, consignacaoDaCompra } from '../consignacoes/nucleo.js';
 
 type Db = Tx | typeof prisma;
 
@@ -182,6 +183,8 @@ export async function acaoLancarContas(ctx: ContextoAcao) {
   const compra = await tx.compra.findUnique({ where: { id }, include: { parcelas: { orderBy: { numero: 'asc' } } } });
   if (!compra) throw new NotFound('Compra');
   if (compra.contasLancadas) return;
+  // consignação: quem lança o pagamento ao consignante é o módulo de consignação (venda ou diárias)
+  if (await consignacaoDaCompra(tx, id)) return;
   const categoriaId = compra.categoriaFinanceiraId || (await categoriaPadraoId(tx, 'Compra de mercadorias (CMV)', 'DESPESA', 'CMV'));
   const competencia = competenciaDe(compra.data);
   const n = compra.parcelas.length;
@@ -219,6 +222,7 @@ export async function acaoEstornarContas(ctx: ContextoAcao) {
   const compra = await tx.compra.findUnique({ where: { id } });
   if (!compra) throw new NotFound('Compra');
   if (!compra.contasLancadas) return;
+  if (await consignacaoDaCompra(tx, id)) return;
   // crédito bancário: desfaz o pagamento ao fornecedor feito com o crédito e cancela a operação
   await estornarCreditoBancarioCompra(tx, id);
   await cancelarContasPagar(tx, 'COMPRA', id);
@@ -540,6 +544,9 @@ export async function marcarCompraVendida(tx: Tx, compraId: number, vendaNumero:
   await tx.historicoSituacao.create({
     data: { entidadeTipo: 'COMPRA', entidadeId: compraId, deSituacaoId: compra.situacaoId, deSituacao: compra.situacao.nome, paraSituacaoId: vendido.id, paraSituacao: vendido.nome, observacao: `Automático: mercadoria vendida na venda nº ${vendaNumero}`, usuarioId },
   });
+  // consignado vendido: lança o pagamento ao consignante (na hora) e avisa pelo WhatsApp
+  const venda = await tx.venda.findFirst({ where: { tipo: 'PEDIDO', numero: vendaNumero }, select: { id: true, numero: true } });
+  if (venda) await aoVenderConsignado(tx, compraId, venda, usuarioId);
   return true;
 }
 
@@ -560,6 +567,7 @@ export async function desalocarComprasDaVenda(tx: Tx, vendaId: number, usuarioId
   for (const compraId of compras) {
     const compra = await tx.compra.findUnique({ where: { id: compraId }, include: { situacao: true } });
     if (!compra || compra.situacao.nome !== 'Vendido') continue;
+    await aoEstornarVendaConsignado(tx, compraId, usuarioId);
     const ultimo = await tx.historicoSituacao.findFirst({ where: { entidadeTipo: 'COMPRA', entidadeId: compraId, paraSituacaoId: compra.situacaoId }, orderBy: { id: 'desc' } });
     const anterior = (ultimo?.deSituacaoId ? await tx.situacao.findUnique({ where: { id: ultimo.deSituacaoId } }) : null) || (await tx.situacao.findFirst({ where: { modulo: 'COMPRA', nome: 'Fechado' } }));
     if (!anterior || anterior.id === compra.situacaoId) continue;

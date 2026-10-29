@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { AlertTriangle, CheckCircle2, ExternalLink } from 'lucide-react';
-import { api, mensagemErro } from '@/lib/api';
+import { abrirEmNovaAba, api, mensagemErro } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Textarea } from '@/components/ui/Input';
@@ -28,6 +28,8 @@ interface Checagem {
   contatoId: number;
   custoProdutos: number;
   compraRegistrada: { id: number; numero: number; total: number } | null;
+  /** itens consignados: o pagamento ao consignante sai pela consignação (na hora) */
+  consignados?: { id: number; numero: number; descricao: string; valorConsignante: number; status: string }[];
   parcelas: {
     id: number;
     numero: number;
@@ -39,6 +41,20 @@ interface Checagem {
     creditoPagador?: 'CLIENTE' | 'LOJA' | null;
   }[];
   formas: { id: number; nome: string; tipo: string; contaFinanceiraId: number | null; contasPermitidas: number[] }[];
+  /** carnê próprio: risco do cliente e faixa de juros (o vendedor vê sem acesso ao financeiro) */
+  carne?: {
+    taxaMin: number;
+    taxaMax: number;
+    taxaEscolhida: number | null;
+    avaliacao: { classe: string; score: number; taxaPct: number; apto: boolean; comRessalva: boolean; limite: number; disponivel: number; bloqueios: string[]; motivos: { texto: string; pontos: number }[] } | null;
+  };
+}
+
+/** tabela Price: valor da parcela */
+export function parcelaPrice(valor: number, taxaPct: number, n: number) {
+  const i = taxaPct / 100;
+  if (!(n > 0)) return 0;
+  return Math.round((i > 0 ? (valor * i) / (1 - Math.pow(1 + i, -n)) : valor / n) * 100) / 100;
 }
 
 const PAGO_NA_HORA = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'TRANSFERENCIA'];
@@ -103,6 +119,8 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
   const [compraPaga, setCompraPaga] = useState<EscolhaCompra>(null);
   const [contaCompra, setContaCompra] = useState<number | ''>('');
   const [vencCompra, setVencCompra] = useState(hoje());
+  // carnê: juros ao mês escolhidos na hora (sugestão = risco do cliente)
+  const [taxaCarne, setTaxaCarne] = useState<number>(0);
 
   const contaPadrao = contasFin?.find((x) => x.padrao)?.id ?? contasFin?.[0]?.id ?? '';
   useEffect(() => {
@@ -110,6 +128,7 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
     setReceb(Object.fromEntries(c.parcelas.map((p) => [p.id, { formaPagamentoId: p.formaPagamento?.id ?? '', recebido: p.recebidoSugerido, contaFinanceiraId: p.contaSugeridaId ?? '', creditoPagador: (p.creditoPagador ?? 'CLIENTE') as Pagador }])));
     setRegistrarCompra(c.compraRegistrada || !(c.custoProdutos > 0) ? 'nao' : null);
     setCompraPaga(null);
+    setTaxaCarne(c.carne?.taxaEscolhida ?? c.carne?.avaliacao?.taxaPct ?? c.carne?.taxaMax ?? 15);
   }, [c]);
   useEffect(() => {
     if (contaCompra === '' && contaPadrao !== '') setContaCompra(contaPadrao);
@@ -121,8 +140,10 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
         observacao: obs || undefined,
         recebimentos: (c?.parcelas ?? []).map((p) => {
           const credito = ehCredito(receb[p.id]?.formaPagamentoId);
-          return { parcelaId: p.id, formaPagamentoId: receb[p.id]?.formaPagamentoId || null, recebido: !credito && !!receb[p.id]?.recebido, contaFinanceiraId: credito ? null : receb[p.id]?.contaFinanceiraId || null, creditoPagador: credito ? receb[p.id]?.creditoPagador ?? 'CLIENTE' : null };
+          const semBaixa = credito || ehCarne(receb[p.id]?.formaPagamentoId);
+          return { parcelaId: p.id, formaPagamentoId: receb[p.id]?.formaPagamentoId || null, recebido: !semBaixa && !!receb[p.id]?.recebido, contaFinanceiraId: semBaixa ? null : receb[p.id]?.contaFinanceiraId || null, creditoPagador: credito ? receb[p.id]?.creditoPagador ?? 'CLIENTE' : null };
         }),
+        carne: carneParcelas.length ? { taxaPct: taxaCarne } : undefined,
         compra:
           registrarCompra === 'sim'
             ? { fornecedorId, paga: compraPaga === 'sim', creditoBancario: compraPaga === 'credito', contaFinanceiraId: compraPaga === 'sim' ? contaCompra || null : null, vencimento: compraPaga === 'nao' ? vencCompra : undefined }
@@ -131,7 +152,13 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
     onSuccess: (r) => {
       const compra = r.compra && !r.compra.jaExistia ? ` Compra nº ${r.compra.compra.numero} registrada${compraPaga === 'credito' ? ' e paga com o crédito bancário' : r.compra.paga ? ' e paga' : ' (a pagar)'}.` : '';
       if (Object.values(receb).some((x) => ehCredito(x.formaPagamentoId)) || compraPaga === 'credito') qc.invalidateQueries({ queryKey: ['emprestimos'] });
-      toast.success(`Venda nº ${numero} finalizada (${r.situacao.nome}).${compra}`);
+      if (carneParcelas.length) {
+        qc.invalidateQueries({ queryKey: ['carnes'] });
+        toast.success(`Venda nº ${numero} finalizada com carnê de ${carneParcelas.length}x de ${moeda(valorParcelaCarne)}.${compra}`, {
+          duration: 30_000,
+          action: { label: 'Imprimir carnê', onClick: () => abrirEmNovaAba(`/vendas/${vendaId}/carne/imprimir`).catch((e) => toast.error(mensagemErro(e))) },
+        });
+      } else toast.success(`Venda nº ${numero} finalizada (${r.situacao.nome}).${compra}`);
       ['vendas', 'compras', 'dashboard-geral', 'painel-vendedor', 'contas-receber', 'contas-pagar', 'caixa', 'contas-financeiras', 'movimentos-fin'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       qc.invalidateQueries({ queryKey: ['venda', String(vendaId)] });
       qc.invalidateQueries({ queryKey: ['venda-finalizacao', vendaId] });
@@ -147,8 +174,12 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
   const pode = !!c?.podeFinalizar && !c.jaFinalizada;
   const formaDe = (id: number | '' | undefined) => c?.formas.find((f) => f.id === id);
   const ehCredito = (id: number | '' | undefined) => formaDe(id)?.tipo === 'CREDITO_BANCARIO';
+  const ehCarne = (id: number | '' | undefined) => formaDe(id)?.tipo === 'CARNE';
   const temFormaCredito = !!c?.formas.some((f) => f.tipo === 'CREDITO_BANCARIO');
-  const faltaBanco = (c?.parcelas ?? []).some((p) => !receb[p.id]?.formaPagamentoId || (!ehCredito(receb[p.id]?.formaPagamentoId) && receb[p.id]?.recebido && !receb[p.id]?.contaFinanceiraId));
+  const faltaBanco = (c?.parcelas ?? []).some((p) => !receb[p.id]?.formaPagamentoId || (!ehCredito(receb[p.id]?.formaPagamentoId) && !ehCarne(receb[p.id]?.formaPagamentoId) && receb[p.id]?.recebido && !receb[p.id]?.contaFinanceiraId));
+  const carneParcelas = (c?.parcelas ?? []).filter((p) => ehCarne(receb[p.id]?.formaPagamentoId));
+  const valorCarne = carneParcelas.reduce((s, p) => s + p.valor, 0);
+  const valorParcelaCarne = parcelaPrice(valorCarne, taxaCarne || 0, carneParcelas.length);
   /** bancos que recebem a forma (se a forma não tem lista, todos) */
   const bancosDa = (id: number | '' | undefined) => {
     const f = formaDe(id);
@@ -200,6 +231,7 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
                 const r = receb[p.id] ?? { formaPagamentoId: '', recebido: false, contaFinanceiraId: '' };
                 const bancos = bancosDa(r.formaPagamentoId);
                 const credito = ehCredito(r.formaPagamentoId);
+                const carne = ehCarne(r.formaPagamentoId);
                 return (
                   <div key={p.id} className="space-y-2 p-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -207,7 +239,7 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
                         <b className="num">{moeda(p.valor)}</b>
                         {c.parcelas.length > 1 && <span className="text-slate-500"> · parcela {p.numero}</span>}
                       </span>
-                      {!credito && (
+                      {!credito && !carne && (
                         <label className="flex items-center gap-2 text-slate-700">
                           <input type="checkbox" className="h-4 w-4" checked={r.recebido} onChange={(e) => setReceb({ ...receb, [p.id]: { ...r, recebido: e.target.checked } })} />
                           Já recebido
@@ -230,6 +262,8 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
                             {(r.creditoPagador ?? 'CLIENTE') === 'CLIENTE' ? 'O cliente paga o boleto direto ao credor.' : 'O cliente paga a loja e a loja repassa ao credor.'} O valor entra no banco da forma e a devolução + juros vai para o contas a pagar.
                           </p>
                         </div>
+                      ) : carne ? (
+                        <p className="self-end pb-2 text-xs text-slate-500">Parcela do carnê: o cliente paga por PIX (QR Code) no vencimento.</p>
                       ) : r.recebido ? (
                         <div>
                           <span className="mb-1 block text-xs font-medium text-slate-600">Onde o dinheiro entrou</span>
@@ -242,9 +276,19 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
                                 className={r.contaFinanceiraId === b.id ? 'rounded-md border border-brand-600 bg-brand-600 px-3 py-1.5 text-sm font-medium text-white' : 'rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50'}
                               >
                                 {b.nome}
+                                {(b.taxaRecebimentoPct ?? 0) > 0 && <span className="ml-1 text-[11px] opacity-80">(−{String(b.taxaRecebimentoPct).replace('.', ',')}%)</span>}
                               </button>
                             ))}
                           </div>
+                          {(() => {
+                            const banco = bancos.find((b) => b.id === r.contaFinanceiraId);
+                            const t = banco?.taxaRecebimentoPct ?? 0;
+                            return t > 0 ? (
+                              <p className="mt-1 text-xs font-medium text-amber-700">
+                                Cai no {banco!.nome}: {moeda(p.valor * (1 - t / 100))} (taxa de {moeda(p.valor * (t / 100))})
+                              </p>
+                            ) : null;
+                          })()}
                         </div>
                       ) : (
                         <p className="self-end pb-2 text-xs text-slate-500">Fica no contas a receber.</p>
@@ -254,14 +298,22 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
                 );
               })}
             </div>
+            {carneParcelas.length > 0 && c.carne && <PainelCarne carne={c.carne} taxa={taxaCarne} setTaxa={setTaxaCarne} valor={valorCarne} n={carneParcelas.length} parcela={valorParcelaCarne} contatoId={c.contatoId} onNavegar={onFechar} />}
           </section>
 
           <section>
             <h3 className="mb-2 text-sm font-semibold text-slate-800">2. Compra da mercadoria</h3>
+            {!!c.consignados?.length && (
+              <div className="mb-2 rounded-md border border-violet-200 bg-violet-50 p-2.5 text-sm text-violet-800">
+                {c.consignados.map((k) => (
+                  <p key={k.id}>Consignado nº {k.numero} ({k.descricao}): ao finalizar, o pagamento de <b className="num">{moeda(k.valorConsignante)}</b> ao consignante entra no contas a pagar de hoje e ele recebe um WhatsApp.</p>
+                ))}
+              </div>
+            )}
             {c.compraRegistrada ? (
               <p className="text-sm text-emerald-700">Compra nº {c.compraRegistrada.numero} ({moeda(c.compraRegistrada.total)}) já registrada para esta venda.</p>
             ) : !(c.custoProdutos > 0) ? (
-              <p className="text-sm text-slate-500">Sem custo informado nos produtos.</p>
+              c.consignados?.length ? null : <p className="text-sm text-slate-500">Sem custo informado nos produtos.</p>
             ) : (
               <div className="space-y-3 rounded-md border border-slate-200 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -307,5 +359,63 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
         </div>
       )}
     </Modal>
+  );
+}
+
+const TOM_CLASSE: Record<string, string> = { A: 'bg-emerald-600', B: 'bg-lime-600', C: 'bg-amber-500', D: 'bg-orange-600', E: 'bg-red-600' };
+
+/** Carnê na finalização: risco do cliente, juros (7% a 15%) e quanto fica cada parcela. */
+function PainelCarne({ carne, taxa, setTaxa, valor, n, parcela, contatoId, onNavegar }: { carne: NonNullable<Checagem['carne']>; taxa: number; setTaxa: (v: number) => void; valor: number; n: number; parcela: number; contatoId: number; onNavegar: () => void }) {
+  const a = carne.avaliacao;
+  const total = Math.round(parcela * n * 100) / 100;
+  const foraDaFaixa = taxa < carne.taxaMin || taxa > carne.taxaMax;
+  return (
+    <div className="mt-3 space-y-3 rounded-md border border-brand-200 bg-brand-50/50 p-3 text-sm" data-testid="painel-carne">
+      <div className="flex flex-wrap items-center gap-3">
+        {a ? (
+          <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-base font-bold text-white ${TOM_CLASSE[a.classe] ?? 'bg-slate-500'}`} title={`Nota ${a.score}/100`}>
+            {a.classe}
+          </span>
+        ) : null}
+        <div className="flex-1">
+          <p className="font-semibold text-slate-800">Carnê próprio (PIX no Cora)</p>
+          <p className="text-xs text-slate-600">
+            {a ? <>Risco do cliente: nota <b>{a.score}</b>/100, classe <b>{a.classe}</b> → sugestão de <b>{a.taxaPct.toLocaleString('pt-BR')}% ao mês</b>{a.limite > 0 ? <> · limite disponível {moeda(a.disponivel)}</> : null}</> : 'Cliente sem histórico: juros máximos.'}
+          </p>
+        </div>
+      </div>
+      {a && !a.apto && (
+        <p className={`flex items-start gap-2 rounded px-2 py-1.5 text-xs ${a.comRessalva ? 'bg-amber-100 text-amber-900' : 'bg-red-100 text-red-800'}`}>
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            {a.comRessalva ? 'Cliente com ressalva: ofereça com entrada ou valor menor.' : 'O sistema não recomenda carnê para este cliente.'}
+            {a.bloqueios.length > 0 ? <> {a.bloqueios.join(' · ')}.</> : <> Nota baixa (classe {a.classe}): pouco histórico de compras ou de pagamentos em dia.</>}
+            {a.bloqueios.some((b) => /CPF|cadastro/i.test(b)) && (
+              <Link to={`/contatos/${contatoId}/editar`} onClick={onNavegar} className="ml-1 font-medium underline">Completar cadastro</Link>
+            )}
+          </span>
+        </p>
+      )}
+      {a && a.apto && valor > a.disponivel && a.disponivel > 0 && <p className="text-xs text-amber-800">Valor acima do limite sugerido ({moeda(a.disponivel)}).</p>}
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-600">Juros ao mês (%)</span>
+          <input type="number" step="0.5" min={0} max={30} aria-label="Juros do carnê ao mês" value={taxa} onChange={(e) => setTaxa(Number(e.target.value) || 0)} className="input-base h-9 w-24" />
+        </label>
+        <div className="flex gap-1">
+          {[carne.taxaMin, a?.taxaPct, carne.taxaMax].filter((v, i, arr): v is number => v != null && arr.indexOf(v) === i).map((v) => (
+            <button key={v} type="button" onClick={() => setTaxa(v)} className={`rounded border px-2 py-1 text-xs ${taxa === v ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-300 bg-white text-slate-700'}`}>
+              {v.toLocaleString('pt-BR')}%
+            </button>
+          ))}
+        </div>
+        <p className="flex-1 text-right text-slate-700">
+          {n}x de <b className="num">{moeda(parcela)}</b>
+          <span className="block text-xs text-slate-500">financiado {moeda(valor)} · total {moeda(total)} · juros {moeda(total - valor)}</span>
+        </p>
+      </div>
+      {foraDaFaixa && <p className="text-xs text-amber-800">Fora da faixa da loja ({carne.taxaMin}% a {carne.taxaMax}% ao mês).</p>}
+      <p className="text-xs text-slate-500">Ao finalizar, o carnê sai pronto para imprimir (3 por folha, com capa e agradecimento) e cada parcela vira uma conta a receber com QR Code PIX.</p>
+    </div>
   );
 }

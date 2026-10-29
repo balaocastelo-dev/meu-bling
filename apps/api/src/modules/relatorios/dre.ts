@@ -110,6 +110,13 @@ function lancarEmprestimo(ac: Acumulado, valor: number, e: { juros: number; valo
   if (valor - juros) add(ac.informativo, 'Devolução de empréstimos (principal)', valor - juros);
 }
 
+/** Parcela de carnê próprio: juros vão para o resultado financeiro; o principal já é a receita da venda. */
+function partesCarne(valor: number, c: { juros: number; total: number }) {
+  const fator = c.total > 0 ? Math.min(1, Math.max(0, c.juros / c.total)) : 0;
+  const juros = valor * fator;
+  return { juros, principal: valor - juros };
+}
+
 async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>): Promise<Acumulado> {
   const ac = novoAcumulado();
   const [sitVenda, sitOs] = await Promise.all([
@@ -176,9 +183,15 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
       origemTipo: { notIn: ['VENDA', 'OS'] },
       OR: [{ competencia: { gte: compIni, lte: compFim } }, { competencia: null, vencimento: { gte: ini, lte: fim } }],
     },
-    select: { valor: true, categoriaId: true, emprestimoId: true },
+    select: { valor: true, categoriaId: true, emprestimoId: true, carne: { select: { juros: true, total: true } } },
   });
   for (const r of receitas) {
+    if (r.carne) {
+      const { juros, principal } = partesCarne(r.valor, r.carne);
+      if (juros) add(ac.resultFin, 'Juros de carnê', juros);
+      if (principal) add(ac.informativo, 'Carnês: principal das parcelas (já é receita da venda)', principal);
+      continue;
+    }
     if (r.emprestimoId) {
       add(ac.informativo, 'Empréstimos recebidos (dinheiro que entrou)', r.valor);
       continue;
@@ -197,12 +210,19 @@ async function acumularCaixa(ini: Date, fim: Date, cats: Map<number, Cat>): Prom
   const movs = await prisma.movimentoFinanceiro.findMany({
     // transferências entre contas e ajustes de saldo não entram no DRE; NULL precisa ser incluído explicitamente
     where: { data: { gte: ini, lte: fim }, tipo: { in: ['ENTRADA', 'SAIDA'] }, OR: [{ observacoes: null }, { observacoes: { notIn: OBS_FORA_DO_RESULTADO } }] },
-    select: { tipo: true, valor: true, categoriaId: true, contaReceberId: true, contaPagarId: true, contaReceber: { select: { emprestimoId: true } }, contaPagar: { select: { emprestimo: { select: { juros: true, valorDevolver: true } } } } },
+    select: { tipo: true, valor: true, categoriaId: true, contaReceberId: true, contaPagarId: true, contaReceber: { select: { emprestimoId: true, carne: { select: { juros: true, total: true } } } }, contaPagar: { select: { emprestimo: { select: { juros: true, valorDevolver: true } } } } },
   });
   for (const m of movs) {
     const cat = m.categoriaId ? cats.get(m.categoriaId) : null;
     if (m.tipo === 'ENTRADA' && m.contaReceber?.emprestimoId) {
       add(ac.informativo, 'Empréstimos recebidos (dinheiro que entrou)', m.valor);
+      continue;
+    }
+    if (m.tipo === 'ENTRADA' && m.contaReceber?.carne) {
+      // carnê recebido: o principal é a venda entrando no caixa; a parte de juros é resultado financeiro
+      const { juros, principal } = partesCarne(m.valor, m.contaReceber.carne);
+      if (juros) add(ac.resultFin, 'Juros de carnê', juros);
+      ac.receitaProdutos += principal;
       continue;
     }
     if (m.tipo === 'SAIDA' && m.contaPagar?.emprestimo) {
