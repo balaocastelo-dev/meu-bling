@@ -22,16 +22,17 @@ export const TTS_DISPONIVEL = typeof window !== 'undefined' && 'speechSynthesis'
  * o JARVIS continua falando, só que com a voz de fábrica.
  */
 let audioAtual: HTMLAudioElement | null = null;
-let clonadaOk: boolean | null = null; // null = ainda não tentei nesta sessão
+/** Quando a voz clonada falhou, espera um pouco antes de tentar de novo. */
+let semClonadaAte = 0;
 
 async function falarClonada(texto: string): Promise<boolean> {
-  if (clonadaOk === false) return false;
+  if (Date.now() < semClonadaAte) return false;
   const blob = await api.blobPost('/jarvis/voz', { texto });
   if (!blob || blob.size < 100) {
-    clonadaOk = false; // não insiste a cada frase; recarregar a página tenta de novo
+    semClonadaAte = Date.now() + 5 * 60_000; // não insiste a cada frase
     return false;
   }
-  clonadaOk = true;
+  semClonadaAte = 0;
 
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
