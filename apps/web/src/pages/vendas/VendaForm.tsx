@@ -147,6 +147,8 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
   const bloqueado = !!venda && (venda.estoqueLancado || venda.contasLancadas);
   const comissaoPadrao = vendedores?.find((v) => v.id === form.vendedorId)?.comissaoPadraoPct ?? 0;
   const veLucro = usuario?.perfil === 'ADMIN' || usuario?.perfil === 'GERENTE';
+  // vendedor/técnico vende sempre no próprio nome (29/10/2026) — para repassar a um colega existe "Transferir vendedor"
+  const vendedorFixo = usuario?.perfil === 'VENDEDOR' || usuario?.perfil === 'TECNICO';
   const custos = useMemo(() => {
     const produtos = arred(form.itens.reduce((s, i) => s + (i.custoUnitario || 0) * i.quantidade, 0));
     const total = arred(produtos + (form.custoLogistica || 0));
@@ -280,7 +282,7 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                 </>
               }
             />
-            <Select className="xl:col-span-3" label="Vendedor" value={form.vendedorId ?? ''} onChange={(e) => set('vendedorId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(vendedores)} placeholder="—" disabled={bloqueado} />
+            <Select className="xl:col-span-3" label="Vendedor" value={form.vendedorId ?? ''} onChange={(e) => set('vendedorId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(vendedores)} placeholder="—" disabled={bloqueado || vendedorFixo} ajuda={vendedorFixo ? 'Suas vendas saem sempre no seu nome' : undefined} />
             <DateInput className="xl:col-span-2" label="Data" obrigatorio erro={erros.data} value={form.data} onChange={(v) => set('data', v)} disabled={bloqueado} />
             {orcamento ? (
               <DateInput className="xl:col-span-2" label="Válido até" value={form.validade ?? null} onChange={(v) => set('validade', v || null)} ajuda="Padrão: 7 dias" />

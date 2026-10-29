@@ -121,15 +121,17 @@ export function atalhosPeriodo(hoje = new Date()): { id: string; nome: string; i
 }
 
 /**
- * Filtro de data do sistema — o mesmo dos dashboards: Tudo · Hoje · 7 dias · 30 dias · Este mês · Mês passado · Este ano · Ano passado · Últimos 12 meses · Período.
- * "Tudo" só aparece onde o período é opcional (limpavel). Com atalhos=false mostra só as duas datas.
+ * Filtro de data do sistema — o mesmo dos dashboards: Todo o período · Hoje · Ontem · 7 dias · 30 dias · Este mês · Mês passado · Este ano · Ano passado · Últimos 12 meses · Período.
+ * "Todo o período": nas listas (limpavel) limpa as datas; onde o período é obrigatório (DRE, fluxo de caixa, relatórios)
+ * manda DESDE_SEMPRE..hoje e a API recua até o primeiro registro. Com atalhos=false mostra só as duas datas.
  */
 export function PeriodoFiltro({ inicial, final, onChange, label = 'Período', atalhos = true, limpavel = true }: { inicial: string; final: string; onChange: (i: string, f: string) => void; label?: string; atalhos?: boolean; /** false onde o período é obrigatório (DRE, relatórios) */ limpavel?: boolean }) {
   const idPill = useId();
   const detectado = periodoDe(inicial, final);
   const [livre, setLivre] = useState(false);
-  const ativo: Periodo = livre ? 'custom' : detectado === 'tudo' && !limpavel ? 'custom' : detectado;
-  const opcoes: { valor: Periodo; rotulo: string }[] = [...(limpavel ? [{ valor: 'tudo' as Periodo, rotulo: 'Tudo' }] : []), ...OPCOES_PERIODO];
+  // sem datas onde o período é obrigatório = ainda não escolheu (datas livres)
+  const ativo: Periodo = livre ? 'custom' : detectado === 'tudo' && !limpavel && !inicial ? 'custom' : detectado;
+  const opcoes = OPCOES_PERIODO;
   const escolher = (p: Periodo) => {
     if (p === 'custom') {
       setLivre(true);
@@ -140,7 +142,7 @@ export function PeriodoFiltro({ inicial, final, onChange, label = 'Período', at
       return;
     }
     setLivre(false);
-    const r = intervaloPeriodo(p);
+    const r = intervaloPeriodo(p, undefined, !limpavel);
     onChange(r.dataInicial, r.dataFinal);
   };
   const datas = (

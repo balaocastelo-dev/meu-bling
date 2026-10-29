@@ -62,11 +62,55 @@ if ! grep -q '^SITE_CHAVE_INTEGRACAO=' "$ENV_FILE"; then
   echo "chave do PDV do site criada (SITE_CHAVE_INTEGRACAO)"
 fi
 
+# ---- chat da equipe (29/10/2026): tempo real direto nesta VPS + TURN para as chamadas de voz/vídeo fora da loja
+HOSTVPS="$(grep -m1 -oE '^[A-Za-z0-9.-]+\.[a-z]+ *\{' "$CADDYFILE" 2>/dev/null | sed 's/ *{//' || true)"
+if [ -n "$HOSTVPS" ]; then
+  # O WebSocket do chat não passa pelo rewrite da Vercel (www.balao.info/sistema): o navegador liga direto nesta VPS.
+  grep -q '^CHAT_REALTIME_URL=' "$ENV_FILE" || { echo "CHAT_REALTIME_URL=https://${HOSTVPS}${CAMINHO}" >> "$ENV_FILE"; echo "CHAT_REALTIME_URL definido (https://${HOSTVPS}${CAMINHO})"; }
+  grep -q '^TURN_HOST=' "$ENV_FILE" || { echo "TURN_HOST=${HOSTVPS}" >> "$ENV_FILE"; echo "TURN_HOST definido (${HOSTVPS})"; }
+fi
+grep -q '^TURN_PORT=' "$ENV_FILE" || echo "TURN_PORT=3478" >> "$ENV_FILE"
+if ! grep -q '^TURN_SECRET=' "$ENV_FILE"; then
+  echo "TURN_SECRET=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48)" >> "$ENV_FILE"
+  echo "segredo do TURN criado (TURN_SECRET)"
+fi
+TURN_SECRET_ATUAL="$(grep -m1 '^TURN_SECRET=' "$ENV_FILE" | cut -d= -f2-)"
+TURN_PORT_ATUAL="$(grep -m1 '^TURN_PORT=' "$ENV_FILE" | cut -d= -f2-)"
+
 msg "Pastas de dados em $DADOS"
 mkdir -p "$DADOS/data" "$DADOS/storage"
 
 msg "Construindo a imagem (base ${CAMINHO}/)"
 docker build --build-arg "VITE_BASE_PATH=${CAMINHO}/" -t "$CONTAINER" "$CODIGO"
+
+msg "Cópia do banco antes de mexer (fica em $DADOS/antes-do-deploy)"
+# Se o passo seguinte falhar, esta cópia é o caminho de volta mais curto.
+mkdir -p "$DADOS/antes-do-deploy"
+if [ -f "$DADOS/data/meubling.db" ]; then
+  cp "$DADOS/data/meubling.db" "$DADOS/antes-do-deploy/meubling-$(date +%Y%m%d%H%M%S).db"
+  # guarda as 5 últimas
+  ls -1t "$DADOS/antes-do-deploy"/meubling-*.db 2>/dev/null | tail -n +6 | xargs -r rm -f
+  echo "cópia feita"
+fi
+
+msg "Conferindo a mudança de banco ANTES de derrubar o sistema"
+# O 'prisma db push' recusa colunas novas obrigatórias quando já existem linhas na tabela.
+# Descobrir isso com o container velho fora do ar deixa a loja parada — então testa-se antes,
+# num container temporário que usa uma CÓPIA do banco. Só troca o container se passar.
+TEMP_DB="$(mktemp -d)"
+cp -a "$DADOS/data/." "$TEMP_DB/" 2>/dev/null || true
+if docker run --rm --env-file "$ENV_FILE" -v "$TEMP_DB:/app/apps/api/data" "$CONTAINER" \
+     sh -c 'npx prisma db push --skip-generate' >/tmp/meu-bling-db-push.log 2>&1; then
+  echo "o banco aceita a mudança"
+  rm -rf "$TEMP_DB"
+else
+  rm -rf "$TEMP_DB"
+  echo
+  tail -25 /tmp/meu-bling-db-push.log
+  echo
+  erro "A mudança de banco não passou (detalhes acima). O sistema NÃO foi derrubado e continua no ar com a versão anterior.
+   Resolva a pendência no banco (a cópia de segurança está em $DADOS/antes-do-deploy) e rode este instalador de novo."
+fi
 
 msg "Trocando o container"
 # (docker inspect em vez de "docker ps | grep -q": com pipefail o grep -q pode quebrar o pipe e dar falso negativo)
@@ -84,6 +128,48 @@ docker run -d \
   -e TZ=America/Sao_Paulo \
   --memory="$MEMORIA" \
   "$CONTAINER"
+
+# Um QR Code só: o sistema precisa alcançar o servidor Evolution (que fica na rede do
+# compose dele). Sem isso, Configurações → WhatsApp não consegue falar com o servidor.
+REDE_EVOLUTION="${REDE_EVOLUTION:-balaoevo_default}"
+if docker network inspect "$REDE_EVOLUTION" >/dev/null 2>&1; then
+  if docker inspect "$CONTAINER" --format '{{json .NetworkSettings.Networks}}' | grep -q "$REDE_EVOLUTION"; then
+    echo "já está na rede $REDE_EVOLUTION"
+  else
+    docker network connect "$REDE_EVOLUTION" "$CONTAINER" 2>/dev/null \
+      && echo "ligado à rede $REDE_EVOLUTION (WhatsApp com um QR Code só)" \
+      || echo "não consegui ligar à rede $REDE_EVOLUTION — configure o endereço do servidor pelo IP em Configurações → WhatsApp"
+  fi
+else
+  echo "rede $REDE_EVOLUTION não existe nesta VPS — o WhatsApp segue com a sessão própria do sistema"
+fi
+
+msg "TURN (coturn) para as chamadas de voz/vídeo de fora da loja"
+# Servidor de passagem do WebRTC: quando o navegador de alguém na rua/em casa não consegue falar direto com o outro,
+# o áudio/vídeo passa por aqui. Credenciais temporárias (use-auth-secret) geradas pela API com o TURN_SECRET.
+IP_PUBLICO="$(curl -fsS -m 5 https://api.ipify.org 2>/dev/null || curl -fsS -m 5 https://ifconfig.me 2>/dev/null || true)"
+if docker inspect meu-bling-turn >/dev/null 2>&1; then
+  docker rm -f meu-bling-turn >/dev/null 2>&1 || true
+fi
+docker run -d \
+  --name meu-bling-turn \
+  --restart unless-stopped \
+  --network host \
+  coturn/coturn:4 \
+  -n --log-file=stdout --no-cli --no-tls --no-dtls --fingerprint \
+  --listening-port="${TURN_PORT_ATUAL}" \
+  --min-port=49160 --max-port=49200 \
+  --use-auth-secret --static-auth-secret="${TURN_SECRET_ATUAL}" \
+  --realm=balao.info \
+  --no-multicast-peers --stale-nonce=600 \
+  ${IP_PUBLICO:+--external-ip="$IP_PUBLICO"} >/dev/null && echo "coturn no ar na porta ${TURN_PORT_ATUAL} (udp/tcp) + 49160-49200/udp${IP_PUBLICO:+, IP ${IP_PUBLICO}}"
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
+  ufw allow "${TURN_PORT_ATUAL}/udp" >/dev/null 2>&1 || true
+  ufw allow "${TURN_PORT_ATUAL}/tcp" >/dev/null 2>&1 || true
+  ufw allow 49160:49200/udp >/dev/null 2>&1 || true
+  echo "ufw liberado para o TURN"
+fi
+echo "Se a Hostinger (hPanel → Firewall) estiver filtrando, libere ${TURN_PORT_ATUAL} udp/tcp e 49160-49200 udp."
 
 msg "Esperando a API responder"
 ok=0
@@ -151,4 +237,5 @@ cat <<EOF
    Dados: ${DADOS}   Segredos: ${ENV_FILE}   Logs: docker logs -f ${CONTAINER}
    Backup: todo dia às 03:00 em /root/backups/meu-bling (log em /var/log/meu-bling-backup.log)
    PDV do site: chave SITE_CHAVE_INTEGRACAO em ${ENV_FILE} (a mesma vai na Vercel como MEU_BLING_CHAVE).
+   Chat da equipe: tempo real em CHAT_REALTIME_URL, TURN (coturn) no container meu-bling-turn, porta ${TURN_PORT_ATUAL}.
 EOF

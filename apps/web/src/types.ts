@@ -786,7 +786,7 @@ export interface DashboardAssistencia {
     semCusto: number;
     realizado: TotaisAssistencia;
     previsto: TotaisAssistencia;
-    comparativo: TotaisAssistencia;
+    comparativo: TotaisAssistencia | null;
   };
   series: { periodo: string; valorEntrada: number; custo: number; lucro: number; qtd: number }[];
   porTecnico: { id: number | null; nome: string; qtd: number; valorEntrada: number; maoDeObra: number; pecas: number; custo: number; lucro: number }[];
@@ -1102,7 +1102,7 @@ export interface TotaisPanorama {
 
 export interface DashboardPanorama {
   periodo: { dataInicial: string; dataFinal: string; agrupar: 'dia' | 'semana' | 'mes'; base: 'entrada' | 'conclusao' };
-  resumo: TotaisPanorama & { comparativo: TotaisPanorama; osSemCusto: number; melhorPeriodo: { periodo: string; valor: number } | null };
+  resumo: TotaisPanorama & { comparativo: TotaisPanorama | null; osSemCusto: number; melhorPeriodo: { periodo: string; valor: number } | null };
   series: { periodo: string; vendas: number; assistencia: number; lucro: number; entradas: number; saidas: number }[];
   porVendedor: { id: number | null; nome: string; valor: number; qtd: number; lucro: number }[];
   porTecnico: { id: number | null; nome: string; valor: number; qtd: number; lucro: number }[];
@@ -1318,7 +1318,10 @@ export interface VendaPublicaResposta {
 }
 
 // ---------------------------------------------------------------- metas, desafios e painel do vendedor
-export type TipoDesafio = 'VALOR' | 'QTD_VENDAS' | 'QTD_ITENS';
+/** vendedores: VALOR | QTD_VENDAS | QTD_ITENS · técnicos: VALOR_SERVICOS | QTD_OS */
+export type TipoDesafio = 'VALOR' | 'QTD_VENDAS' | 'QTD_ITENS' | 'VALOR_SERVICOS' | 'QTD_OS';
+export type PublicoDesafio = 'VENDEDORES' | 'TECNICOS';
+export type TipoMetaTecnico = 'VALOR_SERVICOS' | 'QTD_OS';
 export type StatusDesafioCard = 'EM_ANDAMENTO' | 'AGENDADO' | 'CONQUISTADO' | 'GANHO_POR_OUTRO' | 'ENCERRADO';
 
 export interface PeriodoPainel {
@@ -1350,6 +1353,7 @@ export interface DesafioCard {
   id: number;
   titulo: string;
   descricao?: string | null;
+  publico?: PublicoDesafio;
   tipo: TipoDesafio;
   alvo: number;
   premio: number;
@@ -1398,6 +1402,7 @@ export interface Desafio {
   id: number;
   titulo: string;
   descricao?: string | null;
+  publico: PublicoDesafio;
   tipo: TipoDesafio;
   alvo: number;
   produtoId?: number | null;
@@ -1410,10 +1415,112 @@ export interface Desafio {
   regra: 'TODOS' | 'PRIMEIRO';
   todosVendedores: boolean;
   vendedoresIds: number[];
+  tecnicosIds: number[];
   ativo: boolean;
   situacao: 'EM_ANDAMENTO' | 'AGENDADO' | 'FINALIZADO' | 'ENCERRADO';
-  participantes: { vendedorId: number; nome: string; atingido: number; pct: number; conquistou: boolean; conquistadoEm?: string | null; premioStatus?: Comissao['status'] | null }[];
+  participantes: { participanteId: number; vendedorId: number; nome: string; atingido: number; pct: number; conquistou: boolean; conquistadoEm?: string | null; premioStatus?: Comissao['status'] | null }[];
   totalPremios: number;
+}
+
+export interface MetaTecnicoLinha {
+  tecnicoId: number;
+  nome: string;
+  tipoPadrao: TipoMetaTecnico;
+  metaPadrao: number;
+  tipoMes: TipoMetaTecnico | null;
+  metaMes: number | null;
+  tipo: TipoMetaTecnico;
+  meta: number;
+  valorServicos: number;
+  osConcluidas: number;
+  atingido: number;
+  pct: number;
+}
+
+// ---------------------------------------------------------------- Meu Dashboard (29/10/2026)
+export interface Lembrete {
+  id: number;
+  titulo: string;
+  descricao?: string | null;
+  data: string;
+  link?: string | null;
+  concluidoEm?: string | null;
+  criadoEm: string;
+  paraUsuarioId: number;
+  para?: Ref | null;
+  criadoPor?: Ref | null;
+  situacao: 'ATRASADO' | 'HOJE' | 'FUTURO' | 'CONCLUIDO';
+}
+
+export interface AlertaDashboard {
+  id: string;
+  nivel: 'erro' | 'aviso' | 'info';
+  area: string;
+  titulo: string;
+  mensagem: string;
+  qtd: number;
+  link: string;
+  botao: 'Corrija' | 'Resolver' | 'Ver';
+  itens: { rotulo: string; link: string }[];
+}
+
+export interface MetaTecnicoPainel extends Omit<MetaPainel, 'vendido'> {
+  vendido: number;
+  tipo: TipoMetaTecnico;
+  atingido: number;
+  osConcluidas: number;
+  valorServicos: number;
+}
+
+export interface BlocoVendasDashboard extends PainelVendedor {
+  periodo: { faturamento: number; qtd: number; ticketMedio: number; comissao: number; anterior: { faturamento: number; qtd: number } | null };
+  serie: { periodo: string; valor: number; qtd: number }[];
+  topProdutos: { produtoId: number | null; nome: string; qtd: number; valor: number }[];
+}
+
+export interface BlocoAssistenciaDashboard {
+  tecnico: Ref;
+  agora: { comigo: number; emAndamento: number; aguardandoPeca: number; aguardandoAprovacao: number; prontas: number; atrasadas: number; semTecnico: number };
+  periodo: { entradas: number; concluidas: number; valorServicos: number; maoDeObra: number; pecas: number; ticketMedio: number; tempoMedioDias: number; anterior: { concluidas: number; valorServicos: number } | null };
+  meta: MetaTecnicoPainel;
+  ranking: { competencia: string; posicao: number; total: number; lista: { posicao: number; tecnicoId: number; nome: string; eu: boolean; valor: number | null; qtd: number | null }[] };
+  desafios: DesafioCard[];
+  porSituacao: { id: number; nome: string; cor: string; qtd: number }[];
+  fila: { id: number; numero: number; dataEntrada: string; dataPrevista?: string | null; equipamento?: string | null; marca?: string | null; modelo?: string | null; prioridade: string; total: number; orcar: boolean; orcamentoAprovado: boolean; contato: Ref; situacao: SituacaoRef; atrasada: boolean; diasNaLoja: number }[];
+  serie: { periodo: string; entradas: number; concluidas: number; valor: number }[];
+}
+
+export interface BlocoGerenteDashboard {
+  financeiro: ResumoFinanceiro;
+  periodo: { receita: number; vendas: { valor: number; qtd: number }; assistencia: { valor: number; qtd: number }; entradas: number; saidas: number; anterior: { receita: number; vendas: number; assistencia: number } | null };
+  avisos: { tipo: 'erro' | 'aviso' | 'info'; prioridade: number; mensagem: string; link: string }[];
+  caixinhas: { lista: { id: number; nome: string; valorMeta: number; saldo: number; falta: number; pct: number; diasRestantes: number; sugestaoHoje: number; situacao: string; dataUso: string }[]; sugestaoHojeTotal: number };
+  equipe: {
+    competencia: string;
+    vendedores: { id: number; nome: string; vendido: number; qtd: number; meta: number; pct: number }[];
+    tecnicos: { id: number; nome: string; valorServicos: number; osConcluidas: number; tipo: TipoMetaTecnico; meta: number; atingido: number; pct: number }[];
+  };
+  desafios: { id: number; titulo: string; publico: PublicoDesafio; tipo: TipoDesafio; alvo: number; premio: number; fim: string; regra: 'TODOS' | 'PRIMEIRO'; conquistados: string[] }[];
+  serie: { periodo: string; vendas: number; assistencia: number; entradas: number; saidas: number }[];
+  porVendedor: { id: number | null; nome: string; valor: number; qtd: number }[];
+  acontecimentos: { id: string; quando: string; usuario: string; categoria: string; texto: string; tom: 'verde' | 'vermelho' | 'azul' | 'amarelo' | 'neutro'; link: string | null }[];
+}
+
+export interface MeuDashboard {
+  usuario: { id: number; nome: string; perfil: Perfil };
+  verComo: boolean;
+  periodo: { dataInicial: string; dataFinal: string; agrupar: 'dia' | 'semana' | 'mes'; tudo?: boolean };
+  lembretes: Lembrete[];
+  alertas: AlertaDashboard[];
+  vendas?: BlocoVendasDashboard | null;
+  assistencia?: BlocoAssistenciaDashboard | null;
+  gerente?: BlocoGerenteDashboard;
+}
+
+export interface EquipeUsuario {
+  id: number;
+  nome: string;
+  perfil: Perfil;
 }
 
 /** Item que falta para finalizar uma venda (regra: cliente completo ou consumidor final, produto, custo, pagamento, vendedor). */

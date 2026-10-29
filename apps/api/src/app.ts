@@ -5,6 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import cookie from '@fastify/cookie';
+import websocket from '@fastify/websocket';
 import { arquivosPlugin } from './plugins/arquivos.js';
 import autoload from '@fastify/autoload';
 import path from 'node:path';
@@ -75,6 +76,8 @@ export async function construirApp() {
     },
   });
   await app.register(multipart, { limits: { fileSize: 30 * 1024 * 1024 } });
+  // Chat da equipe em tempo real (WebSocket): registrado antes das rotas, como o plugin pede
+  await app.register(websocket, { options: { maxPayload: 256 * 1024 } });
   await app.register(authPlugin);
 
   // Arquivos do storage (/uploads/*): logos públicos; anexos/DANFE/XML exigem sessão (cookie ou Bearer).

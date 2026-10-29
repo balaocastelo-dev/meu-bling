@@ -37,10 +37,10 @@ export interface Lembretes {
   semDono: number;
 }
 
-export const CHAVE_LEMBRETES = ['lembretes'] as const;
+export const CHAVE_LEMBRETES = ['lembretes-robo'] as const;
 
 export function useLembretes(ativo = true) {
-  return useQuery({ queryKey: CHAVE_LEMBRETES, queryFn: () => api.get<Lembretes>('/lembretes'), refetchInterval: 60_000, refetchOnWindowFocus: true, enabled: ativo });
+  return useQuery({ queryKey: CHAVE_LEMBRETES, queryFn: () => api.get<Lembretes>('/robo-saude/lembretes'), refetchInterval: 60_000, refetchOnWindowFocus: true, enabled: ativo });
 }
 
 const ICONE = { erro: AlertTriangle, aviso: AlertTriangle, info: Info };

@@ -3,10 +3,11 @@ import { CalendarClock, Crown, Lock, Target, Trophy } from 'lucide-react';
 import { data, inteiro, moeda, numero } from '@/lib/format';
 import type { DesafioCard as Desafio, TipoDesafio } from '@/types';
 
-/** Valor de um desafio no formato do tipo (R$, nº de vendas ou unidades) */
+/** Valor de um desafio no formato do tipo (R$, nº de vendas, unidades, R$ de serviços ou nº de OS) */
 export function valorDesafio(tipo: TipoDesafio, v: number) {
-  if (tipo === 'VALOR') return moeda(v);
+  if (tipo === 'VALOR' || tipo === 'VALOR_SERVICOS') return moeda(v);
   if (tipo === 'QTD_VENDAS') return `${inteiro(v)} ${v === 1 ? 'venda' : 'vendas'}`;
+  if (tipo === 'QTD_OS') return `${inteiro(v)} OS`;
   return `${numero(v)} un.`;
 }
 
@@ -14,6 +15,8 @@ export function textoAlvo(d: Pick<Desafio, 'tipo' | 'alvo' | 'produto' | 'catego
   const filtro = d.produto ? ` de ${d.produto.nome}` : d.categoria ? ` em ${d.categoria.nome}` : '';
   if (d.tipo === 'VALOR') return `Vender ${moeda(d.alvo)}${filtro}`;
   if (d.tipo === 'QTD_VENDAS') return `Fazer ${inteiro(d.alvo)} ${d.alvo === 1 ? 'venda' : 'vendas'}${filtro ? ` com${filtro.replace(/^ de/, '')}` : ''}`;
+  if (d.tipo === 'VALOR_SERVICOS') return `Concluir ${moeda(d.alvo)} em OS`;
+  if (d.tipo === 'QTD_OS') return `Concluir ${inteiro(d.alvo)} OS`;
   return `Vender ${numero(d.alvo)} unidade${d.alvo === 1 ? '' : 's'}${filtro}`;
 }
 

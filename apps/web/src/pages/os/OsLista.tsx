@@ -64,7 +64,7 @@ function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; da
       setCustoPendente(null);
       qc.invalidateQueries({ queryKey: ['os-kanban'] });
       qc.invalidateQueries({ queryKey: ['ordens-servico'] });
-      qc.invalidateQueries({ queryKey: ['lembretes'] });
+      qc.invalidateQueries({ queryKey: ['lembretes-robo'] });
     },
     onError: (e, vars) => {
       if (e instanceof ApiError && e.code === 'TRANSICAO_INVALIDA') {

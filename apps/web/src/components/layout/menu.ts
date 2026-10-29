@@ -3,6 +3,7 @@
  */
 import type { LucideIcon } from 'lucide-react';
 import {
+  Bot,
   PiggyBank,
   FileSignature,
   Banknote,
@@ -35,6 +36,7 @@ import {
   HandCoins,
   BookOpen,
   Handshake,
+  MessagesSquare,
 } from 'lucide-react';
 import type { Perfil } from '@/types';
 
@@ -59,8 +61,11 @@ export const MENU: GrupoMenu[] = [
   {
     titulo: 'Início',
     itens: [
-      // dashboards: só o dono (ADMIN)
-      { rotulo: 'Dashboard', para: '/', icone: LayoutDashboard, perfis: ['ADMIN'] },
+      // JARVIS: o agente do gestor (caminho até R$ 1 milhão livres no caixa) — primeiro item do menu
+      { rotulo: 'JARVIS', para: '/jarvis', icone: Bot, perfis: ['ADMIN'] },
+      // Meu Dashboard: todo mundo tem o seu (vendedor, técnico, gerente; o gestor vê o completo com lucro)
+      { rotulo: 'Meu Dashboard', para: '/', icone: LayoutDashboard, alias: ['/meu-dashboard'] },
+      // os outros dashboards (com lucro): só o dono (ADMIN)
       { rotulo: 'Dashboard de vendas', para: '/dashboard/vendas', icone: TrendingUp, perfis: ['ADMIN'] },
       { rotulo: 'Dashboard de assistência', para: '/dashboard/assistencia', icone: Stethoscope, perfis: ['ADMIN'] },
       { rotulo: 'Dashboard de consignação', para: '/dashboard/consignacao', icone: Handshake, perfis: ['ADMIN', 'GERENTE'] },
@@ -69,7 +74,7 @@ export const MENU: GrupoMenu[] = [
   {
     titulo: 'Vendas',
     itens: [
-      { rotulo: 'Meu painel', para: '/meu-painel', icone: Gauge, perfis: [...GESTAO, 'VENDEDOR'] },
+      { rotulo: 'Painel do vendedor', para: '/meu-painel', icone: Gauge, perfis: GESTAO },
       { rotulo: 'Pedidos de venda', para: '/vendas', icone: ShoppingCart },
       { rotulo: 'Orçamentos', para: '/orcamentos', icone: FileSignature },
       { rotulo: 'Clientes', para: '/contatos', icone: Users, alias: ['/contatos'] },
@@ -125,6 +130,8 @@ export const MENU: GrupoMenu[] = [
   {
     titulo: 'Comunicação',
     itens: [
+      // chat da equipe: todo funcionário fala com todo mundo, salas de reunião, voz e vídeo (29/10/2026)
+      { rotulo: 'Chat da equipe', para: '/chat', icone: MessagesSquare },
       { rotulo: 'Notificações', para: '/comunicacao/notificacoes', icone: Bell },
       { rotulo: 'WhatsApp', para: '/comunicacao/whatsapp', icone: MessageCircle, perfis: GESTAO },
       { rotulo: 'Templates', para: '/comunicacao/templates', icone: FileCode2, perfis: GESTAO },
@@ -154,6 +161,8 @@ export const CONFIG_ITENS: { rotulo: string; para: string; descricao: string; pe
   { rotulo: 'Depósitos', para: '/configuracoes/depositos', descricao: 'Locais de estoque e distribuidores' },
   { rotulo: 'Contas financeiras', para: '/configuracoes/contas-financeiras', descricao: 'Caixa, bancos e cartões' },
   { rotulo: 'E-mail (SMTP)', para: '/configuracoes/smtp', descricao: 'Servidor de envio e teste', perfis: ['ADMIN'] },
+  { rotulo: 'JARVIS', para: '/configuracoes/jarvis', descricao: 'Meta de caixa, chave da IA e regras de preço de usado', perfis: ['ADMIN'] },
+  { rotulo: 'WhatsApp', para: '/configuracoes/whatsapp', descricao: 'O QR Code principal da loja — um número para o sistema inteiro', perfis: ['ADMIN'] },
   { rotulo: 'Mercado Pago', para: '/configuracoes/mercado-pago', descricao: 'Link de pagamento nos pedidos', perfis: ['ADMIN'] },
   { rotulo: 'Open Finance', para: '/configuracoes/open-finance', descricao: 'Credenciais Pluggy', perfis: ['ADMIN'] },
   { rotulo: 'API e integrações', para: '/configuracoes/api', descricao: 'Chaves para outros sistemas e agentes de IA, webhooks, MCP', perfis: ['ADMIN'] },

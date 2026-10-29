@@ -4,6 +4,7 @@ import { MotionConfig } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { CommandPalette } from './CommandPalette';
+import { ChatProvider } from '@/components/chat/ChatProvider';
 import { useAuth } from '@/stores/auth';
 
 /** Casca da aplicação autenticada: sidebar + topbar + conteúdo */
@@ -65,6 +66,8 @@ export function AppShell() {
         </main>
       </div>
       <CommandPalette aberto={buscaAberta} onFechar={() => setBuscaAberta(false)} />
+      {/* chat da equipe: tempo real, avisos de mensagem e chamadas em qualquer tela */}
+      <ChatProvider />
     </div>
     </MotionConfig>
   );

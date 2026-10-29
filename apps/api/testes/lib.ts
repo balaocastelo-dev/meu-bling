@@ -102,7 +102,10 @@ export function secao(t: string) {
 
 export function encerrar(nome: string) {
   console.log(`\n${nome}: ${placar.ok} ok, ${placar.falhas} falhas`);
-  process.exit(placar.falhas ? 1 : 0);
+  // process.exit imediato dispara um assert do libuv no Windows (Node 24 + tsx) quando ainda há
+  // handles fechando ("Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)") e derruba suíte
+  // que passou — um respiro para o event loop fechar os handles antes de sair resolve
+  setTimeout(() => process.exit(placar.falhas ? 1 : 0), 300);
 }
 
 /** CPF válido (dígitos verificadores corretos) a partir de um sufixo. */

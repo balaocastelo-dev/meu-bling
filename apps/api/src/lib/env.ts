@@ -9,7 +9,7 @@ function req(name: string, fallback?: string): string {
 }
 
 const storageDir = path.resolve(process.cwd(), process.env.STORAGE_DIR || './storage');
-for (const sub of ['', 'nfe', 'danfe', 'anexos', 'pedidos', 'whatsapp', 'logos', 'temp', 'importacao', 'consignados']) {
+for (const sub of ['', 'nfe', 'danfe', 'anexos', 'pedidos', 'whatsapp', 'logos', 'temp', 'importacao', 'consignados', 'chat']) {
   fs.mkdirSync(path.join(storageDir, sub), { recursive: true });
 }
 

@@ -84,15 +84,15 @@ async function main() {
   let p = await adm.post('/robo-saude/rodar');
   const avisoOs = (p.abertas as any[]).find((a) => a.chave === `os-sem-custo:os:${os.id}`);
   verifica(!!avisoOs && avisoOs.tecnicoId === tecnico.id && avisoOs.link === `/ordens-servico/${os.id}/editar`, 'robô abriu o aviso da OS com o técnico como destinatário', avisoOs);
-  const lT = await T.get('/lembretes');
+  const lT = await T.get('/robo-saude/lembretes');
   verifica(lT.meus.some((l: any) => l.id === avisoOs?.id), 'GET /lembretes do técnico traz o lembrete dele', lT.meus.map((l: any) => l.chave));
   verifica(lT.equipe.length === 0, 'técnico não recebe a lista da equipe', lT.equipe.length);
-  const lT2 = await T2.get('/lembretes');
+  const lT2 = await T2.get('/robo-saude/lembretes');
   verifica(!lT2.meus.some((l: any) => l.id === avisoOs?.id), 'outro técnico não recebe o lembrete', lT2.meus.length);
-  const lG = await G.get('/lembretes');
+  const lG = await G.get('/robo-saude/lembretes');
   const daEquipe = lG.equipe.find((l: any) => l.id === avisoOs?.id);
   verifica(daEquipe && daEquipe.quem === tecnico.nome, 'gerente vê o lembrete na equipe com o nome do técnico', daEquipe);
-  await adm.get('/lembretes', 200);
+  await adm.get('/robo-saude/lembretes', 200);
 
   secao('Técnico preenche o custo da peça com a OS já lançada → lembrete some');
   const corpo = { itens: osF.itens.map((i: any) => ({ tipo: i.tipo, produtoId: i.produtoId, descricao: i.descricao, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, custoUnitario: /Mem/.test(i.descricao) ? 120 : i.custoInformado ? i.custoUnitario : null, comissaoVendedorPct: i.comissaoVendedorPct, comissaoTecnicoPct: i.comissaoTecnicoPct, depositoId: i.depositoId })) };
@@ -108,7 +108,7 @@ async function main() {
   verifica(f && igual(f.custoPecas, 300) && igual(f.imposto, impostoOs) && igual(f.custoTotal, 300 + impostoOs) && igual(f.lucro, 600 - 300 - impostoOs), 'fechamento: peças 300 + imposto, lucro = 600 - custo', f);
   p = await adm.post('/robo-saude/rodar');
   verifica(!(p.abertas as any[]).some((a) => a.chave === `os-sem-custo:os:${os.id}`), 'lembrete da OS sumiu depois de preencher o custo', (p.abertas as any[]).filter((a) => a.chave.startsWith('os-sem-custo')).length);
-  verifica(!(await T.get('/lembretes')).meus.some((l: any) => l.chave === `os-sem-custo:os:${os.id}`), 'painel do técnico sem o lembrete');
+  verifica(!(await T.get('/robo-saude/lembretes')).meus.some((l: any) => l.chave === `os-sem-custo:os:${os.id}`), 'painel do técnico sem o lembrete');
   // mexer em quantidade continua bloqueado
   await T.put(`/ordens-servico/${os.id}`, { itens: corpo.itens.map((i: any) => ({ ...i, quantidade: i.quantidade + 1 })) }, 422);
 
@@ -127,9 +127,9 @@ async function main() {
   p = await adm.post('/robo-saude/rodar');
   const avisoV = (p.abertas as any[]).find((a) => a.chave === `venda-sem-custo:venda:${venda.id}`);
   verifica(!!avisoV && avisoV.vendedorId === vend.id && avisoV.link === `/vendas/${venda.id}/editar`, 'robô abriu o aviso da venda com o vendedor como destinatário', avisoV);
-  const lV = await V.get('/lembretes');
+  const lV = await V.get('/robo-saude/lembretes');
   verifica(lV.meus.some((l: any) => l.id === avisoV?.id), 'GET /lembretes do vendedor traz o lembrete dele', lV.meus.map((l: any) => l.chave));
-  verifica(!(await T.get('/lembretes')).meus.some((l: any) => l.id === avisoV?.id), 'técnico não recebe o lembrete do vendedor');
+  verifica(!(await T.get('/robo-saude/lembretes')).meus.some((l: any) => l.id === avisoV?.id), 'técnico não recebe o lembrete do vendedor');
   const vCorr = await V.put(`/vendas/${venda.id}`, { itens: [{ produtoId: prodSem.id, descricao: prodSem.nome, quantidade: 2, valorUnitario: 50, custoUnitario: 20 }] }, 200);
   verifica(igual(vCorr.custoTotal, 40), 'vendedor preencheu o custo (2 × 20)', vCorr.custoTotal);
   p = await adm.post('/robo-saude/rodar');
@@ -140,9 +140,9 @@ async function main() {
   p = await adm.post('/robo-saude/rodar');
   const avisoSem = (p.abertas as any[]).find((a) => a.chave === `os-sem-custo:os:${osSemTec.id}`);
   verifica(!!avisoSem && avisoSem.tecnicoId === null, 'aviso sem destinatário (OS sem técnico)', avisoSem);
-  const lG2 = await G.get('/lembretes');
+  const lG2 = await G.get('/robo-saude/lembretes');
   verifica(lG2.semDono >= 1, 'gerente vê a contagem de OS sem dono', lG2.semDono);
-  verifica(!(await T.get('/lembretes')).meus.some((l: any) => l.id === avisoSem?.id), 'ninguém recebe o lembrete da OS sem técnico');
+  verifica(!(await T.get('/robo-saude/lembretes')).meus.some((l: any) => l.id === avisoSem?.id), 'ninguém recebe o lembrete da OS sem técnico');
 
   secao('DRE: cartão, logística e terceiro da OS entram nas despesas operacionais');
   const credito = formas.find((f) => f.tipo === 'CARTAO_CREDITO');

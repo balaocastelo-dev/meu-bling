@@ -9,7 +9,7 @@
  *   POST /api/v1/robo-saude/resolver-tudo           aperta o botão principal de todas as sugestões seguras
  *   POST /api/v1/robo-saude/marcar-lidas            zera o "novas correções"
  *   PUT  /api/v1/robo-saude/config                  { ligado, autoCorrigir }
- *   GET  /api/v1/lembretes                          (qualquer perfil) lembretes do robô para quem está logado
+ *   GET  /api/v1/robo-saude/lembretes               (qualquer perfil) lembretes do robô para quem está logado
  *                                                   — OS com peça sem custo (técnico), venda sem custo (vendedor);
  *                                                   ADMIN/GERENTE recebem também os da equipe, com o nome de quem age
  */
@@ -105,7 +105,8 @@ export default async function roboSaudeRoutes(app: FastifyInstance) {
   });
 
   // ---------------------------------------------------------------- lembretes para a equipe (qualquer perfil logado)
-  app.get('/api/v1/lembretes', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE', 'VENDEDOR', 'TECNICO', 'FINANCEIRO') }, async (req) => {
+  // (era /api/v1/lembretes; /lembretes virou os lembretes que as pessoas escrevem no Meu Dashboard — modules/lembretes)
+  app.get('/api/v1/robo-saude/lembretes', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE', 'VENDEDOR', 'TECNICO', 'FINANCEIRO') }, async (req) => {
     const u = req.user as { perfil: string; tecnicoId?: number | null; vendedorId?: number | null };
     return lembretesDe(u);
   });

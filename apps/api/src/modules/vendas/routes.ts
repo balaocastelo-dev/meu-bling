@@ -13,6 +13,7 @@ import { auditar } from '../../lib/auditoria.js';
 import { arredondar, dataSchema, paginar, proximoNumero, respostaPaginada } from '../../lib/util.js';
 import { eventos } from '../../core/eventos.js';
 import { vendedorDoUsuario } from '../comum/vendedores.js';
+import { vendedorRestrito, whereVendasDoUsuario } from '../comum/escopo-vendas.js';
 import { executarAcoes, mudarSituacao, registrarAcao, registrarModulo, situacaoInicial, type Acao, registrarAoCancelar } from '../../core/situacoes.js';
 import { idDe } from '../comum/zod.js';
 import { intervalo, hojeMeioDia } from '../comum/datas.js';
@@ -151,10 +152,12 @@ export default async function vendasRoutes(app: FastifyInstance) {
   // ---------------------------------------------------------------- listagem
   app.get('/api/v1/vendas', async (req) => {
     const q = listaQuery.parse(req.query);
+    // vendedor/técnico: a lista é sempre só das próprias vendas (o filtro de vendedor da query é ignorado)
+    const escopo = await whereVendasDoUsuario(req.user);
     const where: any = {
       tipo: q.tipo === 'TODOS' ? undefined : q.tipo,
       contatoId: q.contatoId,
-      vendedorId: q.vendedorId,
+      vendedorId: escopo.vendedorId ?? q.vendedorId,
       origem: q.origem,
       data: intervalo(q.dataInicial, q.dataFinal),
     };
@@ -205,6 +208,10 @@ export default async function vendasRoutes(app: FastifyInstance) {
       const proprio = await vendedorDoUsuario(req.user.id);
       if (proprio) body.vendedorId = proprio;
     }
+    // vendedor/técnico vende sempre no próprio nome (senão perderia o acesso à venda que acabou de fazer);
+    // para passar a venda a um colega existe "Transferir vendedor"
+    const restrito = await vendedorRestrito(req.user);
+    if (restrito !== null && restrito > 0) body.vendedorId = restrito;
     // criar já numa situação final (Fechada / NF emitida) exige a venda completa
     if (body.tipo !== 'ORCAMENTO' && body.situacaoId) {
       const sit = await prisma.situacao.findUnique({ where: { id: body.situacaoId } });
@@ -298,7 +305,10 @@ export default async function vendasRoutes(app: FastifyInstance) {
     }
 
     // aceita body parcial: campos ausentes são mantidos da venda atual
-    const body = vendaSchema.parse(mesclarComAtual(atual, req.body as Record<string, unknown>));
+    // (vendedor/técnico não trocam o vendedor da venda ao editar — para isso existe "Transferir vendedor")
+    const corpoPut = { ...(req.body as Record<string, unknown>) };
+    if ((await vendedorRestrito(req.user)) !== null) delete corpoPut.vendedorId;
+    const body = vendaSchema.parse(mesclarComAtual(atual, corpoPut));
     await prisma.$transaction(async (tx) => {
       const { itens, totais, parcelas, data } = await prepararVenda(tx, body);
       // parcelas: preserva as já vinculadas a conta (não há, pois contas não lançadas) → recria

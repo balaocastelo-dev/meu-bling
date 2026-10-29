@@ -131,6 +131,36 @@ model Usuario {
   auditorias        Auditoria[]
   historicos        HistoricoSituacao[]
   movimentosEstoque MovimentoEstoque[]
+  lembretes         Lembrete[]             @relation("LembretePara")
+  lembretesCriados  Lembrete[]             @relation("LembreteCriador")
+  // chat da equipe (29/10/2026)
+  conversasCriadas  Conversa[]             @relation("ConversaCriador")
+  conversas         ConversaParticipante[]
+  mensagensChat     Mensagem[]
+  chamadasIniciadas Chamada[]
+  pushAssinaturas   PushAssinatura[]
+}
+
+/// Lembrete do "Meu Dashboard": do próprio usuário ou enviado pela gestão (gestor/gerente) para alguém da equipe.
+model Lembrete {
+  id            Int       @id @default(autoincrement())
+  titulo        String
+  descricao     String?
+  /// quando lembrar (dia; hora opcional)
+  data          DateTime
+  /// para quem é o lembrete
+  para          Usuario   @relation("LembretePara", fields: [paraUsuarioId], references: [id], onDelete: Cascade)
+  paraUsuarioId Int
+  /// quem criou (null = o próprio usuário já apagado)
+  criadoPor     Usuario?  @relation("LembreteCriador", fields: [criadoPorId], references: [id])
+  criadoPorId   Int?
+  /// tela do sistema ligada ao lembrete (ex.: /vendas/12)
+  link          String?
+  concluidoEm   DateTime?
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
+
+  @@index([paraUsuarioId, concluidoEm, data])
 }
 
 model Vendedor {
@@ -172,12 +202,15 @@ model MetaVendedor {
   @@unique([vendedorId, competencia])
 }
 
-/// Desafio de vendas lançado pela gestão; aparece como card no painel do vendedor e paga prêmio como comissão extra
+/// Desafio lançado pela gestão; aparece como card no Meu Dashboard do vendedor/técnico e paga prêmio como comissão extra
 model Desafio {
   id              Int               @id @default(autoincrement())
   titulo          String
   descricao       String?
-  /// VALOR (R$ vendido) | QTD_VENDAS (nº de vendas) | QTD_ITENS (unidades vendidas)
+  /// para quem: VENDEDORES (conta vendas) | TECNICOS (conta ordens de serviço concluídas)
+  publico         String            @default("VENDEDORES")
+  /// vendedores: VALOR (R$ vendido) | QTD_VENDAS (nº de vendas) | QTD_ITENS (unidades vendidas)
+  /// técnicos:   VALOR_SERVICOS (R$ de OS concluídas) | QTD_OS (nº de OS concluídas)
   tipo            String            @default("VALOR")
   alvo            Float
   /// filtro opcional: só conta itens deste produto / desta categoria
@@ -194,6 +227,8 @@ model Desafio {
   todosVendedores Boolean           @default(true)
   /// ids dos vendedores participantes quando todosVendedores = false (JSON array)
   vendedoresIds   String            @default("[]")
+  /// público TECNICOS: ids dos técnicos participantes quando todosVendedores = false (JSON array)
+  tecnicosIds     String            @default("[]")
   /// false = encerrado/cancelado pela gestão antes do fim
   ativo           Boolean           @default(true)
   criadoPorId     Int?
@@ -206,13 +241,15 @@ model Desafio {
   @@index([inicio, fim])
 }
 
-/// Vendedor que bateu o alvo de um desafio (gera a comissão extra)
+/// Vendedor (ou técnico) que bateu o alvo de um desafio (gera a comissão extra)
 model DesafioConquista {
   id            Int       @id @default(autoincrement())
   desafio       Desafio   @relation(fields: [desafioId], references: [id], onDelete: Cascade)
   desafioId     Int
-  vendedor      Vendedor  @relation(fields: [vendedorId], references: [id])
-  vendedorId    Int
+  vendedor      Vendedor? @relation(fields: [vendedorId], references: [id])
+  vendedorId    Int?
+  tecnico       Tecnico?  @relation(fields: [tecnicoId], references: [id])
+  tecnicoId     Int?
   conquistadoEm DateTime  @default(now())
   /// valor/quantidade atingido no momento da conquista
   atingido      Float     @default(0)
@@ -220,6 +257,7 @@ model DesafioConquista {
   comissaoId    Int?      @unique
 
   @@unique([desafioId, vendedorId])
+  @@unique([desafioId, tecnicoId])
 }
 
 model Tecnico {
@@ -229,13 +267,35 @@ model Tecnico {
   telefone          String?
   especialidade     String?
   comissaoPadraoPct Float    @default(0)
+  /// meta padrão por mês (vale para todo mês sem meta específica em MetaTecnico)
+  metaMensal        Float    @default(0)
+  /// tipo da meta padrão: VALOR_SERVICOS (R$ de OS concluídas) | QTD_OS (nº de OS concluídas)
+  metaTipo          String   @default("VALOR_SERVICOS")
   ativo             Boolean  @default(true)
   criadoEm          DateTime @default(now())
   atualizadoEm      DateTime @updatedAt
 
-  usuario   Usuario?
-  ordens    OrdemServico[]
-  comissoes Comissao[]
+  usuario    Usuario?
+  ordens     OrdemServico[]
+  comissoes  Comissao[]
+  metas      MetaTecnico[]
+  conquistas DesafioConquista[]
+}
+
+/// Meta de um técnico num mês específico (sobrepõe Tecnico.metaMensal/metaTipo)
+model MetaTecnico {
+  id           Int      @id @default(autoincrement())
+  tecnico      Tecnico  @relation(fields: [tecnicoId], references: [id], onDelete: Cascade)
+  tecnicoId    Int
+  /// AAAA-MM
+  competencia  String
+  /// VALOR_SERVICOS | QTD_OS
+  tipo         String   @default("VALOR_SERVICOS")
+  valor        Float    @default(0)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([tecnicoId, competencia])
 }
 
 /// Depósitos (inclui estoque de distribuidores, como no Bling)
@@ -520,6 +580,8 @@ model ContaFinanceira {
   carnes          Carne[]
   caixinhas       Caixinha[]
   transacoes      TransacaoBancaria[]
+
+  emailBancoRegras EmailBancoRegra[]
 }
 
 // ---------------------------------------------------------------------
@@ -1170,7 +1232,7 @@ model TransacaoBancaria {
   categoria         CategoriaFinanceira? @relation(fields: [categoriaId], references: [id])
   categoriaId       Int?
   conciliado        Boolean              @default(false)
-  /// OPEN_FINANCE | OFX | MANUAL
+  /// OPEN_FINANCE | OFX | MANUAL | EMAIL
   fonte             String               @default("OPEN_FINANCE")
   dadosBrutos       String? // JSON original
   importadoEm       DateTime             @default(now())
@@ -1496,31 +1558,31 @@ model VendaRoboNf {
 /// ROBÔ DA SAÚDE: o que o robô (que confere a "Saúde do sistema" 24h) corrigiu sozinho e o que ele
 /// sugere para o ADMIN resolver com um clique. Aparece no dashboard do ADMIN e em Configurações → Saúde.
 model RoboSaudeAviso {
-  id          Int       @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   /// identifica o problema/alvo (ex.: "venda-final-sem-lancamento:venda:123"); sugestão aberta não se repete
-  chave       String
+  chave        String
   /// CORRECAO (o robô já resolveu) | SUGESTAO (precisa de um clique) | ALERTA (só avisar, com link)
-  tipo        String
+  tipo         String
   /// erro | aviso | info
-  nivel       String
-  area        String
-  titulo      String
-  mensagem    String
-  link        String?
+  nivel        String
+  area         String
+  titulo       String
+  mensagem     String
+  link         String?
   /// JSON: botões da sugestão [{ codigo, rotulo, estilo, confirmar }]
-  acoes       String?
+  acoes        String?
   /// JSON: dados que a ação precisa (ids, valores)
-  dados       String?
+  dados        String?
   /// ABERTA | RESOLVIDA (o problema sumiu / o botão foi apertado) | IGNORADA | FEITA (correção do robô)
-  status      String    @default("ABERTA")
-  lida        Boolean   @default(false)
+  status       String    @default("ABERTA")
+  lida         Boolean   @default(false)
   resolvidoPor String?
-  resolvidoEm DateTime?
+  resolvidoEm  DateTime?
   /// para quem é o lembrete (aparece no painel desse técnico/vendedor, além do painel do ADMIN)
-  tecnicoId   Int?
-  vendedorId  Int?
-  criadoEm    DateTime  @default(now())
-  atualizadoEm DateTime @updatedAt
+  tecnicoId    Int?
+  vendedorId   Int?
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
 
   @@index([status, tipo])
   @@index([chave])
@@ -1702,4 +1764,316 @@ model ConsignacaoEvento {
   usuarioId     Int?
 
   @@index([consignacaoId])
+}
+
+// ---------------------------------------------------------------------
+// CHAT DA EQUIPE (29/10/2026) — conversas entre os usuários do sistema:
+// direta (duas pessoas) ou sala de reunião privada (pessoas escolhidas),
+// com texto, áudio gravado, arquivos e chamadas de voz/vídeo pelo navegador.
+// O ADMIN pode abrir e ler qualquer conversa (decisão do Thiago).
+// ---------------------------------------------------------------------
+
+model Conversa {
+  id               Int       @id @default(autoincrement())
+  /// DIRETA (duas pessoas) | SALA (reunião privada com pessoas escolhidas)
+  tipo             String    @default("DIRETA")
+  /// nome da sala (conversa direta não tem nome: mostra o nome da outra pessoa)
+  nome             String?
+  /// conversa direta é única por par de usuários: "menorId:maiorId"
+  chaveDireta      String?   @unique
+  criadoPor        Usuario?  @relation("ConversaCriador", fields: [criadoPorId], references: [id])
+  criadoPorId      Int?
+  /// quando chegou a última mensagem (ordena a caixa de entrada)
+  ultimaMensagemEm DateTime?
+  criadoEm         DateTime  @default(now())
+  atualizadoEm     DateTime  @updatedAt
+
+  participantes ConversaParticipante[]
+  mensagens     Mensagem[]
+  chamadas      Chamada[]
+
+  @@index([ultimaMensagemEm])
+}
+
+model ConversaParticipante {
+  id            Int       @id @default(autoincrement())
+  conversa      Conversa  @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId    Int
+  usuario       Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId     Int
+  /// id da última mensagem que a pessoa leu (0 = nenhuma)
+  lidaAteId     Int       @default(0)
+  /// silenciar avisos desta conversa até a data (null = avisa)
+  silenciadaAte DateTime?
+  entrouEm      DateTime  @default(now())
+  /// saiu da sala (não recebe mais nada, mas o histórico fica)
+  saiuEm        DateTime?
+
+  @@unique([conversaId, usuarioId])
+  @@index([usuarioId, saiuEm])
+}
+
+model Mensagem {
+  id             Int       @id @default(autoincrement())
+  conversa       Conversa  @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId     Int
+  /// null = mensagem do sistema ("Fulano entrou na sala")
+  autor          Usuario?  @relation(fields: [autorId], references: [id])
+  autorId        Int?
+  /// TEXTO | AUDIO | ARQUIVO | SISTEMA | CHAMADA
+  tipo           String    @default("TEXTO")
+  texto          String?
+  /// anexo (áudio gravado ou arquivo): caminho no storage (chat/aaaa-mm/arquivo), nome original, tamanho, tipo e duração
+  arquivo        String?
+  arquivoNome    String?
+  arquivoTamanho Int?
+  arquivoMime    String?
+  duracaoSeg     Int?
+  /// resposta a outra mensagem da mesma conversa
+  respondeAId    Int?
+  /// mensagem de chamada: id da chamada (para mostrar duração/perdida)
+  chamadaId      Int?
+  editadaEm      DateTime?
+  apagadaEm      DateTime?
+  criadoEm       DateTime  @default(now())
+
+  @@index([conversaId, id])
+  @@index([autorId])
+}
+
+model Chamada {
+  id            Int       @id @default(autoincrement())
+  conversa      Conversa  @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId    Int
+  /// VOZ | VIDEO
+  tipo          String    @default("VOZ")
+  iniciadoPor   Usuario   @relation(fields: [iniciadoPorId], references: [id])
+  iniciadoPorId Int
+  /// ATIVA | ENCERRADA | PERDIDA | RECUSADA
+  situacao      String    @default("ATIVA")
+  /// ids (JSON) de quem está/esteve na chamada
+  participantes String    @default("[]")
+  iniciadaEm    DateTime  @default(now())
+  atendidaEm    DateTime?
+  encerradaEm   DateTime?
+
+  @@index([conversaId, situacao])
+}
+
+/// Navegador/celular inscrito para receber aviso (Web Push) com o sistema fechado
+model PushAssinatura {
+  id          Int       @id @default(autoincrement())
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId   Int
+  endpoint    String    @unique
+  p256dh      String
+  auth        String
+  userAgent   String?
+  criadoEm    DateTime  @default(now())
+  ultimoUsoEm DateTime?
+
+  @@index([usuarioId])
+}
+
+// ---------------------------------------------------------------------
+// JARVIS — agente do gestor para R$ 1 milhão livres no caixa (docs/JARVIS.md)
+// ---------------------------------------------------------------------
+
+/// Foto do caixa livre a cada rodada do worker (gráfico de evolução do painel /jarvis)
+model JarvisMetrica {
+  id          Int      @id @default(autoincrement())
+  em          DateTime @default(now())
+  /// bancos + caixa − a pagar 30 dias − caixinhas comprometidas − empréstimos
+  caixaLivre  Float
+  /// saldo das contas tipo BANCO/CARTAO/INVESTIMENTO/OUTRO
+  saldoBancos Float
+  /// saldo das contas tipo CAIXA (dinheiro na gaveta)
+  saldoCaixa  Float
+  /// contas a pagar vencidas + a vencer nos próximos 30 dias (o que falta pagar)
+  aPagar30d   Float
+  /// o que ainda falta guardar nas caixinhas ativas
+  caixinhas   Float
+  /// saldo devedor dos empréstimos abertos (principal + juros)
+  emprestimos Float
+  /// JSON com a conta de cada parcela (para a tela explicar o número)
+  detalhes    String?
+
+  @@index([em])
+}
+
+/// Cada sugestão que o JARVIS dá nos painéis. Enquanto ABERTA/ADIADA não se repete (chave).
+model JarvisSugestao {
+  id              Int       @id @default(autoincrement())
+  criadaEm        DateTime  @default(now())
+  /// regra que gerou: ESTOQUE_PARADO | CREDIARIO_VENCIDO | CONSIGNADO_PRAZO | LUMICRED_CUSTO |
+  /// CAIXINHA_ATRASADA | TAXA_CARTAO | MARGEM_BAIXA | OPORTUNIDADE_COMPRA | MAPA_MILHAO
+  regra           String
+  /// identifica o alvo (ex.: "ESTOQUE_PARADO:produto:123")
+  chave           String
+  /// para quem aparece (lista separada por vírgula: "ADMIN" | "ADMIN,GERENTE" | "VENDEDOR"...)
+  perfis          String    @default("ADMIN")
+  titulo          String
+  /// a instrução em português (escrita pela IA quando há chave configurada)
+  texto           String
+  /// R$ que a sugestão libera/ganha se for aceita
+  impactoEstimado Float?
+  /// 1 = urgente ... 5 = baixa
+  prioridade      Int       @default(3)
+  /// JSON: ids e números que a ação precisa
+  dados           String?
+  /// ação de 1 clique: DESCONTO_LOTE | COBRAR_WHATSAPP | CRIAR_CAIXINHA | ABRIR_TELA | NENHUMA
+  acao            String    @default("NENHUMA")
+  /// link da tela quando a ação é ABRIR_TELA
+  link            String?
+  /// ABERTA | ACEITA | ADIADA | RECUSADA | CONCLUIDA | EXPIRADA
+  situacao        String    @default("ABERTA")
+  adiadaAte       DateTime?
+  decididaEm      DateTime?
+  decididaPor     String?
+  motivo          String?
+  /// quanto a sugestão rendeu de verdade (placar do JARVIS)
+  resultadoReal   Float?
+  medidaEm        DateTime?
+  atualizadoEm    DateTime  @updatedAt
+
+  @@index([situacao, prioridade])
+  @@index([chave])
+  @@index([criadaEm])
+}
+
+/// Modo pergunta do painel: o gestor pergunta, a IA responde com os números do dia
+/// Uma conversa do gestor com o JARVIS (o fio da prosa, que dá para retomar depois)
+model JarvisConversa {
+  id           Int      @id @default(autoincrement())
+  em           DateTime @default(now())
+  atualizadaEm DateTime @default(now()) @updatedAt
+  usuarioId    Int?
+  /// resumo curto para a lista de conversas (vem da primeira pergunta)
+  titulo       String   @default("Conversa")
+  arquivada    Boolean  @default(false)
+
+  mensagens JarvisMensagem[]
+
+  @@index([usuarioId, atualizadaEm])
+}
+
+/// Cada fala da conversa. 'usuario' é o gestor; 'jarvis' é a resposta da IA.
+model JarvisMensagem {
+  id         Int            @id @default(autoincrement())
+  conversa   JarvisConversa @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId Int
+  em         DateTime       @default(now())
+  /// usuario | jarvis
+  papel      String
+  texto      String
+  /// JSON: números que a IA recebeu, ferramentas usadas e custo em tokens
+  contexto   String?
+
+  @@index([conversaId, em])
+}
+
+/// Configuração do JARVIS (uma linha só, id = 1). Segredos criptografados com APP_SECRET.
+model JarvisConfig {
+  id                 Int       @id @default(1)
+  ligado             Boolean   @default(true)
+  metaCaixa          Float     @default(1000000)
+  dataAlvo           DateTime?
+  modeloIa           String    @default("claude-fable-5-1")
+  /// chave da API da Anthropic (enc:...)
+  chaveAnthropic     String?
+  /// % do valor de novo que o cliente paga num usado de boas condições
+  percVendaUsado     Int       @default(70)
+  /// % do valor de novo que a loja paga na compra, por condição
+  percCompraRegular  Int       @default(30)
+  percCompraBom      Int       @default(50)
+  percCompraLacrado  Int       @default(75)
+  /// dias sem venda para o produto entrar em ESTOQUE_PARADO
+  diasEstoqueParado  Int       @default(45)
+  /// % da loja no consignado (o consignante fica com o resto)
+  percLojaConsignado Int       @default(20)
+  ultimaRodadaEm     DateTime?
+  ultimoErro         String?
+  atualizadoEm       DateTime  @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// ROBÔ DE E-MAIL DOS BANCOS
+// Lê as caixas de e-mail da loja, transforma aviso de banco em TransacaoBancaria
+// (fonte EMAIL) e deixa a conciliação existente fazer a baixa.
+// ---------------------------------------------------------------------------
+
+/// Configuração do robô de e-mail (uma linha só, id = 1).
+model EmailBancoConfig {
+  id              Int       @id @default(1)
+  ligado          Boolean   @default(true)
+  /// quantos dias olhar para trás na primeira leitura de cada caixa
+  diasIniciais    Int       @default(30)
+  /// dar baixa sozinho quando casar 1:1 com uma conta em aberto
+  baixaAutomatica Boolean   @default(true)
+  /// tolerância em minutos entre a hora do e-mail e a do lançamento
+  janelaMinutos   Int       @default(2880)
+  ultimaRodadaEm  DateTime?
+  ultimoErro      String?
+  atualizadoEm    DateTime  @updatedAt
+}
+
+/// Uma caixa de e-mail que o robô lê (IMAP do domínio próprio ou Gmail).
+model EmailBancoCaixa {
+  id              Int       @id @default(autoincrement())
+  nome            String
+  endereco        String    @unique
+  /// IMAP | GMAIL
+  tipo            String    @default("IMAP")
+  host            String?
+  porta           Int       @default(993)
+  usuario         String?
+  /// senha de IMAP ou refresh token do Gmail (enc:...)
+  segredo         String?
+  pasta           String    @default("INBOX")
+  ativo           Boolean   @default(true)
+  ultimaLeituraEm DateTime?
+  ultimoErro      String?
+  criadoEm        DateTime  @default(now())
+
+  mensagens EmailBancoMensagem[]
+}
+
+/// De qual remetente o robô aceita aviso, com qual parser e para qual conta.
+/// Remetente fora desta lista nunca vira lançamento.
+model EmailBancoRegra {
+  id                Int              @id @default(autoincrement())
+  nome              String
+  /// endereço exato (no-reply@sumup.com) ou domínio (@cora.com.br)
+  remetente         String
+  /// SUMUP_PIX | SUMUP_PAYOUT | CORA | ASAAS | MERCADOPAGO | BOLETO_FORNECEDOR
+  parser            String
+  contaFinanceira   ContaFinanceira? @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId Int?
+  ativo             Boolean          @default(true)
+  ordem             Int              @default(0)
+  criadoEm          DateTime         @default(now())
+
+  @@index([remetente])
+}
+
+/// Todo e-mail que o robô olhou, para não processar duas vezes e para auditoria.
+/// O Message-ID é único no mundo, então o mesmo aviso caindo em duas caixas entra uma vez só.
+model EmailBancoMensagem {
+  id           Int             @id @default(autoincrement())
+  caixa        EmailBancoCaixa @relation(fields: [caixaId], references: [id])
+  caixaId      Int
+  messageId    String          @unique
+  remetente    String
+  assunto      String
+  recebidoEm   DateTime
+  /// IMPORTADO | SEM_REGRA | SEM_DADOS | REMETENTE_SUSPEITO | ERRO
+  situacao     String          @default("SEM_REGRA")
+  motivo       String?
+  /// id da TransacaoBancaria gerada, quando virou lançamento
+  transacaoId  Int?
+  valor        Float?
+  processadoEm DateTime        @default(now())
+
+  @@index([situacao, recebidoEm])
+  @@index([recebidoEm])
 }

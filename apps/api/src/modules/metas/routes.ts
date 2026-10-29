@@ -5,8 +5,11 @@
  *        (VENDEDOR vê só o próprio; ADMIN/GERENTE escolhem o vendedor)
  *   GET  /api/v1/metas?competencia=             metas de todos os vendedores no mês (gestão)
  *   PUT  /api/v1/metas                          grava meta do mês e/ou meta padrão (gestão)
+ *   GET  /api/v1/metas-tecnicos?competencia=    metas dos técnicos no mês — em R$ de serviços ou nº de OS (gestão)
+ *   PUT  /api/v1/metas-tecnicos                 grava meta do mês e/ou meta padrão dos técnicos (gestão)
  *   GET  /api/v1/desafios                       lista com o progresso de cada participante (gestão)
  *   POST /api/v1/desafios · PUT /:id · POST /:id/encerrar · POST /:id/reabrir · DELETE /:id (gestão)
+ *        `publico` VENDEDORES (vendas) ou TECNICOS (OS concluídas)
  */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -19,16 +22,21 @@ import { eventos } from '../../core/eventos.js';
 import { registrarServico } from '../../core/servicos.js';
 import { vendedorDoUsuario } from '../comum/vendedores.js';
 import {
+  PUBLICOS_DESAFIO,
   TIPOS_DESAFIO,
+  TIPOS_DESAFIO_TECNICO,
+  TIPOS_DESAFIO_VENDEDOR,
+  TIPOS_META_TECNICO,
   avaliarDesafio,
   avaliarDesafiosAbertos,
+  includeDesafio,
+  painelDoVendedor,
+  participanteDaConquista,
   participantes,
-  periodosPainel,
   progressoDesafio,
-  progressoMeta,
-  resumoVendas,
+  publicoDe,
+  situacoesOsConcluidas,
   situacoesQueContam,
-  statusDesafio,
 } from './service.js';
 
 const competenciaSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'competência no formato AAAA-MM');
@@ -37,6 +45,7 @@ const desafioBody = z
   .object({
     titulo: z.string().trim().min(3, 'Informe o título do desafio.'),
     descricao: z.string().trim().nullable().optional(),
+    publico: z.enum(PUBLICOS_DESAFIO).default('VENDEDORES'),
     tipo: z.enum(TIPOS_DESAFIO),
     alvo: z.coerce.number().positive('O alvo precisa ser maior que zero.'),
     produtoId: z.coerce.number().int().positive().nullable().optional(),
@@ -45,8 +54,10 @@ const desafioBody = z
     fim: z.string().min(8, 'Informe a data de fim.'),
     premio: z.coerce.number().positive('Informe o valor do prêmio (R$).'),
     regra: z.enum(['TODOS', 'PRIMEIRO']).default('TODOS'),
+    /** todos os participantes do público (vendedores ou técnicos) */
     todosVendedores: z.boolean().default(true),
     vendedoresIds: z.array(z.coerce.number().int().positive()).default([]),
+    tecnicosIds: z.array(z.coerce.number().int().positive()).default([]),
   })
   .transform((b) => {
     const inicio = toDate(b.inicio);
@@ -59,32 +70,36 @@ type DesafioEntrada = z.infer<typeof desafioBody>;
 
 function validarDesafio(b: DesafioEntrada) {
   if (b.fim < b.inicio) throw new AppError('A data de fim é anterior à de início.', 422, 'PERIODO_INVALIDO');
-  if (!b.todosVendedores && !b.vendedoresIds.length) throw new AppError('Escolha ao menos um vendedor ou marque "todos os vendedores".', 422, 'SEM_PARTICIPANTES');
-  if (b.tipo === 'QTD_VENDAS' && !Number.isInteger(b.alvo)) throw new AppError('O alvo de quantidade de vendas precisa ser um número inteiro.', 422, 'ALVO_INVALIDO');
+  if (b.publico === 'TECNICOS') {
+    if (!(TIPOS_DESAFIO_TECNICO as readonly string[]).includes(b.tipo)) throw new AppError('Desafio de técnicos conta OS concluídas: escolha "R$ de serviços" ou "nº de OS".', 422, 'TIPO_INVALIDO');
+    if (!b.todosVendedores && !b.tecnicosIds.length) throw new AppError('Escolha ao menos um técnico ou marque "todos os técnicos".', 422, 'SEM_PARTICIPANTES');
+    if (b.tipo === 'QTD_OS' && !Number.isInteger(b.alvo)) throw new AppError('O alvo de quantidade de OS precisa ser um número inteiro.', 422, 'ALVO_INVALIDO');
+  } else {
+    if (!(TIPOS_DESAFIO_VENDEDOR as readonly string[]).includes(b.tipo)) throw new AppError('Desafio de vendedores conta vendas: escolha R$ vendido, nº de vendas ou unidades.', 422, 'TIPO_INVALIDO');
+    if (!b.todosVendedores && !b.vendedoresIds.length) throw new AppError('Escolha ao menos um vendedor ou marque "todos os vendedores".', 422, 'SEM_PARTICIPANTES');
+    if (b.tipo === 'QTD_VENDAS' && !Number.isInteger(b.alvo)) throw new AppError('O alvo de quantidade de vendas precisa ser um número inteiro.', 422, 'ALVO_INVALIDO');
+  }
 }
 
 function dadosDesafio(b: DesafioEntrada) {
+  const tecnicos = b.publico === 'TECNICOS';
   return {
     titulo: b.titulo,
     descricao: b.descricao || null,
+    publico: b.publico,
     tipo: b.tipo,
     alvo: b.alvo,
-    produtoId: b.produtoId ?? null,
-    categoriaId: b.produtoId ? null : (b.categoriaId ?? null),
+    produtoId: tecnicos ? null : (b.produtoId ?? null),
+    categoriaId: tecnicos || b.produtoId ? null : (b.categoriaId ?? null),
     inicio: b.inicio,
     fim: b.fim,
     premio: arredondar(b.premio),
     regra: b.regra,
     todosVendedores: b.todosVendedores,
-    vendedoresIds: JSON.stringify(b.todosVendedores ? [] : b.vendedoresIds),
+    vendedoresIds: JSON.stringify(b.todosVendedores || tecnicos ? [] : b.vendedoresIds),
+    tecnicosIds: JSON.stringify(b.todosVendedores || !tecnicos ? [] : b.tecnicosIds),
   };
 }
-
-const includeDesafio = {
-  produto: { select: { id: true, nome: true, codigo: true } },
-  categoria: { select: { id: true, nome: true } },
-  conquistas: { include: { vendedor: { select: { id: true, nome: true } }, comissao: { select: { id: true, status: true, valor: true } } }, orderBy: { conquistadoEm: 'asc' as const } },
-} as const;
 
 export default async function metasRoutes(app: FastifyInstance) {
   const gestao = { preHandler: app.exigirPerfil('ADMIN', 'GERENTE') };
@@ -92,10 +107,11 @@ export default async function metasRoutes(app: FastifyInstance) {
   // =====================================================================
   // PAINEL DO VENDEDOR
   // =====================================================================
-  app.get('/api/v1/painel-vendedor', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE', 'VENDEDOR') }, async (req) => {
+  app.get('/api/v1/painel-vendedor', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE', 'VENDEDOR', 'TECNICO') }, async (req) => {
     const q = z.object({ vendedorId: z.coerce.number().int().positive().optional() }).parse(req.query);
     let vendedorId = q.vendedorId;
-    if (req.user.perfil === 'VENDEDOR') {
+    const proprio = req.user.perfil === 'VENDEDOR' || req.user.perfil === 'TECNICO';
+    if (proprio) {
       // relê do banco: o vínculo usuário→vendedor pode ter mudado depois do login
       vendedorId = (await vendedorDoUsuario(req.user.id)) ?? undefined;
       if (!vendedorId) throw new AppError('Seu usuário ainda não está vinculado a um cadastro de vendedor. Peça ao administrador para vincular em Configurações → Usuários.', 422, 'SEM_VENDEDOR');
@@ -105,102 +121,13 @@ export default async function metasRoutes(app: FastifyInstance) {
       if (!primeiro) throw new AppError('Nenhum vendedor cadastrado. Cadastre em Configurações → Vendedores.', 422, 'SEM_VENDEDOR');
       vendedorId = primeiro.id;
     }
-    const vendedor = await prisma.vendedor.findUnique({ where: { id: vendedorId }, select: { id: true, nome: true, ativo: true, metaMensal: true } });
-    if (!vendedor) throw new NotFound('Vendedor');
-
-    const agora = new Date();
-    const periodos = await Promise.all(periodosPainel(agora).map(async (p) => ({ chave: p.chave, rotulo: p.rotulo, inicio: p.ini, fim: p.fim, ...(await resumoVendas(vendedor.id, p.ini, p.fim)) })));
-    const mes = periodos.find((p) => p.chave === 'mes')!;
-    const competencia = competenciaDe(agora);
-
-    // ---- meta
-    const meta = await progressoMeta(vendedor.id, mes.faturamento, agora);
-
-    // ---- bônus de desafios no mês
-    const bonus = await prisma.comissao.aggregate({ where: { vendedorId: vendedor.id, origemTipo: 'DESAFIO', competencia, status: { not: 'CANCELADA' } }, _sum: { valor: true } });
-
-    // ---- ranking do mês (todos os vendedores ativos)
-    const sitOk = await situacoesQueContam();
-    const ativos = await prisma.vendedor.findMany({ where: { ativo: true }, select: { id: true, nome: true } });
-    const grupos = await prisma.venda.groupBy({ by: ['vendedorId'], where: { tipo: 'PEDIDO', situacaoId: { in: sitOk }, data: { gte: mes.inicio!, lte: mes.fim! }, vendedorId: { not: null } }, _sum: { total: true } });
-    const totalDe = (id: number) => arredondar(grupos.find((g) => g.vendedorId === id)?._sum.total || 0);
-    const ordenados = [...ativos, ...(vendedor.ativo ? [] : [{ id: vendedor.id, nome: vendedor.nome }])]
-      .map((v) => ({ vendedorId: v.id, nome: v.nome, faturamento: totalDe(v.id) }))
-      .sort((a, b) => b.faturamento - a.faturamento || a.nome.localeCompare(b.nome));
-    const gestor = req.user.perfil !== 'VENDEDOR';
-    const posicao = ordenados.findIndex((v) => v.vendedorId === vendedor.id) + 1;
-    const acima = posicao > 1 ? ordenados[posicao - 2] : null;
-    const ranking = {
-      competencia,
-      posicao,
-      total: ordenados.length,
-      // vendedor vê nomes e posição de todos, mas o valor só o dele (e quanto falta para passar o da frente)
-      lista: ordenados.map((v, i) => ({ posicao: i + 1, vendedorId: v.vendedorId, nome: v.nome, eu: v.vendedorId === vendedor.id, faturamento: gestor || v.vendedorId === vendedor.id ? v.faturamento : null })),
-      paraPassar: acima ? { nome: acima.nome, falta: arredondar(acima.faturamento - mes.faturamento + 0.01) } : null,
-    };
-
-    // ---- desafios (vigentes, futuros e os que terminaram nos últimos 7 dias)
-    const desafiosDb = await prisma.desafio.findMany({
-      where: { OR: [{ fim: { gte: new Date(agora.getTime() - 7 * 86400000) } }, { conquistas: { some: { vendedorId: vendedor.id, conquistadoEm: { gte: mes.inicio! } } } }] },
-      include: includeDesafio,
-      orderBy: [{ fim: 'asc' }],
-    });
-    const idsAtivos = ativos.map((a) => a.id);
-    const desafios = [];
-    for (const d of desafiosDb) {
-      const part = participantes(d, idsAtivos);
-      const minhaConquista = d.conquistas.find((c) => c.vendedorId === vendedor.id);
-      if (!part.includes(vendedor.id) && !minhaConquista) continue;
-      // conquistas já gravadas não dependem do recálculo; o progresso é ao vivo
-      const prog = (await progressoDesafio(d, [vendedor.id])).get(vendedor.id) || 0;
-      const outro = d.regra === 'PRIMEIRO' ? d.conquistas.find((c) => c.vendedorId !== vendedor.id) : undefined;
-      const status = statusDesafio(d, prog, !!minhaConquista, !!outro, agora);
-      if (status === 'ENCERRADO' && !d.ativo && agora < d.fim && !minhaConquista) continue; // cancelado pela gestão
-      desafios.push({
-        id: d.id,
-        titulo: d.titulo,
-        descricao: d.descricao,
-        tipo: d.tipo,
-        alvo: d.alvo,
-        premio: d.premio,
-        regra: d.regra,
-        inicio: d.inicio,
-        fim: d.fim,
-        produto: d.produto,
-        categoria: d.categoria,
-        atingido: prog,
-        pct: Math.min(100, arredondar((prog / d.alvo) * 100, 1)),
-        falta: Math.max(0, arredondar(d.alvo - prog, 2)),
-        status,
-        conquistadoEm: minhaConquista?.conquistadoEm ?? null,
-        premioStatus: minhaConquista?.comissao?.status ?? null,
-        ganhador: outro ? outro.vendedor.nome : null,
-        diasRestantes: Math.max(0, Math.ceil((d.fim.getTime() - agora.getTime()) / 86400000)),
-      });
-    }
-    const ordemStatus: Record<string, number> = { EM_ANDAMENTO: 0, AGENDADO: 1, CONQUISTADO: 2, GANHO_POR_OUTRO: 3, ENCERRADO: 4 };
-    desafios.sort((a, b) => (ordemStatus[a.status] ?? 9) - (ordemStatus[b.status] ?? 9) || +a.fim - +b.fim);
-
-    // ---- últimas vendas
-    const ultimasVendas = await prisma.venda.findMany({
-      where: { tipo: 'PEDIDO', vendedorId: vendedor.id },
-      orderBy: [{ data: 'desc' }, { id: 'desc' }],
-      take: 10,
-      select: { id: true, numero: true, data: true, total: true, contato: { select: { id: true, nome: true } }, situacao: { select: { id: true, nome: true, cor: true } } },
-    });
-
-    return {
-      vendedor: { id: vendedor.id, nome: vendedor.nome },
-      periodos,
-      meta: { ...meta, bonusDesafios: arredondar(bonus._sum.valor || 0) },
-      ranking,
-      desafios,
-      ultimasVendas,
-    };
+    const painel = await painelDoVendedor(vendedorId, !proprio);
+    if (!painel) throw new NotFound('Vendedor');
+    return painel;
   });
 
   // =====================================================================
-  // METAS
+  // METAS DOS VENDEDORES
   // =====================================================================
   app.get('/api/v1/metas', gestao, async (req) => {
     const q = z.object({ competencia: competenciaSchema.optional() }).parse(req.query);
@@ -247,29 +174,125 @@ export default async function metasRoutes(app: FastifyInstance) {
   });
 
   // =====================================================================
+  // METAS DOS TÉCNICOS (R$ de serviços concluídos ou nº de OS concluídas no mês)
+  // =====================================================================
+  app.get('/api/v1/metas-tecnicos', gestao, async (req) => {
+    const q = z.object({ competencia: competenciaSchema.optional() }).parse(req.query);
+    const competencia = q.competencia || competenciaDe(new Date());
+    const [ano, mes] = competencia.split('-').map(Number);
+    const ini = new Date(ano, mes - 1, 1);
+    const fim = endOfDay(new Date(ano, mes, 0));
+    const tecnicos = await prisma.tecnico.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, metaMensal: true, metaTipo: true, metas: { where: { competencia } } } });
+    const sitOk = await situacoesOsConcluidas();
+    const grupos = await prisma.ordemServico.groupBy({ by: ['tecnicoId'], where: { situacaoId: { in: sitOk }, dataConclusao: { gte: ini, lte: fim } }, _sum: { total: true }, _count: { _all: true } });
+    return {
+      competencia,
+      tecnicos: tecnicos.map((t) => {
+        const g = grupos.find((x) => x.tecnicoId === t.id);
+        const especifica = t.metas[0] ?? null;
+        const tipo = (especifica?.tipo ?? t.metaTipo) as (typeof TIPOS_META_TECNICO)[number];
+        const metaMes = especifica?.valor ?? null;
+        const meta = metaMes ?? t.metaMensal;
+        const valorServicos = arredondar(g?._sum.total || 0);
+        const osConcluidas = g?._count._all || 0;
+        const atingido = tipo === 'QTD_OS' ? osConcluidas : valorServicos;
+        return {
+          tecnicoId: t.id,
+          nome: t.nome,
+          tipoPadrao: t.metaTipo,
+          metaPadrao: t.metaMensal,
+          tipoMes: especifica?.tipo ?? null,
+          metaMes,
+          tipo,
+          meta,
+          valorServicos,
+          osConcluidas,
+          atingido,
+          pct: meta ? arredondar((atingido / meta) * 100, 1) : 0,
+        };
+      }),
+    };
+  });
+
+  app.put('/api/v1/metas-tecnicos', gestao, async (req) => {
+    const body = z
+      .object({
+        competencia: competenciaSchema,
+        itens: z
+          .array(
+            z.object({
+              tecnicoId: z.coerce.number().int().positive(),
+              tipoPadrao: z.enum(TIPOS_META_TECNICO).default('VALOR_SERVICOS'),
+              metaPadrao: z.coerce.number().min(0),
+              tipoMes: z.enum(TIPOS_META_TECNICO).nullable().optional(),
+              metaMes: z.coerce.number().min(0).nullable(),
+            }),
+          )
+          .min(1),
+      })
+      .parse(req.body);
+    await prisma.$transaction(async (tx) => {
+      for (const i of body.itens) {
+        await tx.tecnico.update({ where: { id: i.tecnicoId }, data: { metaMensal: arredondar(i.metaPadrao), metaTipo: i.tipoPadrao } });
+        if (i.metaMes === null) await tx.metaTecnico.deleteMany({ where: { tecnicoId: i.tecnicoId, competencia: body.competencia } });
+        else {
+          const tipo = i.tipoMes ?? i.tipoPadrao;
+          await tx.metaTecnico.upsert({
+            where: { tecnicoId_competencia: { tecnicoId: i.tecnicoId, competencia: body.competencia } },
+            create: { tecnicoId: i.tecnicoId, competencia: body.competencia, tipo, valor: arredondar(i.metaMes) },
+            update: { tipo, valor: arredondar(i.metaMes) },
+          });
+        }
+      }
+    });
+    await auditar(req, 'MetaTecnico', null, 'ALTERAR', body);
+    return { ok: true };
+  });
+
+  // =====================================================================
   // DESAFIOS
   // =====================================================================
   async function desafioComProgresso(id: number) {
     const d = await prisma.desafio.findUnique({ where: { id }, include: includeDesafio });
     if (!d) throw new NotFound('Desafio');
-    const ativos = await prisma.vendedor.findMany({ where: { ativo: true }, select: { id: true, nome: true } });
+    const publico = publicoDe(d);
+    const ativos =
+      publico === 'TECNICOS'
+        ? await prisma.tecnico.findMany({ where: { ativo: true }, select: { id: true, nome: true } })
+        : await prisma.vendedor.findMany({ where: { ativo: true }, select: { id: true, nome: true } });
     const ids = participantes(d, ativos.map((a) => a.id));
     const nomes = new Map(ativos.map((a) => [a.id, a.nome]));
     if (!d.todosVendedores) {
       const faltando = ids.filter((i) => !nomes.has(i));
-      if (faltando.length) for (const v of await prisma.vendedor.findMany({ where: { id: { in: faltando } }, select: { id: true, nome: true } })) nomes.set(v.id, v.nome);
+      if (faltando.length) {
+        const extras = publico === 'TECNICOS' ? await prisma.tecnico.findMany({ where: { id: { in: faltando } }, select: { id: true, nome: true } }) : await prisma.vendedor.findMany({ where: { id: { in: faltando } }, select: { id: true, nome: true } });
+        for (const v of extras) nomes.set(v.id, v.nome);
+      }
     }
     const prog = await progressoDesafio(d, ids);
     const agora = new Date();
+    const rotuloPart = publico === 'TECNICOS' ? 'Técnico' : 'Vendedor';
     return {
       ...d,
+      publico,
       vendedoresIds: parseJsonArray(d.vendedoresIds).map(Number),
+      tecnicosIds: parseJsonArray(d.tecnicosIds).map(Number),
       situacao: !d.ativo ? 'ENCERRADO' : agora < d.inicio ? 'AGENDADO' : agora > d.fim ? 'FINALIZADO' : 'EM_ANDAMENTO',
       participantes: ids
-        .map((vid) => {
-          const atingido = prog.get(vid) || 0;
-          const c = d.conquistas.find((x) => x.vendedorId === vid);
-          return { vendedorId: vid, nome: nomes.get(vid) || `Vendedor ${vid}`, atingido, pct: Math.min(100, arredondar((atingido / d.alvo) * 100, 1)), conquistou: !!c, conquistadoEm: c?.conquistadoEm ?? null, premioStatus: c?.comissao?.status ?? null };
+        .map((pid) => {
+          const atingido = prog.get(pid) || 0;
+          const c = d.conquistas.find((x) => participanteDaConquista(d, x) === pid);
+          return {
+            participanteId: pid,
+            // compatibilidade com a tela antiga (vendedorId) — para técnicos leva o id do técnico
+            vendedorId: pid,
+            nome: nomes.get(pid) || `${rotuloPart} ${pid}`,
+            atingido,
+            pct: Math.min(100, arredondar((atingido / d.alvo) * 100, 1)),
+            conquistou: !!c,
+            conquistadoEm: c?.conquistadoEm ?? null,
+            premioStatus: c?.comissao?.status ?? null,
+          };
         })
         .sort((a, b) => b.atingido - a.atingido),
       totalPremios: arredondar(d.conquistas.reduce((s, c) => s + (c.comissao && c.comissao.status !== 'CANCELADA' ? c.comissao.valor : 0), 0)),
@@ -277,8 +300,8 @@ export default async function metasRoutes(app: FastifyInstance) {
   }
 
   app.get('/api/v1/desafios', gestao, async (req) => {
-    const q = z.object({ situacao: z.enum(['vigentes', 'todos']).default('vigentes') }).parse(req.query);
-    const where = q.situacao === 'vigentes' ? { fim: { gte: new Date(Date.now() - 30 * 86400000) } } : {};
+    const q = z.object({ situacao: z.enum(['vigentes', 'todos']).default('vigentes'), publico: z.enum(PUBLICOS_DESAFIO).optional() }).parse(req.query);
+    const where = { ...(q.situacao === 'vigentes' ? { fim: { gte: new Date(Date.now() - 30 * 86400000) } } : {}), ...(q.publico ? { publico: q.publico } : {}) };
     const lista = await prisma.desafio.findMany({ where, orderBy: [{ ativo: 'desc' }, { fim: 'desc' }], select: { id: true } });
     return Promise.all(lista.map((d) => desafioComProgresso(d.id)));
   });
@@ -290,7 +313,7 @@ export default async function metasRoutes(app: FastifyInstance) {
     validarDesafio(b);
     const d = await prisma.desafio.create({ data: { ...dadosDesafio(b), criadoPorId: req.user.id } });
     await avaliarDesafio(d.id);
-    await auditar(req, 'Desafio', d.id, 'CRIAR', { titulo: d.titulo, premio: d.premio });
+    await auditar(req, 'Desafio', d.id, 'CRIAR', { titulo: d.titulo, premio: d.premio, publico: d.publico });
     return reply.code(201).send(await desafioComProgresso(d.id));
   });
 
@@ -300,6 +323,7 @@ export default async function metasRoutes(app: FastifyInstance) {
     validarDesafio(b);
     const atual = await prisma.desafio.findUnique({ where: { id }, include: { _count: { select: { conquistas: true } } } });
     if (!atual) throw new NotFound('Desafio');
+    if (atual._count.conquistas > 0 && publicoDe(atual) !== b.publico) throw new AppError('Este desafio já tem conquista: não dá para trocar o público (vendedores ↔ técnicos). Encerre e crie outro.', 422, 'PUBLICO_FIXO');
     await prisma.desafio.update({ where: { id }, data: dadosDesafio(b) });
     // prêmio alterado: ajusta as comissões ainda não pagas
     if (atual.premio !== arredondar(b.premio)) {
@@ -333,7 +357,7 @@ export default async function metasRoutes(app: FastifyInstance) {
     const id = Number((req.params as any).id);
     const d = await prisma.desafio.findUnique({ where: { id }, include: { comissoes: { where: { status: { not: 'CANCELADA' } }, select: { id: true } } } });
     if (!d) throw new NotFound('Desafio');
-    if (d.comissoes.length) throw new AppError('Este desafio já pagou prêmio a vendedor(es). Use "Encerrar" em vez de excluir.', 422, 'DESAFIO_COM_PREMIO');
+    if (d.comissoes.length) throw new AppError('Este desafio já pagou prêmio a vendedor(es)/técnico(s). Use "Encerrar" em vez de excluir.', 422, 'DESAFIO_COM_PREMIO');
     await prisma.$transaction([prisma.comissao.updateMany({ where: { desafioId: id }, data: { desafioId: null } }), prisma.desafio.delete({ where: { id } })]);
     await auditar(req, 'Desafio', id, 'EXCLUIR', { titulo: d.titulo });
     return { ok: true };
@@ -343,18 +367,22 @@ export default async function metasRoutes(app: FastifyInstance) {
 // ---- reavalia os desafios quando uma venda é criada, editada, transferida ou excluída
 eventos.ouvir('venda.alterada', async (d) => {
   if (d.tipo !== 'PEDIDO') return;
-  await avaliarDesafiosAbertos(d.data);
+  await avaliarDesafiosAbertos(d.data, 'VENDEDORES');
 });
 
-// ---- e quando muda de situação (fechou, cancelou, voltou)
+// ---- e quando muda de situação (fechou, cancelou, voltou) — venda ou OS
 eventos.ouvir('situacao.alterada', async (d) => {
-  if (d.modulo !== 'VENDA') return;
-  const v = await prisma.venda.findUnique({ where: { id: d.entidadeId }, select: { data: true, tipo: true } });
-  if (!v || v.tipo !== 'PEDIDO') return;
-  await avaliarDesafiosAbertos(v.data);
+  if (d.modulo === 'VENDA') {
+    const v = await prisma.venda.findUnique({ where: { id: d.entidadeId }, select: { data: true, tipo: true } });
+    if (!v || v.tipo !== 'PEDIDO') return;
+    await avaliarDesafiosAbertos(v.data, 'VENDEDORES');
+  } else if (d.modulo === 'OS') {
+    const o = await prisma.ordemServico.findUnique({ where: { id: d.entidadeId }, select: { dataConclusao: true } });
+    await avaliarDesafiosAbertos(o?.dataConclusao ?? new Date(), 'TECNICOS');
+  }
 });
 
-// ---- e a cada 10 min (pega transferências de vendedor, edições de data/valor, vendas do PDV)
+// ---- e a cada 10 min (pega transferências de vendedor/técnico, edições de data/valor, vendas do PDV)
 registrarServico('desafios-de-vendas', (app) => {
   const rodar = async () => {
     try {

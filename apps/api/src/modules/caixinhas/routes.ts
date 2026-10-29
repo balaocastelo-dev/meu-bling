@@ -2,14 +2,13 @@
  * Rotas das caixinhas (ADMIN, GERENTE, FINANCEIRO) e dos avisos do painel do gestor/gerente.
  */
 import type { FastifyInstance } from 'fastify';
-import { avisosConsignacao } from '../consignacoes/service.js';
 import { z } from 'zod';
-import { startOfDay } from 'date-fns';
 import { prisma } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
 import { dataSchema } from '../../lib/util.js';
-import { transferirEntreContas, resumoFinanceiro } from '../financeiro/service.js';
+import { transferirEntreContas } from '../financeiro/service.js';
+import { avisosGestao } from '../comum/avisos-gestao.js';
 import { avisosCaixinhas, caixinha, contaCaixinhaPadraoId, listarCaixinhas } from './service.js';
 
 const corpo = z.object({
@@ -99,17 +98,7 @@ export default async function caixinhasRoutes(app: FastifyInstance) {
 
   /** Avisos mais importantes para o gestor (ADMIN) e a gerente: caixinhas primeiro, depois contas e OS. */
   app.get('/api/v1/avisos', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE') }, async () => {
-    const { caixinhas, avisos } = await avisosCaixinhas();
-    const fin = await resumoFinanceiro();
-    const brl = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    if (fin.pagarAtrasado > 0) avisos.push({ tipo: 'erro', prioridade: 1, mensagem: `Contas a pagar vencidas: ${brl(fin.pagarAtrasado)}`, link: '/financeiro/pagar?situacao=ATRASADO' });
-    if (fin.pagarHoje > 0) avisos.push({ tipo: 'aviso', prioridade: 2, mensagem: `Contas a pagar hoje: ${brl(fin.pagarHoje)}`, link: '/financeiro/pagar?situacao=ABERTO' });
-    if (fin.receberAtrasado > 0) avisos.push({ tipo: 'aviso', prioridade: 3, mensagem: `Contas a receber vencidas: ${brl(fin.receberAtrasado)}`, link: '/financeiro/receber?situacao=ATRASADO' });
-    const osAtrasadas = await prisma.ordemServico.count({ where: { dataPrevista: { lt: startOfDay(new Date()) }, situacao: { final: false, cancelamento: false } } }).catch(() => 0);
-    if (osAtrasadas) avisos.push({ tipo: 'aviso', prioridade: 3, mensagem: `${osAtrasadas} OS atrasada${osAtrasadas > 1 ? 's' : ''} (previsão vencida)`, link: '/ordens-servico?atrasadas=true' });
-    for (const a of await avisosConsignacao().catch(() => [])) avisos.push(a);
-    avisos.sort((a, b) => a.prioridade - b.prioridade);
-    const sugestaoHojeTotal = caixinhas.reduce((s, c) => s + c.sugestaoHoje, 0);
-    return { avisos, caixinhas, sugestaoHojeTotal: Math.round(sugestaoHojeTotal * 100) / 100, saldoTotal: fin.saldoTotal };
+    const { avisos, caixinhas, sugestaoHojeTotal, saldoTotal } = await avisosGestao();
+    return { avisos, caixinhas, sugestaoHojeTotal, saldoTotal };
   });
 }

@@ -22,7 +22,7 @@ export interface Sugestao {
 export async function gravarTransacoes(
   contaFinanceiraId: number,
   transacoes: { externalId: string; data: Date; descricao: string; valor: number; tipo: string; categoria?: string | null; bruto?: unknown }[],
-  fonte: 'OPEN_FINANCE' | 'OFX' | 'MANUAL',
+  fonte: 'OPEN_FINANCE' | 'OFX' | 'MANUAL' | 'EMAIL',
 ) {
   let novas = 0;
   for (const t of transacoes) {
