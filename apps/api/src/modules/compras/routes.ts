@@ -210,6 +210,8 @@ export default async function comprasRoutes(app: FastifyInstance) {
     await prisma.$transaction(async (tx) => {
       await tx.historicoSituacao.deleteMany({ where: { entidadeTipo: 'COMPRA', entidadeId: id } });
       await tx.compra.delete({ where: { id } });
+      // contas a pagar canceladas (sem nenhum pagamento) da compra excluída não ficam órfãs
+      await tx.contaPagar.deleteMany({ where: { origemTipo: 'COMPRA', origemId: id, situacao: 'CANCELADO', valorPago: 0 } });
     });
     await auditar(req, 'Compra', id, 'EXCLUIR', { numero: c.numero });
     return { ok: true };

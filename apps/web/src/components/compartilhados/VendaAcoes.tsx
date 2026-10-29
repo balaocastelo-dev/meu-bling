@@ -25,6 +25,7 @@ import {
   UserRoundCog,
 } from 'lucide-react';
 import { abrirEmNovaAba, api, mensagemErro } from '@/lib/api';
+import { moeda } from '@/lib/format';
 import { useAuth } from '@/stores/auth';
 import { useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { Button, ConfirmDialog, MenuAcoes, Modal, Select, Textarea, type ItemMenu } from '@/components/ui';
@@ -32,6 +33,8 @@ import { NotificarModal } from './NotificarModal';
 import { EmitirNfModal } from './EmitirNfModal';
 import { FinalizarVendaModal } from './FinalizarVenda';
 import type { CanalNotificacao, Venda, VendaResumo } from '@/types';
+
+type CompraDesfeita = { compraId: number; numero: number; desfeita: boolean; motivo?: string; devolvido: { contaFinanceiraId: number; valor: number }[] };
 
 type VendaAlvo = Pick<VendaResumo, 'id' | 'tipo' | 'numero' | 'situacao' | 'nota' | 'estoqueLancado' | 'contasLancadas' | 'vendedorId' | 'vendaGerada' | 'aprovadoEm'> & {
   contato?: { nome?: string; email?: string | null; celular?: string | null } | null;
@@ -72,6 +75,16 @@ export function VendaAcoes({ venda, contexto = 'lista' }: Props) {
     qc.invalidateQueries({ queryKey: ['dashboard-geral'] });
   };
   const erro = (e: unknown) => toast.error(mensagemErro(e));
+  /** aviso sobre a compra registrada ao finalizar a venda (desfeita junto com o cancelamento/exclusão, ou mantida) */
+  const avisarCompra = (c: CompraDesfeita | null | undefined) => {
+    if (!c) return;
+    if (c.desfeita) {
+      const devolvido = c.devolvido.reduce((s, d) => s + d.valor, 0);
+      toast.info(`A compra nº ${c.numero}, registrada ao finalizar esta venda, foi desfeita${devolvido > 0 ? `: ${moeda(devolvido)} voltaram para o banco` : ''}.`, { duration: 8000 });
+    } else {
+      toast.warning(`A compra nº ${c.numero} (registrada ao finalizar) foi mantida: ${c.motivo}.`, { duration: 10000 });
+    }
+  };
 
   const clonar = useMutation({
     mutationFn: () => api.post<Venda>(`/vendas/${venda.id}/duplicar`),
@@ -268,14 +281,15 @@ export function VendaAcoes({ venda, contexto = 'lista' }: Props) {
         descricao={
           orcamento
             ? 'O orçamento vai para "Reprovado". Dá para reabrir depois mudando a situação.'
-            : `A venda vai para "${sitCancelar?.nome ?? 'Cancelada'}": o estoque e as contas lançados são estornados e as reservas liberadas.${notaAtiva ? ' A NF-e precisa ser cancelada à parte, na tela da nota.' : ''}`
+            : `A venda vai para "${sitCancelar?.nome ?? 'Cancelada'}": o estoque e as contas lançados são estornados, as reservas liberadas e a compra registrada ao finalizar (se houver) é desfeita, com o pagamento dela voltando para o banco.${notaAtiva ? ' A NF-e precisa ser cancelada à parte, na tela da nota.' : ''}`
         }
         textoConfirmar={orcamento ? 'Reprovar' : 'Cancelar venda'}
         onConfirmar={async () => {
           if (!sitCancelar) return;
           try {
-            await api.post(`/vendas/${venda.id}/situacao`, { situacaoId: sitCancelar.id, observacao: orcamento ? 'Orçamento reprovado' : 'Venda cancelada' });
+            const r = await api.post<{ compra?: CompraDesfeita | null }>(`/vendas/${venda.id}/situacao`, { situacaoId: sitCancelar.id, observacao: orcamento ? 'Orçamento reprovado' : 'Venda cancelada' });
             toast.success(orcamento ? 'Orçamento reprovado.' : 'Venda cancelada.');
+            avisarCompra(r.compra);
             invalidar();
           } catch (e) {
             erro(e);
@@ -297,13 +311,15 @@ export function VendaAcoes({ venda, contexto = 'lista' }: Props) {
         aberto={excluir}
         onFechar={() => setExcluir(false)}
         titulo={`Excluir ${rotulo} nº ${venda.numero}?`}
-        descricao="O registro será removido permanentemente. Prefira cancelar se quiser manter o histórico."
+        descricao={orcamento ? 'O registro será removido permanentemente. Prefira reprovar se quiser manter o histórico.' : 'O registro será removido permanentemente, junto com a compra registrada ao finalizar a venda (se houver): o pagamento dela volta para o banco. Prefira cancelar se quiser manter o histórico.'}
         textoConfirmar="Excluir"
         onConfirmar={async () => {
           try {
-            await api.del(`/vendas/${venda.id}`);
+            const r = await api.del<{ ok: boolean; compra?: CompraDesfeita | null }>(`/vendas/${venda.id}`);
             toast.success(`${orcamento ? 'Orçamento' : 'Venda'} excluído.`);
+            avisarCompra(r?.compra);
             qc.invalidateQueries({ queryKey: ['vendas'] });
+            qc.invalidateQueries({ queryKey: ['compras'] });
             if (contexto === 'detalhe') nav(base);
           } catch (e) {
             erro(e);

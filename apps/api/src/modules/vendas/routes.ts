@@ -14,7 +14,7 @@ import { arredondar, dataSchema, paginar, proximoNumero, respostaPaginada } from
 import { eventos } from '../../core/eventos.js';
 import { vendedorDoUsuario } from '../comum/vendedores.js';
 import { vendedorRestrito, whereVendasDoUsuario } from '../comum/escopo-vendas.js';
-import { executarAcoes, mudarSituacao, registrarAcao, registrarModulo, situacaoInicial, type Acao } from '../../core/situacoes.js';
+import { executarAcoes, mudarSituacao, registrarAcao, registrarModulo, situacaoInicial, type Acao, registrarAoCancelar } from '../../core/situacoes.js';
 import { idDe } from '../comum/zod.js';
 import { intervalo, hojeMeioDia } from '../comum/datas.js';
 import { enfileirarNotificacao, variaveisTemplate } from '../comum/notificar.js';
@@ -55,6 +55,9 @@ import {
   aplicarRecebimentosFinalizacao,
   validarRecebimentosFinalizacao,
   registrarCompraDaVenda,
+  aoCancelarVenda,
+  desfazerCompraDaVenda,
+  type CompraDesfeita,
 } from './service.js';
 import { acoesBody, aprovarBody, CAMPOS_LIVRES, converterBody, gerarNfeBody, gerarParcelasBody, listaQuery, notificarBody, situacaoBody, transferirVendedorBody, vendaSchema } from './schemas.js';
 import { htmlVenda } from './imprimir.js';
@@ -81,6 +84,8 @@ registrarAcao('VENDA', 'estornarContas', acaoEstornarContas);
 registrarAcao('VENDA', 'reservarEstoque', acaoReservarEstoque);
 registrarAcao('VENDA', 'liberarReserva', acaoLiberarReserva);
 registrarAcao('VENDA', 'gerarNfe', acaoGerarNfe);
+// venda cancelada: a compra registrada ao finalizar (e o pagamento dela) é desfeita junto
+registrarAoCancelar('VENDA', aoCancelarVenda);
 
 // NF-e autorizada → venda vai para "NF emitida"; NF-e cancelada → volta para "Fechada" (quando essas situações existem)
 async function moverVendaPorNota(notaId: number, destinoNome: 'NF emitida' | 'Fechada', observacao: string) {
@@ -368,7 +373,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     }
     if (v.estoqueLancado || v.contasLancadas) throw new AppError('Venda com estoque/contas lançados não pode ser excluída. Estorne (ou cancele) antes.', 422, 'VENDA_LANCADA');
     if (v.nota && v.nota.situacao === 'AUTORIZADA') throw new AppError('Venda com NF-e autorizada não pode ser excluída.', 422, 'NOTA_AUTORIZADA');
-    await prisma.$transaction(async (tx) => {
+    const compraDesfeita: CompraDesfeita | null = await prisma.$transaction(async (tx) => {
       await acaoLiberarReserva({ modulo: 'VENDA', entidadeId: id, tx, usuarioId: req.user.id, situacaoOrigemId: v.situacaoId, situacaoDestinoId: v.situacaoId });
       await tx.comissao.deleteMany({ where: { vendaId: id, status: { not: 'PAGA' } } });
       await tx.historicoSituacao.deleteMany({ where: { entidadeTipo: moduloDe(v.tipo), entidadeId: id } });
@@ -378,13 +383,16 @@ export default async function vendasRoutes(app: FastifyInstance) {
         await tx.venda.update({ where: { id }, data: { notaId: null } });
         if (v.nota && v.nota.situacao === 'PENDENTE') await tx.notaFiscal.delete({ where: { id: v.notaId } });
       }
+      // a compra registrada ao finalizar esta venda (e o pagamento automático dela) vai embora junto
+      const compra = v.tipo === 'PEDIDO' ? await desfazerCompraDaVenda(tx, { id, numero: v.numero }, req.user.id, 'excluir') : null;
       await tx.venda.delete({ where: { id } });
       // contas a receber canceladas (sem nenhum recebimento) da venda excluída não ficam órfãs
       await tx.contaReceber.deleteMany({ where: { origemTipo: 'VENDA', origemId: id, situacao: 'CANCELADO', valorRecebido: 0 } });
+      return compra;
     });
-    await auditar(req, v.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', id, 'EXCLUIR', { numero: v.numero });
+    await auditar(req, v.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', id, 'EXCLUIR', { numero: v.numero, compra: compraDesfeita ? { numero: compraDesfeita.numero, desfeita: compraDesfeita.desfeita, motivo: compraDesfeita.motivo } : undefined });
     eventos.emitir('venda.alterada', { vendaId: id, data: v.data, tipo: v.tipo });
-    return { ok: true };
+    return { ok: true, compra: compraDesfeita };
   });
 
   // ---------------------------------------------------------------- situação / ações
@@ -404,8 +412,9 @@ export default async function vendasRoutes(app: FastifyInstance) {
       }
     }
     const r = await mudarSituacao({ modulo: moduloDe(atual.tipo), entidadeId: id, situacaoDestinoId: body.situacaoId, usuarioId: req.user.id, observacao: body.observacao, forcar });
-    await auditar(req, 'Venda', id, 'SITUACAO', { para: r.situacao.nome, acoes: r.acoes });
-    return { situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor }, acoesExecutadas: r.acoes, alterado: r.alterado };
+    const compra = (r.extras?.compra as CompraDesfeita | undefined) ?? null;
+    await auditar(req, 'Venda', id, 'SITUACAO', { para: r.situacao.nome, acoes: r.acoes, compra: compra ? { numero: compra.numero, desfeita: compra.desfeita, motivo: compra.motivo } : undefined });
+    return { situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor }, acoesExecutadas: r.acoes, alterado: r.alterado, compra };
   });
 
   // ---------------------------------------------------------------- finalizar venda

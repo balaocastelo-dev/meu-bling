@@ -167,6 +167,7 @@ export const CONFIG_ITENS: { rotulo: string; para: string; descricao: string; pe
   { rotulo: 'WhatsApp', para: '/configuracoes/whatsapp', descricao: 'O QR Code principal da loja — um número para o sistema inteiro', perfis: ['ADMIN'] },
   { rotulo: 'Mercado Pago', para: '/configuracoes/mercado-pago', descricao: 'Link de pagamento nos pedidos', perfis: ['ADMIN'] },
   { rotulo: 'Open Finance', para: '/configuracoes/open-finance', descricao: 'Credenciais Pluggy', perfis: ['ADMIN'] },
+  { rotulo: 'Robô de e-mail', para: '/configuracoes/robo-email', descricao: 'Lê os avisos dos bancos por e-mail e lança no financeiro', perfis: ['ADMIN'] },
   { rotulo: 'API e integrações', para: '/configuracoes/api', descricao: 'Chaves para outros sistemas e agentes de IA, webhooks, MCP', perfis: ['ADMIN'] },
   { rotulo: 'Saúde do sistema', para: '/configuracoes/saude', descricao: 'Confere os dados e aponta o que corrigir', perfis: ['ADMIN'] },
   { rotulo: 'Painel de auditoria', para: '/auditoria', descricao: 'Tudo que acontece no sistema, ao vivo e desde o início; reverter; agentes de IA (senha do dia)', perfis: ['ADMIN'] },

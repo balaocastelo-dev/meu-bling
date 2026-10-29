@@ -97,6 +97,7 @@ async function main() {
     rodar('OS: custos internos (peça, logística, terceiros) fora da impressão + dashboard de assistência', NPX, ['tsx', 'testes/os-custos.ts', base]);
     rodar('Vendas: custo do produto e logística internos (fora do cliente) + ordem do contas a pagar', NPX, ['tsx', 'testes/venda-custos.ts', base]);
     rodar('Venda paga na hora entra no caixa + ajuste de saldo fora do DRE + DRE', NPX, ['tsx', 'testes/pago-na-hora.ts', base]);
+    rodar('Venda cancelada/excluída desfaz a compra registrada ao finalizar (dinheiro volta ao banco)', NPX, ['tsx', 'testes/venda-cancelada-compra.ts', base]);
     rodar('Empréstimos (Lumicred): repasse, cliente paga direto, capital de giro, cancelar; DRE só com juros', NPX, ['tsx', 'testes/emprestimos.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Crédito bancário como forma de pagamento: venda (cliente ou loja paga) e compra geram o empréstimo', NPX, ['tsx', 'testes/credito-bancario.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Carnê próprio: PIX no Cora, risco 7–15%, auditoria, venda no carnê, receber, DRE e impressão', NPX, ['tsx', 'testes/carnes.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
@@ -114,6 +115,8 @@ async function main() {
     rodar('Lembretes de custo: OS com os campos da venda, lembrete ao fechar, robô avisa técnicos e vendedores, DRE', NPX, ['tsx', 'testes/lembretes-custo.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
     rodar('JARVIS: caixa livre, regras, sugestões (aceitar/adiar/recusar), feed por perfil, só ADMIN', NPX, ['tsx', 'testes/jarvis.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
     rodar('Robô de e-mail dos bancos: parsers reais (SumUp/Asaas), trava de DKIM, baixa 1:1, senha mascarada, só ADMIN', NPX, ['tsx', 'testes/email-banco.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
+    rodar('Central de Anúncios: canais de API x kit, rascunho sem IA, nada publicado sem publicar', NPX, ['tsx', 'testes/jarvis-anuncios.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
+    rodar('Mercado Livre: OAuth, callback público, secret escondido, publicar sem conta não mente', NPX, ['tsx', 'testes/jarvis-mercadolivre.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
     rodar('Chat da equipe: direta, sala privada, áudio, lida, WebSocket/polling, chamadas de voz e vídeo, push, ADMIN lê tudo', NPX, ['tsx', 'testes/chat.ts', base]);
     rodar('Painel de auditoria: senha do dia, trilha antes/depois (itens e cascata), ao vivo, funcionários, reversão e refazer, agentes', NPX, ['tsx', 'testes/auditoria.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Links: todo link do sistema leva a uma tela que existe', NPX, ['tsx', 'testes/links.ts', base]);

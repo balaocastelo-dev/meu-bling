@@ -156,7 +156,7 @@ docker run -d \
   --restart unless-stopped \
   --network host \
   coturn/coturn:4 \
-  -n --log-file=stdout --no-cli --no-tls --no-dtls --fingerprint \
+  -n --log-file=stdout --no-tls --fingerprint \
   --listening-port="${TURN_PORT_ATUAL}" \
   --min-port=49160 --max-port=49200 \
   --use-auth-secret --static-auth-secret="${TURN_SECRET_ATUAL}" \
