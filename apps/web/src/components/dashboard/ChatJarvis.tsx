@@ -7,11 +7,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Bot, MessageSquarePlus, Send, Trash2, User } from 'lucide-react';
+import { Bot, MessageSquarePlus, Mic, Phone, PhoneOff, Send, Trash2, User, Volume2, VolumeX } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { Button, EmptyState, Skeleton } from '@/components/ui';
 import { CardV18 } from '@/components/dashboard/v18';
 import { dataHora } from '@/lib/format';
+import { escutar, estaFalando, falar, pararDeFalar, STT_DISPONIVEL, TTS_DISPONIVEL, type Escuta } from '@/lib/voz';
 
 interface Mensagem {
   id: number;
@@ -38,6 +39,14 @@ export default function ChatJarvis() {
   const [texto, setTexto] = useState('');
   const lista = useRef<HTMLDivElement>(null);
 
+  // ---- voz
+  const [falando, setFalando] = useState(false);
+  const [emLigacao, setEmLigacao] = useState(false);
+  const [ouvindo, setOuvindo] = useState('');
+  const [falarSempre, setFalarSempre] = useState(() => localStorage.getItem('jarvis-falar') === '1');
+  const escuta = useRef<Escuta | null>(null);
+  const ultimaFalada = useRef<number | null>(null);
+
   const { data: conversas } = useQuery({
     queryKey: ['jarvis-conversas'],
     queryFn: () => api.get<{ data: ResumoConversa[] }>('/jarvis/conversas'),
@@ -60,6 +69,19 @@ export default function ChatJarvis() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [mensagens.length]);
 
+  // fala um texto e mantém o estado do botão em dia
+  const dizer = async (texto: string) => {
+    if (!TTS_DISPONIVEL) return;
+    setFalando(true);
+    await falar(texto);
+    setFalando(false);
+  };
+
+  const calar = () => {
+    pararDeFalar();
+    setFalando(false);
+  };
+
   const enviar = useMutation({
     mutationFn: (pergunta: string) =>
       api.post<{ conversaId: number; resposta: string }>('/jarvis/perguntar', { pergunta, conversaId }),
@@ -68,9 +90,76 @@ export default function ChatJarvis() {
       setConversaId(r.conversaId);
       qc.invalidateQueries({ queryKey: ['jarvis-conversa', r.conversaId] });
       qc.invalidateQueries({ queryKey: ['jarvis-conversas'] });
+      // na ligação ele sempre responde falando; fora dela, só se estiver marcado
+      if (emLigacao || falarSempre) void dizer(r.resposta);
     },
     onError: (e) => toast.error(mensagemErro(e)),
   });
+
+  // ---------------------------------------------------------------- modo ligação
+  const desligar = () => {
+    escuta.current?.parar();
+    escuta.current = null;
+    calar();
+    setEmLigacao(false);
+    setOuvindo('');
+  };
+
+  const atender = () => {
+    if (!STT_DISPONIVEL) {
+      toast.error('Para conversar por voz, use o Chrome ou o Edge — são os que ouvem o microfone.');
+      return;
+    }
+    const e = escutar({
+      onParcial: (t) => {
+        setOuvindo(t);
+        // barge-in: se o chefe começou a falar, o JARVIS cala e escuta
+        if (estaFalando()) calar();
+      },
+      onFrase: (t) => {
+        setOuvindo('');
+        const frase = t.trim();
+        if (frase.length < 3 || enviar.isPending) return;
+        if (/^(desligar|tchau|pode parar|encerrar)\b/i.test(frase)) {
+          void falar('Combinado, chefe. Até mais.');
+          desligar();
+          return;
+        }
+        enviar.mutate(frase);
+      },
+      onErro: (motivo) => {
+        if (motivo === 'microfone-negado') {
+          toast.error('Preciso da permissão do microfone para conversar por voz.');
+          desligar();
+        }
+      },
+    });
+    if (!e) {
+      toast.error('Este navegador não ouve o microfone. Use o Chrome ou o Edge.');
+      return;
+    }
+    escuta.current = e;
+    setEmLigacao(true);
+    void dizer('Pode falar, chefe. Estou ouvindo.');
+  };
+
+  // desliga o microfone e a fala ao sair da tela
+  useEffect(() => {
+    return () => {
+      escuta.current?.parar();
+      pararDeFalar();
+    };
+  }, []);
+
+  // fora da ligação, lê sozinho a resposta nova quando "falar sempre" está marcado
+  useEffect(() => {
+    if (!falarSempre || emLigacao || !mensagens.length) return;
+    const ultima = mensagens[mensagens.length - 1];
+    if (ultima.papel !== 'jarvis' || ultimaFalada.current === ultima.id) return;
+    ultimaFalada.current = ultima.id;
+    void dizer(ultima.texto);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mensagens.length, falarSempre, emLigacao]);
 
   const apagar = useMutation({
     mutationFn: (id: number) => api.del(`/jarvis/conversas/${id}`),
@@ -95,6 +184,31 @@ export default function ChatJarvis() {
       tom="azul"
       acoes={
         <div className="flex flex-wrap items-center gap-2">
+          {TTS_DISPONIVEL && (
+            <Button
+              variante={falarSempre ? 'primario' : 'secundario'}
+              tamanho="sm"
+              icone={falarSempre ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+              onClick={() => {
+                const novo = !falarSempre;
+                setFalarSempre(novo);
+                localStorage.setItem('jarvis-falar', novo ? '1' : '0');
+                if (!novo) calar();
+              }}
+            >
+              {falarSempre ? 'Falando' : 'Mudo'}
+            </Button>
+          )}
+          {STT_DISPONIVEL &&
+            (emLigacao ? (
+              <Button variante="perigo" tamanho="sm" icone={<PhoneOff className="h-4 w-4" />} onClick={desligar}>
+                Desligar
+              </Button>
+            ) : (
+              <Button variante="sucesso" tamanho="sm" icone={<Phone className="h-4 w-4" />} onClick={atender}>
+                Conversar
+              </Button>
+            ))}
           {(conversas?.data?.length ?? 0) > 0 && (
             <select
               className="h-8 max-w-[14rem] rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700"
@@ -128,6 +242,15 @@ export default function ChatJarvis() {
         </div>
       }
     >
+      {emLigacao && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 ring-1 ring-emerald-200">
+          <Mic className="h-4 w-4 animate-pulse" />
+          <span className="font-medium">{falando ? 'JARVIS falando — pode interromper' : 'Na linha, pode falar'}</span>
+          {ouvindo && <span className="min-w-0 flex-1 truncate text-emerald-700">“{ouvindo}”</span>}
+          <span className="text-xs text-emerald-600">diga “desligar” para encerrar</span>
+        </div>
+      )}
+
       <div ref={lista} className="flex max-h-[26rem] min-h-[12rem] flex-col gap-3 overflow-y-auto pr-1">
         {isLoading && conversaId ? (
           <>
@@ -141,7 +264,9 @@ export default function ChatJarvis() {
             descricao="Ele enxerga caixa, contas, estoque, consignados e empréstimos — e responde com os números."
           />
         ) : (
-          mensagens.map((m) => <Balao key={m.id} m={m} />)
+          mensagens.map((m) => (
+            <Balao key={m.id} m={m} aoFalar={m.papel === 'jarvis' ? () => (falando ? calar() : void dizer(m.texto)) : undefined} falando={falando} />
+          ))
         )}
         {enviar.isPending && (
           <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -179,6 +304,11 @@ export default function ChatJarvis() {
           }}
           placeholder="Pergunte alguma coisa… (Enter manda, Shift+Enter pula linha)"
         />
+        {STT_DISPONIVEL && !emLigacao && (
+          <Button variante="secundario" icone={<Mic className="h-4 w-4" />} onClick={atender} title="Conversar por voz">
+            Voz
+          </Button>
+        )}
         <Button
           variante="primario"
           icone={<Send className="h-4 w-4" />}
@@ -193,7 +323,7 @@ export default function ChatJarvis() {
   );
 }
 
-function Balao({ m }: { m: Mensagem }) {
+function Balao({ m, aoFalar, falando }: { m: Mensagem; aoFalar?: () => void; falando?: boolean }) {
   const meu = m.papel === 'usuario';
   return (
     <motion.div
@@ -216,7 +346,15 @@ function Balao({ m }: { m: Mensagem }) {
         >
           {m.texto}
         </div>
-        <p className="mt-0.5 text-[11px] text-slate-400">{dataHora(m.em)}</p>
+        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-400">
+          <span>{dataHora(m.em)}</span>
+          {aoFalar && TTS_DISPONIVEL && (
+            <button type="button" onClick={aoFalar} className="inline-flex items-center gap-1 text-slate-400 transition hover:text-brand-600">
+              {falando ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+              {falando ? 'parar' : 'ouvir'}
+            </button>
+          )}
+        </div>
       </div>
     </motion.div>
   );
