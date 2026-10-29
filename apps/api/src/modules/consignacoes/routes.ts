@@ -6,6 +6,7 @@
  *   Site (vitrine "Consignados"): /api/v1/publico/consignados
  */
 import type { FastifyInstance } from 'fastify';
+import { dashboardConsignacao } from './dashboard.js';
 import { z } from 'zod';
 import path from 'node:path';
 import { auditar } from '../../lib/auditoria.js';
@@ -136,6 +137,12 @@ export default async function consignacoesRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/v1/consignacoes/painel', async () => painelConsignacao());
+
+  // dashboard de consignação (gestor e gerente): estoque, quanto dá para lucrar, vendas, lucro, pagamentos
+  app.get('/api/v1/consignacoes/dashboard', gestao, async (req) => {
+    const q = z.object({ dataInicial: dataSchema, dataFinal: dataSchema }).parse(req.query);
+    return dashboardConsignacao({ dataInicial: q.dataInicial, dataFinal: q.dataFinal });
+  });
 
   app.get('/api/v1/consignacoes/regras', async () => ({ regras: await lerRegras(), padrao: REGRAS_PADRAO }));
 

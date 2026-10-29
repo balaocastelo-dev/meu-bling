@@ -213,6 +213,12 @@ async function main() {
   await adm.get('/publico/consignacao/000000000000000000000000', 404);
   await adm.get('/publico/consignacao/nao-e-token', 400);
 
+  secao('Dashboard de consignação');
+  const dash: any = await adm.get('/consignacoes/dashboard');
+  verifica(dash && dash.estoque && dash.vendas && dash.total && Array.isArray(dash.serie) && dash.serie.length === 12, 'dashboard responde com estoque, vendas, totais e 12 meses', dash && Object.keys(dash));
+  verifica(igual(dash.estoque.lucroPotencial, dash.estoque.valorVenda - dash.estoque.custo), 'lucro possível = valor em estoque − custo dos consignantes', dash.estoque);
+  verifica(dash.total.contratos >= 1, 'conta os contratos criados no teste', dash.total);
+
   encerrar('Consignação');
 }
 
