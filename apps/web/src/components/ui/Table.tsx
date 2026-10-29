@@ -47,6 +47,9 @@ interface TableProps<T> {
   cartao?: (linha: T, indice: number) => ReactNode;
 }
 
+/** colunas de valor curto (código, data, depósito, número…) que nunca se partem em duas linhas */
+const CURTAS = /^(codigo|sku|data|dataHora|vencimento|emissao|deposito|numero|nf|periodo|criadoEm|ultimoLogin|cpfCnpj|telefone|qtd|quantidade)$/;
+
 /** Tabela densa com cabeçalho fixo, skeleton, estado vazio e ordenação opcional */
 export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazio, ordenacao, onOrdenar, linhasSkeleton = 6, className, rodape, destacar, compacta, celular = 'cartoes', cartao }: TableProps<T>) {
   const alternar = (c: Coluna<T>) => {
@@ -61,7 +64,11 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
   const cartoes = celular === 'cartoes';
   // no cartão: a coluna marcada como 'titulo' (ou a primeira) vai no topo; colunas sem título (ações) ficam à direita
   const semTitulo = (c: Coluna<T>) => c.titulo === '' || c.titulo === null || c.titulo === undefined || c.chave === 'acoes' || c.chave === 'menu';
-  const colTitulo = colunas.find((c) => c.noCartao === 'titulo') ?? colunas.find((c) => !semTitulo(c) && c.noCartao !== 'oculto');
+  // título do cartão: o marcado, senão o nome/produto (um código curto no topo deixava o nome espremido no corpo), senão a 1ª coluna
+  const colTitulo =
+    colunas.find((c) => c.noCartao === 'titulo') ??
+    (colunas[0]?.chave === 'codigo' ? colunas.find((c) => ['nome', 'produto', 'descricao'].includes(c.chave)) : undefined) ??
+    colunas.find((c) => !semTitulo(c) && c.noCartao !== 'oculto');
   const colAcoes = colunas.filter((c) => semTitulo(c) && c.noCartao !== 'oculto');
   const colCorpo = colunas.filter((c) => c !== colTitulo && !colAcoes.includes(c) && c.noCartao !== 'oculto');
 
@@ -81,7 +88,7 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
           )}
           {!carregando && dados && dados.length === 0 && <div className="py-8">{vazio ?? <EmptyState titulo="Nenhum registro encontrado" />}</div>}
           {!!dados?.length && (
-            <ul className="divide-y divide-slate-100 md:grid md:grid-cols-2 md:gap-px md:divide-y-0 md:bg-slate-100">
+            <ul className="divide-y divide-slate-100 md:grid md:grid-cols-2 md:gap-px md:divide-y-0 md:bg-slate-100 md:[&>li:last-child:nth-child(odd)]:col-span-2">
               {dados.map((linha, i) => (
                 <li
                   key={chave(linha)}
@@ -102,10 +109,11 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
                     </div>
                   ) : (
                   <>
-                  <div className="flex items-start gap-2">
+                  {/* ícones de ação centralizados na linha do título (não caídos abaixo dela) */}
+                  <div className="flex items-center gap-2">
                     {colTitulo && <div className="min-w-0 flex-1 break-words text-sm font-medium text-slate-900">{colTitulo.render(linha, i)}</div>}
                     {colAcoes.length > 0 && (
-                      <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <div className="-my-1.5 flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
                         {colAcoes.map((c) => (
                           <span key={c.chave}>{c.render(linha, i)}</span>
                         ))}
@@ -114,12 +122,17 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
                   </div>
                   {colCorpo.length > 0 && (
                     <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
-                      {colCorpo.map((c) => (
-                        <div key={c.chave} className={clsx('min-w-0', c.noCartao === 'cheio' && 'col-span-2')}>
-                          <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{c.titulo}</dt>
-                          <dd className={clsx('min-w-0 break-words text-slate-700 [&_.truncate]:whitespace-normal', c.direita && 'num font-medium')}>{c.render(linha, i)}</dd>
-                        </div>
-                      ))}
+                      {colCorpo.map((c) => {
+                        const v = c.render(linha, i);
+                        // texto comprido (e-mail, endereço, código) ocupa a linha toda em vez de se partir no meio da palavra
+                        const longo = typeof v === 'string' && (v.includes('@') || v.length > 22);
+                        return (
+                          <div key={c.chave} className={clsx('min-w-0', (c.noCartao === 'cheio' || longo) && 'col-span-2')}>
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{c.titulo}</dt>
+                            <dd className={clsx('min-w-0 break-words text-slate-700 [&_.truncate]:whitespace-normal', c.direita && 'num font-medium')}>{v}</dd>
+                          </div>
+                        );
+                      })}
                     </dl>
                   )}
                   </>
@@ -188,7 +201,7 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
               onClick={() => onClickLinha?.(linha)}
             >
               {colunas.map((c) => (
-                <td key={c.chave} className={clsx(c.direita && 'text-right num', c.ocultarMobile && 'hidden xl:table-cell', c.className)}>
+                <td key={c.chave} className={clsx(c.direita && 'text-right num', CURTAS.test(c.chave) && 'nowrap', c.ocultarMobile && 'hidden xl:table-cell', c.className)}>
                   {c.render(linha, i)}
                 </td>
               ))}

@@ -261,9 +261,9 @@ export function CardRoboSaude({ className }: { className?: string }) {
     <div className={clsx('overflow-hidden rounded-2xl border bg-white shadow-card', pct >= 95 && !sugestoes.length ? 'border-emerald-200' : pct >= 80 ? 'border-amber-200' : 'border-red-200', className)}>
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3">
         <AnelSaude pct={pct} tamanho={56} />
-        <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
-            <Bot className="h-4 w-4 text-brand-600" /> Robô da Saúde
+        <div className="min-w-0 flex-[1_1_10rem]">
+          <p className="flex flex-wrap items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-slate-900">
+            <Bot className="h-4 w-4 shrink-0 text-brand-600" /> Robô da Saúde
             {!p.config.ligado && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">desligado</span>}
           </p>
           <p className="text-xs text-slate-500">
@@ -286,7 +286,7 @@ export function CardRoboSaude({ className }: { className?: string }) {
       {sugestoes.length ? (
         <ListaAvisosRobo avisos={sugestoes} compacto limite={5} />
       ) : (
-        <p className="flex items-center gap-2 px-4 py-3 text-sm text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Sistema 100%: nada para você resolver agora.</p>
+        <p className="flex items-start gap-2 px-4 py-3 text-sm text-emerald-700"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> Sistema 100%: nada para você resolver agora.</p>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/60 px-4 py-2 text-xs">
         <span className="min-w-0 truncate text-slate-500">{p.correcoes[0] ? `Última correção: ${p.correcoes[0].mensagem}` : `Confiro a cada ${p.intervaloMin} min e logo depois de cada venda, pagamento ou NF.`}</span>

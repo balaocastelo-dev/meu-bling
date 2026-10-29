@@ -126,7 +126,7 @@ export default function Templates() {
   return (
     <div>
       <PageHeader titulo="Templates de notificação" descricao="Mensagens automáticas por mudança de situação e envios manuais." acoes={<Button variante="primario" icone={<Plus className="h-4 w-4" />} onClick={() => setSel('novo')}>Novo template</Button>} />
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid items-start gap-4 lg:grid-cols-3">
         <Card semPadding className="lg:col-span-1">
           {isLoading ? (
             <div className="p-4"><Skeleton className="h-64" /></div>

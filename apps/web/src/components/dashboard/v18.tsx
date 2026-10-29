@@ -239,19 +239,22 @@ export function KpiV18({
       <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[3px]" style={{ backgroundColor: TONS[tom].barra, opacity: 0.85 }} />
       <div className="flex items-start justify-between gap-2">
         <p className="line-clamp-2 min-h-8 min-w-0 text-xs font-medium leading-4 text-slate-500">{rotulo}</p>
-        {icone && <span className={clsx('hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl @[10rem]:flex', TONS[tom].chip)}>{icone}</span>}
+        {icone && <span className={clsx('hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl @[8.5rem]:flex', TONS[tom].chip)}>{icone}</span>}
       </div>
       {carregando ? (
         <Skeleton className="mt-2 h-7 w-24" />
       ) : (
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-base font-bold leading-tight tracking-tight text-slate-900 @[9rem]:text-lg @[12rem]:text-xl @[15rem]:text-2xl">
+        <>
+          {/* valor numa linha; a variação sempre embaixo dele — igual em todos os cartões da linha */}
+          <span className="mt-1 block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-base font-bold leading-tight tracking-tight text-slate-900 @[9rem]:text-lg @[12rem]:text-xl @[15rem]:text-2xl">
             <Contador valor={valor ?? 0} formato={formato} />
           </span>
-          <Variacao atual={valor} anterior={anterior} inverter={inverter} />
-        </div>
+          <div className="mt-1 flex min-h-5 items-center">
+            <Variacao atual={valor} anterior={anterior} inverter={inverter} />
+          </div>
+        </>
       )}
-      {sub && <p className="mt-auto line-clamp-2 pt-1 text-xs leading-4 text-slate-400">{sub}</p>}
+      {sub && <div className="mt-auto break-words pt-1 text-xs leading-4 text-slate-400">{sub}</div>}
     </motion.div>
   );
 }
@@ -306,8 +309,9 @@ export const listaVariants = lista;
 /** Seletor segmentado com a "pílula" deslizando até a opção escolhida */
 export function SegmentadoV18<T extends string>({ opcoes, valor, onMudar, id }: { opcoes: { valor: T; rotulo: ReactNode }[]; valor: T; onMudar: (v: T) => void; id: string }) {
   return (
-    // no celular fica numa linha só, rolando de lado (pílula torta em várias linhas, nunca)
-    <div className="sem-barra inline-flex max-w-full shrink-0 flex-nowrap overflow-x-auto overscroll-x-contain rounded-full border border-slate-200 bg-white p-1 shadow-card">
+    // quando não cabe numa linha, as opções vão para a linha de baixo dentro de um bloco de cantos arredondados
+    // (como os botões de segmentação do Power BI) — nada cortado na borda e nada de "pílula" oval torta
+    <div className="inline-flex max-w-full flex-wrap gap-0.5 rounded-2xl border border-slate-200 bg-white p-1 shadow-card">
       {opcoes.map((o) => (
         <button
           key={o.valor}

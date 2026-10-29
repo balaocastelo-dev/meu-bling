@@ -24,6 +24,7 @@ export default function ProdutosLista() {
     {
       chave: 'nome',
       titulo: 'Produto',
+      noCartao: 'titulo',
       render: (p) => (
         <div className="flex items-center gap-3">
           <FotoProduto url={p.imagemUrl} tamanho="md" />

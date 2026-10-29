@@ -451,7 +451,7 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
         </Secao>
 
         {/* Totais + transporte */}
-        <div className="grid gap-4 xl:grid-cols-3">
+        <div className="grid items-start gap-4 xl:grid-cols-3">
           <Secao titulo="Transporte" className="xl:col-span-2">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Select

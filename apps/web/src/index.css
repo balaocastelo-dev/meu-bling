@@ -185,7 +185,15 @@ body {
 /* Tabela de itens que no celular vira uma pilha de cartões (um por linha, cada campo com rótulo).
    Uso: <table className="tbl tbl-pilha"> e, nas células, data-rotulo="Qtd" (rótulo no celular),
    className "pilha-cheio" (linha inteira), "pilha-oculto" (some no celular), "pilha-canto" (botão no canto). */
-@media (max-width: 767px) {
+/* valores (colunas numéricas, datas, códigos) nunca se partem em duas linhas */
+.tbl tbody td.num,
+.tbl tfoot td.num,
+.tbl td.nowrap {
+  white-space: nowrap;
+}
+
+/* celular e tablet (até 1023 px): a tabela de itens vira cartões — no tablet, 4 campos por linha */
+@media (max-width: 1023px) {
   table.tbl-pilha,
   table.tbl-pilha > tbody,
   table.tbl-pilha > tfoot {
@@ -256,6 +264,11 @@ body {
   }
   table.tbl-pilha > tfoot > tr > td:empty {
     display: none;
+  }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  table.tbl-pilha > tbody > tr {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

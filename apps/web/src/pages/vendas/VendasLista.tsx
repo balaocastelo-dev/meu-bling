@@ -33,17 +33,18 @@ function nomePeriodo(i: string, f: string) {
 /** Painel à direita do filtro: total, nº de vendas e vendedor destaque do que está filtrado */
 function PainelResumo({ r, periodo, orcamento, carregando }: { r?: ResumoLista; periodo: string; orcamento: boolean; carregando: boolean }) {
   return (
-    <div className={`grid w-full grid-cols-2 gap-2 transition-opacity sm:ml-auto sm:flex sm:w-auto sm:flex-wrap sm:items-stretch ${carregando ? 'opacity-50' : ''}`} aria-live="polite">
-      <div className="col-span-2 min-w-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 sm:min-w-[150px]">
+    // faixa de 3 cartões na largura toda (no celular: total em cima, os outros dois lado a lado)
+    <div className={`grid w-full basis-full grid-cols-2 gap-2 transition-opacity md:grid-cols-3 ${carregando ? 'opacity-50' : ''}`} aria-live="polite">
+      <div className="col-span-2 min-w-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 md:col-span-1">
         <div className="text-[11px] font-medium text-emerald-700">{orcamento ? 'Total orçado' : 'Total vendido'} · {periodo}</div>
         <div className="num text-lg font-semibold leading-tight text-emerald-800">{r ? moeda(r.valor) : '—'}</div>
       </div>
-      <div className="min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 sm:min-w-[110px]">
+      <div className="min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
         <div className="text-[11px] font-medium text-slate-500">{orcamento ? 'Orçamentos' : 'Vendas'}</div>
         <div className="num text-lg font-semibold leading-tight text-slate-900">{r ? inteiro(r.quantidade) : '—'}</div>
         {r && r.quantidade > 0 && <div className="num text-[11px] text-slate-500">ticket {moeda(r.ticketMedio)}</div>}
       </div>
-      <div className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 sm:min-w-[170px] sm:max-w-[260px]">
+      <div className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5">
         <div className="flex items-center gap-1 text-[11px] font-medium text-amber-700">
           <Trophy className="h-3 w-3" /> Vendedor destaque
         </div>

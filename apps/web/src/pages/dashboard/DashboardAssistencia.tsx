@@ -141,13 +141,13 @@ export default function DashboardAssistencia() {
                     <motion.div key={c.nome} initial={{ width: 0 }} animate={{ width: `${r.valorEntrada > 0 ? Math.max(0, (c.valor / r.valorEntrada) * 100) : 0}%` }} transition={{ duration: 0.9, ease: 'easeOut' }} style={{ backgroundColor: c.cor }} title={`${c.nome}: ${moeda(c.valor)}`} />
                   ))}
                 </div>
-                <motion.ul className="mt-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2" variants={listaVariants} initial="oculto" animate="visivel">
+                <motion.ul className="mt-3 grid gap-x-6 gap-y-1.5 md:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2" variants={listaVariants} initial="oculto" animate="visivel">
                   {composicao.map((c) => (
                     <LinhaV18 key={c.nome} className="px-0 py-0.5">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white" style={{ backgroundColor: c.cor }}>{c.icone}</span>
-                      <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{c.nome}</span>
-                      <span className="num text-xs text-slate-400">{r.valorEntrada > 0 ? numero((c.valor / r.valorEntrada) * 100, 0) : 0}%</span>
-                      <span className={`num w-28 text-right text-sm font-semibold ${c.nome === 'Lucro' && c.valor < 0 ? 'text-red-600' : 'text-slate-900'}`}>{c.nome === 'Lucro' ? '' : '- '}{moeda(c.valor)}</span>
+                      <span className="min-w-0 flex-1 text-sm leading-tight text-slate-700">{c.nome}</span>
+                      <span className="num shrink-0 text-xs text-slate-400">{r.valorEntrada > 0 ? numero((c.valor / r.valorEntrada) * 100, 0) : 0}%</span>
+                      <span className={`num min-w-[6.5rem] shrink-0 whitespace-nowrap text-right text-sm font-semibold ${c.nome === 'Lucro' && c.valor < 0 ? 'text-red-600' : 'text-slate-900'}`}>{c.nome === 'Lucro' ? '' : '- '}{moeda(c.valor)}</span>
                     </LinhaV18>
                   ))}
                 </motion.ul>
