@@ -61,11 +61,12 @@ export const MENU: GrupoMenu[] = [
   {
     titulo: 'Início',
     itens: [
+      // JARVIS: o agente do gestor (caminho até R$ 1 milhão livres no caixa) — primeiro item do menu
+      { rotulo: 'JARVIS', para: '/jarvis', icone: Bot, perfis: ['ADMIN'] },
       // Meu Dashboard: todo mundo tem o seu (vendedor, técnico, gerente; o gestor vê o completo com lucro)
       { rotulo: 'Meu Dashboard', para: '/', icone: LayoutDashboard, alias: ['/meu-dashboard'] },
       // os outros dashboards (com lucro): só o dono (ADMIN)
       { rotulo: 'Dashboard de vendas', para: '/dashboard/vendas', icone: TrendingUp, perfis: ['ADMIN'] },
-      { rotulo: 'JARVIS', para: '/jarvis', icone: Bot, perfis: ['ADMIN'] },
       { rotulo: 'Dashboard de assistência', para: '/dashboard/assistencia', icone: Stethoscope, perfis: ['ADMIN'] },
       { rotulo: 'Dashboard de consignação', para: '/dashboard/consignacao', icone: Handshake, perfis: ['ADMIN', 'GERENTE'] },
     ],
