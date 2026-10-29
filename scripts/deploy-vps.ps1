@@ -51,7 +51,7 @@ fi
 if ($LASTEXITCODE -ne 0) { throw "Não consegui iniciar o instalador na VPS (exit $LASTEXITCODE)" }
 
 $vistas = 0; $fim = $null; $inicio = Get-Date
-while (-not $fim) {
+while ($null -eq $fim) {
   Start-Sleep -Seconds 15
   if (((Get-Date) - $inicio).TotalMinutes -gt 30) { throw "A instalação passou de 30 minutos. Confira na VPS: tail -50 $LOG" }
   $novas = NaVps "tail -n +$($vistas + 1) $LOG 2>/dev/null"
