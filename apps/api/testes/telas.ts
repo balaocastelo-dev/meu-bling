@@ -6,7 +6,7 @@
  *   npx tsx testes/telas.ts http://localhost:3333
  */
 import { chromium, type Browser, type Page } from 'playwright';
-import { encerrar, entrar, falhar, placar, secao, SUF } from './lib.js';
+import { encerrar, entrar, falhar, hoje, placar, secao, SUF } from './lib.js';
 import { lerRotas, type Perfil } from './rotas.js';
 
 const RAIZ = (process.argv[2] || 'http://localhost:3333').replace(/\/$/, '');
@@ -80,10 +80,26 @@ async function main() {
     'notas-fiscais': await primeiro('/notas-fiscais?limite=1'),
     consignacoes: await primeiro('/consignacoes'),
   };
-  const montar = (caminho: string) => {
+  // vendedor e técnico só acessam as próprias vendas (29/10/2026): as telas de detalhe deles abrem uma venda,
+  // um orçamento e uma nota no nome deles; a venda do ADMIN deve aparecer como "Venda de outro vendedor"
+  const idsProprios: Partial<Record<Perfil, Record<string, number | null>>> = {};
+  const vendaAlheia = ids.vendas;
+  {
+    const formas: any[] = await adm.get('/formas-pagamento');
+    for (const p of ['VENDEDOR', 'TECNICO'] as Perfil[]) {
+      const s = await entrar(contas[p], senha);
+      const cli = ids.contatos;
+      const venda = await s.post('/vendas', { contatoId: cli, data: hoje(), itens: [{ descricao: `Item telas ${p}`, quantidade: 1, valorUnitario: 100, custoUnitario: 50 }], parcelas: [{ dataVencimento: hoje(), valor: 100, formaPagamentoId: formas[0]?.id }] }, 201);
+      const orc = await s.post('/vendas', { tipo: 'ORCAMENTO', contatoId: cli, itens: [{ descricao: `Orçamento telas ${p}`, quantidade: 1, valorUnitario: 100 }] }, 201);
+      const notas = await s.get('/notas-fiscais?limite=1');
+      idsProprios[p] = { vendas: venda?.id ?? null, orcamentos: orc?.id ?? null, 'notas-fiscais': notas?.data?.[0]?.id ?? null };
+    }
+  }
+  const montar = (caminho: string, perfil?: Perfil) => {
     if (!caminho.includes(':id')) return caminho;
     const base = caminho.split('/')[1];
-    const id = ids[base];
+    const proprios = perfil ? idsProprios[perfil] : undefined;
+    const id = proprios && base in proprios ? proprios[base] : ids[base];
     return id ? caminho.replace(':id', String(id)) : null;
   };
 
@@ -111,7 +127,7 @@ async function main() {
     await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
 
     for (const r of rotas) {
-      const caminho = montar(r.caminho);
+      const caminho = montar(r.caminho, perfil);
       if (!caminho) continue;
       const pode = r.perfis === 'TODOS' || perfil === 'ADMIN' || r.perfis.includes(perfil);
       const v = await visitar(page, RAIZ + caminho);
@@ -129,6 +145,19 @@ async function main() {
       else {
         placar.ok++;
         console.log(`  ✔ ${rotulo}${pode ? '' : ' (bloqueada corretamente)'}`);
+      }
+    }
+    // vendedor/técnico: a venda de outro vendedor abre com o aviso, sem quebrar a tela
+    if ((perfil === 'VENDEDOR' || perfil === 'TECNICO') && vendaAlheia && vendaAlheia !== idsProprios[perfil]?.vendas) {
+      const v = await visitar(page, `${RAIZ}/vendas/${vendaAlheia}`);
+      const rotulo = `[${perfil}] /vendas/${vendaAlheia} (venda de outro vendedor)`;
+      const erros = [...v.problemas];
+      if (!v.texto.includes('Venda de outro vendedor')) erros.push('não mostra o aviso "Venda de outro vendedor"');
+      for (const x of v.respostas.filter((x) => x.status !== 403)) erros.push(`API ${x.status} em ${x.url}`);
+      if (erros.length) for (const e of [...new Set(erros)]) falhar(`${rotulo}: ${e}`);
+      else {
+        placar.ok++;
+        console.log(`  ✔ ${rotulo}: aviso "Venda de outro vendedor"`);
       }
     }
     await ctx.close();

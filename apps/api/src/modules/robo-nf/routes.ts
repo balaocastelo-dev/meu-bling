@@ -12,6 +12,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
+import { whereVendasDoUsuario } from '../comum/escopo-vendas.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
 import { somenteDigitos } from '../../lib/util.js';
@@ -133,8 +134,10 @@ export default async function roboNfRoutes(app: FastifyInstance) {
   app.get('/api/v1/robo-nf/vendas', async (req) => {
     const q = z.object({ status: z.enum(['PRONTA', 'PENDENTE', 'EMITIDA']).default('PRONTA'), limite: z.coerce.number().int().min(1).max(200).default(50) }).parse(req.query);
     const desde = new Date(Date.now() - DIAS_VARREDURA * 86400_000);
+    // vendedor/técnico: só as próprias vendas (29/10/2026)
+    const escopo = await whereVendasDoUsuario(req.user);
     const regs = await prisma.vendaRoboNf.findMany({
-      where: { status: q.status, venda: { data: { gte: desde } } },
+      where: { status: q.status, venda: { ...escopo, data: { gte: desde } } },
       include: { venda: { select: { id: true, numero: true, data: true, total: true, contato: { select: { nome: true } } } } },
       orderBy: { venda: { data: 'desc' } },
       take: q.limite,

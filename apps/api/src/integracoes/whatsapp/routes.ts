@@ -1,29 +1,85 @@
 /**
- * Rotas do WhatsApp (QR Code): status, conectar, desconectar, enviar teste, eventos (SSE).
+ * Rotas do WhatsApp: status, conectar (QR Code), desconectar, enviar teste, eventos (SSE)
+ * e a configuração do servidor Evolution — o caminho do "um QR Code só" para toda a loja.
+ *
+ * O status/conexão passam pelo provedor (Evolution quando configurada, senão a sessão
+ * própria do sistema). O SSE e o robô de reconexão continuam ligados ao Baileys, que é
+ * quem tem eventos locais; com a Evolution a tela recarrega o estado sozinha.
  */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { registrarServico } from '../../core/servicos.js';
 import { auditar } from '../../lib/auditoria.js';
-import { conectar, desconectar, reconectarDoZero, enviarTexto, status, whatsappEventos, iniciarSeNecessario } from './servico.js';
+import { reconectarDoZero, status as statusBaileys, whatsappEventos, iniciarSeNecessario } from './servico.js';
+import { conectar, desconectar, enviarTexto, status, provedorAtual } from './provedor.js';
+import { gravarConfig, lerConfig, listarInstancias, testar } from './evolution.js';
+import { mask } from '../../lib/crypto.js';
 
 export default async function whatsappRoutes(app: FastifyInstance) {
   const cfg = app.exigirPerfil('ADMIN', 'GERENTE');
 
   app.get('/api/v1/whatsapp/status', async () => status());
 
+  // ---------------------------------------------------------------- um QR Code só (Evolution)
+  app.get('/api/v1/whatsapp/evolution', { preHandler: app.exigirPerfil('ADMIN') }, async () => {
+    const c = await lerConfig();
+    return {
+      ligado: c.ligado,
+      url: c.url,
+      instancia: c.instancia,
+      temChave: !!c.apiKey,
+      chaveMascarada: mask(c.apiKey),
+      provedor: await provedorAtual(),
+    };
+  });
+
+  app.put('/api/v1/whatsapp/evolution', { preHandler: app.exigirPerfil('ADMIN') }, async (req) => {
+    const b = z
+      .object({
+        ligado: z.boolean().optional(),
+        url: z.string().max(300).optional(),
+        instancia: z.string().max(100).optional(),
+        apiKey: z.string().max(300).optional().nullable(),
+      })
+      .strict()
+      .parse(req.body ?? {});
+
+    const c = await gravarConfig({ ...b, apiKey: b.apiKey ?? undefined });
+    await auditar(req, 'Empresa', 1, 'ALTERAR', {
+      acao: 'whatsapp.evolution',
+      ligado: c.ligado,
+      instancia: c.instancia,
+      trocouChave: !!b.apiKey,
+    });
+    return { ligado: c.ligado, url: c.url, instancia: c.instancia, temChave: !!c.apiKey, chaveMascarada: mask(c.apiKey), provedor: await provedorAtual() };
+  });
+
+  app.post('/api/v1/whatsapp/evolution/testar', { preHandler: app.exigirPerfil('ADMIN') }, async (req) => {
+    const b = z
+      .object({ url: z.string().min(5).max(300), apiKey: z.string().max(300).optional(), instancia: z.string().min(1).max(100) })
+      .parse(req.body ?? {});
+    const guardada = await lerConfig();
+    const chave = b.apiKey && !/^[*•]+/.test(b.apiKey) ? b.apiKey : guardada.apiKey;
+    if (!chave) return { ok: false, mensagem: 'Informe a chave da API (apikey) do servidor Evolution.' };
+    return testar({ url: b.url, apiKey: chave, instancia: b.instancia });
+  });
+
+  app.get('/api/v1/whatsapp/evolution/instancias', { preHandler: app.exigirPerfil('ADMIN') }, async () => {
+    return { data: await listarInstancias() };
+  });
+
   app.post('/api/v1/whatsapp/conectar', { preHandler: cfg }, async (req) => {
     const r = await conectar();
     // aguarda até 8s pelo QR (ou conexão) para a UI já receber algo útil
     const inicio = Date.now();
     while (Date.now() - inicio < 8000) {
-      const s = status();
+      const s = await status();
       if (s.status === 'AGUARDANDO_QR' || s.status === 'CONECTADO') return s;
       if (s.status === 'DESCONECTADO' && s.ultimoErro) return s;
       await new Promise((res) => setTimeout(res, 300));
     }
     await auditar(req, 'Empresa', 1, 'ACAO', { acao: 'whatsapp.conectar' });
-    return r.status === 'CONECTANDO' ? status() : r;
+    return r.status === 'CONECTANDO' ? await status() : r;
   });
 
   app.post('/api/v1/whatsapp/desconectar', { preHandler: cfg }, async (req) => {
@@ -37,13 +93,13 @@ export default async function whatsappRoutes(app: FastifyInstance) {
     await reconectarDoZero();
     const inicio = Date.now();
     while (Date.now() - inicio < 8000) {
-      const s = status();
+      const s = statusBaileys();
       if (s.status === 'AGUARDANDO_QR' || s.status === 'CONECTADO') break;
       if (s.status === 'DESCONECTADO' && s.ultimoErro) break;
       await new Promise((res) => setTimeout(res, 300));
     }
     await auditar(req, 'Empresa', 1, 'ACAO', { acao: 'whatsapp.reconectar' });
-    return status();
+    return statusBaileys();
   });
 
   app.post('/api/v1/whatsapp/enviar-teste', { preHandler: cfg }, async (req) => {
@@ -69,8 +125,8 @@ export default async function whatsappRoutes(app: FastifyInstance) {
         /* cliente fechou */
       }
     };
-    enviar('estado', status());
-    const onEstado = () => enviar('estado', status());
+    enviar('estado', statusBaileys());
+    const onEstado = () => enviar('estado', statusBaileys());
     const onMensagem = (m: unknown) => enviar('mensagem', m);
     whatsappEventos.on('estado', onEstado);
     whatsappEventos.on('mensagem', onMensagem);
@@ -85,6 +141,10 @@ export default async function whatsappRoutes(app: FastifyInstance) {
 }
 
 registrarServico('whatsapp', async (app) => {
+  if ((await provedorAtual()) === 'EVOLUTION') {
+    app.log.info('[whatsapp] quem manda é a Evolution API (um QR Code só) — sessão local não será aberta');
+    return;
+  }
   const iniciou = await iniciarSeNecessario();
   if (iniciou) app.log.info('[whatsapp] sessão salva encontrada — reconectando');
   whatsappEventos.on('estado', (e: any) => {

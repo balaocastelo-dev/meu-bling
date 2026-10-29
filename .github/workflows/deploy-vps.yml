@@ -1,0 +1,64 @@
+# Publica o MEU BLING na VPS do Balão a cada merge na main — sem depender do PC da loja.
+#
+# Para ligar (uma vez só):
+#   1. Na VPS, gerar/pegar uma chave SSH que o root aceite:
+#        ssh-keygen -t ed25519 -f ~/deploy-github -N ""
+#        cat ~/deploy-github.pub >> ~/.ssh/authorized_keys
+#   2. No GitHub (repositório → Settings → Secrets and variables → Actions → New repository secret):
+#        VPS_SSH_KEY   = conteúdo de ~/deploy-github (a chave privada inteira)
+#        VPS_HOST      = 179.199.148.87   (opcional; este é o padrão)
+#        VPS_USUARIO   = root             (opcional; este é o padrão)
+#   Sem o segredo VPS_SSH_KEY o passo é pulado sem dar erro (o deploy segue pelo scripts\deploy-vps.ps1).
+name: Publicar na VPS
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Conferir se a chave da VPS está configurada
+        id: chave
+        run: |
+          if [ -n "${{ secrets.VPS_SSH_KEY }}" ]; then echo "tem=sim" >> "$GITHUB_OUTPUT";
+          else echo "tem=nao" >> "$GITHUB_OUTPUT"; echo "::notice::Segredo VPS_SSH_KEY não configurado — deploy automático pulado."; fi
+
+      - name: Preparar o SSH
+        if: steps.chave.outputs.tem == 'sim'
+        env:
+          CHAVE: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$CHAVE" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${VPS_HOST:-179.199.148.87}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Enviar o código e montar na VPS
+        if: steps.chave.outputs.tem == 'sim'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USUARIO: ${{ secrets.VPS_USUARIO }}
+        run: |
+          ALVO="${VPS_USUARIO:-root}@${VPS_HOST:-179.199.148.87}"
+          git archive --format=tar HEAD | ssh -o BatchMode=yes "$ALVO" "mkdir -p /opt/meu-bling && tar -x -C /opt/meu-bling"
+          ssh -o BatchMode=yes -o ServerAliveInterval=20 "$ALVO" "bash /opt/meu-bling/deploy/vps/instalar-vps.sh"
+
+      - name: Conferir se o sistema respondeu
+        if: steps.chave.outputs.tem == 'sim'
+        run: |
+          for i in $(seq 1 10); do
+            codigo=$(curl -s -o /dev/null -w '%{http_code}' https://www.balao.info/sistema/api/v1/saude || true)
+            if [ "$codigo" = "200" ]; then echo "✅ www.balao.info/sistema no ar"; exit 0; fi
+            sleep 10
+          done
+          echo "::warning::O endereço público não respondeu 200 (pode ser cache da Vercel). Confira na VPS: docker logs --tail 50 meu-bling"

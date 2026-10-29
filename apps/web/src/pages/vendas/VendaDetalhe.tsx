@@ -95,7 +95,11 @@ export default function VendaDetalhe() {
   };
 
   if (isLoading) return <FormSkeleton />;
-  if (error || !venda) return <EmptyState titulo="Venda não encontrada" descricao={error ? mensagemErro(error) : undefined} acao={<Link to="/vendas"><Button>Voltar</Button></Link>} />;
+  if (error || !venda) {
+    // venda de outro vendedor (vendedor/técnico só acessam as próprias): o servidor explica de quem é
+    const deOutro = (error as { code?: string } | null)?.code === 'VENDA_DE_OUTRO_VENDEDOR';
+    return <EmptyState titulo={deOutro ? 'Venda de outro vendedor' : 'Venda não encontrada'} descricao={error ? mensagemErro(error) : undefined} acao={<Link to="/vendas"><Button>Voltar para minhas vendas</Button></Link>} />;
+  }
 
   const contato = venda.contato as Contato;
   const orcamento = venda.tipo === 'ORCAMENTO';
