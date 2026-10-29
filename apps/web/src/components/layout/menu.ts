@@ -36,6 +36,7 @@ import {
   BookOpen,
   Handshake,
   MessagesSquare,
+  ShieldCheck,
 } from 'lucide-react';
 import type { Perfil } from '@/types';
 
@@ -139,6 +140,7 @@ export const MENU: GrupoMenu[] = [
     itens: [
       { rotulo: 'Empresa', para: '/configuracoes/empresa', icone: Building2, perfis: GESTAO },
       { rotulo: 'Saúde do sistema', para: '/configuracoes/saude', icone: Stethoscope, perfis: ['ADMIN'] },
+      { rotulo: 'Painel de auditoria', para: '/auditoria', icone: ShieldCheck, perfis: ['ADMIN'] },
       { rotulo: 'API e integrações', para: '/configuracoes/api', icone: Cable, perfis: ['ADMIN'] },
       { rotulo: 'Todas as configurações', para: '/configuracoes', icone: Settings, perfis: GESTAO },
     ],
@@ -162,6 +164,7 @@ export const CONFIG_ITENS: { rotulo: string; para: string; descricao: string; pe
   { rotulo: 'Open Finance', para: '/configuracoes/open-finance', descricao: 'Credenciais Pluggy', perfis: ['ADMIN'] },
   { rotulo: 'API e integrações', para: '/configuracoes/api', descricao: 'Chaves para outros sistemas e agentes de IA, webhooks, MCP', perfis: ['ADMIN'] },
   { rotulo: 'Saúde do sistema', para: '/configuracoes/saude', descricao: 'Confere os dados e aponta o que corrigir', perfis: ['ADMIN'] },
+  { rotulo: 'Painel de auditoria', para: '/auditoria', descricao: 'Tudo que acontece no sistema, ao vivo e desde o início; reverter; agentes de IA (senha do dia)', perfis: ['ADMIN'] },
   { rotulo: 'Migração do Bling', para: '/configuracoes/bling', descricao: 'Conectar e importar dados', perfis: ['ADMIN'] },
 ];
 

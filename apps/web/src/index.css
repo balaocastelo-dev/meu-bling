@@ -425,3 +425,10 @@ body {
     height: calc(100dvh - 6.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   }
 }
+
+/* Painel de auditoria: operação nova chegando no "ao vivo" */
+@keyframes aud-chegou {
+  from { background-color: rgb(254 243 199); transform: translateX(-6px); opacity: 0; }
+  to { background-color: transparent; transform: translateX(0); opacity: 1; }
+}
+.aud-nova { animation: aud-chegou 1.2s ease-out; }

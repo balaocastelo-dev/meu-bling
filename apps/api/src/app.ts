@@ -17,6 +17,8 @@ import { AppError } from './lib/errors.js';
 import authPlugin from './plugins/auth.js';
 import { prisma } from './lib/prisma.js';
 import { chaveDoCabecalho, hashDaChave, limiteDaChaveEmCache } from './modules/api-externa/chaves.js';
+import { contextoAtual, entrarNoContexto } from './modules/auditoria/contexto.js';
+import { fecharOperacao } from './modules/auditoria/operacoes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -78,6 +80,19 @@ export async function construirApp() {
   await app.register(multipart, { limits: { fileSize: 30 * 1024 * 1024 } });
   // Chat da equipe em tempo real (WebSocket): registrado antes das rotas, como o plugin pede
   await app.register(websocket, { options: { maxPayload: 256 * 1024 } });
+
+  // Painel de auditoria: cada requisição é uma "operação" — tudo o que ela gravar no banco fica
+  // agrupado com quem fez (o usuário é lido na hora da gravação, já autenticado; por isso este hook
+  // vem ANTES do authPlugin, que também grava — último uso da chave de API). Ver modules/auditoria.
+  app.addHook('onRequest', (req, _reply, done) => {
+    if (!req.url.startsWith('/api/')) return done();
+    entrarNoContexto({ origem: 'TELA', req }, done);
+  });
+  app.addHook('onResponse', async (req, reply) => {
+    const ctx = contextoAtual();
+    if (ctx?.req === req) await fecharOperacao(ctx, reply.statusCode);
+  });
+
   await app.register(authPlugin);
 
   // Arquivos do storage (/uploads/*): logos públicos; anexos/DANFE/XML exigem sessão (cookie ou Bearer).
