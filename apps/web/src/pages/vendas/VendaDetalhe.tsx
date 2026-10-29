@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowRight, CheckCircle2, Clock, FileText, Link2, Pencil, Printer, Send, ShoppingCart, Undo2, Zap } from 'lucide-react';
 import { abrirEmNovaAba, api, mensagemErro } from '@/lib/api';
@@ -16,6 +16,7 @@ import { data, dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { Contato, Venda } from '@/types';
 import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/ProdutoSite';
 import { FinalizarVendaModal } from '@/components/compartilhados/FinalizarVenda';
+import { PosVendaImpressao } from '@/components/compartilhados/PosVendaImpressao';
 import { LinkPagamento } from '@/components/compartilhados/LinkPagamento';
 
 /** Detalhe do pedido de venda com abas e ações */
@@ -30,6 +31,24 @@ export default function VendaDetalhe() {
   const [nfe, setNfe] = useState<{ modelo: 55 | 65; info: string } | null>(null);
 
   const { data: venda, isLoading, error } = useQuery({ queryKey: ['venda', id], queryFn: () => api.get<Venda>(`/vendas/${id}`) });
+
+  // impressão logo depois de finalizar: quando a venda vira "Fechada"/"NF emitida" nesta tela,
+  // ou quando chega aqui recém-salva já finalizada (VendaForm manda state.imprimir)
+  const local = useLocation();
+  const [posVenda, setPosVenda] = useState(false);
+  const finalAnterior = useRef<{ id: string | undefined; final: boolean } | null>(null);
+  useEffect(() => {
+    if (!venda || venda.tipo === 'ORCAMENTO') return;
+    const s = venda.situacao as { final?: boolean; cancelamento?: boolean };
+    const final = !!s.final && !s.cancelamento;
+    const antes = finalAnterior.current;
+    if (antes && antes.id === id && !antes.final && final) setPosVenda(true);
+    if (!antes && final && (local.state as { imprimir?: boolean } | null)?.imprimir) {
+      setPosVenda(true);
+      nav(local.pathname, { replace: true, state: null }); // não abre de novo ao recarregar
+    }
+    finalAnterior.current = { id, final };
+  }, [venda, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: ['venda', id] });
@@ -425,6 +444,7 @@ export default function VendaDetalhe() {
       />
 
       {!orcamento && <FinalizarVendaModal vendaId={venda.id} numero={venda.numero} aberto={finalizar} onFechar={() => setFinalizar(false)} />}
+      {!orcamento && <PosVendaImpressao vendaId={venda.id} numero={venda.numero} aberto={posVenda} onFechar={() => setPosVenda(false)} />}
     </div>
   );
 }

@@ -185,7 +185,10 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
       toast.success(editando ? `${Nome} atualizado.` : `${Nome} nº ${v.numero} criado.`, orcamento && !editando ? { description: 'Agora é só enviar por e-mail ou WhatsApp em "Mais ações".' } : undefined);
       qc.invalidateQueries({ queryKey: ['vendas'] });
       qc.invalidateQueries({ queryKey: ['venda', String(v.id)] });
-      nav(`${base}/${v.id}`);
+      // venda salva já finalizada (Fechada / NF emitida): a tela da venda abre a impressão
+      const sit = v.situacao as { final?: boolean; cancelamento?: boolean } | undefined;
+      const imprimir = !editando && !orcamento && !!sit?.final && !sit?.cancelamento;
+      nav(`${base}/${v.id}`, imprimir ? { state: { imprimir: true } } : undefined);
     },
     onError: (e) => toast.error(mensagemErro(e)),
   });
