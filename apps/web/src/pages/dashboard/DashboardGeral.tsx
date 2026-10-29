@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { AvisosImportantes } from '@/components/compartilhados/AvisosImportantes';
 import { MensagensCard } from '@/components/chat/MensagensCard';
+import SugestoesJarvis from '@/components/dashboard/SugestoesJarvis';
 import { CardRoboSaude } from '@/components/compartilhados/RoboSaude';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -251,6 +252,7 @@ export default function DashboardGeral({ acoesExtras }: { acoesExtras?: React.Re
       {/* avisos mais importantes (caixinhas no prazo, contas vencidas, OS atrasadas) */}
       <Aparecer>
         <MensagensCard />
+        <SugestoesJarvis />
       </Aparecer>
       <Aparecer>
         <AvisosImportantes />

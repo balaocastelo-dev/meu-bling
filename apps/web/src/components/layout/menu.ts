@@ -3,6 +3,7 @@
  */
 import type { LucideIcon } from 'lucide-react';
 import {
+  Bot,
   PiggyBank,
   FileSignature,
   Banknote,
@@ -64,6 +65,7 @@ export const MENU: GrupoMenu[] = [
       { rotulo: 'Meu Dashboard', para: '/', icone: LayoutDashboard, alias: ['/meu-dashboard'] },
       // os outros dashboards (com lucro): só o dono (ADMIN)
       { rotulo: 'Dashboard de vendas', para: '/dashboard/vendas', icone: TrendingUp, perfis: ['ADMIN'] },
+      { rotulo: 'JARVIS', para: '/jarvis', icone: Bot, perfis: ['ADMIN'] },
       { rotulo: 'Dashboard de assistência', para: '/dashboard/assistencia', icone: Stethoscope, perfis: ['ADMIN'] },
       { rotulo: 'Dashboard de consignação', para: '/dashboard/consignacao', icone: Handshake, perfis: ['ADMIN', 'GERENTE'] },
     ],
@@ -158,6 +160,7 @@ export const CONFIG_ITENS: { rotulo: string; para: string; descricao: string; pe
   { rotulo: 'Depósitos', para: '/configuracoes/depositos', descricao: 'Locais de estoque e distribuidores' },
   { rotulo: 'Contas financeiras', para: '/configuracoes/contas-financeiras', descricao: 'Caixa, bancos e cartões' },
   { rotulo: 'E-mail (SMTP)', para: '/configuracoes/smtp', descricao: 'Servidor de envio e teste', perfis: ['ADMIN'] },
+  { rotulo: 'JARVIS', para: '/configuracoes/jarvis', descricao: 'Meta de caixa, chave da IA e regras de preço de usado', perfis: ['ADMIN'] },
   { rotulo: 'Mercado Pago', para: '/configuracoes/mercado-pago', descricao: 'Link de pagamento nos pedidos', perfis: ['ADMIN'] },
   { rotulo: 'Open Finance', para: '/configuracoes/open-finance', descricao: 'Credenciais Pluggy', perfis: ['ADMIN'] },
   { rotulo: 'API e integrações', para: '/configuracoes/api', descricao: 'Chaves para outros sistemas e agentes de IA, webhooks, MCP', perfis: ['ADMIN'] },

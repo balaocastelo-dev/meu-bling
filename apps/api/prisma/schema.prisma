@@ -1872,3 +1872,106 @@ model PushAssinatura {
 
   @@index([usuarioId])
 }
+
+// ---------------------------------------------------------------------
+// JARVIS — agente do gestor para R$ 1 milhão livres no caixa (docs/JARVIS.md)
+// ---------------------------------------------------------------------
+
+/// Foto do caixa livre a cada rodada do worker (gráfico de evolução do painel /jarvis)
+model JarvisMetrica {
+  id          Int      @id @default(autoincrement())
+  em          DateTime @default(now())
+  /// bancos + caixa − a pagar 30 dias − caixinhas comprometidas − empréstimos
+  caixaLivre  Float
+  /// saldo das contas tipo BANCO/CARTAO/INVESTIMENTO/OUTRO
+  saldoBancos Float
+  /// saldo das contas tipo CAIXA (dinheiro na gaveta)
+  saldoCaixa  Float
+  /// contas a pagar vencidas + a vencer nos próximos 30 dias (o que falta pagar)
+  aPagar30d   Float
+  /// o que ainda falta guardar nas caixinhas ativas
+  caixinhas   Float
+  /// saldo devedor dos empréstimos abertos (principal + juros)
+  emprestimos Float
+  /// JSON com a conta de cada parcela (para a tela explicar o número)
+  detalhes    String?
+
+  @@index([em])
+}
+
+/// Cada sugestão que o JARVIS dá nos painéis. Enquanto ABERTA/ADIADA não se repete (chave).
+model JarvisSugestao {
+  id              Int       @id @default(autoincrement())
+  criadaEm        DateTime  @default(now())
+  /// regra que gerou: ESTOQUE_PARADO | CREDIARIO_VENCIDO | CONSIGNADO_PRAZO | LUMICRED_CUSTO |
+  /// CAIXINHA_ATRASADA | TAXA_CARTAO | MARGEM_BAIXA | OPORTUNIDADE_COMPRA | MAPA_MILHAO
+  regra           String
+  /// identifica o alvo (ex.: "ESTOQUE_PARADO:produto:123")
+  chave           String
+  /// para quem aparece (lista separada por vírgula: "ADMIN" | "ADMIN,GERENTE" | "VENDEDOR"...)
+  perfis          String    @default("ADMIN")
+  titulo          String
+  /// a instrução em português (escrita pela IA quando há chave configurada)
+  texto           String
+  /// R$ que a sugestão libera/ganha se for aceita
+  impactoEstimado Float?
+  /// 1 = urgente ... 5 = baixa
+  prioridade      Int       @default(3)
+  /// JSON: ids e números que a ação precisa
+  dados           String?
+  /// ação de 1 clique: DESCONTO_LOTE | COBRAR_WHATSAPP | CRIAR_CAIXINHA | ABRIR_TELA | NENHUMA
+  acao            String    @default("NENHUMA")
+  /// link da tela quando a ação é ABRIR_TELA
+  link            String?
+  /// ABERTA | ACEITA | ADIADA | RECUSADA | CONCLUIDA | EXPIRADA
+  situacao        String    @default("ABERTA")
+  adiadaAte       DateTime?
+  decididaEm      DateTime?
+  decididaPor     String?
+  motivo          String?
+  /// quanto a sugestão rendeu de verdade (placar do JARVIS)
+  resultadoReal   Float?
+  medidaEm        DateTime?
+  atualizadoEm    DateTime  @updatedAt
+
+  @@index([situacao, prioridade])
+  @@index([chave])
+  @@index([criadaEm])
+}
+
+/// Modo pergunta do painel: o gestor pergunta, a IA responde com os números do dia
+model JarvisConversa {
+  id        Int      @id @default(autoincrement())
+  em        DateTime @default(now())
+  usuarioId Int?
+  pergunta  String
+  resposta  String
+  /// JSON com os números que a IA recebeu (e o custo em tokens)
+  contexto  String?
+
+  @@index([em])
+}
+
+/// Configuração do JARVIS (uma linha só, id = 1). Segredos criptografados com APP_SECRET.
+model JarvisConfig {
+  id                Int       @id @default(1)
+  ligado            Boolean   @default(true)
+  metaCaixa         Float     @default(1000000)
+  dataAlvo          DateTime?
+  modeloIa          String    @default("claude-fable-5-1")
+  /// chave da API da Anthropic (enc:...)
+  chaveAnthropic    String?
+  /// % do valor de novo que o cliente paga num usado de boas condições
+  percVendaUsado    Int       @default(70)
+  /// % do valor de novo que a loja paga na compra, por condição
+  percCompraRegular Int       @default(30)
+  percCompraBom     Int       @default(50)
+  percCompraLacrado Int       @default(75)
+  /// dias sem venda para o produto entrar em ESTOQUE_PARADO
+  diasEstoqueParado Int       @default(45)
+  /// % da loja no consignado (o consignante fica com o resto)
+  percLojaConsignado Int      @default(20)
+  ultimaRodadaEm    DateTime?
+  ultimoErro        String?
+  atualizadoEm      DateTime  @updatedAt
+}

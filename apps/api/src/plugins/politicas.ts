@@ -53,6 +53,9 @@ const REGRAS: Regra[] = [
   // lembretes do Robô da Saúde para quem está logado (OS sem custo → técnico, venda sem custo → vendedor): todos
   { teste: /^\/robo-saude\/lembretes$/, perfis: 'TODOS' },
   { teste: /^\/robo-saude(\/|$)/, perfis: ['ADMIN'] },
+  // JARVIS: o feed de sugestões aparece no Meu Dashboard de todo mundo; o resto é só do gestor
+  { teste: /^\/jarvis\/feed$/, perfis: 'TODOS' },
+  { teste: /^\/jarvis(\/|$)/, perfis: ['ADMIN'] },
   { teste: /^\/notas-fiscais\/inutilizar/, perfis: GESTAO },
   { teste: /^\/whatsapp\/(conectar|desconectar)/, perfis: GESTAO },
   { metodos: MUT, teste: /^\/templates-notificacao(\/|$)/, perfis: GESTAO },
