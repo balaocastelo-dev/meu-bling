@@ -1,6 +1,6 @@
 # MEU BLING — ERP do Balão da Informática
 
-Sistema completo que substitui o Bling: **vendas, compras e ordens de serviço com situações configuráveis**, **NF-e / NFC-e com certificado A1 direto na SEFAZ**, **financeiro com contas a receber/pagar, bancos ao vivo (Open Finance) e conciliação**, **vendedores, técnicos e comissões**, **controle de peças da assistência**, **histórico do cliente**, **dashboards**, **DRE**, **e-mail (SMTP)** e **WhatsApp automático via QR Code** a cada mudança de situação.
+Sistema completo que substitui o Bling: **vendas, compras e ordens de serviço com situações configuráveis**, **NF-e / NFC-e com certificado A1 direto na SEFAZ**, **financeiro com contas a receber/pagar, bancos ao vivo (Open Finance) e conciliação**, **vendedores, técnicos e comissões**, **controle de peças da assistência**, **histórico do cliente**, **dashboards** (Meu Dashboard por perfil: vendedor, técnico, gerente e gestor — ver `docs/MEU-DASHBOARD.md`), **DRE**, **e-mail (SMTP)** e **WhatsApp automático via QR Code** a cada mudança de situação.
 
 ## Instalação (Windows)
 

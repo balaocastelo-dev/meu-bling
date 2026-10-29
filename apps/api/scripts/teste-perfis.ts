@@ -104,7 +104,11 @@ async function main() {
   await esperar(tecnico, 'DELETE', '/vendas/1', [403], undefined, 'TECNICO');
   await esperar(tecnico, 'DELETE', '/ordens-servico/1', [403], undefined, 'TECNICO');
   await esperar(tecnico, 'GET', '/financeiro/resumo', [403], undefined, 'TECNICO');
-  await esperar(tecnico, 'GET', '/painel-vendedor', [403], undefined, 'TECNICO');
+  // o técnico também vende (29/10/2026): tem painel do vendedor e Meu Dashboard; nunca vê lucro
+  await esperar(tecnico, 'GET', '/painel-vendedor', [200, 422], undefined, 'TECNICO');
+  await esperar(tecnico, 'GET', '/meu-dashboard', [200], undefined, 'TECNICO');
+  await esperar(tecnico, 'GET', '/meu-dashboard?usuarioId=1', [403], undefined, 'TECNICO');
+  await esperar(tecnico, 'GET', '/metas-tecnicos', [403], undefined, 'TECNICO');
 
   console.log('== FINANCEIRO');
   await esperar(financeiro, 'GET', '/financeiro/resumo', [200], undefined, 'FINANCEIRO');

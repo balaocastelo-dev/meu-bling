@@ -75,7 +75,7 @@ com o primeiro nome de quem precisa agir. O ADMIN continua vendo tudo no sino e 
 `GET /robo-saude` · `GET /robo-saude/contagem` · `POST /robo-saude/rodar` · `POST /robo-saude/avisos/:id/executar {acao}` ·
 `POST /robo-saude/avisos/:id/ignorar` · `POST /robo-saude/resolver-tudo` · `POST /robo-saude/marcar-lidas` · `PUT /robo-saude/config {ligado, autoCorrigir}`
 
-`GET /lembretes` (qualquer perfil logado) → `{ meus: [avisos abertos para o meu técnico/vendedor], equipe: [só ADMIN/GERENTE, com "quem"], semDono }`.
+`GET /robo-saude/lembretes` (qualquer perfil logado; `/lembretes` são os lembretes que as pessoas escrevem no Meu Dashboard) → `{ meus: [avisos abertos para o meu técnico/vendedor], equipe: [só ADMIN/GERENTE, com "quem"], semDono }`.
 
 Dados: tabela `RoboSaudeAviso` (tipo CORRECAO | SUGESTAO | ALERTA; status ABERTA | RESOLVIDA | IGNORADA | FEITA;
 `tecnicoId`/`vendedorId` = destinatário do lembrete); config e último estado em `Configuracao` (`roboSaude.config`,

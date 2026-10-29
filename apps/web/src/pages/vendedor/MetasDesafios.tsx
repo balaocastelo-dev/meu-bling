@@ -7,11 +7,11 @@ import { format, endOfMonth } from 'date-fns';
 import { Ban, Check, Crown, LayoutDashboard, Pencil, Plus, RotateCcw, Save, Target, Trash2, Trophy } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { buscarProdutos } from '@/lib/buscas';
-import { useCategoriasProduto, useVendedores } from '@/hooks/useListas';
+import { useCategoriasProduto, useTecnicos, useVendedores } from '@/hooks/useListas';
 import { Badge, Button, Card, Checkbox, DateInput, EmptyState, Input, Modal, MoneyInput, PageHeader, SearchSelect, Segmentado, Select, Skeleton, Tabs, Textarea } from '@/components/ui';
 import { textoAlvo, valorDesafio } from '@/components/compartilhados/DesafioCard';
 import { competenciaAtual, competenciaLabel, data, hoje, moeda, numero } from '@/lib/format';
-import type { Desafio, MetaLinha, TipoDesafio } from '@/types';
+import type { Desafio, MetaLinha, MetaTecnicoLinha, PublicoDesafio, TipoDesafio, TipoMetaTecnico } from '@/types';
 
 /** Metas mensais e desafios de vendas (ADMIN e GERENTE) */
 export default function MetasDesafios() {
@@ -21,7 +21,7 @@ export default function MetasDesafios() {
     <div>
       <PageHeader
         titulo="Metas e desafios"
-        descricao="Defina a meta de cada vendedor e lance desafios que valem prêmio em comissão."
+        descricao="Defina a meta de cada vendedor e de cada técnico e lance desafios (de vendas ou de OS) que valem prêmio em comissão."
         acoes={
           <Link to="/meu-painel">
             <Button variante="secundario" icone={<LayoutDashboard className="h-4 w-4" />}>Ver painel do vendedor</Button>
@@ -37,7 +37,14 @@ export default function MetasDesafios() {
         ativa={aba}
         onMudar={(id) => setParams(id === 'metas' ? { aba: 'metas' } : {})}
       />
-      {aba === 'desafios' ? <AbaDesafios /> : <AbaMetas />}
+      {aba === 'desafios' ? (
+        <AbaDesafios />
+      ) : (
+        <div className="space-y-4">
+          <AbaMetas />
+          <AbaMetasTecnicos />
+        </div>
+      )}
     </div>
   );
 }
@@ -86,7 +93,7 @@ function AbaDesafios() {
           <EmptyState
             icone={<Trophy className="h-5 w-5" />}
             titulo="Nenhum desafio lançado"
-            descricao='Ex.: "Vender R$ 10.000 até sexta" valendo +R$ 100. Aparece como card na tela do vendedor e o prêmio entra sozinho na comissão quando ele bate o alvo.'
+            descricao='Ex.: "Vender R$ 10.000 até sexta" (vendedores) ou "Concluir 15 OS no mês" (técnicos) valendo +R$ 100. Aparece como card no Meu Dashboard de cada um e o prêmio entra sozinho na comissão quando bate o alvo.'
             acao={<Button icone={<Plus className="h-4 w-4" />} onClick={() => setEditar('novo')}>Lançar o primeiro desafio</Button>}
           />
         </Card>
@@ -100,6 +107,7 @@ function AbaDesafios() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm font-semibold text-slate-900">{d.titulo}</h3>
+                      <Badge tom={d.publico === 'TECNICOS' ? 'azul' : 'vermelho'}>{d.publico === 'TECNICOS' ? 'Técnicos' : 'Vendedores'}</Badge>
                       <Badge tom={s.tom}>{s.rotulo}</Badge>
                       {d.regra === 'PRIMEIRO' && <Badge tom="roxo"><Crown className="h-3 w-3" /> Só o primeiro</Badge>}
                     </div>
@@ -112,7 +120,7 @@ function AbaDesafios() {
                 </div>
                 <ul className="max-h-60 divide-y divide-slate-50 overflow-y-auto px-4 py-1">
                   {d.participantes.map((p) => (
-                    <li key={p.vendedorId} className="flex items-center gap-3 py-2 text-sm">
+                    <li key={p.participanteId ?? p.vendedorId} className="flex items-center gap-3 py-2 text-sm">
                       <span className="w-32 shrink-0 truncate text-slate-700">{p.nome}</span>
                       <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
                         <div className={clsx('h-full rounded-full', p.conquistou ? 'bg-emerald-500' : 'bg-amber-500')} style={{ width: `${Math.max(2, p.pct)}%` }} />
@@ -121,7 +129,7 @@ function AbaDesafios() {
                       {p.conquistou ? <Trophy className="h-4 w-4 shrink-0 text-emerald-600" aria-label="Conquistou" /> : <span className="w-4" />}
                     </li>
                   ))}
-                  {!d.participantes.length && <li className="py-3 text-center text-xs text-slate-400">Nenhum vendedor ativo participando.</li>}
+                  {!d.participantes.length && <li className="py-3 text-center text-xs text-slate-400">{d.publico === 'TECNICOS' ? 'Nenhum técnico ativo participando.' : 'Nenhum vendedor ativo participando.'}</li>}
                 </ul>
                 <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-4 py-2.5">
                   <Button tamanho="sm" variante="fantasma" icone={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditar(d)}>Editar</Button>
@@ -146,6 +154,7 @@ function AbaDesafios() {
 interface FormState {
   titulo: string;
   descricao: string;
+  publico: PublicoDesafio;
   tipo: TipoDesafio;
   alvo: number;
   premio: number;
@@ -154,6 +163,7 @@ interface FormState {
   regra: 'TODOS' | 'PRIMEIRO';
   todosVendedores: boolean;
   vendedoresIds: number[];
+  tecnicosIds: number[];
   filtro: 'NENHUM' | 'PRODUTO' | 'CATEGORIA';
   produtoId: number | null;
   produtoNome: string | null;
@@ -162,12 +172,14 @@ interface FormState {
 
 function FormDesafio({ desafio, onFechar, onSalvo }: { desafio: Desafio | null; onFechar: () => void; onSalvo: () => void }) {
   const { data: vendedores } = useVendedores();
+  const { data: tecnicos } = useTecnicos();
   const { data: categorias } = useCategoriasProduto();
   const [f, setF] = useState<FormState>(() =>
     desafio
       ? {
           titulo: desafio.titulo,
           descricao: desafio.descricao ?? '',
+          publico: desafio.publico ?? 'VENDEDORES',
           tipo: desafio.tipo,
           alvo: desafio.alvo,
           premio: desafio.premio,
@@ -176,20 +188,24 @@ function FormDesafio({ desafio, onFechar, onSalvo }: { desafio: Desafio | null; 
           regra: desafio.regra,
           todosVendedores: desafio.todosVendedores,
           vendedoresIds: desafio.vendedoresIds,
+          tecnicosIds: desafio.tecnicosIds ?? [],
           filtro: desafio.produtoId ? 'PRODUTO' : desafio.categoriaId ? 'CATEGORIA' : 'NENHUM',
           produtoId: desafio.produtoId ?? null,
           produtoNome: desafio.produto?.nome ?? null,
           categoriaId: desafio.categoriaId ?? null,
         }
-      : { titulo: '', descricao: '', tipo: 'VALOR', alvo: 0, premio: 50, inicio: hoje(), fim: format(endOfMonth(new Date()), 'yyyy-MM-dd'), regra: 'TODOS', todosVendedores: true, vendedoresIds: [], filtro: 'NENHUM', produtoId: null, produtoNome: null, categoriaId: null },
+      : { titulo: '', descricao: '', publico: 'VENDEDORES', tipo: 'VALOR', alvo: 0, premio: 50, inicio: hoje(), fim: format(endOfMonth(new Date()), 'yyyy-MM-dd'), regra: 'TODOS', todosVendedores: true, vendedoresIds: [], tecnicosIds: [], filtro: 'NENHUM', produtoId: null, produtoNome: null, categoriaId: null },
   );
   const set = (p: Partial<FormState>) => setF((x) => ({ ...x, ...p }));
+  const tecnicosPub = f.publico === 'TECNICOS';
+  const emReais = f.tipo === 'VALOR' || f.tipo === 'VALOR_SERVICOS';
 
   const salvar = useMutation({
     mutationFn: () => {
       const body = {
         titulo: f.titulo,
         descricao: f.descricao || null,
+        publico: f.publico,
         tipo: f.tipo,
         alvo: f.alvo,
         premio: f.premio,
@@ -197,14 +213,15 @@ function FormDesafio({ desafio, onFechar, onSalvo }: { desafio: Desafio | null; 
         fim: f.fim,
         regra: f.regra,
         todosVendedores: f.todosVendedores,
-        vendedoresIds: f.todosVendedores ? [] : f.vendedoresIds,
-        produtoId: f.filtro === 'PRODUTO' ? f.produtoId : null,
-        categoriaId: f.filtro === 'CATEGORIA' ? f.categoriaId : null,
+        vendedoresIds: f.todosVendedores || tecnicosPub ? [] : f.vendedoresIds,
+        tecnicosIds: f.todosVendedores || !tecnicosPub ? [] : f.tecnicosIds,
+        produtoId: !tecnicosPub && f.filtro === 'PRODUTO' ? f.produtoId : null,
+        categoriaId: !tecnicosPub && f.filtro === 'CATEGORIA' ? f.categoriaId : null,
       };
       return desafio ? api.put(`/desafios/${desafio.id}`, body) : api.post('/desafios', body);
     },
     onSuccess: () => {
-      toast.success(desafio ? 'Desafio atualizado.' : 'Desafio lançado! Já aparece no painel dos vendedores.');
+      toast.success(desafio ? 'Desafio atualizado.' : `Desafio lançado! Já aparece no Meu Dashboard dos ${tecnicosPub ? 'técnicos' : 'vendedores'}.`);
       onSalvo();
       onFechar();
     },
@@ -217,11 +234,11 @@ function FormDesafio({ desafio, onFechar, onSalvo }: { desafio: Desafio | null; 
       ? 'Informe o alvo.'
       : f.premio <= 0
         ? 'Informe o prêmio.'
-        : !f.todosVendedores && !f.vendedoresIds.length
-          ? 'Escolha os vendedores.'
-          : f.filtro === 'PRODUTO' && !f.produtoId
+        : !f.todosVendedores && (tecnicosPub ? !f.tecnicosIds.length : !f.vendedoresIds.length)
+          ? tecnicosPub ? 'Escolha os técnicos.' : 'Escolha os vendedores.'
+          : !tecnicosPub && f.filtro === 'PRODUTO' && !f.produtoId
             ? 'Escolha o produto.'
-            : f.filtro === 'CATEGORIA' && !f.categoriaId
+            : !tecnicosPub && f.filtro === 'CATEGORIA' && !f.categoriaId
               ? 'Escolha a categoria.'
               : null;
 
@@ -231,7 +248,7 @@ function FormDesafio({ desafio, onFechar, onSalvo }: { desafio: Desafio | null; 
       onFechar={onFechar}
       tamanho="lg"
       titulo={desafio ? 'Editar desafio' : 'Novo desafio'}
-      descricao="O prêmio entra como comissão extra (já liberada) quando o vendedor bate o alvo. Contam todas as vendas salvas, menos as canceladas."
+      descricao={tecnicosPub ? 'O prêmio entra como comissão extra (já liberada) quando o técnico bate o alvo. Contam as OS concluídas (Entregue etc.) no período, pela data de conclusão.' : 'O prêmio entra como comissão extra (já liberada) quando o vendedor bate o alvo. Contam todas as vendas salvas, menos as canceladas.'}
       rodape={
         <>
           {erro && <span className="mr-auto text-xs text-slate-500">{erro}</span>}
@@ -241,7 +258,15 @@ function FormDesafio({ desafio, onFechar, onSalvo }: { desafio: Desafio | null; 
       }
     >
       <div className="space-y-3">
-        <Input label="Título" obrigatorio placeholder='Ex.: "Semana do notebook"' value={f.titulo} onChange={(e) => set({ titulo: e.target.value })} autoFocus />
+        <div>
+          <p className="mb-1 text-xs font-medium text-slate-600">Para quem</p>
+          <Segmentado
+            opcoes={[{ valor: 'VENDEDORES', rotulo: 'Vendedores (conta vendas)' }, { valor: 'TECNICOS', rotulo: 'Técnicos (conta OS concluídas)' }]}
+            valor={f.publico}
+            onMudar={(v) => set({ publico: v, tipo: v === 'TECNICOS' ? 'QTD_OS' : 'VALOR', alvo: 0, filtro: 'NENHUM', produtoId: null, produtoNome: null, categoriaId: null })}
+          />
+        </div>
+        <Input label="Título" obrigatorio placeholder={tecnicosPub ? 'Ex.: "Mês das 20 OS"' : 'Ex.: "Semana do notebook"'} value={f.titulo} onChange={(e) => set({ titulo: e.target.value })} autoFocus />
         <Textarea label="Descrição (opcional)" rows={2} placeholder="Regras ou recado para a equipe" value={f.descricao} onChange={(e) => set({ descricao: e.target.value })} />
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -249,13 +274,20 @@ function FormDesafio({ desafio, onFechar, onSalvo }: { desafio: Desafio | null; 
             label="O que conta"
             value={f.tipo}
             onChange={(e) => set({ tipo: e.target.value as TipoDesafio, alvo: 0 })}
-            opcoes={[
-              { valor: 'VALOR', rotulo: 'Valor vendido (R$)' },
-              { valor: 'QTD_VENDAS', rotulo: 'Número de vendas' },
-              { valor: 'QTD_ITENS', rotulo: 'Unidades vendidas' },
-            ]}
+            opcoes={
+              tecnicosPub
+                ? [
+                    { valor: 'QTD_OS', rotulo: 'Número de OS concluídas' },
+                    { valor: 'VALOR_SERVICOS', rotulo: 'Valor das OS concluídas (R$)' },
+                  ]
+                : [
+                    { valor: 'VALOR', rotulo: 'Valor vendido (R$)' },
+                    { valor: 'QTD_VENDAS', rotulo: 'Número de vendas' },
+                    { valor: 'QTD_ITENS', rotulo: 'Unidades vendidas' },
+                  ]
+            }
           />
-          <MoneyInput label="Alvo" obrigatorio prefixo={f.tipo === 'VALOR' ? 'R$' : ''} casas={f.tipo === 'VALOR' ? 2 : 0} value={f.alvo} onChange={(v) => set({ alvo: v })} />
+          <MoneyInput label="Alvo" obrigatorio prefixo={emReais ? 'R$' : ''} casas={emReais ? 2 : 0} value={f.alvo} onChange={(v) => set({ alvo: v })} />
           <MoneyInput label="Prêmio (comissão extra)" obrigatorio value={f.premio} onChange={(v) => set({ premio: v })} />
         </div>
         <div className="flex flex-wrap gap-2">
@@ -274,6 +306,7 @@ function FormDesafio({ desafio, onFechar, onSalvo }: { desafio: Desafio | null; 
           <Segmentado opcoes={[{ valor: 'TODOS', rotulo: 'Todos que baterem o alvo' }, { valor: 'PRIMEIRO', rotulo: 'Só o primeiro a bater' }]} valor={f.regra} onMudar={(v) => set({ regra: v })} />
         </div>
 
+        {!tecnicosPub && (
         <div>
           <p className="mb-1 text-xs font-medium text-slate-600">Contar só um produto ou categoria? (opcional)</p>
           <Segmentado opcoes={[{ valor: 'NENHUM', rotulo: 'Todas as vendas' }, { valor: 'PRODUTO', rotulo: 'Um produto' }, { valor: 'CATEGORIA', rotulo: 'Uma categoria' }]} valor={f.filtro} onMudar={(v) => set({ filtro: v })} />
@@ -284,19 +317,29 @@ function FormDesafio({ desafio, onFechar, onSalvo }: { desafio: Desafio | null; 
             <Select className="mt-2" value={f.categoriaId ?? ''} onChange={(e) => set({ categoriaId: e.target.value ? Number(e.target.value) : null })} placeholder="Escolha a categoria" opcoes={(categorias ?? []).map((c) => ({ valor: c.id, rotulo: c.nome }))} />
           )}
         </div>
+        )}
 
         <div>
-          <Checkbox label="Todos os vendedores participam" checked={f.todosVendedores} onChange={(e) => set({ todosVendedores: e.target.checked })} />
+          <Checkbox label={tecnicosPub ? 'Todos os técnicos participam' : 'Todos os vendedores participam'} checked={f.todosVendedores} onChange={(e) => set({ todosVendedores: e.target.checked })} />
           {!f.todosVendedores && (
             <div className="mt-2 grid grid-cols-2 gap-1.5 rounded-md border border-slate-200 p-3 sm:grid-cols-3">
-              {(vendedores ?? []).map((v) => (
-                <Checkbox
-                  key={v.id}
-                  label={v.nome}
-                  checked={f.vendedoresIds.includes(v.id)}
-                  onChange={(e) => set({ vendedoresIds: e.target.checked ? [...f.vendedoresIds, v.id] : f.vendedoresIds.filter((x) => x !== v.id) })}
-                />
-              ))}
+              {tecnicosPub
+                ? (tecnicos ?? []).map((t) => (
+                    <Checkbox
+                      key={t.id}
+                      label={t.nome}
+                      checked={f.tecnicosIds.includes(t.id)}
+                      onChange={(e) => set({ tecnicosIds: e.target.checked ? [...f.tecnicosIds, t.id] : f.tecnicosIds.filter((x) => x !== t.id) })}
+                    />
+                  ))
+                : (vendedores ?? []).map((v) => (
+                    <Checkbox
+                      key={v.id}
+                      label={v.nome}
+                      checked={f.vendedoresIds.includes(v.id)}
+                      onChange={(e) => set({ vendedoresIds: e.target.checked ? [...f.vendedoresIds, v.id] : f.vendedoresIds.filter((x) => x !== v.id) })}
+                    />
+                  ))}
             </div>
           )}
         </div>
@@ -398,6 +441,115 @@ function AbaMetas() {
                 <td className="text-right text-xs text-slate-500 num">{totalMeta ? `${numero((totalVendido / totalMeta) * 100, 0)}%` : ''}</td>
               </tr>
             </tfoot>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// =====================================================================================
+// METAS DOS TÉCNICOS — em R$ de OS concluídas ou nº de OS concluídas (tipo escolhido na meta)
+// =====================================================================================
+const TIPOS_META_TECNICO: { valor: TipoMetaTecnico; rotulo: string }[] = [
+  { valor: 'VALOR_SERVICOS', rotulo: 'R$ de serviços' },
+  { valor: 'QTD_OS', rotulo: 'Nº de OS' },
+];
+const fmtMetaTec = (tipo: TipoMetaTecnico, v: number) => (tipo === 'QTD_OS' ? `${numero(v, 0)} OS` : moeda(v));
+
+function AbaMetasTecnicos() {
+  const qc = useQueryClient();
+  const [competencia, setCompetencia] = useState(competenciaAtual());
+  const { data: resp, isLoading } = useQuery({ queryKey: ['metas-tecnicos', competencia], queryFn: () => api.get<{ competencia: string; tecnicos: MetaTecnicoLinha[] }>('/metas-tecnicos', { competencia }) });
+  const [linhas, setLinhas] = useState<MetaTecnicoLinha[]>([]);
+  useEffect(() => setLinhas(resp?.tecnicos ?? []), [resp]);
+  const alterou = JSON.stringify(linhas) !== JSON.stringify(resp?.tecnicos ?? []);
+  const atualizar = (id: number, p: Partial<MetaTecnicoLinha>) => setLinhas((ls) => ls.map((l) => (l.tecnicoId === id ? { ...l, ...p } : l)));
+
+  const salvar = useMutation({
+    mutationFn: () => api.put('/metas-tecnicos', { competencia, itens: linhas.map((l) => ({ tecnicoId: l.tecnicoId, tipoPadrao: l.tipoPadrao, metaPadrao: l.metaPadrao, tipoMes: l.metaMes === null ? null : (l.tipoMes ?? l.tipoPadrao), metaMes: l.metaMes })) }),
+    onSuccess: () => {
+      toast.success('Metas dos técnicos salvas.');
+      qc.invalidateQueries({ queryKey: ['metas-tecnicos'] });
+      qc.invalidateQueries({ queryKey: ['meu-dashboard'] });
+    },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
+
+  return (
+    <Card
+      semPadding
+      titulo={`Metas dos técnicos · ${competenciaLabel(competencia)}`}
+      descricao="Escolha o tipo da meta de cada técnico: R$ de OS concluídas ou nº de OS concluídas no mês. A meta padrão vale para todo mês; “Só neste mês” sobrepõe."
+      acoes={
+        <>
+          <Input type="month" value={competencia} onChange={(e) => e.target.value && setCompetencia(e.target.value)} className="w-40" />
+          <Button icone={<Save className="h-4 w-4" />} disabled={!alterou} carregando={salvar.isPending} onClick={() => salvar.mutate()}>Salvar metas</Button>
+        </>
+      }
+    >
+      {isLoading ? (
+        <div className="p-4"><Skeleton className="h-32 w-full" /></div>
+      ) : !linhas.length ? (
+        <EmptyState compacto titulo="Nenhum técnico ativo" descricao="Cadastre os técnicos em Configurações → Técnicos (ou crie o usuário com perfil TÉCNICO: o cadastro nasce sozinho)." />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="tbl tbl-pilha">
+            <thead>
+              <tr>
+                <th>Técnico</th>
+                <th className="w-64">Meta padrão (todo mês)</th>
+                <th className="w-96">Meta deste mês</th>
+                <th className="text-right">Realizado</th>
+                <th className="w-48">Atingido</th>
+              </tr>
+            </thead>
+            <tbody>
+              {linhas.map((l) => {
+                const tipo = l.metaMes !== null ? (l.tipoMes ?? l.tipoPadrao) : l.tipoPadrao;
+                const meta = l.metaMes ?? l.metaPadrao;
+                const atingido = tipo === 'QTD_OS' ? l.osConcluidas : l.valorServicos;
+                const pct = meta ? (atingido / meta) * 100 : 0;
+                return (
+                  <tr key={l.tecnicoId}>
+                    <td className="font-medium text-slate-800" data-rotulo="Técnico">{l.nome}</td>
+                    <td data-rotulo="Meta padrão (todo mês)">
+                      <div className="flex items-center gap-2">
+                        <Select className="w-36" value={l.tipoPadrao} onChange={(e) => atualizar(l.tecnicoId, { tipoPadrao: e.target.value as TipoMetaTecnico })} opcoes={TIPOS_META_TECNICO} />
+                        <MoneyInput className="w-32" prefixo={l.tipoPadrao === 'QTD_OS' ? '' : 'R$'} casas={l.tipoPadrao === 'QTD_OS' ? 0 : 2} value={l.metaPadrao} onChange={(v) => atualizar(l.tecnicoId, { metaPadrao: v })} />
+                      </div>
+                    </td>
+                    <td data-rotulo="Meta deste mês">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Checkbox label="Só neste mês" checked={l.metaMes !== null} onChange={(e) => atualizar(l.tecnicoId, { metaMes: e.target.checked ? l.metaPadrao : null, tipoMes: e.target.checked ? l.tipoPadrao : null })} />
+                        {l.metaMes !== null && (
+                          <>
+                            <Select className="w-36" value={l.tipoMes ?? l.tipoPadrao} onChange={(e) => atualizar(l.tecnicoId, { tipoMes: e.target.value as TipoMetaTecnico })} opcoes={TIPOS_META_TECNICO} />
+                            <MoneyInput className="w-32" prefixo={(l.tipoMes ?? l.tipoPadrao) === 'QTD_OS' ? '' : 'R$'} casas={(l.tipoMes ?? l.tipoPadrao) === 'QTD_OS' ? 0 : 2} value={l.metaMes} onChange={(v) => atualizar(l.tecnicoId, { metaMes: v })} />
+                          </>
+                        )}
+                      </div>
+                    </td>
+                    <td className="text-right num" data-rotulo="Realizado">
+                      {numero(l.osConcluidas, 0)} OS · {moeda(l.valorServicos)}
+                    </td>
+                    <td data-rotulo="Atingido">
+                      {meta ? (
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                            <div className={clsx('h-full rounded-full', pct >= 100 ? 'bg-emerald-500' : 'bg-brand-500')} style={{ width: `${Math.min(100, Math.max(2, pct))}%` }} />
+                          </div>
+                          <span className="w-12 text-right text-xs font-semibold text-slate-600 num">{numero(pct, 0)}%</span>
+                          <span className="hidden text-[11px] text-slate-400 lg:inline">de {fmtMetaTec(tipo, meta)}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400">sem meta</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
           </table>
         </div>
       )}

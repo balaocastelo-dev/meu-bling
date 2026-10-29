@@ -10,8 +10,8 @@ const DESCRICAO: Record<Perfil, string> = {
   ADMIN: 'Acesso completo (dono): usuários, configurações, fiscal, integrações e tudo o mais.',
   GERENTE: 'Acesso administrativo: vendas, compras, OS, estoque, financeiro, fiscal, relatórios, cadastros e WhatsApp. Não altera usuários, certificado, SMTP, Open Finance, Bling e situações.',
   FINANCEIRO: 'Financeiro, bancos, compras, comissões, relatórios e notas fiscais; leitura do restante.',
-  VENDEDOR: 'Vendas, clientes, ordens de serviço, consulta de produtos/estoque, NF-e da venda e mensagens ao cliente.',
-  TECNICO: 'Ordens de serviço, clientes e consulta de produtos/estoque.',
+  VENDEDOR: 'Vendas, clientes, ordens de serviço, consulta de produtos/estoque, NF-e da venda e mensagens ao cliente. Meu Dashboard sem lucro.',
+  TECNICO: 'Ordens de serviço e também vendas (o técnico vende: ganha cadastro de técnico e de vendedor sozinho), clientes, consulta de produtos/estoque. Não emite NF. Meu Dashboard sem lucro.',
 };
 
 /** Usuários e perfis de acesso */

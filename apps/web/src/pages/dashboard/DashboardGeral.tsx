@@ -114,8 +114,11 @@ function Ranking({ itens, cor, vazio, rotuloQtd }: { itens: DashboardPanorama['p
   );
 }
 
-/** Dashboard (tela inicial do ADMIN) — vendas + assistência no período, no padrão do dashboard de assistência */
-export default function DashboardGeral() {
+/**
+ * "Meu Dashboard" do gestor (tela inicial do ADMIN) — vendas + assistência no período, com lucro, DRE,
+ * saldo por banco, lançamentos e Saúde. `acoesExtras` = o seletor "ver como" (abre o dashboard de alguém da equipe).
+ */
+export default function DashboardGeral({ acoesExtras }: { acoesExtras?: React.ReactNode } = {}) {
   const nav = useNavigate();
   const usuario = useAuth((s) => s.usuario);
   const { periodo, setPeriodo, custom, setCustom, dataInicial, dataFinal, faixa } = usePeriodoDashboard();
@@ -175,9 +178,10 @@ export default function DashboardGeral() {
           <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
             {saudacao}, {usuario?.nome?.split(' ')[0]} <motion.span className="inline-block origin-[70%_70%]" animate={{ rotate: [0, 14, -8, 14, 0] }} transition={{ duration: 1.4, delay: 0.4 }}>👋</motion.span>
           </h1>
-          <p className="hidden text-sm text-slate-500 sm:block">Vendas e assistência técnica somadas, no período que você escolher.</p>
+          <p className="hidden text-sm text-slate-500 sm:block">Meu Dashboard · vendas e assistência técnica somadas, no período que você escolher.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
+          {acoesExtras}
           <StatusPilula icone={<MessageCircle className="h-3.5 w-3.5 text-slate-400" />} nome="WhatsApp" ok={data?.whatsapp.status === 'CONECTADO'} texto={rotulo(data?.whatsapp.status ?? 'DESCONECTADO')} tom={tomPorStatus(data?.whatsapp.status)} />
           <StatusPilula icone={<FileText className="h-3.5 w-3.5 text-slate-400" />} nome="SEFAZ" ok={!!sefaz?.online} texto={sefaz ? (sefaz.online ? 'Online' : 'Offline') : '—'} tom={sefaz?.online ? 'verde' : sefaz ? 'vermelho' : 'neutro'} />
         </div>
