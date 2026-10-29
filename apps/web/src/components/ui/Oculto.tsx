@@ -45,7 +45,8 @@ export function ValorOculto({ children, className }: { children: ReactNode; clas
   const [revelado, setRevelado] = useRevelado();
   return (
     <span className={clsx('inline-flex items-center gap-1', className)}>
-      <span className={clsx(!revelado && 'select-none tracking-widest text-slate-400')}>{revelado ? children : MASCARA}</span>
+      {/* o asterisco fica no alto da linha: desce um pouco para alinhar com o olhinho e com os outros valores */}
+      <span className={clsx(!revelado && 'inline-block translate-y-[0.2em] select-none tracking-widest text-slate-400')}>{revelado ? children : MASCARA}</span>
       <BotaoOlho revelado={revelado} onClick={() => setRevelado((r) => !r)} />
     </span>
   );

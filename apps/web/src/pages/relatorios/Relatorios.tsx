@@ -161,7 +161,7 @@ export default function Relatorios() {
               </thead>
               <tbody>
                 {linhas.map((l, i) => (
-                  <tr key={i}>{colunas.map((c) => <td key={c.chave} className={c.formato === 'moeda' || c.formato === 'numero' ? 'num text-right' : ''}>{fmt(l[c.chave], c.formato)}</td>)}</tr>
+                  <tr key={i}>{colunas.map((c) => <td key={c.chave} className={c.formato === 'moeda' || c.formato === 'numero' ? 'num text-right' : ['periodo', 'codigo', 'deposito', 'data'].includes(c.chave) ? 'nowrap' : ''}>{fmt(l[c.chave], c.formato)}</td>)}</tr>
                 ))}
               </tbody>
               <tfoot>

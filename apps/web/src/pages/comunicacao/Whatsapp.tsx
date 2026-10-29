@@ -42,7 +42,7 @@ export default function Whatsapp() {
         }
       />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         <Card titulo="Sessão">
           <div className="flex flex-col items-center justify-center py-4 text-center">
             {isLoading ? (

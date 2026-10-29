@@ -116,8 +116,9 @@ export function Contador({ valor, formato }: { valor: number; formato: (n: numbe
   const [atual, setAtual] = useState(0);
   const ultimo = useRef(0);
   useEffect(() => {
-    if (!visto) return;
     const reduz = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    // sem animação (pedido do sistema, impressão, print): valor final na hora, mesmo fora da tela
+    if (!visto && !reduz) return;
     if (reduz) {
       setAtual(valor);
       ultimo.current = valor;

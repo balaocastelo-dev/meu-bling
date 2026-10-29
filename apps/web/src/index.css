@@ -118,6 +118,13 @@ body {
 *::-webkit-scrollbar-track {
   background: transparent;
 }
+/* rolagem lateral sem barra (seletores de período e abas no celular) */
+.sem-barra {
+  scrollbar-width: none;
+}
+.sem-barra::-webkit-scrollbar {
+  display: none;
+}
 
 @layer base {
   /* Itens de grade não esticam por causa de conteúdo largo (tabela, texto comprido): sem isso, uma
@@ -178,7 +185,15 @@ body {
 /* Tabela de itens que no celular vira uma pilha de cartões (um por linha, cada campo com rótulo).
    Uso: <table className="tbl tbl-pilha"> e, nas células, data-rotulo="Qtd" (rótulo no celular),
    className "pilha-cheio" (linha inteira), "pilha-oculto" (some no celular), "pilha-canto" (botão no canto). */
-@media (max-width: 767px) {
+/* valores (colunas numéricas, datas, códigos) nunca se partem em duas linhas */
+.tbl tbody td.num,
+.tbl tfoot td.num,
+.tbl td.nowrap {
+  white-space: nowrap;
+}
+
+/* celular e tablet (até 1279 px): a tabela de itens vira cartões — no tablet, 4 campos por linha */
+@media (max-width: 1279px) {
   table.tbl-pilha,
   table.tbl-pilha > tbody,
   table.tbl-pilha > tfoot {
@@ -207,6 +222,18 @@ body {
     text-align: left;
     white-space: normal;
   }
+  /* campo sem valor (ex.: "Saiu" numa entrada) não aparece no cartão */
+  table.tbl-pilha > tbody > tr > td[data-rotulo]:empty {
+    display: none;
+  }
+  /* rodapé de totais: cada valor com o rótulo da coluna */
+  table.tbl-pilha > tfoot > tr > td[data-rotulo]::before {
+    content: attr(data-rotulo) " ";
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: rgb(148 163 184);
+  }
   table.tbl-pilha > tbody > tr > td[colspan] {
     grid-column: 1 / -1;
   }
@@ -224,6 +251,10 @@ body {
   table.tbl-pilha > tbody > tr > td[data-pilha="pilha-cheio"] {
     grid-column: 1 / -1;
     padding-right: 2rem;
+  }
+  /* campo que precisa de mais espaço (data): duas colunas do cartão */
+  table.tbl-pilha > tbody > tr > td.pilha-dupla {
+    grid-column: span 2;
   }
   table.tbl-pilha > tbody > tr > td.pilha-oculto,
   table.tbl-pilha > tbody > tr > td[data-pilha="pilha-oculto"] {
@@ -249,6 +280,11 @@ body {
   }
   table.tbl-pilha > tfoot > tr > td:empty {
     display: none;
+  }
+}
+@media (min-width: 768px) and (max-width: 1279px) {
+  table.tbl-pilha > tbody > tr {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

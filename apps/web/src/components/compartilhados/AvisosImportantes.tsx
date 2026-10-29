@@ -1,5 +1,6 @@
 /** Avisos mais importantes do gestor e da gerente: caixinhas no prazo, contas vencidas, OS atrasadas. */
 import { useQuery } from '@tanstack/react-query';
+import { TextoValores } from '@/components/compartilhados/TextoValores';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { AlertOctagon, AlertTriangle, ChevronRight, Info, PiggyBank } from 'lucide-react';
@@ -35,8 +36,8 @@ export function AvisosImportantes({ className }: { className?: string }) {
             <li key={i}>
               <Link to={a.link} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-50">
                 {icone(a.tipo)}
-                <span className={clsx('flex-1', a.tipo === 'erro' ? 'font-medium text-red-800' : 'text-slate-700')}>{a.mensagem}</span>
-                <ChevronRight className="h-4 w-4 text-slate-300" />
+                <span className={clsx('min-w-0 flex-1', a.tipo === 'erro' ? 'font-medium text-red-800' : 'text-slate-700')}><TextoValores texto={a.mensagem} /></span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
               </Link>
             </li>
           ))}

@@ -124,9 +124,9 @@ export default function Bancos() {
         titulo="Contas bancárias & conciliação"
         descricao={
           contas ? (
-            <span className="inline-flex items-center gap-2">
-              Saldo total no sistema:
-              <span className={clsx('num rounded-lg px-2.5 py-0.5 text-lg font-bold transition', verSaldo ? (saldoSistema < 0 ? 'bg-red-50 text-red-700 ring-1 ring-red-200' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200') : 'bg-slate-100 text-slate-500 tracking-widest')}>
+            <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="whitespace-nowrap">Saldo total no sistema:</span>
+              <span className={clsx('num whitespace-nowrap rounded-lg px-2.5 py-0.5 text-lg font-bold transition', verSaldo ? (saldoSistema < 0 ? 'bg-red-50 text-red-700 ring-1 ring-red-200' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200') : 'bg-slate-100 text-slate-500 tracking-widest')}>
                 {verSaldo ? moeda(saldoSistema) : 'R$ ••••••'}
               </span>
               <button type="button" onClick={alternarSaldo} aria-label={verSaldo ? 'Esconder saldo' : 'Mostrar saldo'} title={verSaldo ? 'Esconder saldo' : 'Mostrar saldo'} className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800">

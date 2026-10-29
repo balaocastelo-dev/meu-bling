@@ -319,7 +319,7 @@ export default function OsForm() {
           <GridItens tipo="PECA" itens={form.itens} onChange={(l) => set('itens', l)} comissaoTecnico={comissaoTec} comissaoVendedor={comissaoVend} depositos={depositos ?? []} bloqueado={bloqueado} />
         </Secao>
 
-        <div className="grid gap-4 xl:grid-cols-3">
+        <div className="grid items-start gap-4 xl:grid-cols-3">
           <Secao titulo="Observações" className="xl:col-span-2">
             <div className="grid gap-3 sm:grid-cols-2">
               <Textarea label="Observações (visíveis ao cliente)" rows={3} value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} />

@@ -98,7 +98,7 @@ export default function ConsignacaoDetalhe() {
         {ativa && <Button icone={<PackageOpen className="h-4 w-4" />} onClick={() => setAcao('retirada')}>Registrar retirada</Button>}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid items-start gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Fotos c={c} onAtualizado={(fotos) => qc.setQueryData(['consignacao', id], { ...c, fotosUrls: fotos })} />
 

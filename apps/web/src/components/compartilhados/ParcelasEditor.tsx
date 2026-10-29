@@ -72,12 +72,12 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled, pagadorCre
   return (
     <div className="space-y-3">
       {!disabled && (
-        <div className="flex flex-wrap items-end gap-2 rounded-md border border-dashed border-slate-200 bg-slate-50 p-3">
-          <Input label="Nº parcelas" type="number" min={1} max={48} value={qtd} onChange={(e) => setQtd(Number(e.target.value))} className="w-24" />
-          <Select label="Forma" value={formaId} onChange={(e) => setFormaId(e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(formas)} placeholder="—" className="w-44" />
-          <Input label="1º vencimento" type="date" value={primeiro} onChange={(e) => setPrimeiro(e.target.value)} className="w-40" />
-          <Input label="Intervalo (dias)" type="number" min={0} value={intervalo} onChange={(e) => setIntervalo(Number(e.target.value))} className="w-32" />
-          <Button variante="secundario" icone={<Wand2 className="h-4 w-4" />} onClick={gerar} disabled={total <= 0}>
+        <div className="grid grid-cols-2 items-end gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 sm:flex sm:flex-wrap">
+          <Input label="Nº parcelas" type="number" min={1} max={48} value={qtd} onChange={(e) => setQtd(Number(e.target.value))} className="sm:w-24" />
+          <Select label="Forma" value={formaId} onChange={(e) => setFormaId(e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(formas)} placeholder="—" className="sm:w-44" />
+          <Input label="1º vencimento" type="date" value={primeiro} onChange={(e) => setPrimeiro(e.target.value)} className="col-span-2 sm:col-span-1 sm:w-40" />
+          <Input label="Intervalo (dias)" type="number" min={0} value={intervalo} onChange={(e) => setIntervalo(Number(e.target.value))} className="sm:w-32" />
+          <Button variante="secundario" className="col-span-2 sm:col-span-1" icone={<Wand2 className="h-4 w-4" />} onClick={gerar} disabled={total <= 0}>
             Gerar parcelas
           </Button>
         </div>
@@ -106,7 +106,7 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled, pagadorCre
             {parcelas.map((p, i) => (
               <tr key={i}>
                 <td className="pilha-oculto text-slate-500">{i + 1}</td>
-                <td data-rotulo="Vencimento">
+                <td data-rotulo="Vencimento" className="pilha-dupla">
                   <input type="date" disabled={disabled} value={p.dataVencimento?.slice(0, 10) ?? ''} onChange={(e) => atualizar(i, { dataVencimento: e.target.value })} className="input-base h-8 py-0" />
                 </td>
                 <td data-rotulo="Valor">

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TextoValores } from '@/components/compartilhados/TextoValores';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { ArrowDownLeft, ArrowUpRight, Ban, CircleDollarSign, FileText, History, LogIn, Package, Pencil, Plus, RefreshCw, Send, ShoppingCart, Wrench } from 'lucide-react';
@@ -159,10 +160,10 @@ export function UltimosAcontecimentos({ className }: { className?: string }) {
                     <span className="block text-sm text-slate-700">
                       {a.usuario ? (
                         <>
-                          <span className="font-medium text-slate-900">{a.usuario}</span> {a.texto}
+                          <span className="font-medium text-slate-900">{a.usuario}</span> <TextoValores texto={a.texto} />
                         </>
                       ) : (
-                        <span className="font-medium text-slate-900">{a.texto.charAt(0).toUpperCase() + a.texto.slice(1)}</span>
+                        <span className="font-medium text-slate-900"><TextoValores texto={a.texto.charAt(0).toUpperCase() + a.texto.slice(1)} /></span>
                       )}
                     </span>
                     <span className="text-xs text-slate-400" title={dataHora(a.quando)}>

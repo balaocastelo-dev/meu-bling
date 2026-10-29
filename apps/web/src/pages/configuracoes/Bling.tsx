@@ -96,7 +96,7 @@ export default function Bling() {
   return (
     <div className="pb-6">
       <PageHeader migalhas={[{ rotulo: 'Configurações', para: '/configuracoes' }, { rotulo: 'Migração do Bling' }]} titulo="Migração do Bling" descricao="Conecte sua conta Bling e traga clientes, produtos, estoque, vendas e financeiro. Reimportar não duplica (usa o ID do Bling)." />
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid items-start gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Card titulo="1. Aplicativo Bling (credenciais)" descricao="Crie um aplicativo em developer.bling.com.br e informe o Client ID / Client Secret. Cadastre lá a URL de redirecionamento abaixo.">
             <div className="grid gap-3 md:grid-cols-2">
@@ -105,7 +105,7 @@ export default function Bling() {
             </div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               <p className="min-w-0 break-all text-xs text-slate-500">
-                URL de redirecionamento: <code className="rounded bg-slate-100 px-1">{status?.callbackUrl ?? `${location.origin}${BASE_PATH}/configuracoes/bling/callback`}</code>
+                URL de redirecionamento: <code className="inline-block max-w-full overflow-x-auto whitespace-nowrap rounded bg-slate-100 px-1 align-middle">{status?.callbackUrl ?? `${location.origin}${BASE_PATH}/configuracoes/bling/callback`}</code>
               </p>
               <Button variante="secundario" tamanho="sm" icone={<Save className="h-3.5 w-3.5" />} carregando={salvarCred.isPending} disabled={!cred.blingClientId.trim()} onClick={() => salvarCred.mutate()}>Salvar credenciais</Button>
             </div>

@@ -95,12 +95,12 @@ export default function ExtratoConta() {
       {isLoading && <Skeleton className="h-60" />}
       {e && (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
-            <Card><p className="text-xs text-slate-500">Saldo antes do período</p><p className="num text-lg font-semibold">{moeda(e.saldoAnterior)}</p></Card>
-            <Card><p className="text-xs text-slate-500">Entrou</p><p className="num text-lg font-semibold text-emerald-700">{moeda(e.entradas)}</p></Card>
-            <Card><p className="text-xs text-slate-500">Saiu</p><p className="num text-lg font-semibold text-red-600">{moeda(e.saidas)}</p></Card>
-            <Card><p className="text-xs text-slate-500">Saldo no fim do período</p><p className="num text-lg font-semibold">{moeda(e.saldoFinal)}</p></Card>
-            <Card><p className="text-xs text-slate-500">Saldo hoje</p><p className={clsx('num text-lg font-bold', e.conta.saldoAtual < 0 ? 'text-red-600' : 'text-slate-900')}>{moeda(e.conta.saldoAtual)}</p></Card>
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
+            <Card><p className="text-xs text-slate-500">Saldo antes do período</p><p className="num whitespace-nowrap text-lg font-semibold">{moeda(e.saldoAnterior)}</p></Card>
+            <Card><p className="text-xs text-slate-500">Entrou</p><p className="num whitespace-nowrap text-lg font-semibold text-emerald-700">{moeda(e.entradas)}</p></Card>
+            <Card><p className="text-xs text-slate-500">Saiu</p><p className="num whitespace-nowrap text-lg font-semibold text-red-600">{moeda(e.saidas)}</p></Card>
+            <Card><p className="text-xs text-slate-500">Saldo no fim do período</p><p className="num whitespace-nowrap text-lg font-semibold">{moeda(e.saldoFinal)}</p></Card>
+            <Card><p className="text-xs text-slate-500">Saldo hoje</p><p className={clsx('num whitespace-nowrap text-lg font-bold', e.conta.saldoAtual < 0 ? 'text-red-600' : 'text-slate-900')}>{moeda(e.conta.saldoAtual)}</p></Card>
           </div>
           {e.cortado && <p className="mb-2 text-xs text-amber-700">Período com {e.total} lançamentos: mostrando os 3.000 mais recentes. Escolha um período menor para ver os mais antigos.</p>}
           {!e.lancamentos.length ? (
@@ -108,7 +108,7 @@ export default function ExtratoConta() {
           ) : (
             <Card semPadding>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="tbl-pilha w-full text-sm">
                   <thead className="bg-slate-50 text-left text-xs text-slate-500">
                     <tr>
                       <th className="px-3 py-2">Data</th>
@@ -123,8 +123,8 @@ export default function ExtratoConta() {
                   <tbody className="divide-y divide-slate-100">
                     {e.lancamentos.map((l) => (
                       <tr key={l.id} className="align-top hover:bg-slate-50/60">
-                        <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600" title={`lançado em ${dataHora(l.criadoEm)}`}>{fmtData(l.data)}</td>
-                        <td className="px-3 py-2">
+                        <td data-rotulo="Data" className="whitespace-nowrap px-3 py-2 text-xs text-slate-600" title={`lançado em ${dataHora(l.criadoEm)}`}>{fmtData(l.data)}</td>
+                        <td className="pilha-cheio px-3 py-2">
                           <div className="flex items-start gap-2">
                             <span className={clsx('mt-0.5', l.tipo === 'ENTRADA' ? 'text-emerald-600' : 'text-red-500')}>{ICONE[l.natureza]}</span>
                             <div className="min-w-0">
@@ -137,7 +137,7 @@ export default function ExtratoConta() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-xs text-slate-600">
+                        <td data-rotulo="De onde veio / para onde foi" className="pilha-cheio px-3 py-2 text-xs text-slate-600">
                           {l.link ? (
                             <Link to={l.link} className="inline-flex items-center gap-1 text-brand-700 hover:underline">
                               {l.contraparte} <ExternalLink className="h-3 w-3" />
@@ -146,10 +146,10 @@ export default function ExtratoConta() {
                             l.contraparte
                           )}
                         </td>
-                        <td className="num whitespace-nowrap px-3 py-2 text-right text-emerald-700">{l.tipo === 'ENTRADA' ? moeda(l.valor) : ''}</td>
-                        <td className="num whitespace-nowrap px-3 py-2 text-right text-red-600">{l.tipo === 'SAIDA' ? moeda(l.valor) : ''}</td>
-                        <td className={clsx('num whitespace-nowrap px-3 py-2 text-right font-medium', l.saldo < 0 ? 'text-red-600' : 'text-slate-900')}>{moeda(l.saldo)}</td>
-                        <td className="px-1 py-2">
+                        <td data-rotulo="Entrou" className="num whitespace-nowrap px-3 py-2 text-right text-emerald-700">{l.tipo === 'ENTRADA' ? moeda(l.valor) : ''}</td>
+                        <td data-rotulo="Saiu" className="num whitespace-nowrap px-3 py-2 text-right text-red-600">{l.tipo === 'SAIDA' ? moeda(l.valor) : ''}</td>
+                        <td data-rotulo="Saldo" className={clsx('num whitespace-nowrap px-3 py-2 text-right font-medium', l.saldo < 0 ? 'text-red-600' : 'text-slate-900')}>{moeda(l.saldo)}</td>
+                        <td className="pilha-canto px-1 py-2">
                           {l.podeExcluir && (
                             <Button
                               tamanho="xs"
