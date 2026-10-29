@@ -1,5 +1,5 @@
 <#
-  MEU BLING — Publicar na internet a partir do PC da loja (Cloudflare Tunnel)
+  MEU BLING - Publicar na internet a partir do PC da loja (Cloudflare Tunnel)
   --------------------------------------------------------------------------
   Expõe o sistema com HTTPS sem abrir portas no roteador e sem IP fixo.
   O PC precisa ficar ligado; o MEU BLING precisa estar rodando (atalho "MEU BLING"
@@ -54,7 +54,7 @@ if ($Rapido) {
 if (-not $Dominio) { throw "Informe -Rapido (teste) ou -Dominio seu.dominio.com.br (permanente)." }
 
 # ---- túnel permanente
-Passo "Login na Cloudflare (abre o navegador — escolha o domínio $($Dominio.Split('.')[-2..-1] -join '.'))"
+Passo "Login na Cloudflare (abre o navegador - escolha o domínio $($Dominio.Split('.')[-2..-1] -join '.'))"
 cloudflared tunnel login
 
 Passo "Criando túnel '$NomeTunel'"

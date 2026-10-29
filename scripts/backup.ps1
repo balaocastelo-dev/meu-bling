@@ -1,5 +1,5 @@
 <#
-  MEU BLING — Backup
+  MEU BLING - Backup
   Copia o banco (SQLite) e a pasta storage (XMLs de NF-e, DANFEs, anexos, sessão do WhatsApp)
   para  Área de Trabalho\MEU BLING Backups\backup-AAAA-MM-DD_HHmm.zip
   Pode ser agendado no Agendador de Tarefas do Windows (diário).

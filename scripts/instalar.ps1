@@ -1,5 +1,5 @@
 <#
-  MEU BLING — Instalador para Windows (PowerShell)
+  MEU BLING - Instalador para Windows (PowerShell)
   ------------------------------------------------
   O que faz:
     1. Verifica/instala o Node.js 22 (via winget) se necessário
@@ -33,7 +33,7 @@ Write-Host @"
   ██║╚██╔╝██║██╔══╝  ██║   ██║    ██╔══██╗██║     ██║██║╚██╗██║██║   ██║
   ██║ ╚═╝ ██║███████╗╚██████╔╝    ██████╔╝███████╗██║██║ ╚████║╚██████╔╝
   ╚═╝     ╚═╝╚══════╝ ╚═════╝     ╚═════╝ ╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝
-          ERP do Balão da Informática — instalação
+          ERP do Balão da Informática - instalação
 "@ -ForegroundColor Red
 
 # ---------------------------------------------------------------- 1. Node.js

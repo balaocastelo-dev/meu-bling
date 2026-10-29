@@ -1,5 +1,5 @@
 <#
-  MEU BLING — Rodar como serviço (inicia sozinho quando o Windows liga, sem precisar logar)
+  MEU BLING - Rodar como serviço (inicia sozinho quando o Windows liga, sem precisar logar)
   Cria uma Tarefa Agendada "MEU BLING" que executa o servidor em segundo plano na inicialização.
   Rode como Administrador:  powershell -ExecutionPolicy Bypass -File .\scripts\instalar-servico.ps1
   Para remover:             .\scripts\instalar-servico.ps1 -Remover
