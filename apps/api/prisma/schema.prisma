@@ -131,6 +131,30 @@ model Usuario {
   auditorias        Auditoria[]
   historicos        HistoricoSituacao[]
   movimentosEstoque MovimentoEstoque[]
+  lembretes         Lembrete[]          @relation("LembretePara")
+  lembretesCriados  Lembrete[]          @relation("LembreteCriador")
+}
+
+/// Lembrete do "Meu Dashboard": do próprio usuário ou enviado pela gestão (gestor/gerente) para alguém da equipe.
+model Lembrete {
+  id            Int       @id @default(autoincrement())
+  titulo        String
+  descricao     String?
+  /// quando lembrar (dia; hora opcional)
+  data          DateTime
+  /// para quem é o lembrete
+  para          Usuario   @relation("LembretePara", fields: [paraUsuarioId], references: [id], onDelete: Cascade)
+  paraUsuarioId Int
+  /// quem criou (null = o próprio usuário já apagado)
+  criadoPor     Usuario?  @relation("LembreteCriador", fields: [criadoPorId], references: [id])
+  criadoPorId   Int?
+  /// tela do sistema ligada ao lembrete (ex.: /vendas/12)
+  link          String?
+  concluidoEm   DateTime?
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
+
+  @@index([paraUsuarioId, concluidoEm, data])
 }
 
 model Vendedor {
@@ -172,12 +196,15 @@ model MetaVendedor {
   @@unique([vendedorId, competencia])
 }
 
-/// Desafio de vendas lançado pela gestão; aparece como card no painel do vendedor e paga prêmio como comissão extra
+/// Desafio lançado pela gestão; aparece como card no Meu Dashboard do vendedor/técnico e paga prêmio como comissão extra
 model Desafio {
   id              Int               @id @default(autoincrement())
   titulo          String
   descricao       String?
-  /// VALOR (R$ vendido) | QTD_VENDAS (nº de vendas) | QTD_ITENS (unidades vendidas)
+  /// para quem: VENDEDORES (conta vendas) | TECNICOS (conta ordens de serviço concluídas)
+  publico         String            @default("VENDEDORES")
+  /// vendedores: VALOR (R$ vendido) | QTD_VENDAS (nº de vendas) | QTD_ITENS (unidades vendidas)
+  /// técnicos:   VALOR_SERVICOS (R$ de OS concluídas) | QTD_OS (nº de OS concluídas)
   tipo            String            @default("VALOR")
   alvo            Float
   /// filtro opcional: só conta itens deste produto / desta categoria
@@ -194,6 +221,8 @@ model Desafio {
   todosVendedores Boolean           @default(true)
   /// ids dos vendedores participantes quando todosVendedores = false (JSON array)
   vendedoresIds   String            @default("[]")
+  /// público TECNICOS: ids dos técnicos participantes quando todosVendedores = false (JSON array)
+  tecnicosIds     String            @default("[]")
   /// false = encerrado/cancelado pela gestão antes do fim
   ativo           Boolean           @default(true)
   criadoPorId     Int?
@@ -206,13 +235,15 @@ model Desafio {
   @@index([inicio, fim])
 }
 
-/// Vendedor que bateu o alvo de um desafio (gera a comissão extra)
+/// Vendedor (ou técnico) que bateu o alvo de um desafio (gera a comissão extra)
 model DesafioConquista {
   id            Int       @id @default(autoincrement())
   desafio       Desafio   @relation(fields: [desafioId], references: [id], onDelete: Cascade)
   desafioId     Int
-  vendedor      Vendedor  @relation(fields: [vendedorId], references: [id])
-  vendedorId    Int
+  vendedor      Vendedor? @relation(fields: [vendedorId], references: [id])
+  vendedorId    Int?
+  tecnico       Tecnico?  @relation(fields: [tecnicoId], references: [id])
+  tecnicoId     Int?
   conquistadoEm DateTime  @default(now())
   /// valor/quantidade atingido no momento da conquista
   atingido      Float     @default(0)
@@ -220,6 +251,7 @@ model DesafioConquista {
   comissaoId    Int?      @unique
 
   @@unique([desafioId, vendedorId])
+  @@unique([desafioId, tecnicoId])
 }
 
 model Tecnico {
@@ -229,13 +261,35 @@ model Tecnico {
   telefone          String?
   especialidade     String?
   comissaoPadraoPct Float    @default(0)
+  /// meta padrão por mês (vale para todo mês sem meta específica em MetaTecnico)
+  metaMensal        Float    @default(0)
+  /// tipo da meta padrão: VALOR_SERVICOS (R$ de OS concluídas) | QTD_OS (nº de OS concluídas)
+  metaTipo          String   @default("VALOR_SERVICOS")
   ativo             Boolean  @default(true)
   criadoEm          DateTime @default(now())
   atualizadoEm      DateTime @updatedAt
 
-  usuario   Usuario?
-  ordens    OrdemServico[]
-  comissoes Comissao[]
+  usuario    Usuario?
+  ordens     OrdemServico[]
+  comissoes  Comissao[]
+  metas      MetaTecnico[]
+  conquistas DesafioConquista[]
+}
+
+/// Meta de um técnico num mês específico (sobrepõe Tecnico.metaMensal/metaTipo)
+model MetaTecnico {
+  id           Int      @id @default(autoincrement())
+  tecnico      Tecnico  @relation(fields: [tecnicoId], references: [id], onDelete: Cascade)
+  tecnicoId    Int
+  /// AAAA-MM
+  competencia  String
+  /// VALOR_SERVICOS | QTD_OS
+  tipo         String   @default("VALOR_SERVICOS")
+  valor        Float    @default(0)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([tecnicoId, competencia])
 }
 
 /// Depósitos (inclui estoque de distribuidores, como no Bling)

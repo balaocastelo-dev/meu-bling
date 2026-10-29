@@ -59,8 +59,9 @@ export const MENU: GrupoMenu[] = [
   {
     titulo: 'Início',
     itens: [
-      // dashboards: só o dono (ADMIN)
-      { rotulo: 'Dashboard', para: '/', icone: LayoutDashboard, perfis: ['ADMIN'] },
+      // Meu Dashboard: todo mundo tem o seu (vendedor, técnico, gerente; o gestor vê o completo com lucro)
+      { rotulo: 'Meu Dashboard', para: '/', icone: LayoutDashboard, alias: ['/meu-dashboard'] },
+      // os outros dashboards (com lucro): só o dono (ADMIN)
       { rotulo: 'Dashboard de vendas', para: '/dashboard/vendas', icone: TrendingUp, perfis: ['ADMIN'] },
       { rotulo: 'Dashboard de assistência', para: '/dashboard/assistencia', icone: Stethoscope, perfis: ['ADMIN'] },
       { rotulo: 'Dashboard de consignação', para: '/dashboard/consignacao', icone: Handshake, perfis: ['ADMIN', 'GERENTE'] },
@@ -69,7 +70,7 @@ export const MENU: GrupoMenu[] = [
   {
     titulo: 'Vendas',
     itens: [
-      { rotulo: 'Meu painel', para: '/meu-painel', icone: Gauge, perfis: [...GESTAO, 'VENDEDOR'] },
+      { rotulo: 'Painel do vendedor', para: '/meu-painel', icone: Gauge, perfis: GESTAO },
       { rotulo: 'Pedidos de venda', para: '/vendas', icone: ShoppingCart },
       { rotulo: 'Orçamentos', para: '/orcamentos', icone: FileSignature },
       { rotulo: 'Clientes', para: '/contatos', icone: Users, alias: ['/contatos'] },

@@ -1,5 +1,7 @@
 # Painel do vendedor, metas e desafios (desde 22/10/2026)
 
+> Desde 29/10/2026 a tela inicial de todo mundo é o **Meu Dashboard** (`docs/MEU-DASHBOARD.md`), que inclui tudo o que está aqui e ganhou **metas e desafios de técnico** (R$ de serviços ou nº de OS concluídas) e lembretes.
+
 Endereços: **www.balao.info/sistema/meu-painel** (vendedor) e **www.balao.info/sistema/metas-desafios** (ADMIN e GERENTE).
 
 ## Painel do vendedor ("Meu painel")

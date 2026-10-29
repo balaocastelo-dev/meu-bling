@@ -7,7 +7,7 @@ import { auditar } from '../../lib/auditoria.js';
 import { env } from '../../lib/env.js';
 import { COOKIE_SESSAO, COOKIE_PATH } from '../../plugins/arquivos.js';
 import { DESCRICAO_PERFIS } from '../../plugins/politicas.js';
-import { vendedorDoUsuario } from '../comum/vendedores.js';
+import { tecnicoDoUsuario, vendedorDoUsuario } from '../comum/vendedores.js';
 
 const PERFIS = ['ADMIN', 'GERENTE', 'VENDEDOR', 'TECNICO', 'FINANCEIRO'] as const;
 
@@ -32,9 +32,11 @@ export default async function authRoutes(app: FastifyInstance) {
       throw new AppError('E-mail ou senha inválidos.', 401, 'CREDENCIAIS');
     }
     await prisma.usuario.update({ where: { id: u.id }, data: { ultimoLogin: new Date() } });
-    // vendedor sem cadastro de vendedor ganha um na hora (senão a venda dele fica sem vendedor)
+    // vendedor (e técnico, que também vende) sem cadastro de vendedor ganha um na hora (senão a venda dele fica sem vendedor);
+    // técnico sem cadastro de técnico idem (senão a OS dele fica sem técnico)
     const vendedorId = await vendedorDoUsuario(u.id);
-    const payload = { id: u.id, nome: u.nome, email: u.email, perfil: u.perfil as any, vendedorId, tecnicoId: u.tecnicoId };
+    const tecnicoId = await tecnicoDoUsuario(u.id);
+    const payload = { id: u.id, nome: u.nome, email: u.email, perfil: u.perfil as any, vendedorId, tecnicoId };
     const token = app.jwt.sign(payload);
     await auditar(req, 'Usuario', u.id, 'LOGIN');
     // cookie usado apenas para servir arquivos (/uploads/*) em <img>/<a>; a API usa o Bearer
