@@ -11,6 +11,7 @@ import * as fiscal from './service.js';
 import { orientacaoNota } from './orientacao.js';
 import { caminhoXml } from './service.js';
 import { registrarServico } from '../../core/servicos.js';
+import { vendedorRestrito } from '../../modules/comum/escopo-vendas.js';
 
 const itemSchema = z.object({
   produtoId: z.number().int().nullable().optional(),
@@ -105,6 +106,9 @@ export default async function fiscalRoutes(app: FastifyInstance) {
       })
       .parse(req.query);
     const where: any = {};
+    // vendedor/técnico: só as notas das próprias vendas (29/10/2026)
+    const restrito = await vendedorRestrito(req.user);
+    if (restrito !== null) where.venda = { vendedorId: restrito };
     if (q.tipo !== undefined) where.tipo = q.tipo;
     if (q.modelo) where.modelo = q.modelo;
     if (q.situacao) where.situacao = q.situacao;

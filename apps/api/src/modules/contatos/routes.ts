@@ -4,6 +4,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
+import { whereVendasDoUsuario } from '../comum/escopo-vendas.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
 import { paginacaoSchema, paginar, respostaPaginada, somenteDigitos } from '../../lib/util.js';
@@ -141,16 +142,18 @@ export default async function contatosRoutes(app: FastifyInstance) {
     const id = idDe(req);
     const c = await prisma.contato.findUnique({ where: { id }, include: { vendedor: { select: { id: true, nome: true } } } });
     if (!c) throw new NotFound('Contato');
+    // vendedor/técnico: o resumo e o histórico do cliente só contam as vendas do próprio vendedor (29/10/2026)
+    const escopo = await whereVendasDoUsuario(req.user);
 
     const [vendasAgg, qtdOs, emAberto, ultima] = await Promise.all([
       prisma.venda.aggregate({
-        where: { contatoId: id, tipo: 'PEDIDO', situacao: { cancelamento: false } },
+        where: { ...escopo, contatoId: id, tipo: 'PEDIDO', situacao: { cancelamento: false } },
         _sum: { total: true },
         _count: { id: true },
       }),
       prisma.ordemServico.count({ where: { contatoId: id } }),
       prisma.contaReceber.aggregate({ where: { contatoId: id, situacao: { in: ['ABERTO', 'PARCIAL'] } }, _sum: { valor: true, valorRecebido: true } }),
-      prisma.venda.findFirst({ where: { contatoId: id, tipo: 'PEDIDO', situacao: { cancelamento: false } }, orderBy: { data: 'desc' }, select: { data: true } }),
+      prisma.venda.findFirst({ where: { ...escopo, contatoId: id, tipo: 'PEDIDO', situacao: { cancelamento: false } }, orderBy: { data: 'desc' }, select: { data: true } }),
     ]);
     return {
       ...c,
@@ -170,10 +173,11 @@ export default async function contatosRoutes(app: FastifyInstance) {
     const c = await prisma.contato.findUnique({ where: { id }, select: { id: true } });
     if (!c) throw new NotFound('Contato');
     const limite = z.object({ limite: z.coerce.number().int().min(1).max(500).default(100) }).parse(req.query).limite;
+    const escopo = await whereVendasDoUsuario(req.user);
 
     const [vendas, ordens, contasReceber, notificacoes] = await Promise.all([
       prisma.venda.findMany({
-        where: { contatoId: id },
+        where: { ...escopo, contatoId: id },
         orderBy: { data: 'desc' },
         take: limite,
         select: { id: true, tipo: true, numero: true, data: true, total: true, situacao: { select: { id: true, nome: true, cor: true } } },
