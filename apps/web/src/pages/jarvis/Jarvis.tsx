@@ -232,14 +232,15 @@ export default function Jarvis() {
           <Conta rotulo="Saldo dos bancos" valor={p?.saldoBancos} tom="positivo" />
           <Conta rotulo="Caixa da loja" valor={p?.saldoCaixa} tom="positivo" />
           <Conta rotulo="Contas a pagar em 30 dias" valor={p?.aPagar30d} tom="negativo" />
-          <Conta rotulo="Caixinhas atrasadas (o que já devia estar guardado)" valor={p?.caixinhasDevidas} tom="negativo" />
+          <Conta rotulo="Caixinhas a usar em 30 dias (+ atraso das distantes)" valor={p?.caixinhasDevidas} tom="negativo" />
           <Conta rotulo="Empréstimos que vencem em 30 dias" valor={p?.emprestimos30d} tom="negativo" />
           <Conta rotulo="= Caixa livre" valor={p?.caixaLivre} tom="total" />
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          O caixa livre olha os próximos 30 dias — é com ele que dá para decidir o que fazer hoje. O que vem depois
-          ({moeda(p?.caixinhasFuturas ?? 0)} de caixinhas e {moeda(p?.emprestimosDepois ?? 0)} de empréstimos) entra nos
-          compromissos totais, logo abaixo dos números do topo.
+          O caixa livre olha os próximos 30 dias — é com ele que dá para decidir o que fazer hoje. Caixinha que será
+          usada nesse prazo entra inteira; as mais distantes entram só pelo que já deveria estar guardado. O resto
+          ({moeda(p?.caixinhasFuturas ?? 0)} de caixinhas e {moeda(p?.emprestimosDepois ?? 0)} de empréstimos) aparece
+          nos compromissos totais, logo abaixo dos números do topo.
         </p>
       </CardV18>
 

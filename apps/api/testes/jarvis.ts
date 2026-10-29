@@ -55,33 +55,33 @@ async function main() {
   const longe = await adm.get('/jarvis/painel');
   verifica(igual(longe.aPagar30d, depois.aPagar30d), 'conta para daqui a 90 dias fica de fora dos 30 dias', longe.aPagar30d);
 
-  // caixinha nova e em dia NÃO tira do caixa livre (só o que já deveria estar guardado entra)
+  // caixinha para daqui a 20 dias: o dinheiro sai dentro da janela de 30 dias, então já não é livre
   await adm.post('/caixinhas', { nome: `JARVIS 13º ${SUF}`, valorMeta: 3_000, dataUso: daqui(20), contaFinanceiraId: banco.id }, 201);
   const comCaixinha = await adm.get('/jarvis/painel');
   verifica(
-    igual(comCaixinha.caixaLivre, longe.caixaLivre),
-    'caixinha nova, dentro do ritmo, não mexe no caixa livre de hoje',
+    igual(longe.caixaLivre - comCaixinha.caixaLivre, 3_000),
+    'caixinha que será usada dentro de 30 dias sai inteira do caixa livre',
     { antes: longe.caixaLivre, depois: comCaixinha.caixaLivre, atrasadas: comCaixinha.caixinhasDevidas },
   );
-  verifica(
-    igual(comCaixinha.caixinhasFuturas - longe.caixinhasFuturas, 3_000),
-    'mas os 3.000 aparecem como compromisso para depois',
-    { futuras: comCaixinha.caixinhasFuturas },
-  );
-  verifica(
-    igual(longe.compromissosTotais - comCaixinha.compromissosTotais, 3_000),
-    'e entram nos compromissos totais',
-    { antes: longe.compromissosTotais, depois: comCaixinha.compromissosTotais },
-  );
 
-  // caixinha vencendo amanhã e sem nada guardado está atrasada: essa sim sai do caixa livre
-  const antesAtrasada = await adm.get('/jarvis/painel');
-  await adm.post('/caixinhas', { nome: `JARVIS IPTU ${SUF}`, valorMeta: 1_000, dataUso: daqui(1), contaFinanceiraId: banco.id }, 201);
-  const comAtrasada = await adm.get('/jarvis/painel');
+  // caixinha distante (6 meses): só o ritmo já vencido pesa hoje; o resto fica para depois
+  const antesLonge = await adm.get('/jarvis/painel');
+  await adm.post('/caixinhas', { nome: `JARVIS Reforma ${SUF}`, valorMeta: 12_000, dataUso: daqui(180), contaFinanceiraId: banco.id }, 201);
+  const comLonge = await adm.get('/jarvis/painel');
   verifica(
-    comAtrasada.caixaLivre < antesAtrasada.caixaLivre,
-    'caixinha que vence amanhã e está vazia baixa o caixa livre',
-    { antes: antesAtrasada.caixaLivre, depois: comAtrasada.caixaLivre, atrasadas: comAtrasada.caixinhasDevidas },
+    igual(comLonge.caixaLivre, antesLonge.caixaLivre),
+    'caixinha de 6 meses, recém-criada, não mexe no caixa livre de hoje',
+    { antes: antesLonge.caixaLivre, depois: comLonge.caixaLivre },
+  );
+  verifica(
+    igual(comLonge.caixinhasFuturas - antesLonge.caixinhasFuturas, 12_000),
+    'mas os 12.000 ficam como compromisso para depois',
+    { futuras: comLonge.caixinhasFuturas },
+  );
+  verifica(
+    igual(antesLonge.compromissosTotais - comLonge.compromissosTotais, 12_000),
+    'e entram nos compromissos totais',
+    { antes: antesLonge.compromissosTotais, depois: comLonge.compromissosTotais },
   );
 
   secao('Mapa do milhão: falta e ritmo por dia útil');

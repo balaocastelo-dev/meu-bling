@@ -90,13 +90,20 @@ export async function calcularCaixaLivre(): Promise<CaixaLivre> {
     .filter((c) => !c.emprestimoId)
     .reduce((s, c) => s + Math.max(0, c.valor + c.juros - c.desconto - c.valorPago), 0);
 
-  // caixinhas: o que já deveria estar guardado até hoje × o que fica para depois
+  // Caixinhas. O dinheiro de uma caixinha que será usada dentro de 30 dias já não é livre —
+  // é a mesma natureza das contas a pagar da janela, então entra inteiro. As mais distantes
+  // entram só pelo que já deveria estar guardado (o ritmo combinado); o resto fica para depois.
   let caixinhasDevidas = 0;
   let caixinhasFuturas = 0;
   for (const cx of caixinhas) {
     const guardado = cx.movimentos.reduce((t, m) => t + (m.tipo === 'SAIDA' ? -m.valor : m.valor), 0);
     const falta = Math.max(0, cx.valorMeta - guardado);
     if (falta <= 0) continue;
+
+    if (cx.dataUso <= em30Dias) {
+      caixinhasDevidas += falta;
+      continue;
+    }
 
     const totalDias = Math.max(1, Math.ceil((cx.dataUso.getTime() - cx.dataInicio.getTime()) / 86_400_000));
     // dias INTEIROS já passados: no primeiro dia ainda não se deve nada
