@@ -1944,10 +1944,10 @@ model JarvisSugestao {
 model JarvisConversa {
   id           Int      @id @default(autoincrement())
   em           DateTime @default(now())
-  atualizadaEm DateTime @updatedAt
+  atualizadaEm DateTime @default(now()) @updatedAt
   usuarioId    Int?
   /// resumo curto para a lista de conversas (vem da primeira pergunta)
-  titulo       String
+  titulo       String   @default("Conversa")
   arquivada    Boolean  @default(false)
 
   mensagens JarvisMensagem[]

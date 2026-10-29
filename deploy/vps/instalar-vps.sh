@@ -83,6 +83,35 @@ mkdir -p "$DADOS/data" "$DADOS/storage"
 msg "Construindo a imagem (base ${CAMINHO}/)"
 docker build --build-arg "VITE_BASE_PATH=${CAMINHO}/" -t "$CONTAINER" "$CODIGO"
 
+msg "Cópia do banco antes de mexer (fica em $DADOS/antes-do-deploy)"
+# Se o passo seguinte falhar, esta cópia é o caminho de volta mais curto.
+mkdir -p "$DADOS/antes-do-deploy"
+if [ -f "$DADOS/data/meubling.db" ]; then
+  cp "$DADOS/data/meubling.db" "$DADOS/antes-do-deploy/meubling-$(date +%Y%m%d%H%M%S).db"
+  # guarda as 5 últimas
+  ls -1t "$DADOS/antes-do-deploy"/meubling-*.db 2>/dev/null | tail -n +6 | xargs -r rm -f
+  echo "cópia feita"
+fi
+
+msg "Conferindo a mudança de banco ANTES de derrubar o sistema"
+# O 'prisma db push' recusa colunas novas obrigatórias quando já existem linhas na tabela.
+# Descobrir isso com o container velho fora do ar deixa a loja parada — então testa-se antes,
+# num container temporário que usa uma CÓPIA do banco. Só troca o container se passar.
+TEMP_DB="$(mktemp -d)"
+cp -a "$DADOS/data/." "$TEMP_DB/" 2>/dev/null || true
+if docker run --rm --env-file "$ENV_FILE" -v "$TEMP_DB:/app/apps/api/data" "$CONTAINER" \
+     sh -c 'npx prisma db push --skip-generate' >/tmp/meu-bling-db-push.log 2>&1; then
+  echo "o banco aceita a mudança"
+  rm -rf "$TEMP_DB"
+else
+  rm -rf "$TEMP_DB"
+  echo
+  tail -25 /tmp/meu-bling-db-push.log
+  echo
+  erro "A mudança de banco não passou (detalhes acima). O sistema NÃO foi derrubado e continua no ar com a versão anterior.
+   Resolva a pendência no banco (a cópia de segurança está em $DADOS/antes-do-deploy) e rode este instalador de novo."
+fi
+
 msg "Trocando o container"
 # (docker inspect em vez de "docker ps | grep -q": com pipefail o grep -q pode quebrar o pipe e dar falso negativo)
 if docker inspect "$CONTAINER" >/dev/null 2>&1; then
