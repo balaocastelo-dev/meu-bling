@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { TextoValores } from '@/components/compartilhados/TextoValores';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -89,7 +90,7 @@ export default function Emprestimos() {
     { chave: 'dev', titulo: 'A devolver', direita: true, render: (e) => <div><p>{moeda(e.valorDevolver)}</p><p className="text-[11px] text-slate-400">juros {moeda(e.juros)}{e.jurosEstimado ? ' (est.)' : ''}</p></div> },
     { chave: 'saldo', titulo: 'Saldo', direita: true, render: (e) => <span className={e.saldoDevedor > 0 ? 'font-semibold text-slate-900' : 'text-slate-400'}>{moeda(e.saldoDevedor)}</span> },
     { chave: 'venc', titulo: 'Vence', render: (e) => (e.proximoVencimento ? <span className={e.status === 'VENCIDO' ? 'font-medium text-red-600' : ''}>{data(e.proximoVencimento)}</span> : '—') },
-    { chave: 'st', titulo: 'Situação', render: (e) => <div className="space-y-1"><Badge tom={tomStatus(e.status)}>{nomeStatus(e.status)}</Badge>{e.alerta && <p className={`max-w-[240px] text-[11px] leading-snug ${e.alerta.tom === 'vermelho' ? 'text-red-600' : e.alerta.tom === 'amarelo' ? 'text-amber-700' : 'text-sky-700'}`}>{e.alerta.texto}</p>}</div> },
+    { chave: 'st', titulo: 'Situação', render: (e) => <div className="space-y-1"><Badge tom={tomStatus(e.status)}>{nomeStatus(e.status)}</Badge>{e.alerta && <p className={`max-w-[240px] text-[11px] leading-snug ${e.alerta.tom === 'vermelho' ? 'text-red-600' : e.alerta.tom === 'amarelo' ? 'text-amber-700' : 'text-sky-700'}`}><TextoValores texto={e.alerta.texto} /></p>}</div> },
   ];
 
   return (

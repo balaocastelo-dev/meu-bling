@@ -3,6 +3,7 @@
  * Abre ao clicar no card do banco em Financeiro → Bancos.
  */
 import { useState, type ReactNode } from 'react';
+import { TextoValores } from '@/components/compartilhados/TextoValores';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -128,7 +129,7 @@ export default function ExtratoConta() {
                           <div className="flex items-start gap-2">
                             <span className={clsx('mt-0.5', l.tipo === 'ENTRADA' ? 'text-emerald-600' : 'text-red-500')}>{ICONE[l.natureza]}</span>
                             <div className="min-w-0">
-                              <p className="text-slate-800">{l.descricao}</p>
+                              <p className="text-slate-800"><TextoValores texto={l.descricao} /></p>
                               <div className="mt-0.5 flex flex-wrap gap-1">
                                 <Badge tom={l.natureza === 'AJUSTE' ? 'amarelo' : l.foraDoResultado ? 'cinza' : 'azul'}>{ROTULO[l.natureza]}</Badge>
                                 {l.foraDoResultado && <span className="text-[10px] text-slate-400">fora do DRE</span>}

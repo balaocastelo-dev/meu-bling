@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { TextoValores } from '@/components/compartilhados/TextoValores';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -140,7 +141,7 @@ export default function ConsignacaoDetalhe() {
             <ol className="divide-y divide-slate-100">
               {(c.eventos ?? []).map((e) => (
                 <li key={e.id} className="px-4 py-2.5 text-sm">
-                  <p className="text-slate-700">{e.texto}</p>
+                  <p className="text-slate-700"><TextoValores texto={e.texto} /></p>
                   <p className="text-[11px] text-slate-400">{dataHora(e.data)}{e.publico ? '' : ' · só a loja vê'}</p>
                 </li>
               ))}
