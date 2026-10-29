@@ -1,6 +1,6 @@
 # MEU BLING — ERP do Balão da Informática
 
-Sistema completo que substitui o Bling: **vendas, compras e ordens de serviço com situações configuráveis**, **NF-e / NFC-e com certificado A1 direto na SEFAZ**, **financeiro com contas a receber/pagar, bancos ao vivo (Open Finance) e conciliação**, **vendedores, técnicos e comissões**, **controle de peças da assistência**, **histórico do cliente**, **dashboards**, **DRE**, **e-mail (SMTP)** e **WhatsApp automático via QR Code** a cada mudança de situação.
+Sistema completo que substitui o Bling: **vendas, compras e ordens de serviço com situações configuráveis**, **NF-e / NFC-e com certificado A1 direto na SEFAZ**, **financeiro com contas a receber/pagar, bancos ao vivo (Open Finance) e conciliação**, **vendedores, técnicos e comissões**, **controle de peças da assistência**, **histórico do cliente**, **dashboards** (Meu Dashboard por perfil: vendedor, técnico, gerente e gestor — ver `docs/MEU-DASHBOARD.md`), **DRE**, **e-mail (SMTP)**, **WhatsApp automático via QR Code** a cada mudança de situação e **chat da equipe** (conversas, salas de reunião privadas, áudio gravado, chamadas de voz e vídeo pelo navegador, aviso no celular — ver `docs/CHAT.md`).
 
 ## Instalação (Windows)
 
@@ -40,7 +40,8 @@ npm run dev        # API :3333 + frontend :5173
 apps/api   Fastify + Prisma (SQLite) — API REST /api/v1 (contrato em docs/API.md)
   src/core/situacoes.ts     motor de situações (igual aos módulos de situação do Bling)
   src/modules/*             vendas, compras, ordens-servico, contatos, produtos/estoque, financeiro, bancos,
-                            comissoes, notificacoes, dashboard, relatorios (DRE), situacoes, cadastros, empresa, auth
+                            comissoes, notificacoes, dashboard, relatorios (DRE), situacoes, cadastros, empresa, auth,
+                            chat (equipe: WebSocket/long polling, salas, áudio, WebRTC, Web Push)
   src/integracoes/fiscal    NF-e/NFC-e 4.00: XML, assinatura A1, SEFAZ (autorização, consulta, cancelamento, CC-e, inutilização), DANFE
   src/integracoes/whatsapp  sessão WhatsApp via QR Code (Baileys) + fila de mensagens
   src/integracoes/email     SMTP (nodemailer)
@@ -48,7 +49,7 @@ apps/api   Fastify + Prisma (SQLite) — API REST /api/v1 (contrato em docs/API.
   src/integracoes/bling     importador (OAuth + API v3 + CSV)
 apps/web   React + Vite + Tailwind — interface
 scripts/   instalar.ps1, iniciar.ps1, backup.ps1
-docs/      ANALISE-BLING.md (análise do Bling), API.md (contrato), DEV.md (guia do código), OPEN-FINANCE.md (Pluggy), ROADMAP.md
+docs/      ANALISE-BLING.md (análise do Bling), API.md (contrato), DEV.md (guia do código), OPEN-FINANCE.md (Pluggy), CHAT.md (chat da equipe), ROADMAP.md
 ```
 
 ## Acesso pela internet e perfis

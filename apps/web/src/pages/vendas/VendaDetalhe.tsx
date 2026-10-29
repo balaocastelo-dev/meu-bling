@@ -1,18 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowRight, CheckCircle2, Clock, FileText, Link2, Pencil, Printer, Send, ShoppingCart, Undo2, Zap } from 'lucide-react';
 import { abrirEmNovaAba, api, mensagemErro } from '@/lib/api';
-import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, Modal, PageHeader, Select, StatusChanger, Tabs, Textarea, tomPorStatus } from '@/components/ui';
+import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, Modal, PageHeader, Select, StatusChanger, Tabs, Textarea, tomPorStatus, ValorOculto } from '@/components/ui';
 import { VendaAcoes } from '@/components/compartilhados/VendaAcoes';
 import { HistoricoSituacoes } from '@/components/compartilhados/HistoricoSituacoes';
 import { NotificarModal } from '@/components/compartilhados/NotificarModal';
 import { EmitirNfModal } from '@/components/compartilhados/EmitirNfModal';
+import { BotaoRoboNf } from '@/components/compartilhados/RoboNf';
+import { ImprimirVenda } from '@/components/compartilhados/ImprimirVenda';
 import { NotificacoesLista } from '@/components/compartilhados/NotificacoesLista';
 import { data, dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { Contato, Venda } from '@/types';
 import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/ProdutoSite';
+import { FinalizarVendaModal } from '@/components/compartilhados/FinalizarVenda';
+import { PosVendaImpressao } from '@/components/compartilhados/PosVendaImpressao';
+import { LinkPagamento } from '@/components/compartilhados/LinkPagamento';
 
 /** Detalhe do pedido de venda com abas e ações */
 export default function VendaDetalhe() {
@@ -22,9 +27,28 @@ export default function VendaDetalhe() {
   const [aba, setAba] = useState('itens');
   const [notificar, setNotificar] = useState(false);
   const [converter, setConverter] = useState(false);
+  const [finalizar, setFinalizar] = useState(false);
   const [nfe, setNfe] = useState<{ modelo: 55 | 65; info: string } | null>(null);
 
   const { data: venda, isLoading, error } = useQuery({ queryKey: ['venda', id], queryFn: () => api.get<Venda>(`/vendas/${id}`) });
+
+  // impressão logo depois de finalizar: quando a venda vira "Fechada"/"NF emitida" nesta tela,
+  // ou quando chega aqui recém-salva já finalizada (VendaForm manda state.imprimir)
+  const local = useLocation();
+  const [posVenda, setPosVenda] = useState(false);
+  const finalAnterior = useRef<{ id: string | undefined; final: boolean } | null>(null);
+  useEffect(() => {
+    if (!venda || venda.tipo === 'ORCAMENTO') return;
+    const s = venda.situacao as { final?: boolean; cancelamento?: boolean };
+    const final = !!s.final && !s.cancelamento;
+    const antes = finalAnterior.current;
+    if (antes && antes.id === id && !antes.final && final) setPosVenda(true);
+    if (!antes && final && (local.state as { imprimir?: boolean } | null)?.imprimir) {
+      setPosVenda(true);
+      nav(local.pathname, { replace: true, state: null }); // não abre de novo ao recarregar
+    }
+    finalAnterior.current = { id, final };
+  }, [venda, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: ['venda', id] });
@@ -71,7 +95,11 @@ export default function VendaDetalhe() {
   };
 
   if (isLoading) return <FormSkeleton />;
-  if (error || !venda) return <EmptyState titulo="Venda não encontrada" descricao={error ? mensagemErro(error) : undefined} acao={<Link to="/vendas"><Button>Voltar</Button></Link>} />;
+  if (error || !venda) {
+    // venda de outro vendedor (vendedor/técnico só acessam as próprias): o servidor explica de quem é
+    const deOutro = (error as { code?: string } | null)?.code === 'VENDA_DE_OUTRO_VENDEDOR';
+    return <EmptyState titulo={deOutro ? 'Venda de outro vendedor' : 'Venda não encontrada'} descricao={error ? mensagemErro(error) : undefined} acao={<Link to="/vendas"><Button>Voltar para minhas vendas</Button></Link>} />;
+  }
 
   const contato = venda.contato as Contato;
   const orcamento = venda.tipo === 'ORCAMENTO';
@@ -79,6 +107,7 @@ export default function VendaDetalhe() {
   const Nome = orcamento ? 'Orçamento' : 'Venda';
   const convertido = !!venda.vendaGerada;
   const fechado = !!(venda.situacao as { cancelamento?: boolean }).cancelamento;
+  const jaFinalizada = !!(venda.situacao as { final?: boolean }).final && !fechado;
   const vencido = orcamento && !convertido && !!venda.validade && new Date(venda.validade).getTime() < Date.now() - 86400000;
 
   return (
@@ -90,10 +119,10 @@ export default function VendaDetalhe() {
         descricao={`${data(venda.data)} · ${contato?.nome ?? ''} · ${venda.vendedor?.nome ? 'vendedor ' + venda.vendedor.nome : 'sem vendedor'}`}
         acoes={
           <>
+            {/* robô de NF: "Pronto pra NF" (verde) ou "Falta N pra NF" (amarelo) */}
+            {!orcamento && !fechado && !venda.nota && <BotaoRoboNf vendaId={venda.id} numero={venda.numero} onEmitida={invalidar} />}
             <VendaAcoes venda={venda} contexto="detalhe" />
-            <Button variante="secundario" icone={<Printer className="h-4 w-4" />} onClick={imprimir}>
-              Imprimir
-            </Button>
+            <ImprimirVenda vendaId={venda.id} orcamento={orcamento} aoImprimirPedido={imprimir} />
             <Button variante="secundario" icone={<Send className="h-4 w-4" />} onClick={() => setNotificar(true)}>
               Enviar ao cliente
             </Button>
@@ -103,6 +132,11 @@ export default function VendaDetalhe() {
                   Editar
                 </Button>
               </Link>
+            )}
+            {!orcamento && !jaFinalizada && (
+              <Button variante="sucesso" icone={<CheckCircle2 className="h-4 w-4" />} onClick={() => setFinalizar(true)}>
+                Finalizar venda
+              </Button>
             )}
             {orcamento && !convertido && (
               <Button variante="primario" icone={<ShoppingCart className="h-4 w-4" />} onClick={() => setConverter(true)} disabled={fechado}>
@@ -146,7 +180,7 @@ export default function VendaDetalhe() {
       )}
 
       {/* Resumo + ações de lançamento */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid items-start gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <Definicoes
             colunas={4}
@@ -171,8 +205,38 @@ export default function VendaDetalhe() {
             <div className="flex justify-between"><span className="text-slate-500">Frete</span><span className="num">{moeda(venda.frete)}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Outras</span><span className="num">{moeda(venda.outrasDespesas)}</span></div>
             <div className="flex justify-between border-t border-slate-200 pt-2 text-base"><span className="font-semibold">Total</span><span className="num font-bold">{moeda(venda.total)}</span></div>
-            {venda.custoTotal !== undefined && venda.custoTotal > 0 && venda.total > 0 && (
-              <div className="flex justify-between text-xs text-slate-400"><span>Custo / margem</span><span className="num">{moeda(venda.custoTotal)} · {numero(((venda.total - venda.custoTotal) / (venda.total || 1)) * 100, 1)}%</span></div>
+          </div>
+          {/* custos internos — não saem no pedido, PDF, link, e-mail, WhatsApp nem NF */}
+          <div className="mt-3 space-y-1 rounded-md border border-dashed border-slate-200 bg-slate-50/70 p-2.5 text-xs">
+            <p className="mb-1 flex items-center justify-between font-semibold uppercase tracking-wide text-slate-400">
+              <span>Custos internos 🔒</span>
+              <Link to={`${orcamento ? '/orcamentos' : '/vendas'}/${venda.id}/editar`} className="normal-case tracking-normal text-brand-600 hover:underline">Lançar</Link>
+            </p>
+            {(() => {
+              const custoProdutos = venda.fechamento?.custoProdutos ?? venda.custoTotal ?? 0;
+              const semCusto = venda.itens.filter((i) => !i.custoUnitario).length;
+              return (
+                <>
+                  <div className="flex justify-between"><span className="text-slate-500">Custo dos produtos</span><ValorOculto className="num">{moeda(custoProdutos)}{venda.fechamento?.custoProdutoPct ? ` (${numero(venda.fechamento.custoProdutoPct, 1)}%)` : ''}</ValorOculto></div>
+                  {venda.fechamento?.custoProdutoEstimado ? (
+                    <p className="text-[11px] text-amber-700">Custo estimado — informe o custo real em “Lançar”</p>
+                  ) : semCusto > 0 && <p className="text-[11px] text-amber-700">{semCusto} {semCusto === 1 ? 'item' : 'itens'} sem custo</p>}
+                  {venda.fechamento && (
+                    <>
+                      <div className="flex justify-between"><span className="text-slate-500">Imposto ({numero(venda.fechamento.impostoPct ?? 0, 1)}%)</span><ValorOculto className="num">{moeda(venda.fechamento.imposto ?? 0)}</ValorOculto></div>
+                      <div className="flex justify-between"><span className="text-slate-500">Taxa do cartão{venda.fechamento.taxaCartao ? ` (${venda.fechamento.parcelasCartao ?? 1}x · ${numero(venda.fechamento.taxaCartaoPct ?? 0, 2)}%)` : ''}</span><ValorOculto className="num">{moeda(venda.fechamento.taxaCartao ?? 0)}</ValorOculto></div>
+                    </>
+                  )}
+                  <div className="flex justify-between"><span className="text-slate-500">Frete / logística</span><ValorOculto className="num">{moeda(venda.fechamento?.frete ?? venda.custoLogistica ?? 0)}</ValorOculto></div>
+                  {venda.fechamento && <div className="flex justify-between font-medium"><span className="text-slate-600">Custo total</span><ValorOculto className="num">{moeda(venda.fechamento.custoTotal)}</ValorOculto></div>}
+                </>
+              );
+            })()}
+            {venda.fechamento && (
+              <div className="mt-1 flex justify-between border-t border-slate-200 pt-1.5 text-sm">
+                <span className="font-semibold text-slate-700">Lucro</span>
+                <span className={`num font-bold ${venda.fechamento.lucro < 0 ? 'text-red-600' : 'text-emerald-600'}`}><ValorOculto>{moeda(venda.fechamento.lucro)} <span className="text-[11px] font-normal text-slate-400">({numero(venda.fechamento.margemPct, 1)}%)</span></ValorOculto></span>
+              </div>
             )}
           </div>
           {!orcamento && (<>
@@ -190,6 +254,9 @@ export default function VendaDetalhe() {
           </div>
           </>)}
           {orcamento && <p className="mt-3 text-xs text-slate-400">Orçamento não movimenta estoque nem financeiro. Ao converter, a venda criada segue o fluxo normal.</p>}
+          <div className="mt-3">
+            <LinkPagamento venda={venda as any} />
+          </div>
         </Card>
       </div>
 
@@ -380,6 +447,8 @@ export default function VendaDetalhe() {
         }}
       />
 
+      {!orcamento && <FinalizarVendaModal vendaId={venda.id} numero={venda.numero} aberto={finalizar} onFechar={() => setFinalizar(false)} />}
+      {!orcamento && <PosVendaImpressao vendaId={venda.id} numero={venda.numero} aberto={posVenda} onFechar={() => setPosVenda(false)} />}
     </div>
   );
 }

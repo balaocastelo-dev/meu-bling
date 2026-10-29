@@ -56,7 +56,23 @@ model Empresa {
   cfopPadraoForaUf       String  @default("6102")
   csosnPadrao            String  @default("102")
   /// alíquota aproximada do Simples usada no DRE (deduções) — ex.: 6.0
-  aliquotaSimplesPct     Float   @default(6.0)
+  aliquotaSimplesPct     Float   @default(10.0)
+  /// custo de cada venda (DRE, dashboards): taxa do cartão em 1x e em 12x (linear entre elas), frete por venda
+  /// e faixa do custo estimado do produto quando a venda não tem custo informado
+  taxaCartao1xPct        Float   @default(5.0)
+  taxaCartao12xPct       Float   @default(12.0)
+  freteVendaPadrao       Float   @default(10.0)
+  custoProdutoMinPct     Float   @default(40.0)
+  custoProdutoMaxPct     Float   @default(70.0)
+  /// CARNÊ PRÓPRIO (PIX): chave, nome e cidade do recebedor no QR Code; juros por risco do cliente (% ao mês)
+  pixChave               String?
+  pixNome                String?
+  pixCidade              String?
+  carneTaxaMinPct        Float   @default(7.0)
+  carneTaxaMaxPct        Float   @default(15.0)
+  /// multa e juros de mora impressos no carnê (cobrados à mão na baixa)
+  carneMultaPct          Float   @default(2.0)
+  carneMoraMesPct        Float   @default(1.0)
   /// Provedor fiscal: "sefaz" (direto com certificado A1) | "mock" (simulado p/ testes)
   provedorFiscal         String  @default("mock")
 
@@ -85,11 +101,13 @@ model Empresa {
   openFinanceAtivo        Boolean @default(false)
 
   // ---- Bling (migração)
-  blingClientId     String?
-  blingClientSecret String? // criptografado
-  blingAccessToken  String? // criptografado
-  blingRefreshToken String? // criptografado
-  blingTokenExpira  DateTime?
+  blingClientId          String?
+  blingClientSecret      String? // criptografado
+  blingAccessToken       String? // criptografado
+  blingRefreshToken      String? // criptografado
+  blingTokenExpira       DateTime?
+  /// Mercado Pago (link de pagamento): Access Token de produção — criptografado
+  mercadoPagoAccessToken String?
 
   atualizadoEm DateTime @updatedAt
 }
@@ -113,6 +131,36 @@ model Usuario {
   auditorias        Auditoria[]
   historicos        HistoricoSituacao[]
   movimentosEstoque MovimentoEstoque[]
+  lembretes         Lembrete[]             @relation("LembretePara")
+  lembretesCriados  Lembrete[]             @relation("LembreteCriador")
+  // chat da equipe (29/10/2026)
+  conversasCriadas  Conversa[]             @relation("ConversaCriador")
+  conversas         ConversaParticipante[]
+  mensagensChat     Mensagem[]
+  chamadasIniciadas Chamada[]
+  pushAssinaturas   PushAssinatura[]
+}
+
+/// Lembrete do "Meu Dashboard": do próprio usuário ou enviado pela gestão (gestor/gerente) para alguém da equipe.
+model Lembrete {
+  id            Int       @id @default(autoincrement())
+  titulo        String
+  descricao     String?
+  /// quando lembrar (dia; hora opcional)
+  data          DateTime
+  /// para quem é o lembrete
+  para          Usuario   @relation("LembretePara", fields: [paraUsuarioId], references: [id], onDelete: Cascade)
+  paraUsuarioId Int
+  /// quem criou (null = o próprio usuário já apagado)
+  criadoPor     Usuario?  @relation("LembreteCriador", fields: [criadoPorId], references: [id])
+  criadoPorId   Int?
+  /// tela do sistema ligada ao lembrete (ex.: /vendas/12)
+  link          String?
+  concluidoEm   DateTime?
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
+
+  @@index([paraUsuarioId, concluidoEm, data])
 }
 
 model Vendedor {
@@ -137,6 +185,7 @@ model Vendedor {
   contasReceber ContaReceber[]
   metas         MetaVendedor[]
   conquistas    DesafioConquista[]
+  consignacoes  Consignacao[]
 }
 
 /// Meta de vendas de um vendedor num mês específico (sobrepõe Vendedor.metaMensal)
@@ -153,12 +202,15 @@ model MetaVendedor {
   @@unique([vendedorId, competencia])
 }
 
-/// Desafio de vendas lançado pela gestão; aparece como card no painel do vendedor e paga prêmio como comissão extra
+/// Desafio lançado pela gestão; aparece como card no Meu Dashboard do vendedor/técnico e paga prêmio como comissão extra
 model Desafio {
   id              Int               @id @default(autoincrement())
   titulo          String
   descricao       String?
-  /// VALOR (R$ vendido) | QTD_VENDAS (nº de vendas) | QTD_ITENS (unidades vendidas)
+  /// para quem: VENDEDORES (conta vendas) | TECNICOS (conta ordens de serviço concluídas)
+  publico         String            @default("VENDEDORES")
+  /// vendedores: VALOR (R$ vendido) | QTD_VENDAS (nº de vendas) | QTD_ITENS (unidades vendidas)
+  /// técnicos:   VALOR_SERVICOS (R$ de OS concluídas) | QTD_OS (nº de OS concluídas)
   tipo            String            @default("VALOR")
   alvo            Float
   /// filtro opcional: só conta itens deste produto / desta categoria
@@ -175,6 +227,8 @@ model Desafio {
   todosVendedores Boolean           @default(true)
   /// ids dos vendedores participantes quando todosVendedores = false (JSON array)
   vendedoresIds   String            @default("[]")
+  /// público TECNICOS: ids dos técnicos participantes quando todosVendedores = false (JSON array)
+  tecnicosIds     String            @default("[]")
   /// false = encerrado/cancelado pela gestão antes do fim
   ativo           Boolean           @default(true)
   criadoPorId     Int?
@@ -187,13 +241,15 @@ model Desafio {
   @@index([inicio, fim])
 }
 
-/// Vendedor que bateu o alvo de um desafio (gera a comissão extra)
+/// Vendedor (ou técnico) que bateu o alvo de um desafio (gera a comissão extra)
 model DesafioConquista {
   id            Int       @id @default(autoincrement())
   desafio       Desafio   @relation(fields: [desafioId], references: [id], onDelete: Cascade)
   desafioId     Int
-  vendedor      Vendedor  @relation(fields: [vendedorId], references: [id])
-  vendedorId    Int
+  vendedor      Vendedor? @relation(fields: [vendedorId], references: [id])
+  vendedorId    Int?
+  tecnico       Tecnico?  @relation(fields: [tecnicoId], references: [id])
+  tecnicoId     Int?
   conquistadoEm DateTime  @default(now())
   /// valor/quantidade atingido no momento da conquista
   atingido      Float     @default(0)
@@ -201,6 +257,7 @@ model DesafioConquista {
   comissaoId    Int?      @unique
 
   @@unique([desafioId, vendedorId])
+  @@unique([desafioId, tecnicoId])
 }
 
 model Tecnico {
@@ -210,13 +267,35 @@ model Tecnico {
   telefone          String?
   especialidade     String?
   comissaoPadraoPct Float    @default(0)
+  /// meta padrão por mês (vale para todo mês sem meta específica em MetaTecnico)
+  metaMensal        Float    @default(0)
+  /// tipo da meta padrão: VALOR_SERVICOS (R$ de OS concluídas) | QTD_OS (nº de OS concluídas)
+  metaTipo          String   @default("VALOR_SERVICOS")
   ativo             Boolean  @default(true)
   criadoEm          DateTime @default(now())
   atualizadoEm      DateTime @updatedAt
 
-  usuario   Usuario?
-  ordens    OrdemServico[]
-  comissoes Comissao[]
+  usuario    Usuario?
+  ordens     OrdemServico[]
+  comissoes  Comissao[]
+  metas      MetaTecnico[]
+  conquistas DesafioConquista[]
+}
+
+/// Meta de um técnico num mês específico (sobrepõe Tecnico.metaMensal/metaTipo)
+model MetaTecnico {
+  id           Int      @id @default(autoincrement())
+  tecnico      Tecnico  @relation(fields: [tecnicoId], references: [id], onDelete: Cascade)
+  tecnicoId    Int
+  /// AAAA-MM
+  competencia  String
+  /// VALOR_SERVICOS | QTD_OS
+  tipo         String   @default("VALOR_SERVICOS")
+  valor        Float    @default(0)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([tecnicoId, competencia])
 }
 
 /// Depósitos (inclui estoque de distribuidores, como no Bling)
@@ -287,14 +366,18 @@ model Contato {
   criadoEm        DateTime  @default(now())
   atualizadoEm    DateTime  @updatedAt
 
-  vendas           Venda[]        @relation("VendaContato")
-  compras          Compra[]
-  ordens           OrdemServico[]
-  contasReceber    ContaReceber[]
-  contasPagar      ContaPagar[]
-  notas            NotaFiscal[]
-  notificacoes     Notificacao[]
-  transportesVenda Venda[]        @relation("VendaTransportadora")
+  vendas             Venda[]        @relation("VendaContato")
+  compras            Compra[]
+  ordens             OrdemServico[]
+  contasReceber      ContaReceber[]
+  contasPagar        ContaPagar[]
+  notas              NotaFiscal[]
+  notificacoes       Notificacao[]
+  transportesVenda   Venda[]        @relation("VendaTransportadora")
+  emprestimosCredor  Emprestimo[]   @relation("EmprestimoCredor")
+  emprestimosCliente Emprestimo[]   @relation("EmprestimoCliente")
+  carnes             Carne[]        @relation("CarneCliente")
+  consignacoes       Consignacao[]
 
   @@index([nome])
   @@index([documento])
@@ -332,6 +415,9 @@ model Produto {
   ativo              Boolean           @default(true)
   // ---- Fiscal
   ncm                String?
+  /// de onde veio o NCM: null = digitado à mão · HISTORICO = notas já autorizadas (robô, confiável)
+  /// SUGERIDO = robô deduziu pelo nome/categoria e falta alguém confirmar · CONFIRMADO = alguém conferiu
+  ncmOrigem          String?
   cest               String?
   cfopPadrao         String?
   /// origem da mercadoria (0 nacional, 1 estrangeira importação direta, 2 estrangeira adquirida no mercado interno...)
@@ -369,6 +455,7 @@ model Produto {
   compraItens CompraItem[]
   osItens     OrdemServicoItem[]
   nfItens     NotaFiscalItem[]
+  consignacao Consignacao?
 
   @@index([nome])
   @@index([prontaEntrega])
@@ -412,17 +499,24 @@ model MovimentoEstoque {
 }
 
 model FormaPagamento {
-  id              Int     @id @default(autoincrement())
-  nome            String
+  id                Int              @id @default(autoincrement())
+  nome              String
   /// DINHEIRO | PIX | CARTAO_CREDITO | CARTAO_DEBITO | BOLETO | TRANSFERENCIA | CREDIARIO | OUTRO
-  tipo            String  @default("OUTRO")
+  tipo              String           @default("OUTRO")
   /// tPag da NF-e: 01 dinheiro, 02 cheque, 03 crédito, 04 débito, 15 boleto, 16 depósito, 17 PIX, 18 transferência, 90 sem pagamento, 99 outros
-  codigoFiscal    String  @default("99")
-  taxaPct         Float   @default(0)
-  diasRecebimento Int     @default(0)
-  maxParcelas     Int     @default(1)
-  ativo           Boolean @default(true)
-  blingId         String? @unique
+  codigoFiscal      String           @default("99")
+  taxaPct           Float            @default(0)
+  diasRecebimento   Int              @default(0)
+  maxParcelas       Int              @default(1)
+  ativo             Boolean          @default(true)
+  blingId           String?          @unique
+  /// bancos/contas que podem receber esta forma (JSON com ids) — a tela de finalizar só mostra estes
+  contasPermitidas  String?
+  /// banco/conta onde o dinheiro desta forma cai (sugerido ao finalizar a venda e usado no "pago na hora")
+  contaFinanceira   ContaFinanceira? @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId Int?
+  /// CREDITO_BANCARIO: quem empresta o dinheiro (ex.: Lumicred). Taxa = taxaPct, prazo = diasRecebimento
+  credorId          Int?
 
   vendaParcelas  VendaParcela[]
   compraParcelas CompraParcela[]
@@ -463,6 +557,8 @@ model ContaFinanceira {
   agencia              String?
   conta                String?
   saldoInicial         Float     @default(0)
+  /// taxa que o banco/maquininha desconta de cada recebimento (ex.: Mercado Pago 5%): cai o valor − taxa
+  taxaRecebimentoPct   Float     @default(0)
   saldoAtual           Float     @default(0)
   /// saldo informado pelo banco via Open Finance (ao vivo)
   saldoBanco           Float?
@@ -477,10 +573,15 @@ model ContaFinanceira {
   ultimaSincronizacao  DateTime?
   blingId              String?   @unique
 
-  movimentos  ContaReceber[]
-  pagamentos  ContaPagar[]
-  lancamentos MovimentoFinanceiro[]
-  transacoes  TransacaoBancaria[]
+  movimentos      ContaReceber[]
+  pagamentos      ContaPagar[]
+  lancamentos     MovimentoFinanceiro[]
+  formasPagamento FormaPagamento[]
+  carnes          Carne[]
+  caixinhas       Caixinha[]
+  transacoes      TransacaoBancaria[]
+
+  emailBancoRegras EmailBancoRegra[]
 }
 
 // ---------------------------------------------------------------------
@@ -584,6 +685,11 @@ model Venda {
   /// BALCAO | WHATSAPP | LOJA_VIRTUAL | TELEFONE | MARKETPLACE | OUTRO
   origem                String               @default("BALCAO")
   numeroPedidoLoja      String?
+  /// link de pagamento do Mercado Pago gerado pelo vendedor dentro do pedido
+  linkPagamentoUrl      String?
+  linkPagamentoId       String?
+  linkPagamentoValor    Float?
+  linkPagamentoEm       DateTime?
   totalProdutos         Float                @default(0)
   /// REAL | PERCENTUAL
   descontoTipo          String               @default("REAL")
@@ -592,6 +698,8 @@ model Venda {
   outrasDespesas        Float                @default(0)
   total                 Float                @default(0)
   custoTotal            Float                @default(0)
+  /// custo interno de logística da venda (frete pago, motoboy, envio) — nunca sai para o cliente
+  custoLogistica        Float                @default(0)
   observacoes           String?
   observacoesInternas   String?
   // ---- transporte
@@ -603,16 +711,22 @@ model Venda {
   pesoBruto             Float                @default(0)
   // ---- controle
   estoqueLancado        Boolean              @default(false)
+  /// carnê: juros ao mês escolhidos na venda (vazio = pelo risco do cliente)
+  carneTaxaPct          Float?
   contasLancadas        Boolean              @default(false)
   nota                  NotaFiscal?          @relation(fields: [notaId], references: [id])
   notaId                Int?                 @unique
+  /// robô de NF: o que ele conferiu/preencheu e se a venda está "Pronta pra NF"
+  roboNf                VendaRoboNf?
   blingId               String?              @unique
   criadoEm              DateTime             @default(now())
   atualizadoEm          DateTime             @updatedAt
 
-  itens     VendaItem[]
-  parcelas  VendaParcela[]
-  comissoes Comissao[]
+  itens       VendaItem[]
+  parcelas    VendaParcela[]
+  comissoes   Comissao[]
+  emprestimos Emprestimo[]
+  carnes      Carne[]
 
   @@unique([tipo, numero])
   @@index([data])
@@ -622,22 +736,26 @@ model Venda {
 }
 
 model VendaItem {
-  id            Int      @id @default(autoincrement())
-  venda         Venda    @relation(fields: [vendaId], references: [id], onDelete: Cascade)
-  vendaId       Int
-  produto       Produto? @relation(fields: [produtoId], references: [id])
-  produtoId     Int?
-  codigo        String?
-  descricao     String
-  unidade       String   @default("UN")
-  quantidade    Float    @default(1)
-  valorUnitario Float    @default(0)
-  desconto      Float    @default(0)
-  total         Float    @default(0)
-  custoUnitario Float    @default(0)
-  comissaoPct   Float    @default(0)
-  comissaoValor Float    @default(0)
-  ordem         Int      @default(0)
+  id             Int      @id @default(autoincrement())
+  venda          Venda    @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+  vendaId        Int
+  produto        Produto? @relation(fields: [produtoId], references: [id])
+  produtoId      Int?
+  codigo         String?
+  descricao      String
+  unidade        String   @default("UN")
+  quantidade     Float    @default(1)
+  valorUnitario  Float    @default(0)
+  desconto       Float    @default(0)
+  total          Float    @default(0)
+  custoUnitario  Float    @default(0)
+  /// custo digitado pelo vendedor (true) ou vindo do cadastro do produto (false)
+  custoInformado Boolean  @default(false)
+  comissaoPct    Float    @default(0)
+  comissaoValor  Float    @default(0)
+  /// nº de série / IMEI do aparelho vendido (sai no certificado de garantia)
+  numeroSerie    String?
+  ordem          Int      @default(0)
 
   alocacoesCompra AlocacaoCompra[]
 }
@@ -652,6 +770,8 @@ model VendaParcela {
   formaPagamento   FormaPagamento? @relation(fields: [formaPagamentoId], references: [id])
   formaPagamentoId Int?
   observacoes      String?
+  /// forma CREDITO_BANCARIO: quem paga o credor — CLIENTE (paga direto) ou LOJA (cliente paga a loja e a loja repassa)
+  creditoPagador   String?
   contaReceber     ContaReceber?   @relation(fields: [contaReceberId], references: [id])
   contaReceberId   Int?            @unique
 }
@@ -690,8 +810,10 @@ model Compra {
   criadoEm              DateTime             @default(now())
   atualizadoEm          DateTime             @updatedAt
 
-  itens    CompraItem[]
-  parcelas CompraParcela[]
+  itens       CompraItem[]
+  parcelas    CompraParcela[]
+  emprestimos Emprestimo[]
+  consignacao Consignacao?
 
   @@index([data])
   @@index([fornecedorId])
@@ -835,7 +957,10 @@ model OrdemServicoItem {
   valorUnitario       Float        @default(0)
   desconto            Float        @default(0)
   total               Float        @default(0)
+  /// custo da peça (interno, nunca sai para o cliente): digitado pelo técnico ou vindo do cadastro do produto
   custoUnitario       Float        @default(0)
+  /// custo digitado pelo técnico (true) ou vindo do cadastro do produto (false)
+  custoInformado      Boolean      @default(false)
   comissaoVendedorPct Float        @default(0)
   comissaoTecnicoPct  Float        @default(0)
   deposito            Deposito?    @relation(fields: [depositoId], references: [id])
@@ -943,9 +1068,21 @@ model ContaReceber {
   criadoEm          DateTime             @default(now())
   atualizadoEm      DateTime             @updatedAt
 
+  /// entrada do dinheiro de um empréstimo (não é receita: fica fora do DRE)
+  emprestimo   Emprestimo? @relation(fields: [emprestimoId], references: [id])
+  emprestimoId Int?
+  /// parcela de carnê próprio (no DRE: só os juros são resultado financeiro)
+  carne        Carne?      @relation(fields: [carneId], references: [id])
+  carneId      Int?
+  carneParcela Int?
+
   vendaParcela VendaParcela?
-  osParcela    OrdemServicoParcela?
-  lancamentos  MovimentoFinanceiro[]
+
+  /// taxa de retirada / devolução cobrada do consignante
+  consignacao   Consignacao?          @relation(fields: [consignacaoId], references: [id])
+  consignacaoId Int?
+  osParcela     OrdemServicoParcela?
+  lancamentos   MovimentoFinanceiro[]
 
   @@index([vencimento, situacao])
   @@index([origemTipo, origemId])
@@ -982,11 +1119,71 @@ model ContaPagar {
   criadoEm          DateTime             @default(now())
   atualizadoEm      DateTime             @updatedAt
 
+  /// devolução de um empréstimo: no DRE entra só a parte de juros
+  emprestimo   Emprestimo? @relation(fields: [emprestimoId], references: [id])
+  emprestimoId Int?
+
   compraParcela CompraParcela?
+
+  /// pagamento ao consignante (diária ou valor da venda)
+  consignacao   Consignacao?          @relation(fields: [consignacaoId], references: [id])
+  consignacaoId Int?
   comissoes     Comissao[]
   lancamentos   MovimentoFinanceiro[]
 
   @@index([vencimento, situacao])
+}
+
+/// Empréstimos e antecipações (ex.: Lumicred). O dinheiro entra na conta e devolve-se o valor + juros.
+///   REPASSE      → o cliente paga o boleto para a loja e a loja repassa ao credor
+///   DIRETO       → o cliente paga o boleto direto ao credor; a loja paga só a diferença (juros)
+///   CAPITAL_GIRO → sem cliente: a loja devolve tudo
+model Emprestimo {
+  id                    Int      @id @default(autoincrement())
+  numero                Int      @unique
+  /// código da operação no credor (ex.: E-161)
+  codigo                String?
+  descricao             String?
+  credor                Contato  @relation("EmprestimoCredor", fields: [credorId], references: [id])
+  credorId              Int
+  modalidade            String   @default("REPASSE")
+  cliente               Contato? @relation("EmprestimoCliente", fields: [clienteId], references: [id])
+  clienteId             Int?
+  venda                 Venda?   @relation(fields: [vendaId], references: [id])
+  vendaId               Int?
+  /// compra paga com crédito bancário
+  compra                Compra?  @relation(fields: [compraId], references: [id])
+  compraId              Int?
+  /// parcela da venda/compra paga com a forma "Crédito bancário" que gerou a operação
+  vendaParcelaId        Int?
+  compraParcelaId       Int?
+  /// recebível do cliente (boleto) que garante a operação
+  contaReceberClienteId Int?
+  dataOperacao          DateTime
+  valorRecebido         Float
+  taxaPct               Float    @default(6)
+  juros                 Float
+  valorDevolver         Float
+  prazoDias             Int      @default(30)
+  vencimento            DateTime
+  parcelas              Int      @default(1)
+  /// conta onde o dinheiro entrou
+  contaFinanceiraId     Int?
+  /// ABERTO | CANCELADO (quitado/vencido é calculado pelas contas a pagar)
+  situacao              String   @default("ABERTO")
+  /// operação trazida do histórico (pedidos de compra / pagamentos do Bling)
+  importado             Boolean  @default(false)
+  /// juros calculados pela taxa padrão (valor recebido real não informado)
+  jurosEstimado         Boolean  @default(false)
+  observacoes           String?
+  criadoEm              DateTime @default(now())
+  atualizadoEm          DateTime @updatedAt
+
+  contasPagar   ContaPagar[]
+  contasReceber ContaReceber[]
+
+  @@index([situacao, vencimento])
+  @@index([credorId])
 }
 
 /// Lançamentos efetivos nas contas (caixa/banco) — base do fluxo de caixa
@@ -1012,6 +1209,9 @@ model MovimentoFinanceiro {
   conciliado        Boolean              @default(false)
   transacao         TransacaoBancaria?   @relation(fields: [transacaoId], references: [id])
   transacaoId       Int?                 @unique
+  /// caixinha (guardar dinheiro para um compromisso) a que este movimento pertence
+  caixinha          Caixinha?            @relation(fields: [caixinhaId], references: [id])
+  caixinhaId        Int?
   observacoes       String?
   criadoEm          DateTime             @default(now())
 
@@ -1032,7 +1232,7 @@ model TransacaoBancaria {
   categoria         CategoriaFinanceira? @relation(fields: [categoriaId], references: [id])
   categoriaId       Int?
   conciliado        Boolean              @default(false)
-  /// OPEN_FINANCE | OFX | MANUAL
+  /// OPEN_FINANCE | OFX | MANUAL | EMAIL
   fonte             String               @default("OPEN_FINANCE")
   dadosBrutos       String? // JSON original
   importadoEm       DateTime             @default(now())
@@ -1310,4 +1510,570 @@ model EntregaWebhook {
 
   @@index([status, proximaTentativa])
   @@index([webhookId, criadoEm])
+}
+
+// ---------------------------------------------------------------------
+// CAIXINHAS (Nubank): guardar dinheiro para compromissos grandes
+// ---------------------------------------------------------------------
+model Caixinha {
+  id                Int                   @id @default(autoincrement())
+  /// para que é o dinheiro (ex.: 13º dos funcionários, IPTU, estoque Black Friday)
+  nome              String
+  valorMeta         Float
+  /// dia em que o dinheiro vai ser usado
+  dataUso           DateTime
+  dataInicio        DateTime              @default(now())
+  contaFinanceira   ContaFinanceira       @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId Int
+  observacoes       String?
+  /// false = já usada / arquivada
+  ativo             Boolean               @default(true)
+  usadaEm           DateTime?
+  criadoEm          DateTime              @default(now())
+  atualizadoEm      DateTime              @updatedAt
+  movimentos        MovimentoFinanceiro[]
+}
+
+/// ROBÔ DE NF: estado de cada venda conferida pelo robô que roda 24h na API.
+/// Fica numa tabela à parte para o robô nunca mexer no "atualizadoEm" da venda.
+model VendaRoboNf {
+  id                Int      @id @default(autoincrement())
+  venda             Venda    @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+  vendaId           Int      @unique
+  /// PRONTA (botão "Pronto pra NF" aceso) | PENDENTE (falta algo que o robô não resolve) | EMITIDA | IGNORADA (orçamento/cancelada/só serviço)
+  status            String
+  erros             Int      @default(0)
+  avisos            Int      @default(0)
+  /// JSON: pendências (mesmo formato do checklist da NF, com os links de onde corrigir)
+  pendencias        String?
+  /// JSON: o que o robô preencheu sozinho (cliente, NCM...) — vai acumulando
+  preenchido        String?
+  /// atualizadoEm da venda quando foi conferida (mudou → confere de novo)
+  vendaAtualizadaEm DateTime
+  verificadoEm      DateTime @default(now())
+
+  @@index([status])
+}
+
+/// ROBÔ DA SAÚDE: o que o robô (que confere a "Saúde do sistema" 24h) corrigiu sozinho e o que ele
+/// sugere para o ADMIN resolver com um clique. Aparece no dashboard do ADMIN e em Configurações → Saúde.
+model RoboSaudeAviso {
+  id           Int       @id @default(autoincrement())
+  /// identifica o problema/alvo (ex.: "venda-final-sem-lancamento:venda:123"); sugestão aberta não se repete
+  chave        String
+  /// CORRECAO (o robô já resolveu) | SUGESTAO (precisa de um clique) | ALERTA (só avisar, com link)
+  tipo         String
+  /// erro | aviso | info
+  nivel        String
+  area         String
+  titulo       String
+  mensagem     String
+  link         String?
+  /// JSON: botões da sugestão [{ codigo, rotulo, estilo, confirmar }]
+  acoes        String?
+  /// JSON: dados que a ação precisa (ids, valores)
+  dados        String?
+  /// ABERTA | RESOLVIDA (o problema sumiu / o botão foi apertado) | IGNORADA | FEITA (correção do robô)
+  status       String    @default("ABERTA")
+  lida         Boolean   @default(false)
+  resolvidoPor String?
+  resolvidoEm  DateTime?
+  /// para quem é o lembrete (aparece no painel desse técnico/vendedor, além do painel do ADMIN)
+  tecnicoId    Int?
+  vendedorId   Int?
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  @@index([status, tipo])
+  @@index([chave])
+  @@index([criadoEm])
+  @@index([status, tecnicoId])
+  @@index([status, vendedorId])
+}
+
+// ---------------------------------------------------------------------
+// CARNÊ PRÓPRIO — o cliente paga cada parcela por PIX (QR Code) na conta da loja (Cora)
+// ---------------------------------------------------------------------
+model Carne {
+  id                 Int              @id @default(autoincrement())
+  numero             Int              @unique
+  cliente            Contato          @relation("CarneCliente", fields: [clienteId], references: [id])
+  clienteId          Int
+  venda              Venda?           @relation(fields: [vendaId], references: [id])
+  vendaId            Int?
+  descricao          String?
+  dataEmissao        DateTime
+  /// valor financiado (sem juros)
+  valorFinanciado    Float
+  taxaMensalPct      Float
+  parcelas           Int
+  primeiroVencimento DateTime
+  valorParcela       Float
+  /// soma das parcelas e juros totais (tabela Price)
+  total              Float
+  juros              Float
+  /// risco calculado na hora da emissão (A..E) e nota 0-100
+  risco              String?
+  score              Int?
+  /// banco onde o PIX cai (Cora)
+  contaFinanceira    ContaFinanceira? @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId  Int?
+  /// ATIVO | CANCELADO (quitado/atrasado são calculados pelas parcelas)
+  situacao           String           @default("ATIVO")
+  observacoes        String?
+  criadoEm           DateTime         @default(now())
+  atualizadoEm       DateTime         @updatedAt
+
+  contas ContaReceber[]
+
+  @@index([clienteId])
+  @@index([vendaId])
+}
+
+// ---------------------------------------------------------------------
+// CONSIGNAÇÃO (28/10/2026): o cliente deixa o equipamento para a loja vender.
+//   Consignante fica com X% (padrão 80) do preço — valor TRAVADO no contrato.
+//   Vendeu → paga na hora. Não vendeu em N dias corridos (padrão 10) → a loja paga
+//   5% por dia útil (mín. R$ 100, máx. R$ 1.000) até quitar; quitou → item vira estoque próprio.
+//   Retirada antes do prazo: taxa (padrão R$ 100); depois do prazo, sem taxa.
+// ---------------------------------------------------------------------
+model Consignacao {
+  id                       Int       @id @default(autoincrement())
+  numero                   Int       @unique
+  /// token do link do consignante (assinar, acompanhar, autorizar desconto, escolher retirar/receber)
+  token                    String    @unique
+  consignante              Contato   @relation(fields: [consignanteId], references: [id])
+  consignanteId            Int
+  vendedor                 Vendedor? @relation(fields: [vendedorId], references: [id])
+  vendedorId               Int?
+  usuarioId                Int?
+  // ---- equipamento
+  /// NOTEBOOK | PC | PC_GAMER | CELULAR | TABLET | GAMES | MONITOR | OUTRO
+  tipoEquipamento          String    @default("OUTRO")
+  /// título que aparece no site e no estoque (ex.: "MacBook Air M1 8GB 256GB")
+  descricao                String
+  marca                    String?
+  modelo                   String?
+  numeroSerie              String?
+  imei                     String?
+  /// estado de conservação (ex.: "Seminovo, sem marcas")
+  estado                   String?
+  acessorios               String?
+  /// texto da página de venda no site
+  detalhes                 String?
+  /// JSON: nomes dos arquivos em /uploads/consignados/<id>/
+  fotos                    String?
+  /// consignante declarou que o equipamento é dele, de origem lícita e sem bloqueio
+  declaracaoOrigem         Boolean   @default(false)
+  // ---- valores (travados no contrato; só mudam com desconto autorizado pelo consignante)
+  precoVenda               Float
+  percentualConsignante    Float     @default(80)
+  valorConsignante         Float
+  precoVendaOriginal       Float
+  valorConsignanteOriginal Float
+  // ---- regras copiadas da configuração no dia do contrato
+  prazoDias                Int       @default(10)
+  diariaPct                Float     @default(5)
+  diariaMinima             Float     @default(100)
+  diariaMaxima             Float     @default(1000)
+  taxaRetirada             Float     @default(100)
+  dataEntrada              DateTime
+  /// último dia do prazo (entrada + prazoDias corridos)
+  dataLimite               DateTime
+  /// NO_PRAZO | EM_DIARIAS | AGUARDANDO_RETIRADA | VENDIDO | QUITADO | RETIRADO | CANCELADO
+  status                   String    @default("NO_PRAZO")
+  // ---- assinatura
+  assinadoEm               DateTime?
+  /// CELULAR | LOJA
+  assinadoPor              String?
+  assinaturaNome           String?
+  assinaturaDocumento      String?
+  assinaturaIp             String?
+  assinaturaAgente         String?
+  /// imagem da assinatura (anexos/consignacoes/<id>/assinatura.png)
+  assinaturaArquivo        String?
+  // ---- escolha do consignante no fim do prazo
+  /// RECEBER | RETIRAR
+  escolha                  String?
+  escolhaEm                DateTime?
+  diariasIniciadasEm       DateTime?
+  diariaValor              Float?
+  // ---- desfecho
+  vendaId                  Int?
+  vendaNumero              Int?
+  vendidoEm                DateTime?
+  /// vendeu durante as diárias: o painel sugere quitar o saldo (decisão do ADMIN)
+  vendidoEmDiarias         Boolean   @default(false)
+  retiradoEm               DateTime?
+  quitadoEm                DateTime?
+  canceladoEm              DateTime?
+  // ---- vínculos
+  compra                   Compra?   @relation(fields: [compraId], references: [id])
+  compraId                 Int?      @unique
+  produto                  Produto?  @relation(fields: [produtoId], references: [id])
+  produtoId                Int?      @unique
+  /// aparece na vitrine "Consignados" do site (depois de assinado)
+  mostrarNoSite            Boolean   @default(true)
+  destaque                 Boolean   @default(false)
+  observacoes              String?
+  /// JSON: avisos de WhatsApp já enviados (chave → data), para não repetir
+  avisos                   String?
+  criadoEm                 DateTime  @default(now())
+  atualizadoEm             DateTime  @updatedAt
+
+  contasPagar   ContaPagar[]
+  contasReceber ContaReceber[]
+  descontos     ConsignacaoDesconto[]
+  eventos       ConsignacaoEvento[]
+
+  @@index([status])
+  @@index([consignanteId])
+}
+
+/// Pedido de desconto ao consignante (o robô pede nos primeiros dias; a loja também pode pedir)
+model ConsignacaoDesconto {
+  id            Int         @id @default(autoincrement())
+  consignacao   Consignacao @relation(fields: [consignacaoId], references: [id], onDelete: Cascade)
+  consignacaoId Int
+  pct           Float
+  precoDe       Float
+  precoPara     Float
+  valorDe       Float
+  valorPara     Float
+  /// PENDENTE | AUTORIZADO | RECUSADO | EXPIRADO
+  status        String      @default("PENDENTE")
+  /// ROBO | LOJA
+  origem        String      @default("ROBO")
+  pedidoEm      DateTime    @default(now())
+  respondidoEm  DateTime?
+  ip            String?
+
+  @@index([consignacaoId, status])
+}
+
+/// Linha do tempo do contrato (o que aconteceu, em português, para a loja e para o consignante)
+model ConsignacaoEvento {
+  id            Int         @id @default(autoincrement())
+  consignacao   Consignacao @relation(fields: [consignacaoId], references: [id], onDelete: Cascade)
+  consignacaoId Int
+  data          DateTime    @default(now())
+  tipo          String
+  texto         String
+  /// aparece no painel do consignante
+  publico       Boolean     @default(true)
+  usuarioId     Int?
+
+  @@index([consignacaoId])
+}
+
+// ---------------------------------------------------------------------
+// CHAT DA EQUIPE (29/10/2026) — conversas entre os usuários do sistema:
+// direta (duas pessoas) ou sala de reunião privada (pessoas escolhidas),
+// com texto, áudio gravado, arquivos e chamadas de voz/vídeo pelo navegador.
+// O ADMIN pode abrir e ler qualquer conversa (decisão do Thiago).
+// ---------------------------------------------------------------------
+
+model Conversa {
+  id               Int       @id @default(autoincrement())
+  /// DIRETA (duas pessoas) | SALA (reunião privada com pessoas escolhidas)
+  tipo             String    @default("DIRETA")
+  /// nome da sala (conversa direta não tem nome: mostra o nome da outra pessoa)
+  nome             String?
+  /// conversa direta é única por par de usuários: "menorId:maiorId"
+  chaveDireta      String?   @unique
+  criadoPor        Usuario?  @relation("ConversaCriador", fields: [criadoPorId], references: [id])
+  criadoPorId      Int?
+  /// quando chegou a última mensagem (ordena a caixa de entrada)
+  ultimaMensagemEm DateTime?
+  criadoEm         DateTime  @default(now())
+  atualizadoEm     DateTime  @updatedAt
+
+  participantes ConversaParticipante[]
+  mensagens     Mensagem[]
+  chamadas      Chamada[]
+
+  @@index([ultimaMensagemEm])
+}
+
+model ConversaParticipante {
+  id            Int       @id @default(autoincrement())
+  conversa      Conversa  @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId    Int
+  usuario       Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId     Int
+  /// id da última mensagem que a pessoa leu (0 = nenhuma)
+  lidaAteId     Int       @default(0)
+  /// silenciar avisos desta conversa até a data (null = avisa)
+  silenciadaAte DateTime?
+  entrouEm      DateTime  @default(now())
+  /// saiu da sala (não recebe mais nada, mas o histórico fica)
+  saiuEm        DateTime?
+
+  @@unique([conversaId, usuarioId])
+  @@index([usuarioId, saiuEm])
+}
+
+model Mensagem {
+  id             Int       @id @default(autoincrement())
+  conversa       Conversa  @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId     Int
+  /// null = mensagem do sistema ("Fulano entrou na sala")
+  autor          Usuario?  @relation(fields: [autorId], references: [id])
+  autorId        Int?
+  /// TEXTO | AUDIO | ARQUIVO | SISTEMA | CHAMADA
+  tipo           String    @default("TEXTO")
+  texto          String?
+  /// anexo (áudio gravado ou arquivo): caminho no storage (chat/aaaa-mm/arquivo), nome original, tamanho, tipo e duração
+  arquivo        String?
+  arquivoNome    String?
+  arquivoTamanho Int?
+  arquivoMime    String?
+  duracaoSeg     Int?
+  /// resposta a outra mensagem da mesma conversa
+  respondeAId    Int?
+  /// mensagem de chamada: id da chamada (para mostrar duração/perdida)
+  chamadaId      Int?
+  editadaEm      DateTime?
+  apagadaEm      DateTime?
+  criadoEm       DateTime  @default(now())
+
+  @@index([conversaId, id])
+  @@index([autorId])
+}
+
+model Chamada {
+  id            Int       @id @default(autoincrement())
+  conversa      Conversa  @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId    Int
+  /// VOZ | VIDEO
+  tipo          String    @default("VOZ")
+  iniciadoPor   Usuario   @relation(fields: [iniciadoPorId], references: [id])
+  iniciadoPorId Int
+  /// ATIVA | ENCERRADA | PERDIDA | RECUSADA
+  situacao      String    @default("ATIVA")
+  /// ids (JSON) de quem está/esteve na chamada
+  participantes String    @default("[]")
+  iniciadaEm    DateTime  @default(now())
+  atendidaEm    DateTime?
+  encerradaEm   DateTime?
+
+  @@index([conversaId, situacao])
+}
+
+/// Navegador/celular inscrito para receber aviso (Web Push) com o sistema fechado
+model PushAssinatura {
+  id          Int       @id @default(autoincrement())
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId   Int
+  endpoint    String    @unique
+  p256dh      String
+  auth        String
+  userAgent   String?
+  criadoEm    DateTime  @default(now())
+  ultimoUsoEm DateTime?
+
+  @@index([usuarioId])
+}
+
+// ---------------------------------------------------------------------
+// JARVIS — agente do gestor para R$ 1 milhão livres no caixa (docs/JARVIS.md)
+// ---------------------------------------------------------------------
+
+/// Foto do caixa livre a cada rodada do worker (gráfico de evolução do painel /jarvis)
+model JarvisMetrica {
+  id          Int      @id @default(autoincrement())
+  em          DateTime @default(now())
+  /// bancos + caixa − a pagar 30 dias − caixinhas comprometidas − empréstimos
+  caixaLivre  Float
+  /// saldo das contas tipo BANCO/CARTAO/INVESTIMENTO/OUTRO
+  saldoBancos Float
+  /// saldo das contas tipo CAIXA (dinheiro na gaveta)
+  saldoCaixa  Float
+  /// contas a pagar vencidas + a vencer nos próximos 30 dias (o que falta pagar)
+  aPagar30d   Float
+  /// o que ainda falta guardar nas caixinhas ativas
+  caixinhas   Float
+  /// saldo devedor dos empréstimos abertos (principal + juros)
+  emprestimos Float
+  /// JSON com a conta de cada parcela (para a tela explicar o número)
+  detalhes    String?
+
+  @@index([em])
+}
+
+/// Cada sugestão que o JARVIS dá nos painéis. Enquanto ABERTA/ADIADA não se repete (chave).
+model JarvisSugestao {
+  id              Int       @id @default(autoincrement())
+  criadaEm        DateTime  @default(now())
+  /// regra que gerou: ESTOQUE_PARADO | CREDIARIO_VENCIDO | CONSIGNADO_PRAZO | LUMICRED_CUSTO |
+  /// CAIXINHA_ATRASADA | TAXA_CARTAO | MARGEM_BAIXA | OPORTUNIDADE_COMPRA | MAPA_MILHAO
+  regra           String
+  /// identifica o alvo (ex.: "ESTOQUE_PARADO:produto:123")
+  chave           String
+  /// para quem aparece (lista separada por vírgula: "ADMIN" | "ADMIN,GERENTE" | "VENDEDOR"...)
+  perfis          String    @default("ADMIN")
+  titulo          String
+  /// a instrução em português (escrita pela IA quando há chave configurada)
+  texto           String
+  /// R$ que a sugestão libera/ganha se for aceita
+  impactoEstimado Float?
+  /// 1 = urgente ... 5 = baixa
+  prioridade      Int       @default(3)
+  /// JSON: ids e números que a ação precisa
+  dados           String?
+  /// ação de 1 clique: DESCONTO_LOTE | COBRAR_WHATSAPP | CRIAR_CAIXINHA | ABRIR_TELA | NENHUMA
+  acao            String    @default("NENHUMA")
+  /// link da tela quando a ação é ABRIR_TELA
+  link            String?
+  /// ABERTA | ACEITA | ADIADA | RECUSADA | CONCLUIDA | EXPIRADA
+  situacao        String    @default("ABERTA")
+  adiadaAte       DateTime?
+  decididaEm      DateTime?
+  decididaPor     String?
+  motivo          String?
+  /// quanto a sugestão rendeu de verdade (placar do JARVIS)
+  resultadoReal   Float?
+  medidaEm        DateTime?
+  atualizadoEm    DateTime  @updatedAt
+
+  @@index([situacao, prioridade])
+  @@index([chave])
+  @@index([criadaEm])
+}
+
+/// Modo pergunta do painel: o gestor pergunta, a IA responde com os números do dia
+/// Uma conversa do gestor com o JARVIS (o fio da prosa, que dá para retomar depois)
+model JarvisConversa {
+  id           Int      @id @default(autoincrement())
+  em           DateTime @default(now())
+  atualizadaEm DateTime @default(now()) @updatedAt
+  usuarioId    Int?
+  /// resumo curto para a lista de conversas (vem da primeira pergunta)
+  titulo       String   @default("Conversa")
+  arquivada    Boolean  @default(false)
+
+  mensagens JarvisMensagem[]
+
+  @@index([usuarioId, atualizadaEm])
+}
+
+/// Cada fala da conversa. 'usuario' é o gestor; 'jarvis' é a resposta da IA.
+model JarvisMensagem {
+  id         Int            @id @default(autoincrement())
+  conversa   JarvisConversa @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId Int
+  em         DateTime       @default(now())
+  /// usuario | jarvis
+  papel      String
+  texto      String
+  /// JSON: números que a IA recebeu, ferramentas usadas e custo em tokens
+  contexto   String?
+
+  @@index([conversaId, em])
+}
+
+/// Configuração do JARVIS (uma linha só, id = 1). Segredos criptografados com APP_SECRET.
+model JarvisConfig {
+  id                 Int       @id @default(1)
+  ligado             Boolean   @default(true)
+  metaCaixa          Float     @default(1000000)
+  dataAlvo           DateTime?
+  modeloIa           String    @default("claude-fable-5-1")
+  /// chave da API da Anthropic (enc:...)
+  chaveAnthropic     String?
+  /// % do valor de novo que o cliente paga num usado de boas condições
+  percVendaUsado     Int       @default(70)
+  /// % do valor de novo que a loja paga na compra, por condição
+  percCompraRegular  Int       @default(30)
+  percCompraBom      Int       @default(50)
+  percCompraLacrado  Int       @default(75)
+  /// dias sem venda para o produto entrar em ESTOQUE_PARADO
+  diasEstoqueParado  Int       @default(45)
+  /// % da loja no consignado (o consignante fica com o resto)
+  percLojaConsignado Int       @default(20)
+  ultimaRodadaEm     DateTime?
+  ultimoErro         String?
+  atualizadoEm       DateTime  @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// ROBÔ DE E-MAIL DOS BANCOS
+// Lê as caixas de e-mail da loja, transforma aviso de banco em TransacaoBancaria
+// (fonte EMAIL) e deixa a conciliação existente fazer a baixa.
+// ---------------------------------------------------------------------------
+
+/// Configuração do robô de e-mail (uma linha só, id = 1).
+model EmailBancoConfig {
+  id              Int       @id @default(1)
+  ligado          Boolean   @default(true)
+  /// quantos dias olhar para trás na primeira leitura de cada caixa
+  diasIniciais    Int       @default(30)
+  /// dar baixa sozinho quando casar 1:1 com uma conta em aberto
+  baixaAutomatica Boolean   @default(true)
+  /// tolerância em minutos entre a hora do e-mail e a do lançamento
+  janelaMinutos   Int       @default(2880)
+  ultimaRodadaEm  DateTime?
+  ultimoErro      String?
+  atualizadoEm    DateTime  @updatedAt
+}
+
+/// Uma caixa de e-mail que o robô lê (IMAP do domínio próprio ou Gmail).
+model EmailBancoCaixa {
+  id              Int       @id @default(autoincrement())
+  nome            String
+  endereco        String    @unique
+  /// IMAP | GMAIL
+  tipo            String    @default("IMAP")
+  host            String?
+  porta           Int       @default(993)
+  usuario         String?
+  /// senha de IMAP ou refresh token do Gmail (enc:...)
+  segredo         String?
+  pasta           String    @default("INBOX")
+  ativo           Boolean   @default(true)
+  ultimaLeituraEm DateTime?
+  ultimoErro      String?
+  criadoEm        DateTime  @default(now())
+
+  mensagens EmailBancoMensagem[]
+}
+
+/// De qual remetente o robô aceita aviso, com qual parser e para qual conta.
+/// Remetente fora desta lista nunca vira lançamento.
+model EmailBancoRegra {
+  id                Int              @id @default(autoincrement())
+  nome              String
+  /// endereço exato (no-reply@sumup.com) ou domínio (@cora.com.br)
+  remetente         String
+  /// SUMUP_PIX | SUMUP_PAYOUT | CORA | ASAAS | MERCADOPAGO | BOLETO_FORNECEDOR
+  parser            String
+  contaFinanceira   ContaFinanceira? @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId Int?
+  ativo             Boolean          @default(true)
+  ordem             Int              @default(0)
+  criadoEm          DateTime         @default(now())
+
+  @@index([remetente])
+}
+
+/// Todo e-mail que o robô olhou, para não processar duas vezes e para auditoria.
+/// O Message-ID é único no mundo, então o mesmo aviso caindo em duas caixas entra uma vez só.
+model EmailBancoMensagem {
+  id           Int             @id @default(autoincrement())
+  caixa        EmailBancoCaixa @relation(fields: [caixaId], references: [id])
+  caixaId      Int
+  messageId    String          @unique
+  remetente    String
+  assunto      String
+  recebidoEm   DateTime
+  /// IMPORTADO | SEM_REGRA | SEM_DADOS | REMETENTE_SUSPEITO | ERRO
+  situacao     String          @default("SEM_REGRA")
+  motivo       String?
+  /// id da TransacaoBancaria gerada, quando virou lançamento
+  transacaoId  Int?
+  valor        Float?
+  processadoEm DateTime        @default(now())
+
+  @@index([situacao, recebidoEm])
+  @@index([recebidoEm])
 }

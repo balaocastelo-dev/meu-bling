@@ -13,9 +13,9 @@ import { renderTemplate, formatarMoeda, formatarData } from '../../lib/util.js';
 import { eventos } from '../../core/eventos.js';
 import { registrarServico } from '../../core/servicos.js';
 import { enviarEmail, smtpConfigurado } from '../../integracoes/email/servico.js';
-import { enviarDocumento, enviarTexto, status as statusWhatsApp } from '../../integracoes/whatsapp/servico.js';
+import { enviarDocumento, enviarTexto, status as statusWhatsApp } from '../../integracoes/whatsapp/provedor.js';
 
-export type OrigemTipo = 'VENDA' | 'COMPRA' | 'OS' | 'NFE' | 'CONTA' | 'MANUAL';
+export type OrigemTipo = 'VENDA' | 'COMPRA' | 'OS' | 'NFE' | 'CONTA' | 'MANUAL' | 'CONSIGNACAO';
 export type Canal = 'EMAIL' | 'WHATSAPP';
 
 export const EVENTOS_TEMPLATE = ['VENDA_SITUACAO', 'COMPRA_SITUACAO', 'OS_SITUACAO', 'VENDA_CRIADA', 'OS_CRIADA', 'NFE_AUTORIZADA', 'CONTA_VENCENDO', 'ORCAMENTO_OS', 'ORCAMENTO_VENDA', 'ORCAMENTO_SITUACAO'] as const;
@@ -461,7 +461,7 @@ export async function processarFila(limite = 10) {
       processadas += 1;
       try {
         if (n.canal === 'WHATSAPP') {
-          if (statusWhatsApp().status !== 'CONECTADO') {
+          if ((await statusWhatsApp()).status !== 'CONECTADO') {
             // não conta tentativa: fica pendente até conectar
             await prisma.notificacao.update({ where: { id: n.id }, data: { erro: 'WhatsApp desconectado' } });
             continue;

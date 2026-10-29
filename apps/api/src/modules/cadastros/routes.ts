@@ -4,6 +4,7 @@
  * Listagens devolvem array simples (para selects). DELETE: se estiver em uso → ativo=false, senão exclui.
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { lerContasPermitidas } from '../comum/financeiro.js';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
@@ -57,8 +58,11 @@ function registrarCrud<TC, TU>(app: FastifyInstance, def: CrudDef<TC, TU>) {
   app.put(`${base}/:id`, pre, async (req) => {
     const id = idDe(req);
     if (!(await def.obter(id))) throw new NotFound(def.entidade);
-    const body = def.schemaUpdate.parse(req.body);
-    await def.atualizar(id, body, req);
+    const lido = def.schemaUpdate.parse(req.body) as Record<string, unknown>;
+    // .partial() ainda aplica os defaults do schema: grava só o que veio no corpo (senão um PUT parcial zera campos)
+    const enviados = req.body && typeof req.body === 'object' ? new Set(Object.keys(req.body as object)) : null;
+    const body = (enviados ? Object.fromEntries(Object.entries(lido).filter(([k]) => enviados.has(k))) : lido) as typeof lido;
+    await def.atualizar(id, body as any, req);
     await auditar(req, def.entidade, id, 'ALTERAR', body);
     return def.obter(id);
   });
@@ -186,8 +190,11 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
     },
   });
 
+  /** contasPermitidas é gravado como JSON; a API devolve a lista de ids */
+  const formaComContas = <T extends { contasPermitidas: string | null }>(f: T) => ({ ...f, contasPermitidas: lerContasPermitidas(f.contasPermitidas) });
+
   // ---------------- Formas de pagamento
-  const TIPOS_FP = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA', 'CREDIARIO', 'OUTRO'] as const;
+  const TIPOS_FP = ['DINHEIRO', 'PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'BOLETO', 'TRANSFERENCIA', 'CREDIARIO', 'CREDITO_BANCARIO', 'CARNE', 'OUTRO'] as const;
   const formaSchema = z.object({
     nome: z.string().trim().min(2),
     tipo: z.enum(TIPOS_FP).default('OUTRO'),
@@ -195,6 +202,16 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
     taxaPct: z.coerce.number().min(0).max(100).default(0),
     diasRecebimento: z.coerce.number().int().min(0).default(0),
     maxParcelas: z.coerce.number().int().min(1).default(1),
+    /** banco/conta onde o dinheiro desta forma cai */
+    contaFinanceiraId: z.coerce.number().int().positive().nullable().optional(),
+    /** CREDITO_BANCARIO: quem empresta (ex.: Lumicred). Taxa = taxaPct, prazo = diasRecebimento */
+    credorId: z.coerce.number().int().positive().nullable().optional(),
+    /** bancos que podem receber esta forma (a tela de finalizar só mostra estes) */
+    contasPermitidas: z
+      .array(z.coerce.number().int().positive())
+      .nullable()
+      .optional()
+      .transform((a) => (a === undefined ? undefined : a === null || !a.length ? null : JSON.stringify([...new Set(a)]))),
     ativo: z.boolean().default(true),
   });
   registrarCrud(app, {
@@ -203,10 +220,13 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
     schema: formaSchema,
     schemaUpdate: formaSchema.partial(),
     perfisMutacao: CONFIG,
-    listar: (q) => prisma.formaPagamento.findMany({ where: { ativo: q.ativo, ...nomeContains(q.pesquisa) }, orderBy: { nome: 'asc' } }),
-    obter: (id) => prisma.formaPagamento.findUnique({ where: { id } }),
-    criar: (d) => prisma.formaPagamento.create({ data: d }),
-    atualizar: (id, d) => prisma.formaPagamento.update({ where: { id }, data: d }),
+    listar: async (q) => (await prisma.formaPagamento.findMany({ where: { ativo: q.ativo, ...nomeContains(q.pesquisa) }, orderBy: { nome: 'asc' } })).map(formaComContas),
+    obter: async (id) => {
+      const f = await prisma.formaPagamento.findUnique({ where: { id } });
+      return f ? formaComContas(f) : null;
+    },
+    criar: async (d) => formaComContas(await prisma.formaPagamento.create({ data: d as any })),
+    atualizar: async (id, d) => formaComContas(await prisma.formaPagamento.update({ where: { id }, data: d as any })),
     emUso: async (id) =>
       (await prisma.vendaParcela.count({ where: { formaPagamentoId: id } })) > 0 ||
       (await prisma.compraParcela.count({ where: { formaPagamentoId: id } })) > 0 ||
@@ -303,12 +323,13 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
     agencia: z.string().trim().nullable().optional(),
     conta: z.string().trim().nullable().optional(),
     saldoInicial: z.coerce.number().default(0),
+    taxaRecebimentoPct: z.coerce.number().min(0).max(100).default(0),
     padrao: z.boolean().default(false),
     ativo: z.boolean().default(true),
     cor: z.string().trim().nullable().optional(),
   });
   const selectConta = {
-    id: true, nome: true, tipo: true, banco: true, agencia: true, conta: true, saldoInicial: true, saldoAtual: true,
+    id: true, nome: true, tipo: true, banco: true, agencia: true, conta: true, saldoInicial: true, saldoAtual: true, taxaRecebimentoPct: true,
     saldoBanco: true, saldoBancoEm: true, padrao: true, ativo: true, cor: true, openFinanceStatus: true, openFinanceItemId: true, ultimaSincronizacao: true,
   } as const;
   const unicaPadrao = async (id: number, padrao?: boolean) => {

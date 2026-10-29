@@ -1,10 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import clsx from 'clsx';
-import { AlertOctagon, AlertTriangle, CheckCircle2, Info, RefreshCw, Stethoscope } from 'lucide-react';
-import { api } from '@/lib/api';
+import { AlertOctagon, AlertTriangle, Bot, CheckCircle2, Info, RefreshCw, Sparkles, Stethoscope } from 'lucide-react';
+import { api, mensagemErro } from '@/lib/api';
 import { Button, Card, EmptyState, PageHeader, Skeleton } from '@/components/ui';
 import { dataHora, inteiro } from '@/lib/format';
+import { AnelSaude, CHAVE_ROBO, ListaAvisosRobo, ListaCorrecoes, useResolverTudo, useRodarRobo, useRoboSaude, type PainelRobo } from '@/components/compartilhados/RoboSaude';
 
 type Nivel = 'erro' | 'aviso' | 'info';
 interface Achado {
@@ -34,14 +36,19 @@ const ESTILO: Record<Nivel, { icone: typeof Info; cor: string; fundo: string; ro
 /** Saúde do sistema: confere os dados reais e mostra o que está incoerente, com link para resolver (ADMIN) */
 export default function Saude() {
   const { data: d, isFetching, refetch, isLoading } = useQuery({ queryKey: ['diagnostico'], queryFn: () => api.get<Diagnostico>('/diagnostico'), staleTime: 0 });
+  const rodar = useRodarRobo();
 
   return (
     <div>
       <PageHeader
         titulo="Saúde do sistema"
         descricao={d ? `${d.verificacoes} verificações · ${dataHora(d.geradoEm)}` : 'Conferência automática dos dados'}
-        acoes={<Button variante="secundario" icone={<RefreshCw className={clsx('h-4 w-4', isFetching && 'animate-spin')} />} onClick={() => refetch()} carregando={isFetching}>Verificar agora</Button>}
+        acoes={<Button variante="secundario" icone={<RefreshCw className={clsx('h-4 w-4', (isFetching || rodar.isPending) && 'animate-spin')} />} onClick={() => rodar.mutate(undefined, { onSettled: () => void refetch() })} carregando={isFetching || rodar.isPending}>Verificar agora</Button>}
       />
+
+      <PainelDoRobo />
+
+      <h2 className="mb-2 mt-6 flex items-center gap-1.5 text-sm font-semibold text-slate-700"><Stethoscope className="h-4 w-4 text-slate-400" /> Conferência detalhada</h2>
 
       {isLoading || !d ? (
         <div className="space-y-3"><Skeleton className="h-20" /><Skeleton className="h-32" /><Skeleton className="h-32" /></div>
@@ -103,9 +110,82 @@ export default function Saude() {
               })}
             </div>
           )}
-          <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs text-slate-400"><Stethoscope className="h-3.5 w-3.5" /> A verificação também roda sozinha a cada 6 horas e avisa no dashboard.</p>
+          <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs text-slate-400"><Bot className="h-3.5 w-3.5" /> O Robô da Saúde confere sozinho a cada 5 minutos e logo depois de cada venda, pagamento ou NF, e avisa no sino e no dashboard.</p>
         </>
       )}
+    </div>
+  );
+}
+
+/** Robô da Saúde: liga/desliga, o que precisa de um clique e o que ele já corrigiu */
+function PainelDoRobo() {
+  const { data: p, isLoading } = useRoboSaude();
+  const tudo = useResolverTudo();
+  const qc = useQueryClient();
+  const salvar = async (cfg: Partial<PainelRobo['config']>) => {
+    try {
+      await api.put('/robo-saude/config', cfg);
+      void qc.invalidateQueries({ queryKey: CHAVE_ROBO });
+      toast.success('Robô atualizado');
+    } catch (e) {
+      toast.error(mensagemErro(e));
+    }
+  };
+  if (isLoading || !p) return <Skeleton className="h-40" />;
+  const pct = p.estado?.saudePct ?? 100;
+  const sugestoes = p.abertas.filter((a) => a.tipo === 'SUGESTAO');
+  const alertas = p.abertas.filter((a) => a.tipo !== 'SUGESTAO');
+  return (
+    <div className="space-y-3">
+      <div className="v18-card flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card">
+        <AnelSaude pct={pct} tamanho={76} />
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1.5 text-base font-semibold text-slate-900"><Bot className="h-5 w-5 text-brand-600" /> Robô da Saúde</p>
+          <p className="text-sm text-slate-500">
+            {p.abertas.length ? `${p.abertas.length} pendência${p.abertas.length > 1 ? 's' : ''} (${sugestoes.length} com botão de 1 clique)` : 'Sistema 100%: nada pendente'}
+            {p.corrigidasHoje > 0 && ` · corrigi ${p.corrigidasHoje} sozinho hoje`}
+          </p>
+          <p className="text-xs text-slate-400">{p.estado?.ultimaVez ? `Última conferência ${dataHora(p.estado.ultimaVez)}` : 'Ainda não rodou'}{p.estado?.erro ? ` · erro: ${p.estado.erro}` : ''}</p>
+        </div>
+        <div className="flex flex-col gap-1.5 text-sm">
+          <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-brand-600" checked={p.config.ligado} onChange={(e) => salvar({ ligado: e.target.checked })} /> Robô ligado (24h)</label>
+          <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-brand-600" checked={p.config.autoCorrigir} onChange={(e) => salvar({ autoCorrigir: e.target.checked })} /> Corrigir sozinho o que é seguro</label>
+        </div>
+        {p.sugestoesEmLote > 0 && (
+          <Button variante="sucesso" icone={<Sparkles className="h-4 w-4" />} carregando={tudo.isPending} onClick={() => tudo.mutate()}>
+            Resolver {p.sugestoesEmLote} de uma vez
+          </Button>
+        )}
+      </div>
+
+      {p.abertas.length > 0 && (
+        <Card titulo="Precisa de você" descricao="Clique no botão e o robô faz. O que some daqui foi resolvido." semPadding>
+          <ListaAvisosRobo avisos={[...sugestoes, ...alertas]} />
+        </Card>
+      )}
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Card titulo="O que eu corrigi sozinho" descricao="Últimas correções automáticas" semPadding>
+          <ListaCorrecoes itens={p.correcoes} limite={12} />
+        </Card>
+        <Card titulo="Resolvido com um clique" descricao="Botões apertados por você" semPadding>
+          {p.resolvidasPorClique.length ? (
+            <ul className="divide-y divide-slate-100">
+              {p.resolvidasPorClique.map((r) => (
+                <li key={r.id} className="flex items-start gap-3 px-4 py-2.5">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words text-sm text-slate-700">{r.mensagem}</p>
+                    <p className="text-[11px] text-slate-400">{r.resolvidoEm ? dataHora(r.resolvidoEm) : ''} · {r.resolvidoPor}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="px-4 py-3 text-sm text-slate-500">Nenhum ainda.</p>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

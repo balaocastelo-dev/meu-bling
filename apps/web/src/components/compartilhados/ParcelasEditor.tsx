@@ -12,13 +12,15 @@ interface Props {
   onChange: (p: Parcela[]) => void;
   total: number;
   disabled?: boolean;
+  /** venda: na forma "Crédito bancário" pergunta quem paga o credor (cliente ou loja) */
+  pagadorCredito?: boolean;
 }
 
 /**
  * Editor de parcelas com gerador (nº, forma, 1º vencimento, intervalo).
  * Valida que a soma das parcelas = total.
  */
-export function ParcelasEditor({ parcelas, onChange, total, disabled }: Props) {
+export function ParcelasEditor({ parcelas, onChange, total, disabled, pagadorCredito }: Props) {
   const { data: formas } = useFormasPagamento();
   const [qtd, setQtd] = useState(1);
   const [formaId, setFormaId] = useState<number | ''>('');
@@ -70,12 +72,12 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled }: Props) {
   return (
     <div className="space-y-3">
       {!disabled && (
-        <div className="flex flex-wrap items-end gap-2 rounded-md border border-dashed border-slate-200 bg-slate-50 p-3">
-          <Input label="Nº parcelas" type="number" min={1} max={48} value={qtd} onChange={(e) => setQtd(Number(e.target.value))} className="w-24" />
-          <Select label="Forma" value={formaId} onChange={(e) => setFormaId(e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(formas)} placeholder="—" className="w-44" />
-          <Input label="1º vencimento" type="date" value={primeiro} onChange={(e) => setPrimeiro(e.target.value)} className="w-40" />
-          <Input label="Intervalo (dias)" type="number" min={0} value={intervalo} onChange={(e) => setIntervalo(Number(e.target.value))} className="w-32" />
-          <Button variante="secundario" icone={<Wand2 className="h-4 w-4" />} onClick={gerar} disabled={total <= 0}>
+        <div className="grid grid-cols-2 items-end gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 sm:flex sm:flex-wrap">
+          <Input label="Nº parcelas" type="number" min={1} max={48} value={qtd} onChange={(e) => setQtd(Number(e.target.value))} className="sm:w-24" />
+          <Select label="Forma" value={formaId} onChange={(e) => setFormaId(e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(formas)} placeholder="—" className="sm:w-44" />
+          <Input label="1º vencimento" type="date" value={primeiro} onChange={(e) => setPrimeiro(e.target.value)} className="col-span-2 sm:col-span-1 sm:w-40" />
+          <Input label="Intervalo (dias)" type="number" min={0} value={intervalo} onChange={(e) => setIntervalo(Number(e.target.value))} className="sm:w-32" />
+          <Button variante="secundario" className="col-span-2 sm:col-span-1" icone={<Wand2 className="h-4 w-4" />} onClick={gerar} disabled={total <= 0}>
             Gerar parcelas
           </Button>
         </div>
@@ -104,7 +106,7 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled }: Props) {
             {parcelas.map((p, i) => (
               <tr key={i}>
                 <td className="pilha-oculto text-slate-500">{i + 1}</td>
-                <td data-rotulo="Vencimento">
+                <td data-rotulo="Vencimento" className="pilha-dupla">
                   <input type="date" disabled={disabled} value={p.dataVencimento?.slice(0, 10) ?? ''} onChange={(e) => atualizar(i, { dataVencimento: e.target.value })} className="input-base h-8 py-0" />
                 </td>
                 <td data-rotulo="Valor">
@@ -119,6 +121,18 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled }: Props) {
                       </option>
                     ))}
                   </select>
+                  {pagadorCredito && formas?.find((f) => f.id === p.formaPagamentoId)?.tipo === 'CREDITO_BANCARIO' && (
+                    <select
+                      disabled={disabled}
+                      aria-label="Quem paga o crédito bancário"
+                      value={p.creditoPagador ?? 'CLIENTE'}
+                      onChange={(e) => atualizar(i, { creditoPagador: e.target.value as 'CLIENTE' | 'LOJA' })}
+                      className="input-base mt-1 h-8 py-0 text-xs"
+                    >
+                      <option value="CLIENTE">Cliente paga o credor</option>
+                      <option value="LOJA">Loja paga o credor</option>
+                    </select>
+                  )}
                 </td>
                 <td data-rotulo="Observações">
                   <input disabled={disabled} value={p.observacoes ?? ''} onChange={(e) => atualizar(i, { observacoes: e.target.value })} className="input-base h-8 py-0" placeholder="opcional" />

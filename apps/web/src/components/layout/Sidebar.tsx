@@ -40,25 +40,29 @@ export function Sidebar({ aberta, onFechar }: { aberta: boolean; onFechar: () =>
   return (
     <>
       {/* fundo escuro no mobile */}
-      <div className={clsx('fixed inset-0 z-40 bg-slate-900/50 transition-opacity lg:hidden', aberta ? 'opacity-100' : 'pointer-events-none opacity-0')} onClick={onFechar} />
+      <div className={clsx('fixed inset-0 z-40 bg-slate-900/50 transition-opacity xl:hidden', aberta ? 'opacity-100' : 'pointer-events-none opacity-0')} onClick={onFechar} aria-hidden />
       <aside
+        id="menu-lateral"
+        aria-label="Menu principal"
         className={clsx(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-slate-950 text-slate-300 transition-transform duration-200 lg:translate-x-0',
-          aberta ? 'translate-x-0' : '-translate-x-full',
+          // gaveta no celular/tablet: no máximo 85% da tela, para sobrar uma faixa de fundo para tocar e fechar
+          'fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] flex-col bg-slate-950 text-slate-300 transition-transform duration-200 xl:max-w-none xl:translate-x-0',
+          aberta ? 'translate-x-0 shadow-2xl xl:shadow-none' : '-translate-x-full',
         )}
+        style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', paddingLeft: 'env(safe-area-inset-left)' }}
       >
-        <div className="flex h-14 items-center gap-2.5 border-b border-white/5 px-4">
+        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-white/5 px-4">
           <Logo className="h-8 w-8" />
           <div className="min-w-0 leading-tight">
             <p className="text-sm font-bold tracking-wide text-white">MEU BLING</p>
             <p className="truncate text-[11px] text-slate-400">{empresa?.nomeFantasia || empresa?.razaoSocial || 'Balão da Informática'}</p>
           </div>
-          <button className="ml-auto rounded p-1 text-slate-400 hover:bg-white/10 lg:hidden" onClick={onFechar} aria-label="Fechar menu">
+          <button className="-mr-2 ml-auto inline-flex h-10 w-10 items-center justify-center rounded-md text-slate-400 hover:bg-white/10 xl:hidden" onClick={onFechar} aria-label="Fechar menu">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-2 py-3">
+        <nav className="flex-1 overflow-y-auto overscroll-contain px-2 py-3">
           {MENU.map((grupo) => {
             const itens = grupo.itens.filter((i) => podeVer(perfil, i.perfis));
             if (!itens.length) return null;
@@ -74,7 +78,8 @@ export function Sidebar({ aberta, onFechar }: { aberta: boolean; onFechar: () =>
                       to={it.para}
                       onClick={onFechar}
                       className={clsx(
-                        'group relative mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors',
+                        // em tela de toque o item fica com >= 40px de altura
+                        'group relative mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors pointer-coarse:min-h-10 pointer-coarse:text-sm',
                         sel ? 'text-white' : 'text-slate-400 hover:bg-white/5 hover:text-slate-100',
                       )}
                     >

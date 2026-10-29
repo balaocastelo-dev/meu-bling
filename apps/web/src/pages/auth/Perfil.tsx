@@ -39,11 +39,11 @@ export default function Perfil() {
           <Definicoes itens={[{ rotulo: 'Nome', valor: usuario?.nome }, { rotulo: 'E-mail', valor: usuario?.email }, { rotulo: 'Perfil', valor: rotulo(usuario?.perfil) }]} colunas={3} />
         </Card>
         <Card titulo="Alterar senha">
-          <form onSubmit={salvar} className="grid gap-3 sm:grid-cols-3">
+          <form onSubmit={salvar} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Input label="Senha atual" type="password" required value={senhaAtual} onChange={(e) => setSenhaAtual(e.target.value)} autoComplete="current-password" />
             <Input label="Nova senha" type="password" required value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} autoComplete="new-password" />
             <Input label="Confirmar nova senha" type="password" required value={confirmar} onChange={(e) => setConfirmar(e.target.value)} autoComplete="new-password" />
-            <div className="sm:col-span-3">
+            <div className="sm:col-span-2 lg:col-span-3">
               <Button type="submit" variante="primario" carregando={carregando}>
                 Salvar nova senha
               </Button>

@@ -84,7 +84,8 @@ export function MenuAcoes({ itens, titulo = 'Mais ações', gatilho, tamanho = '
         className={clsx(
           'inline-flex items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40',
           aberto && 'bg-slate-100 text-slate-800',
-          gatilho ? 'h-9 gap-1.5 border border-slate-300 bg-white px-3 text-sm font-medium shadow-xs' : tamanho === 'sm' ? 'h-7 w-7' : 'h-9 w-9',
+          // em tela de toque o botão "…" tem no mínimo 40px
+          gatilho ? 'h-9 gap-1.5 border border-slate-300 bg-white px-3 text-sm font-medium shadow-xs pointer-coarse:h-10' : tamanho === 'sm' ? 'h-7 w-7 pointer-coarse:h-10 pointer-coarse:w-10' : 'h-9 w-9 pointer-coarse:h-10 pointer-coarse:w-10',
         )}
       >
         {gatilho ?? <MoreHorizontal className="h-4 w-4" />}
@@ -97,7 +98,7 @@ export function MenuAcoes({ itens, titulo = 'Mais ações', gatilho, tamanho = '
             role="menu"
             onClick={(e) => e.stopPropagation()}
             style={{ top: pos.top, left: pos.left, transform: pos.acima ? 'translateY(-100%)' : undefined }}
-            className="fixed z-[60] w-60 max-h-[420px] overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-pop anim-in"
+            className="fixed z-[60] w-60 max-w-[calc(100vw-1rem)] max-h-[min(420px,70dvh)] overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-pop anim-in"
           >
             {visiveis.map((it, i) => (
               <div key={it.rotulo + i}>
@@ -112,7 +113,7 @@ export function MenuAcoes({ itens, titulo = 'Mais ações', gatilho, tamanho = '
                     it.onClick();
                   }}
                   className={clsx(
-                    'flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                    'flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm transition-colors pointer-coarse:min-h-10 disabled:cursor-not-allowed disabled:opacity-40',
                     it.perigo ? 'text-red-600 hover:bg-red-50' : 'text-slate-700 hover:bg-slate-50',
                   )}
                 >

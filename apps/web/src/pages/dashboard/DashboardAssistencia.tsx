@@ -1,40 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AlertTriangle, BarChart3, HandCoins, CircleDollarSign, ClipboardList, Cpu, HardHat, Layers, Package, Percent, Receipt, TrendingUp, Truck, Wrench } from 'lucide-react';
-import { format, startOfMonth, subDays } from 'date-fns';
 import { api } from '@/lib/api';
 import { useTecnicos, opcoesDe } from '@/hooks/useListas';
-import { Button, EmptyState, PeriodoFiltro, SelectFiltro, Skeleton } from '@/components/ui';
+import { Button, EmptyState, SelectFiltro, Skeleton } from '@/components/ui';
+import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
 import { PagarTecnicoModal } from './PagarTecnico';
-import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, SegmentadoV18, listaVariants } from '@/components/dashboard/v18';
-import { data as fmtData, hoje, inteiro, moeda, numero, percentual } from '@/lib/format';
+import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, SegmentadoV18, listaVariants, FaixaKpis } from '@/components/dashboard/v18';
+import { data as fmtData, inteiro, moeda, numero, percentual } from '@/lib/format';
 import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import type { DashboardAssistencia as Dados, TotaisAssistencia } from '@/types';
-
-type Periodo = 'hoje' | '7d' | '30d' | 'mes' | 'mesPassado' | 'custom';
-
-function intervalo(p: Periodo, custom: { i: string; f: string }): { dataInicial: string; dataFinal: string } {
-  const h = new Date();
-  switch (p) {
-    case 'hoje':
-      return { dataInicial: hoje(), dataFinal: hoje() };
-    case '7d':
-      return { dataInicial: format(subDays(h, 6), 'yyyy-MM-dd'), dataFinal: hoje() };
-    case '30d':
-      return { dataInicial: format(subDays(h, 29), 'yyyy-MM-dd'), dataFinal: hoje() };
-    case 'mes':
-      return { dataInicial: format(startOfMonth(h), 'yyyy-MM-dd'), dataFinal: hoje() };
-    case 'mesPassado': {
-      const ini = startOfMonth(subDays(startOfMonth(h), 1));
-      return { dataInicial: format(ini, 'yyyy-MM-dd'), dataFinal: format(subDays(startOfMonth(h), 1), 'yyyy-MM-dd') };
-    }
-    default:
-      return { dataInicial: custom.i, dataFinal: custom.f };
-  }
-}
 
 /** Linha "receita − custo = lucro" de um bloco (mão de obra ou peças) */
 function BlocoLucro({ titulo, icone, receita, custo, rotuloCusto, cor }: { titulo: string; icone: React.ReactNode; receita: number; custo: number; rotuloCusto: string; cor: string }) {
@@ -72,15 +50,13 @@ function MiniTotais({ titulo, t, qtd, tom }: { titulo: string; t?: TotaisAssiste
 /** Dashboard de assistência técnica (só ADMIN) — entradas, mão de obra x peças, custos e lucro das OS */
 export default function DashboardAssistencia() {
   const nav = useNavigate();
-  const [periodo, setPeriodo] = useState<Periodo>('mes');
-  const [custom, setCustom] = useState({ i: format(startOfMonth(new Date()), 'yyyy-MM-dd'), f: hoje() });
+  const { periodo, setPeriodo, custom, setCustom, dataInicial, dataFinal, faixa } = usePeriodoDashboard();
   const [base, setBase] = useState<'entrada' | 'conclusao'>('entrada');
   const [tecnicoId, setTecnicoId] = useState('');
   const [verCanceladas, setVerCanceladas] = useState(false);
   const [pagarAberto, setPagarAberto] = useState(false);
   const { data: tecnicos } = useTecnicos();
 
-  const { dataInicial, dataFinal } = useMemo(() => intervalo(periodo, custom), [periodo, custom]);
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-assistencia', dataInicial, dataFinal, tecnicoId, base],
     queryFn: () => api.get<Dados>('/dashboard/assistencia', { dataInicial, dataFinal, tecnicoId, base }),
@@ -90,7 +66,6 @@ export default function DashboardAssistencia() {
   const r = data?.resumo;
   const comp = r?.comparativo;
   const series = (data?.series ?? []).map((s) => ({ ...s, rotulo: rotuloPeriodo(s.periodo) }));
-  const faixa = `${dataInicial.split('-').reverse().join('/')} a ${dataFinal.split('-').reverse().join('/')}`;
   const qtd = (n: number) => inteiro(Math.round(n));
   const maiorTec = Math.max(0, ...(data?.porTecnico ?? []).map((t) => t.valorEntrada));
   const totSit = (data?.porSituacao ?? []).reduce((s, x) => s + x.qtd, 0);
@@ -113,21 +88,8 @@ export default function DashboardAssistencia() {
           <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Dashboard de assistência técnica</h1>
           <p className="text-sm text-slate-500">Entradas das OS, mão de obra x peças, custos e lucro dos serviços.</p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <SegmentadoV18
-            id="periodo-assistencia"
-            valor={periodo}
-            onMudar={setPeriodo}
-            opcoes={[
-              { valor: 'hoje', rotulo: 'Hoje' },
-              { valor: '7d', rotulo: '7 dias' },
-              { valor: '30d', rotulo: '30 dias' },
-              { valor: 'mes', rotulo: 'Este mês' },
-              { valor: 'mesPassado', rotulo: 'Mês passado' },
-              { valor: 'custom', rotulo: 'Período' },
-            ]}
-          />
-          {periodo === 'custom' && <PeriodoFiltro inicial={custom.i} final={custom.f} onChange={(i, f) => setCustom({ i, f })} label="" atalhos={false} />}
+        <div className="flex min-w-0 max-w-full flex-wrap items-end gap-2">
+          <FiltroPeriodo id="periodo-assistencia" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
           <SegmentadoV18
             id="base-assistencia"
             valor={base}
@@ -144,14 +106,17 @@ export default function DashboardAssistencia() {
 
       <PagarTecnicoModal aberto={pagarAberto} onFechar={() => setPagarAberto(false)} dataInicial={dataInicial} dataFinal={dataFinal} base={base} filtroTecnicoId={tecnicoId} />
 
-      <Grupo className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiV18 rotulo="Valor de entrada" valor={r?.valorEntrada} anterior={comp?.valorEntrada} formato={moeda} icone={<CircleDollarSign className="h-4 w-4" />} tom="azul" carregando={isLoading} sub="vs. período anterior" />
+      {/* topo (Power BI): entrada e lucro em destaque, o resto logo abaixo */}
+      <FaixaKpis colunas={4}>
+        <KpiV18 destaque className="col-span-2" rotulo={`Valor de entrada · ${faixa}`} valor={r?.valorEntrada} anterior={comp?.valorEntrada} formato={moeda} icone={<CircleDollarSign className="h-4 w-4" />} tom="azul" carregando={isLoading} sub="vs. período anterior" />
+        <KpiV18 destaque className="col-span-2" rotulo="Lucro dos serviços" valor={r?.lucro} anterior={comp?.lucro} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={isLoading} sub={r ? `margem ${percentual(r.margemPct)}` : undefined} />
+      </FaixaKpis>
+      <FaixaKpis colunas={4}>
         <KpiV18 rotulo={base === 'entrada' ? 'OS que entraram' : 'OS concluídas'} valor={r?.qtd} anterior={comp?.qtd} formato={qtd} icone={<ClipboardList className="h-4 w-4" />} tom="neutro" carregando={isLoading} onClick={() => nav('/ordens-servico')} sub={r ? `ticket médio ${moeda(r.ticketMedio)}` : undefined} />
         <KpiV18 rotulo="Mão de obra" valor={r?.maoDeObra} anterior={comp?.maoDeObra} formato={moeda} icone={<Wrench className="h-4 w-4" />} tom="vermelho" carregando={isLoading} />
         <KpiV18 rotulo="Peças" valor={r?.pecas} anterior={comp?.pecas} formato={moeda} icone={<Package className="h-4 w-4" />} tom="amarelo" carregando={isLoading} />
         <KpiV18 rotulo="Custos" valor={r?.custoTotal} anterior={comp?.custoTotal} inverter formato={moeda} icone={<Receipt className="h-4 w-4" />} tom="neutro" carregando={isLoading} sub="peças + logística + terceiros" />
-        <KpiV18 rotulo="Lucro dos serviços" valor={r?.lucro} anterior={comp?.lucro} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={isLoading} sub={r ? `margem ${percentual(r.margemPct)}` : undefined} />
-      </Grupo>
+      </FaixaKpis>
 
       {!!r?.semCusto && (
         <Aparecer className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -216,9 +181,9 @@ export default function DashboardAssistencia() {
 
       <CardV18 titulo="Entrada x lucro" descricao={faixa} icone={<BarChart3 className="h-4 w-4" />} tom="azul">
         {isLoading ? (
-          <Skeleton className="h-64" />
+          <Skeleton className="h-52 sm:h-64" />
         ) : series.some((s) => s.qtd > 0) ? (
-          <div className="h-64">
+          <div className="h-52 sm:h-64">
             <ResponsiveContainer>
               <AreaChart data={series} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                 <defs>
@@ -233,7 +198,7 @@ export default function DashboardAssistencia() {
                 </defs>
                 <CartesianGrid stroke={CORES.grade} strokeDasharray="3 4" vertical={false} />
                 <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={60} />
+                <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={52} />
                 <Tooltip content={<TooltipPadrao />} cursor={{ stroke: CORES.eixo, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="valorEntrada" name="Entrada" stroke={CORES.receita} fill="url(#gradEntradaOs)" strokeWidth={2.5} activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }} animationDuration={1100} />
                 <Area type="monotone" dataKey="custo" name="Custos" stroke={CORES.saida} fill="none" strokeWidth={1.5} strokeDasharray="4 3" animationDuration={1200} />
@@ -326,7 +291,7 @@ export default function DashboardAssistencia() {
         }
       >
         {isLoading ? (
-          <div className="p-4"><Skeleton className="h-64" /></div>
+          <div className="p-4"><Skeleton className="h-52 sm:h-64" /></div>
         ) : ordens.length ? (
           <div className="overflow-x-auto">
             <table className="tbl tbl-pilha">

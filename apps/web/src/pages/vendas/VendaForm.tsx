@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Plus, Save, Trash2, UserPlus, X } from 'lucide-react';
+import { Plus, Save, Trash2, UserPlus, UserRound, X } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { useCategoriasFinanceiras, useDepositos, useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { useAuth } from '@/stores/auth';
 import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/ProdutoSite';
 import { buscarContatos, buscarProdutos } from '@/lib/buscas';
-import { Button, DateInput, FormSkeleton, Input, MoneyInput, PageHeader, SearchSelect, Secao, Select, Textarea } from '@/components/ui';
+import { Button, DateInput, FormSkeleton, Input, MoneyInput, PageHeader, SearchSelect, Secao, Select, Textarea, ValorOculto } from '@/components/ui';
 import { ParcelasEditor, parcelasValidas } from '@/components/compartilhados/ParcelasEditor';
 import { ContatoRapidoDrawer } from '@/components/compartilhados/ContatoRapidoDrawer';
 import { arred, dataIso, hoje, moeda, rotulo } from '@/lib/format';
@@ -41,6 +41,7 @@ function vazio(vendedorId: number | null, tipo: TipoVenda): VendaPayload {
     descontoValor: 0,
     frete: 0,
     outrasDespesas: 0,
+    custoLogistica: 0,
     transportadoraId: null,
     fretePorConta: 9,
     quantidadeVolumes: 0,
@@ -67,12 +68,13 @@ function deVenda(v: Venda): VendaPayload {
     descontoValor: v.descontoValor,
     frete: v.frete,
     outrasDespesas: v.outrasDespesas,
+    custoLogistica: v.custoLogistica ?? 0,
     transportadoraId: v.transportadoraId ?? null,
     fretePorConta: v.fretePorConta,
     quantidadeVolumes: v.quantidadeVolumes,
     pesoBruto: v.pesoBruto,
-    itens: v.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct, imagemUrl: i.produto?.imagemUrl ?? null, prontaEntrega: Boolean(i.produto?.prontaEntrega) })),
-    parcelas: v.parcelas.map((p) => ({ dataVencimento: dataIso(p.dataVencimento), valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes ?? '' })),
+    itens: v.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct, custoUnitario: i.custoUnitario ?? 0, custoInformado: !!i.custoInformado, numeroSerie: i.numeroSerie ?? null, imagemUrl: i.produto?.imagemUrl ?? null, prontaEntrega: Boolean(i.produto?.prontaEntrega) })),
+    parcelas: v.parcelas.map((p) => ({ dataVencimento: dataIso(p.dataVencimento), valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes ?? '', creditoPagador: p.creditoPagador ?? null })),
   };
 }
 
@@ -144,6 +146,15 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
   const totais = useMemo(() => calcularTotais(form), [form]);
   const bloqueado = !!venda && (venda.estoqueLancado || venda.contasLancadas);
   const comissaoPadrao = vendedores?.find((v) => v.id === form.vendedorId)?.comissaoPadraoPct ?? 0;
+  const veLucro = usuario?.perfil === 'ADMIN' || usuario?.perfil === 'GERENTE';
+  // vendedor/técnico vende sempre no próprio nome (29/10/2026) — para repassar a um colega existe "Transferir vendedor"
+  const vendedorFixo = usuario?.perfil === 'VENDEDOR' || usuario?.perfil === 'TECNICO';
+  const custos = useMemo(() => {
+    const produtos = arred(form.itens.reduce((s, i) => s + (i.custoUnitario || 0) * i.quantidade, 0));
+    const total = arred(produtos + (form.custoLogistica || 0));
+    const lucro = arred(totais.total - total);
+    return { produtos, total, lucro, margem: totais.total > 0 ? (lucro / totais.total) * 100 : 0, semCusto: form.itens.filter((i) => !i.custoUnitario).length };
+  }, [form.itens, form.custoLogistica, totais.total]);
 
   // ---- Itens
   const adicionarProduto = (p: Produto) => {
@@ -153,17 +164,17 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
         const itens = f.itens.map((i, idx) => (idx === existente ? { ...i, quantidade: i.quantidade + 1 } : i));
         return { ...f, itens };
       }
-      const novo: VendaItem = { produtoId: p.id, codigo: p.codigo ?? null, descricao: p.nome, unidade: p.unidade, quantidade: 1, valorUnitario: p.preco, desconto: 0, comissaoPct: comissaoPadrao, imagemUrl: p.imagemUrl ?? null, prontaEntrega: Boolean(p.prontaEntrega) };
+      const novo: VendaItem = { produtoId: p.id, codigo: p.codigo ?? null, descricao: p.nome, unidade: p.unidade, quantidade: 1, valorUnitario: p.preco, desconto: 0, comissaoPct: comissaoPadrao, custoUnitario: p.precoCusto ?? 0, custoInformado: false, imagemUrl: p.imagemUrl ?? null, prontaEntrega: Boolean(p.prontaEntrega) };
       return { ...f, itens: [...f.itens, novo] };
     });
     setProdutoSel(null);
   };
-  const adicionarLinhaLivre = () => setForm((f) => ({ ...f, itens: [...f.itens, { produtoId: null, descricao: '', quantidade: 1, valorUnitario: 0, desconto: 0, comissaoPct: comissaoPadrao }] }));
+  const adicionarLinhaLivre = () => setForm((f) => ({ ...f, itens: [...f.itens, { produtoId: null, descricao: '', quantidade: 1, valorUnitario: 0, desconto: 0, comissaoPct: comissaoPadrao, custoUnitario: 0, custoInformado: false }] }));
   const atualizarItem = (i: number, patch: Partial<VendaItem>) => setForm((f) => ({ ...f, itens: f.itens.map((it, j) => (j === i ? { ...it, ...patch } : it)) }));
   // linha livre → produto do cadastro (mantém quantidade e preço digitados)
   const [vincular, setVincular] = useState<number | null>(null);
   const vincularProduto = (i: number, p: Produto) => {
-    atualizarItem(i, { produtoId: p.id, codigo: p.codigo ?? null, descricao: p.nome, unidade: p.unidade, imagemUrl: p.imagemUrl ?? null, prontaEntrega: Boolean(p.prontaEntrega) });
+    atualizarItem(i, { produtoId: p.id, codigo: p.codigo ?? null, descricao: p.nome, unidade: p.unidade, ...(form.itens[i]?.custoInformado ? {} : { custoUnitario: p.precoCusto ?? 0 }), imagemUrl: p.imagemUrl ?? null, prontaEntrega: Boolean(p.prontaEntrega) });
     setVincular(null);
   };
   const removerItem = (i: number) => setForm((f) => ({ ...f, itens: f.itens.filter((_, j) => j !== i) }));
@@ -176,10 +187,24 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
       toast.success(editando ? `${Nome} atualizado.` : `${Nome} nº ${v.numero} criado.`, orcamento && !editando ? { description: 'Agora é só enviar por e-mail ou WhatsApp em "Mais ações".' } : undefined);
       qc.invalidateQueries({ queryKey: ['vendas'] });
       qc.invalidateQueries({ queryKey: ['venda', String(v.id)] });
-      nav(`${base}/${v.id}`);
+      // venda salva já finalizada (Fechada / NF emitida): a tela da venda abre a impressão
+      const sit = v.situacao as { final?: boolean; cancelamento?: boolean } | undefined;
+      const imprimir = !editando && !orcamento && !!sit?.final && !sit?.cancelamento;
+      nav(`${base}/${v.id}`, imprimir ? { state: { imprimir: true } } : undefined);
     },
     onError: (e) => toast.error(mensagemErro(e)),
   });
+
+  const usarConsumidorFinal = async () => {
+    try {
+      const c = await api.get<Contato>('/vendas/consumidor-final');
+      setForm((f) => ({ ...f, contatoId: c.id }));
+      setClienteNome(c.nome);
+      setCliente(c);
+    } catch (e) {
+      toast.error(mensagemErro(e));
+    }
+  };
 
   const validar = (): boolean => {
     const e: Record<string, string> = {};
@@ -198,19 +223,20 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
 
   const submeter = () => {
     if (!validar()) return;
-    salvar.mutate({ ...form, itens: form.itens.map((i, idx) => ({ ...i, ordem: idx })) as VendaItem[] });
+    // custo só vai como "informado" quando o vendedor digitou; senão o servidor usa o do cadastro
+    salvar.mutate({ ...form, itens: form.itens.map((i, idx) => ({ ...i, custoUnitario: i.custoInformado ? i.custoUnitario ?? 0 : null, ordem: idx })) as VendaItem[] });
   };
 
   if (editando && isLoading) return <FormSkeleton />;
 
   return (
-    <div className="pb-24">
+    <div className="espaco-barra-fixa">
       <PageHeader
         migalhas={[{ rotulo: orcamento ? 'Orçamentos' : 'Vendas', para: base }, { rotulo: editando ? `${orcamento ? 'Orçamento' : 'Venda'} nº ${venda?.numero ?? ''}` : orcamento ? 'Novo orçamento' : 'Nova venda' }]}
         titulo={editando ? `Editar ${nomeDoc} nº ${venda?.numero ?? ''}` : orcamento ? 'Novo orçamento' : 'Nova venda'}
         descricao={
           bloqueado
-            ? 'Estoque/contas já lançados: somente observações e transporte podem ser alterados. Estorne antes para editar itens.'
+            ? 'Estoque/contas já lançados: só observações, transporte e custos internos podem ser alterados. Estorne antes para editar itens.'
             : orcamento
               ? 'O orçamento não mexe no estoque nem no financeiro. Depois de salvar, envie ao cliente e converta em venda quando ele aprovar.'
               : 'Preencha cliente, itens e condições de pagamento.'
@@ -246,12 +272,17 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                 setCliente((op?.dados as Contato) ?? null);
               }}
               rodape={
-                <button type="button" onClick={() => setDrawerCliente(true)} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-brand-600 hover:bg-brand-50">
-                  <UserPlus className="h-4 w-4" /> Cadastrar novo cliente
-                </button>
+                <>
+                  <button type="button" onClick={usarConsumidorFinal} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
+                    <UserRound className="h-4 w-4" /> Consumidor final (sem cadastro)
+                  </button>
+                  <button type="button" onClick={() => setDrawerCliente(true)} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-brand-600 hover:bg-brand-50">
+                    <UserPlus className="h-4 w-4" /> Cadastrar novo cliente
+                  </button>
+                </>
               }
             />
-            <Select className="xl:col-span-3" label="Vendedor" value={form.vendedorId ?? ''} onChange={(e) => set('vendedorId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(vendedores)} placeholder="—" disabled={bloqueado} />
+            <Select className="xl:col-span-3" label="Vendedor" value={form.vendedorId ?? ''} onChange={(e) => set('vendedorId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(vendedores)} placeholder="—" disabled={bloqueado || vendedorFixo} ajuda={vendedorFixo ? 'Suas vendas saem sempre no seu nome' : undefined} />
             <DateInput className="xl:col-span-2" label="Data" obrigatorio erro={erros.data} value={form.data} onChange={(v) => set('data', v)} disabled={bloqueado} />
             {orcamento ? (
               <DateInput className="xl:col-span-2" label="Válido até" value={form.validade ?? null} onChange={(v) => set('validade', v || null)} ajuda="Padrão: 7 dias" />
@@ -308,6 +339,7 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                   <th className="w-32 text-right">Unitário</th>
                   <th className="w-28 text-right">Desc. R$</th>
                   <th className="w-20 text-right">Com. %</th>
+                  <th className="w-28 text-right" title="Custo interno: não aparece para o cliente">Custo un. 🔒</th>
                   <th className="w-32 text-right">Total</th>
                   {!bloqueado && <th className="w-10" />}
                 </tr>
@@ -315,7 +347,7 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
               <tbody>
                 {form.itens.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-6 text-center text-sm text-slate-400">
+                    <td colSpan={9} className="py-6 text-center text-sm text-slate-400">
                       Nenhum item. Busque um produto acima.
                     </td>
                   </tr>
@@ -329,8 +361,18 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                         <div className="min-w-0 flex-1">
                           <input disabled={bloqueado} value={it.descricao} onChange={(e) => atualizarItem(i, { descricao: e.target.value })} className={`input-base h-8 py-0 ${erros[`item${i}`] ? 'input-erro' : ''}`} placeholder="Descrição do item" />
                           <span className="flex items-center gap-2">
-                            {it.codigo && <span className="text-[10px] text-slate-400">cód. {it.codigo}</span>}
+                            {it.codigo && <span className="whitespace-nowrap text-[10px] text-slate-400">cód. {it.codigo}</span>}
                             {it.prontaEntrega && <SeloProntaEntrega compacto />}
+                            {it.produtoId && (
+                              <input
+                                disabled={bloqueado}
+                                value={it.numeroSerie ?? ''}
+                                onChange={(e) => atualizarItem(i, { numeroSerie: e.target.value || null })}
+                                className="h-6 w-36 rounded border border-slate-200 px-1.5 text-[11px] placeholder:text-slate-400"
+                                placeholder="Nº série / IMEI"
+                                title="Sai no certificado de garantia"
+                              />
+                            )}
                             {!it.produtoId && !bloqueado && (
                               <span className="text-[11px] text-amber-700">
                                 Sem cadastro: não baixa estoque nem vai na NF ·{' '}
@@ -364,6 +406,16 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                     <td data-rotulo="Comissão %">
                       <MoneyInput value={it.comissaoPct ?? 0} onChange={(v) => atualizarItem(i, { comissaoPct: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" />
                     </td>
+                    <td data-rotulo="Custo un. (interno)">
+                      <MoneyInput
+                        value={it.custoUnitario ?? 0}
+                        onChange={(v) => atualizarItem(i, { custoUnitario: v, custoInformado: true })}
+                        oculto
+                        prefixo=""
+                        inputClassName={`h-8 py-0 ${it.custoInformado ? 'bg-amber-50/60' : !it.custoUnitario ? 'border-amber-300' : 'text-slate-500'}`}
+                        title={it.custoInformado ? 'Custo informado por você' : it.custoUnitario ? 'Custo do cadastro do produto (digite para trocar)' : 'Sem custo: digite o custo deste item'}
+                      />
+                    </td>
                     <td data-rotulo="Total" className="num pilha-cheio text-right font-medium">{moeda(arred(it.quantidade * it.valorUnitario - (it.desconto || 0)))}</td>
                     {!bloqueado && (
                       <td className="pilha-canto">
@@ -379,10 +431,34 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
           </div>
         </Secao>
 
+        {/* Custos internos — só para uso interno, nunca saem para o cliente */}
+        <Secao titulo="Custos internos 🔒" descricao="Só para o fechamento. Não aparecem no pedido, no PDF, no link do cliente, no e-mail, no WhatsApp nem na nota. Podem ser lançados depois da venda fechada.">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">Custo dos produtos</p>
+              <p className="num text-base font-semibold text-slate-800"><ValorOculto>{moeda(custos.produtos)}</ValorOculto></p>
+              <p className={`text-[11px] ${custos.semCusto ? 'text-amber-700' : 'text-slate-400'}`}>{custos.semCusto ? `${custos.semCusto} ${custos.semCusto === 1 ? 'item' : 'itens'} sem custo: preencha na coluna "Custo un."` : 'pela coluna "Custo un." dos itens'}</p>
+            </div>
+            <MoneyInput label="Custo de logística" oculto value={form.custoLogistica} onChange={(v) => set('custoLogistica', v)} ajuda="Frete pago, motoboy, envio" />
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">Custo total</p>
+              <p className="num text-base font-semibold text-slate-800"><ValorOculto>{moeda(custos.total)}</ValorOculto></p>
+              <p className="text-[11px] text-slate-400">produtos + logística</p>
+            </div>
+            {veLucro && (
+              <div className={`rounded-md border px-3 py-2 ${custos.lucro < 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50/60'}`}>
+                <p className="text-xs text-slate-500">Lucro estimado</p>
+                <p className={`num text-base font-bold ${custos.lucro < 0 ? 'text-red-600' : 'text-emerald-700'}`}><ValorOculto>{moeda(custos.lucro)}</ValorOculto></p>
+                <p className="num text-[11px] text-slate-500">margem <ValorOculto>{custos.margem.toFixed(1).replace('.', ',')}%</ValorOculto></p>
+              </div>
+            )}
+          </div>
+        </Secao>
+
         {/* Totais + transporte */}
-        <div className="grid gap-4 xl:grid-cols-3">
+        <div className="grid items-start gap-4 xl:grid-cols-3">
           <Secao titulo="Transporte" className="xl:col-span-2">
-            <div className="grid gap-3 sm:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Select
                 label="Frete por conta"
                 value={form.fretePorConta}
@@ -441,12 +517,12 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
           descricao={orcamento ? 'Aparecem no PDF do orçamento e passam para a venda ao converter.' : 'Sem parcelas a API gera uma à vista. Ao lançar contas, cada parcela vira uma conta a receber.'}
         >
           {erros.parcelas && <p className="mb-2 text-xs text-red-600">{erros.parcelas}</p>}
-          <ParcelasEditor parcelas={form.parcelas} onChange={(p) => set('parcelas', p)} total={totais.total} disabled={bloqueado} />
+          <ParcelasEditor parcelas={form.parcelas} onChange={(p) => set('parcelas', p)} total={totais.total} disabled={bloqueado} pagadorCredito />
         </Secao>
       </div>
 
       {/* Barra fixa de ações */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3 lg:left-64">
+      <div className="barra-fixa fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 pt-2.5 backdrop-blur sm:pt-3 lg:left-64">
         <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-2 sm:gap-3">
           <div className="min-w-0 text-xs text-slate-500 sm:text-sm">
             {form.itens.length} {form.itens.length === 1 ? 'item' : 'itens'} · Total <span className="num font-semibold text-slate-900">{moeda(totais.total)}</span>

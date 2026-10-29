@@ -28,6 +28,73 @@ body,
 body {
   @apply bg-slate-50 text-slate-800 antialiased;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  /* Rede de segurança: se algo escapar da largura, a página não rola para o lado.
+     "clip" (e não "hidden") para não virar área de rolagem e não quebrar o cabeçalho sticky.
+     As larguras são corrigidas nas telas; isto é só o último recurso. */
+  overflow-x: clip;
+  /* iOS não aumenta a fonte sozinho ao girar o aparelho */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* ---------------------------------------------------------------------
+   Celular e tablet
+   --------------------------------------------------------------------- */
+
+/* Campos com fonte >= 16px no celular: abaixo disso o iPhone dá zoom ao tocar no campo.
+   Fora das camadas de propósito, para valer por cima de um text-xs/text-sm no className. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Alvos de toque >= 40px em tela de toque (celular/tablet). No computador nada muda. */
+@media (pointer: coarse) {
+  .input-base {
+    min-height: 2.5rem;
+  }
+}
+
+/* Barra de ações fixa no rodapé (salvar venda/compra/OS): respeita a barra de gestos do iPhone */
+.barra-fixa {
+  padding-bottom: calc(0.625rem + env(safe-area-inset-bottom));
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+}
+@media (min-width: 640px) {
+  .barra-fixa {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+}
+/* Espaço no fim da página para o conteúdo não ficar atrás da barra fixa */
+.espaco-barra-fixa {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
+/* Conteúdo principal: margens laterais respeitam o entalhe do iPhone deitado */
+.conteudo-seguro {
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 640px) {
+  .conteudo-seguro {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+}
+@media (min-width: 768px) {
+  .conteudo-seguro {
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+  }
 }
 
 /* Números financeiros alinhados */
@@ -50,6 +117,13 @@ body {
 }
 *::-webkit-scrollbar-track {
   background: transparent;
+}
+/* rolagem lateral sem barra (seletores de período e abas no celular) */
+.sem-barra {
+  scrollbar-width: none;
+}
+.sem-barra::-webkit-scrollbar {
+  display: none;
 }
 
 @layer base {
@@ -111,7 +185,15 @@ body {
 /* Tabela de itens que no celular vira uma pilha de cartões (um por linha, cada campo com rótulo).
    Uso: <table className="tbl tbl-pilha"> e, nas células, data-rotulo="Qtd" (rótulo no celular),
    className "pilha-cheio" (linha inteira), "pilha-oculto" (some no celular), "pilha-canto" (botão no canto). */
-@media (max-width: 767px) {
+/* valores (colunas numéricas, datas, códigos) nunca se partem em duas linhas */
+.tbl tbody td.num,
+.tbl tfoot td.num,
+.tbl td.nowrap {
+  white-space: nowrap;
+}
+
+/* celular e tablet (até 1279 px): a tabela de itens vira cartões — no tablet, 4 campos por linha */
+@media (max-width: 1279px) {
   table.tbl-pilha,
   table.tbl-pilha > tbody,
   table.tbl-pilha > tfoot {
@@ -140,6 +222,18 @@ body {
     text-align: left;
     white-space: normal;
   }
+  /* campo sem valor (ex.: "Saiu" numa entrada) não aparece no cartão */
+  table.tbl-pilha > tbody > tr > td[data-rotulo]:empty {
+    display: none;
+  }
+  /* rodapé de totais: cada valor com o rótulo da coluna */
+  table.tbl-pilha > tfoot > tr > td[data-rotulo]::before {
+    content: attr(data-rotulo) " ";
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: rgb(148 163 184);
+  }
   table.tbl-pilha > tbody > tr > td[colspan] {
     grid-column: 1 / -1;
   }
@@ -157,6 +251,10 @@ body {
   table.tbl-pilha > tbody > tr > td[data-pilha="pilha-cheio"] {
     grid-column: 1 / -1;
     padding-right: 2rem;
+  }
+  /* campo que precisa de mais espaço (data): duas colunas do cartão */
+  table.tbl-pilha > tbody > tr > td.pilha-dupla {
+    grid-column: span 2;
   }
   table.tbl-pilha > tbody > tr > td.pilha-oculto,
   table.tbl-pilha > tbody > tr > td[data-pilha="pilha-oculto"] {
@@ -182,6 +280,11 @@ body {
   }
   table.tbl-pilha > tfoot > tr > td:empty {
     display: none;
+  }
+}
+@media (min-width: 768px) and (max-width: 1279px) {
+  table.tbl-pilha > tbody > tr {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -249,9 +352,12 @@ body {
   }
 }
 /* blocos da página entram em cascata (cabeçalho, filtros, cards, tabelas...) */
+/* "backwards" e não "both": com "both" o transform do fim da animação fica aplicado para sempre e o bloco
+   vira o "containing block" de position:fixed — a barra fixa de Salvar (venda/compra/OS) parava de ficar
+   presa no rodapé da tela e ia para o fim da página. Com "backwards" nada sobra depois da entrada. */
 /* data-motion = tela que já anima com framer-motion (dashboards) */
 .v18-pagina > *:not([data-motion]) {
-  animation: v18-sobe 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: v18-sobe 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 .v18-pagina > *:nth-child(2) { animation-delay: 0.05s; }
 .v18-pagina > *:nth-child(3) { animation-delay: 0.1s; }
@@ -260,7 +366,7 @@ body {
 .v18-pagina > *:nth-child(n + 6) { animation-delay: 0.25s; }
 /* páginas que usam um único wrapper (div.space-y-*) também cascateiam os filhos */
 .v18-pagina > [class*='space-y']:not([data-motion]) > * {
-  animation: v18-sobe 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: v18-sobe 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 .v18-pagina > [class*='space-y'] > *:nth-child(2) { animation-delay: 0.05s; }
 .v18-pagina > [class*='space-y'] > *:nth-child(3) { animation-delay: 0.1s; }
@@ -268,7 +374,7 @@ body {
 .v18-pagina > [class*='space-y'] > *:nth-child(n + 5) { animation-delay: 0.2s; }
 
 /* cards dentro de grades entram um após o outro */
-.grid > .v18-card { animation: v18-sobe 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.grid > .v18-card { animation: v18-sobe 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
 .grid > .v18-card:nth-child(2) { animation-delay: 0.04s; }
 .grid > .v18-card:nth-child(3) { animation-delay: 0.08s; }
 .grid > .v18-card:nth-child(4) { animation-delay: 0.12s; }
@@ -286,7 +392,7 @@ body {
 
 /* linhas de tabela / lista surgem em sequência (delay vem do style) */
 .v18-linha {
-  animation: v18-surge 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: v18-surge 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -298,5 +404,24 @@ body {
   }
   .v18-card.v18-hover:hover {
     transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Chat da equipe: a tela ocupa a altura toda abaixo do cabeçalho
+   (cabeçalho 3.5rem + respiros do conteúdo), em qualquer tamanho de tela.
+   --------------------------------------------------------------------- */
+.chat-altura {
+  height: calc(100dvh - 5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  min-height: 24rem;
+}
+@media (min-width: 640px) {
+  .chat-altura {
+    height: calc(100dvh - 5.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
+@media (min-width: 768px) {
+  .chat-altura {
+    height: calc(100dvh - 6.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   }
 }

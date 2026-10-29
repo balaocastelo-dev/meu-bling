@@ -2,6 +2,7 @@
  * CUSTOS INTERNOS DA OS + DASHBOARD DE ASSISTÊNCIA TÉCNICA (26/10/2026)
  * Custo da peça, logística e mão de obra de terceiro: gravam na OS, podem ser lançados depois de concluída,
  * NÃO aparecem na impressão nem no link do cliente, e alimentam o dashboard de assistência (só ADMIN).
+ * Desde 29/10/2026 a OS tem o custo completo da venda: + imposto (alíquota) + taxa de cartão (pela forma das parcelas).
  *   npx tsx testes/os-custos.ts http://localhost:3333
  */
 import { encerrar, entrar, hoje, igual, secao, SUF, verifica } from './lib.js';
@@ -9,6 +10,10 @@ import { encerrar, entrar, hoje, igual, secao, SUF, verifica } from './lib.js';
 async function main() {
   const adm = await entrar('admin@balao.info', 'admin123');
   adm.nome = 'ADMIN';
+  // imposto da OS = alíquota do Simples × total (igual à venda); as OS deste teste não têm forma de pagamento → cartão 0
+  const emp = await adm.get('/empresa');
+  const aliq = Number(emp.aliquotaSimplesPct ?? 10);
+  const imposto = (total: number) => Math.round(total * aliq) / 100;
   const sitO: any[] = await adm.get('/situacoes?modulo=OS');
   const sit = (nome: string) => sitO.find((s) => s.nome === nome)?.id;
 
@@ -34,7 +39,8 @@ async function main() {
   );
   verifica(igual(os.total, 650), 'total da OS = 650 (200 serviço + 450 peça)', os.total);
   verifica(igual(os.custoPeca, 280) && igual(os.custoLogistica, 25) && igual(os.custoMaoObraTerceiro, 40), 'custos gravados na OS', os);
-  verifica(os.fechamento && igual(os.fechamento.custoTotal, 345) && igual(os.fechamento.lucro, 305), 'fechamento: custo 345, lucro 305', os.fechamento);
+  verifica(os.fechamento && igual(os.fechamento.custoTotal, 345 + imposto(650)) && igual(os.fechamento.lucro, 305 - imposto(650)), `fechamento: custo 345 + imposto ${imposto(650)}, lucro ${305 - imposto(650)}`, os.fechamento);
+  verifica(os.fechamento && igual(os.fechamento.imposto, imposto(650)) && igual(os.fechamento.taxaCartao, 0), 'fechamento traz imposto e taxa de cartão (0: sem forma de pagamento)', os.fechamento);
 
   secao('Custos não vão para o cliente');
   for (const via of ['cliente', 'tecnico', 'etiqueta']) {
@@ -50,14 +56,14 @@ async function main() {
   for (const nome of ['Em andamento', 'Concluída', 'Entregue']) if (sit(nome)) await adm.post(`/ordens-servico/${os.id}/situacao`, { situacaoId: sit(nome) });
   const os2 = await adm.put(`/ordens-servico/${os.id}`, { custoLogistica: 35 });
   verifica(igual(os2.custoLogistica, 35), 'logística alterada para 35 com a OS concluída', os2.custoLogistica);
-  verifica(igual(os2.fechamento.lucro, 295), 'lucro recalculado = 295', os2.fechamento?.lucro);
+  verifica(igual(os2.fechamento.lucro, 295 - imposto(650)), `lucro recalculado = 295 - imposto = ${295 - imposto(650)}`, os2.fechamento?.lucro);
 
   secao('Dashboard de assistência técnica');
   const d = await adm.get(`/dashboard/assistencia?dataInicial=${hoje()}&dataFinal=${hoje()}`);
   const linha = d.ordens?.find((o: any) => o.id === os.id);
   verifica(linha && igual(linha.valorEntrada, 650) && igual(linha.maoDeObra, 200) && igual(linha.pecas, 450), 'a OS aparece com valor de entrada, mão de obra e peças', linha);
-  verifica(linha && igual(linha.custoPecas, 280) && igual(linha.lucro, 295), 'a OS aparece com custo da peça e lucro', linha);
-  verifica(d.resumo && d.resumo.valorEntrada >= 650 && d.resumo.lucro >= 295 - 0.01, 'resumo soma a OS', d.resumo);
+  verifica(linha && igual(linha.custoPecas, 280) && igual(linha.lucro, 295 - imposto(650)), 'a OS aparece com custo da peça e lucro (já com imposto)', linha);
+  verifica(d.resumo && d.resumo.valorEntrada >= 650 && d.resumo.lucro >= 295 - imposto(650) - 0.01, 'resumo soma a OS', d.resumo);
   verifica(igual(d.resumo.valorEntrada, d.resumo.maoDeObra + d.resumo.pecas - d.resumo.descontos), 'valor de entrada = mão de obra + peças - descontos', d.resumo);
   verifica(igual(d.resumo.lucro, d.resumo.valorEntrada - d.resumo.custoTotal), 'lucro = entrada - custos', d.resumo);
   const dc = await adm.get(`/dashboard/assistencia?base=conclusao&dataInicial=${hoje()}&dataFinal=${hoje()}`);
@@ -65,7 +71,16 @@ async function main() {
 
   secao('Sem custo informado: usa o custo da peça cadastrada');
   const os3 = await adm.post('/ordens-servico', { contatoId: cli.id, dataEntrada: hoje(), equipamento: 'Desktop', defeitoRelatado: 'Não liga', itens: [{ tipo: 'SERVICO', descricao: 'Diagnóstico', quantidade: 1, valorUnitario: 80 }] }, 201);
-  verifica(os3.fechamento?.custoPecasOrigem === 'CADASTRO' && igual(os3.fechamento.lucro, 80), 'OS só de serviço sem custo: lucro = 80', os3.fechamento);
+  verifica(os3.fechamento?.custoPecasOrigem === 'CADASTRO' && igual(os3.fechamento.lucro, 80 - imposto(80)), `OS só de serviço sem custo: lucro = 80 - imposto = ${80 - imposto(80)}`, os3.fechamento);
+
+  secao('Kanban de OS com filtro de data');
+  const kHoje: any[] = await adm.get(`/ordens-servico/kanban?dataInicial=${hoje()}&dataFinal=${hoje()}`);
+  const idsHoje = kHoje.flatMap((c) => c.ordens.map((o: any) => o.id));
+  verifica(idsHoje.includes(os.id), 'kanban "Hoje" mostra a OS que entrou hoje (mesmo finalizada)', idsHoje.length);
+  const kVelho: any[] = await adm.get('/ordens-servico/kanban?dataInicial=2001-01-01&dataFinal=2001-01-31');
+  verifica(kVelho.every((c) => c.ordens.length === 0) && kVelho.length > 0, 'kanban num período sem OS: colunas vazias');
+  const lVelho = await adm.get('/ordens-servico?dataInicial=2001-01-01&dataFinal=2001-01-31');
+  verifica(lVelho.data.length === 0, 'lista de OS respeita o período');
 
   secao('Pagar técnico: % do lucro vira conta a pagar');
   const tecPg = await adm.post('/tecnicos', { nome: `Técnico Pago ${SUF}`, comissaoPadraoPct: 0, ativo: true }, [200, 201]);
@@ -86,12 +101,37 @@ async function main() {
   await adm.post('/dashboard/assistencia/pagar-tecnico', { ...corpoPg, dataInicial: '2001-01-01', dataFinal: '2001-01-31' }, 422);
   await adm.post('/dashboard/assistencia/pagar-tecnico', { ...corpoPg, percentual: 0 }, [400, 422]);
 
+  secao('Dashboard principal (panorama): vendas + assistência no período');
+  const pano = await adm.get(`/dashboard/panorama?dataInicial=${hoje()}&dataFinal=${hoje()}`);
+  const dv = await adm.get(`/dashboard/vendas?dataInicial=${hoje()}&dataFinal=${hoje()}&comparar=false`);
+  const da = await adm.get(`/dashboard/assistencia?dataInicial=${hoje()}&dataFinal=${hoje()}`);
+  const rp = pano.resumo;
+  verifica(igual(rp.vendas.valor, dv.resumo.faturamento) && rp.vendas.qtd === dv.resumo.qtdVendas, 'vendas do panorama = dashboard de vendas', { p: rp.vendas, v: dv.resumo });
+  verifica(igual(rp.vendas.lucro, dv.resumo.lucroBruto), 'lucro das vendas = lucro bruto do dashboard de vendas', { p: rp.vendas.lucro, v: dv.resumo.lucroBruto });
+  verifica(igual(rp.assistencia.valor, da.resumo.valorEntrada) && igual(rp.assistencia.lucro, da.resumo.lucro), 'assistência do panorama = dashboard de assistência', { p: rp.assistencia, a: da.resumo });
+  verifica(igual(rp.faturamento, rp.vendas.valor + rp.assistencia.valor), 'faturamento = vendas + assistência', rp);
+  verifica(igual(rp.lucro, rp.vendas.lucro + rp.assistencia.lucro) && igual(rp.lucro, rp.faturamento - rp.custo), 'lucro = lucro vendas + lucro assistência = faturamento - custos', rp);
+  verifica(igual(rp.caixa.saldo, rp.caixa.entradas - rp.caixa.saidas), 'caixa: saldo = entrou - saiu', rp.caixa);
+  const somaSerie = pano.series.reduce((s: number, x: any) => s + x.vendas + x.assistencia, 0);
+  verifica(igual(somaSerie, rp.faturamento), 'gráfico soma o mesmo faturamento', { somaSerie, fat: rp.faturamento });
+  verifica(rp.comparativo && typeof rp.comparativo.faturamento === 'number', 'traz o período anterior para comparar');
+  // transferência entre contas não mexe no caixa do período
+  const contasFin: any[] = await adm.get('/contas-financeiras');
+  if (contasFin.length >= 2) {
+    await adm.post('/financeiro/transferencia', { origemId: contasFin[0].id, destinoId: contasFin[1].id, valor: 123.45, data: hoje() }, [200, 201]);
+    const pano2 = await adm.get(`/dashboard/panorama?dataInicial=${hoje()}&dataFinal=${hoje()}`);
+    verifica(igual(pano2.resumo.caixa.entradas, rp.caixa.entradas) && igual(pano2.resumo.caixa.saidas, rp.caixa.saidas), 'transferência entre contas não entra no caixa do período', pano2.resumo.caixa);
+  }
+  const vazio = await adm.get('/dashboard/panorama?dataInicial=2001-01-01&dataFinal=2001-01-07');
+  verifica(vazio.resumo.faturamento === 0 && vazio.series.length === 7, 'período sem movimento: zero e 7 dias no gráfico', vazio.resumo.faturamento);
+
   secao('Permissões');
   const senha = 'Senha@12345';
   await adm.post('/usuarios', { nome: `Tecnico custos ${SUF}`, email: `tc${SUF}@teste.com`, senha, perfil: 'TECNICO' }, 201);
   const tec = await entrar(`tc${SUF}@teste.com`, senha);
   tec.nome = 'TECNICO';
   await tec.get(`/dashboard/assistencia`, 403);
+  await tec.get(`/dashboard/panorama`, 403);
   await tec.post('/dashboard/assistencia/pagar-tecnico', { tecnicoId: 1, percentual: 10 }, 403);
   const vistaTec = await tec.get(`/ordens-servico/${os.id}`);
   verifica(vistaTec.fechamento === null && igual(vistaTec.custoPeca, 280), 'técnico vê/lança os custos, mas não o lucro', vistaTec.fechamento);

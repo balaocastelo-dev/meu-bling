@@ -15,9 +15,37 @@ import {
   startOfWeek,
   subDays,
 } from 'date-fns';
+import { prisma } from '../../lib/prisma.js';
 import { toDate } from '../../lib/util.js';
 
 export type Agrupar = 'dia' | 'semana' | 'mes';
+
+/**
+ * "Todo o período" (desde sempre): a tela manda dataInicial = 2000-01-01 (lib/periodo.ts → DESDE_SEMPRE).
+ * Qualquer data inicial anterior ao primeiro registro do sistema é recuada até ele, para as séries
+ * começarem onde os dados começam (e não em 2000).
+ */
+let cacheInicio: { em: number; data: Date } | null = null;
+export async function inicioDoSistema(): Promise<Date> {
+  if (cacheInicio && Date.now() - cacheInicio.em < 5 * 60_000) return cacheInicio.data;
+  const [v, o, c, m] = await Promise.all([
+    prisma.venda.aggregate({ _min: { data: true } }),
+    prisma.ordemServico.aggregate({ _min: { dataEntrada: true } }),
+    prisma.compra.aggregate({ _min: { data: true } }),
+    prisma.movimentoFinanceiro.aggregate({ _min: { data: true } }),
+  ]);
+  const datas = [v._min.data, o._min.dataEntrada, c._min.data, m._min.data].filter((d): d is Date => d instanceof Date && d.getFullYear() > 1990);
+  const data = startOfDay(datas.length ? new Date(Math.min(...datas.map((d) => d.getTime()))) : new Date());
+  cacheInicio = { em: Date.now(), data };
+  return data;
+}
+
+/** Recua o início para o primeiro registro quando a tela pediu "todo o período"; devolve se recuou. */
+export async function desdeSempre(ini: Date, fim: Date): Promise<{ ini: Date; fim: Date; tudo: boolean }> {
+  const primeiro = await inicioDoSistema();
+  if (ini < primeiro) return { ini: primeiro <= fim ? primeiro : ini, fim, tudo: true };
+  return { ini, fim, tudo: false };
+}
 
 /** Chave do período: dia "2026-10-19", semana "2026-10-19" (segunda), mês "2026-10". */
 export function chavePeriodo(d: Date, agrupar: Agrupar): string {
@@ -38,8 +66,11 @@ export function listarPeriodos(ini: Date, fim: Date, agrupar: Agrupar): string[]
   return out;
 }
 
-/** Resolve dataInicial/dataFinal (padrão: mês atual) e devolve limites de dia completos. */
-export function resolverPeriodo(q: { dataInicial?: Date | null; dataFinal?: Date | null }, padrao: 'mes' | '30dias' = 'mes') {
+/**
+ * Resolve dataInicial/dataFinal (padrão: mês atual) e devolve limites de dia completos.
+ * `tudo` = a tela pediu "todo o período" (início recuado até o primeiro registro; sem comparativo com o período anterior).
+ */
+export async function resolverPeriodo(q: { dataInicial?: Date | null; dataFinal?: Date | null }, padrao: 'mes' | '30dias' = 'mes'): Promise<{ ini: Date; fim: Date; tudo: boolean }> {
   const hoje = new Date();
   let ini = q.dataInicial ? startOfDay(q.dataInicial) : null;
   let fim = q.dataFinal ? endOfDay(q.dataFinal) : null;
@@ -56,7 +87,7 @@ export function resolverPeriodo(q: { dataInicial?: Date | null; dataFinal?: Date
   } else if (!fim) {
     fim = endOfDay(addDays(ini, 29));
   }
-  return { ini: ini!, fim: fim! };
+  return desdeSempre(ini!, fim!);
 }
 
 /** Período anterior de mesma duração (para comparativos). */

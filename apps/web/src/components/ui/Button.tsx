@@ -44,6 +44,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         'focus:outline-none focus-visible:ring-2 disabled:opacity-50 disabled:pointer-events-none',
         variantes[variante],
         tamanhos[tamanho],
+        // tela de toque (celular/tablet): alvo de pelo menos 40px; no computador (mouse) nada muda
+        variante !== 'link' && 'pointer-coarse:min-h-10 pointer-coarse:min-w-10',
         className,
       )}
       {...rest}

@@ -22,7 +22,7 @@ export function Pagination({ pagina, totalPaginas, total, limite, onPagina, onLi
           {inteiro(inicio)}–{inteiro(fim)} de {inteiro(total)}
         </span>
         {onLimite && (
-          <select className="rounded border border-slate-200 bg-white px-1.5 py-1 text-xs" value={limite} onChange={(e) => onLimite(Number(e.target.value))}>
+          <select className="rounded border border-slate-200 bg-white px-1.5 py-1 text-xs pointer-coarse:min-h-10" value={limite} onChange={(e) => onLimite(Number(e.target.value))}>
             {[20, 50, 100, 200].map((n) => (
               <option key={n} value={n}>
                 {n} por página

@@ -129,7 +129,7 @@ export default function CompraForm() {
   if (editando && isLoading) return <FormSkeleton />;
 
   return (
-    <div className="pb-24">
+    <div className="espaco-barra-fixa">
       <PageHeader
         migalhas={[{ rotulo: 'Compras', para: '/compras' }, { rotulo: editando ? `Compra nº ${compra?.numero ?? ''}` : 'Nova compra' }]}
         titulo={editando ? `Editar compra nº ${compra?.numero ?? ''}` : 'Nova compra'}
@@ -222,7 +222,7 @@ export default function CompraForm() {
           </div>
         </Secao>
 
-        <div className="grid gap-4 xl:grid-cols-3">
+        <div className="grid items-start gap-4 xl:grid-cols-3">
           <Secao titulo="Observações" className="xl:col-span-2">
             <div className="grid gap-3 sm:grid-cols-2">
               <Textarea label="Observações" value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} rows={3} />
@@ -246,7 +246,7 @@ export default function CompraForm() {
         </Secao>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3 lg:left-64">
+      <div className="barra-fixa fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 pt-2.5 backdrop-blur sm:pt-3 lg:left-64">
         <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-2 sm:gap-3">
           <div className="min-w-0 text-xs text-slate-500 sm:text-sm">Total <span className="num font-semibold text-slate-900">{moeda(totais.total)}</span></div>
           <div className="flex shrink-0 gap-2">

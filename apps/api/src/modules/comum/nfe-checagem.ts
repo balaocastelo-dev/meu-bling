@@ -6,6 +6,7 @@
  * nivel "aviso" → dá para emitir, mas vale conferir
  */
 import { somenteDigitos } from '../../lib/util.js';
+import { ncmVigente } from '../robo-nf/ncm.js';
 import type { Db } from './nfe.js';
 
 export interface AcaoPendencia {
@@ -21,6 +22,8 @@ export interface PendenciaNfe {
   titulo: string;
   detalhe?: string;
   acoes?: AcaoPendencia[];
+  /** NCM sugerido pelo robô de NF: a tela mostra o botão "Confirmar NCM" (um clique) */
+  confirmarNcm?: { produtoId: number; ncm: string; produto: string };
 }
 export interface ResultadoChecagem {
   podeEmitir: boolean;
@@ -185,7 +188,7 @@ export async function verificarNfe(db: Db, p: ParamsChecagem): Promise<Resultado
 
   // ------------------------------------------------------------ itens
   const ids = p.itens.map((i) => i.produtoId).filter((x): x is number => !!x);
-  const produtos = ids.length ? await db.produto.findMany({ where: { id: { in: ids } }, select: { id: true, nome: true, tipo: true, ncm: true, unidade: true } }) : [];
+  const produtos = ids.length ? await db.produto.findMany({ where: { id: { in: ids } }, select: { id: true, nome: true, tipo: true, ncm: true, ncmOrigem: true, unidade: true } }) : [];
   const mapa = new Map(produtos.map((pr) => [pr.id, pr]));
   let itensNota = 0;
   p.itens.forEach((it, idx) => {
@@ -215,17 +218,37 @@ export async function verificarNfe(db: Db, p: ParamsChecagem): Promise<Resultado
     }
     itensNota += 1;
     const ncm = somenteDigitos(pr.ncm);
-    if (!ncm) {
+    const ncmFmt = ncm.length === 8 ? `${ncm.slice(0, 4)}.${ncm.slice(4, 6)}.${ncm.slice(6)}` : ncm;
+    if (!ncm || /^0+$/.test(ncm)) {
       pend.push({
-        nivel: 'aviso',
+        nivel: 'erro',
         codigo: 'PRODUTO_SEM_NCM',
         grupo: 'ITENS',
-        titulo: `${nItem}: o produto está sem NCM (sairá como 0000.00.00).`,
-        detalhe: 'Informe o NCM do produto para a nota sair correta (ex.: notebook 8471.30.12, monitor 8528.52.00).',
+        titulo: `${nItem}: o produto está sem NCM.`,
+        detalhe: 'O robô de NF não conseguiu descobrir o NCM pelo nome. Informe no cadastro do produto (ex.: notebook 8471.30.12, monitor 8528.52.00) — depois ele vale para todas as vendas desse produto.',
         acoes: [{ rotulo: 'Informar NCM do produto', rota: `/produtos/${pr.id}/editar` }],
       });
     } else if (ncm.length !== 8) {
       pend.push({ nivel: 'erro', codigo: 'PRODUTO_NCM_INVALIDO', grupo: 'ITENS', titulo: `${nItem}: NCM "${pr.ncm}" inválido (precisa de 8 dígitos).`, acoes: [{ rotulo: 'Corrigir NCM', rota: `/produtos/${pr.id}/editar` }] });
+    } else if (ncmVigente(ncm) === false) {
+      pend.push({
+        nivel: 'erro',
+        codigo: 'PRODUTO_NCM_EXTINTO',
+        grupo: 'ITENS',
+        titulo: `${nItem}: o NCM ${ncmFmt} não existe mais na tabela oficial (a SEFAZ rejeita).`,
+        detalhe: 'Códigos antigos (antes de 2022) foram trocados — ex.: monitor 8528.52.20 virou 8528.52.00. O robô de NF sugere o novo; confira no produto.',
+        acoes: [{ rotulo: 'Corrigir NCM do produto', rota: `/produtos/${pr.id}/editar` }],
+      });
+    } else if (pr.ncmOrigem === 'SUGERIDO') {
+      pend.push({
+        nivel: 'erro',
+        codigo: 'PRODUTO_NCM_SUGERIDO',
+        grupo: 'ITENS',
+        titulo: `${nItem}: o robô sugeriu o NCM ${ncmFmt} pelo tipo de produto — confirme uma vez.`,
+        detalhe: 'Confirmando, esse NCM passa a valer para todas as vendas deste produto. Se estiver errado, corrija no cadastro do produto.',
+        acoes: [{ rotulo: 'Corrigir no produto', rota: `/produtos/${pr.id}/editar` }],
+        confirmarNcm: { produtoId: pr.id, ncm, produto: pr.nome },
+      });
     }
   });
   if (!p.itens.length) pend.push({ nivel: 'erro', codigo: 'SEM_ITENS', grupo: 'ITENS', titulo: `${nomeOrigem[0].toUpperCase()}${nomeOrigem.slice(1)} não tem itens.`, acoes: [{ rotulo: 'Editar', rota: rotaOrigem }] });

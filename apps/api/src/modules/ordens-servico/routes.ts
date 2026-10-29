@@ -30,10 +30,13 @@ import {
   verificarNfeDaOs,
   osCompleta,
   osSchema,
+  pendenciasCustoOs,
   prepararOs,
   PRIORIDADES,
   resumoSelect,
 } from './service.js';
+import { pecasSemCustoOs } from '../comum/custos-os.js';
+import { arredondar } from '../../lib/util.js';
 import { htmlOsCliente, htmlOsEtiqueta, htmlOsTecnico } from './imprimir.js';
 
 registrarModulo('OS', {
@@ -63,10 +66,19 @@ registrarAcao('OS', 'gerarNfe', acaoGerarNfe);
 
 const NOME_AGUARDANDO_APROVACAO = 'Aguardando aprovação';
 
+/** Linha da lista/kanban: sem os custos (ficam só na OS), com "atrasada" e quantas peças estão sem custo. */
+function resumoOs<T extends { dataPrevista: Date | null; situacao: { final: boolean; cancelamento: boolean }; custoPeca: number; itens: { tipo: string; custoUnitario: number }[] }>(o: T) {
+  const { custoPeca: _c, itens, ...resto } = o;
+  return { ...resto, atrasada: calcularAtrasada(o), pecasSemCusto: pecasSemCustoOs({ custoPeca: o.custoPeca, itens: itens.map((i) => ({ ...i, quantidade: 1 })) }).length };
+}
+
 export default async function ordensServicoRoutes(app: FastifyInstance) {
   // ---------------------------------------------------------------- kanban (antes de /:id)
   app.get('/api/v1/ordens-servico/kanban', async (req) => {
-    const q = z.object({ tecnicoId: z.coerce.number().int().optional(), diasFinalizadas: z.coerce.number().int().min(0).default(7) }).parse(req.query);
+    const q = z
+      .object({ tecnicoId: z.coerce.number().int().optional(), diasFinalizadas: z.coerce.number().int().min(0).default(7), dataInicial: dataSchema, dataFinal: dataSchema })
+      .parse(req.query);
+    // com período: todas as OS que ENTRARAM no período (abertas e finalizadas); sem período: abertas + finalizadas recentes
     const situacoes = await prisma.situacao.findMany({ where: { modulo: 'OS', ativo: true }, orderBy: { ordem: 'asc' } });
     const limite = new Date();
     limite.setDate(limite.getDate() - q.diasFinalizadas);
@@ -74,7 +86,9 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
       where: {
         tecnicoId: q.tecnicoId,
         situacaoId: { in: situacoes.map((s) => s.id) },
-        OR: [{ situacao: { final: false, cancelamento: false } }, { atualizadoEm: { gte: limite } }, { dataConclusao: { gte: limite } }],
+        ...(q.dataInicial || q.dataFinal
+          ? { dataEntrada: intervalo(q.dataInicial, q.dataFinal) }
+          : { OR: [{ situacao: { final: false, cancelamento: false } }, { atualizadoEm: { gte: limite } }, { dataConclusao: { gte: limite } }] }),
       },
       select: resumoSelect,
       orderBy: [{ prioridade: 'desc' }, { dataPrevista: 'asc' }, { dataEntrada: 'asc' }],
@@ -85,7 +99,7 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
       ordens: ordens
         .filter((o) => o.situacao.id === s.id)
         .sort((a, b) => (pesoPrioridade[a.prioridade] ?? 9) - (pesoPrioridade[b.prioridade] ?? 9) || (a.dataPrevista?.getTime() ?? Infinity) - (b.dataPrevista?.getTime() ?? Infinity))
-        .map((o) => ({ ...o, atrasada: calcularAtrasada(o) })),
+        .map(resumoOs),
     }));
   });
 
@@ -128,15 +142,12 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
       prisma.ordemServico.count({ where }),
       prisma.ordemServico.findMany({ where, ...paginar(q), orderBy: [{ dataEntrada: 'desc' }, { numero: 'desc' }], select: resumoSelect }),
     ]);
-    return respostaPaginada(data.map((o) => ({ ...o, atrasada: calcularAtrasada(o) })), total, q);
+    return respostaPaginada(data.map(resumoOs), total, q);
   });
 
-  app.get('/api/v1/ordens-servico/:id', async (req) => {
-    const os = await osCompleta(idDe(req));
-    // lucro/margem do fechamento só para o dono e a gerência; os custos em si ficam visíveis para quem lança
-    if (req.user.perfil !== 'ADMIN' && req.user.perfil !== 'GERENTE') return { ...os, fechamento: null };
-    return os;
-  });
+  // lucro/margem do fechamento só para o dono e a gerência; os custos em si ficam visíveis para quem lança
+  const comFechamento = (req: { user: { perfil: string } }, os: Awaited<ReturnType<typeof osCompleta>>) => (req.user.perfil === 'ADMIN' || req.user.perfil === 'GERENTE' ? os : { ...os, fechamento: null });
+  app.get('/api/v1/ordens-servico/:id', async (req) => comFechamento(req, await osCompleta(idDe(req))));
 
   // ---------------------------------------------------------------- criar
   app.post('/api/v1/ordens-servico', async (req, reply) => {
@@ -198,7 +209,7 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
     await auditar(req, 'OrdemServico', os.id, 'CRIAR', { numero: os.numero, total: os.total });
     eventos.emitir('os.criada', { osId: os.id, usuarioId: req.user.id });
     if (os.orcar && os.situacaoNome === NOME_AGUARDANDO_APROVACAO) eventos.emitir('os.orcamento', { osId: os.id, usuarioId: req.user.id });
-    return reply.code(201).send(await osCompleta(os.id));
+    return reply.code(201).send(comFechamento(req, await osCompleta(os.id)));
   });
 
   // ---------------------------------------------------------------- alterar
@@ -236,9 +247,26 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
       // só o que veio no corpo (o .partial() ainda aplica os defaults do schema e zeraria campos não enviados)
       const enviados = req.body as Record<string, unknown>;
       for (const k of CAMPOS_LIVRES_OS) if (k in enviados && (parcial as any)[k] !== undefined) data[k] = (parcial as any)[k];
-      await prisma.ordemServico.update({ where: { id }, data });
-      await auditar(req, 'OrdemServico', id, 'ALTERAR', data);
-      return osCompleta(id);
+      // custo interno de cada peça pode ser lançado/corrigido mesmo com a OS já baixada/lançada (igual à venda)
+      const custosItens = (parcial.itens || [])
+        .map((n, i) => ({ n, a: atual.itens[i] }))
+        .filter(({ n, a }) => a && a.tipo === 'PECA' && n.custoUnitario !== undefined && (n.custoUnitario ?? null) !== (a.custoInformado ? a.custoUnitario : null));
+      await prisma.$transaction(async (tx) => {
+        if (custosItens.length) {
+          const prods = await tx.produto.findMany({ where: { id: { in: custosItens.map(({ a }) => a.produtoId).filter((x): x is number => !!x) } }, select: { id: true, precoCusto: true } });
+          const doCadastro = new Map(prods.map((p) => [p.id, p.precoCusto]));
+          for (const { n, a } of custosItens) {
+            const informado = n.custoUnitario !== null && n.custoUnitario !== undefined;
+            await tx.ordemServicoItem.update({ where: { id: a.id }, data: { custoUnitario: informado ? n.custoUnitario! : a.produtoId ? doCadastro.get(a.produtoId) ?? 0 : 0, custoInformado: informado } });
+          }
+          const itens = await tx.ordemServicoItem.findMany({ where: { osId: id, tipo: 'PECA' }, select: { custoUnitario: true, quantidade: true } });
+          data.custoTotal = arredondar(itens.reduce((s, i) => s + i.custoUnitario * i.quantidade, 0));
+        }
+        if (Object.keys(data).length) await tx.ordemServico.update({ where: { id }, data });
+      });
+      await auditar(req, 'OrdemServico', id, 'ALTERAR', { ...data, ...(custosItens.length ? { custosItens: custosItens.length } : {}) });
+      eventos.emitir('os.alterada', { osId: id, usuarioId: req.user.id });
+      return comFechamento(req, await osCompleta(id));
     }
 
     const body = osSchema.parse(mesclarComAtual(atual, req.body as Record<string, unknown>));
@@ -298,7 +326,8 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
     await auditar(req, 'OrdemServico', id, 'ALTERAR', { itens: body.itens.length });
     const osAtualizada = await osCompleta(id);
     if (body.orcar && !atual.orcar && osAtualizada.situacao.nome === NOME_AGUARDANDO_APROVACAO) eventos.emitir('os.orcamento', { osId: id, usuarioId: req.user.id });
-    return osAtualizada;
+    eventos.emitir('os.alterada', { osId: id, usuarioId: req.user.id });
+    return comFechamento(req, osAtualizada);
   });
 
   // ---------------------------------------------------------------- excluir
@@ -326,8 +355,24 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
   // ---------------------------------------------------------------- situação / ações
   app.post('/api/v1/ordens-servico/:id/situacao', async (req) => {
     const id = idDe(req);
-    const body = z.object({ situacaoId: z.coerce.number().int().positive(), observacao: z.string().trim().nullable().optional(), forcar: z.boolean().optional() }).parse(req.body);
+    const body = z
+      .object({ situacaoId: z.coerce.number().int().positive(), observacao: z.string().trim().nullable().optional(), forcar: z.boolean().optional(), confirmarCusto: z.boolean().optional() })
+      .parse(req.body);
     if (body.forcar && req.user.perfil !== 'ADMIN' && req.user.perfil !== 'GERENTE') throw new AppError('Somente ADMIN/GERENTE pode forçar transições.', 403, 'SEM_PERMISSAO');
+    // LEMBRETE NO FECHAMENTO: ao concluir/entregar a OS com peça sem custo, a tela pergunta antes
+    // ("Preencher agora" ou "Fechar assim mesmo"). Não trava: com confirmarCusto a OS fecha e o Robô da Saúde
+    // continua lembrando o técnico até o custo entrar (DRE e dashboards precisam do custo real).
+    if (!body.confirmarCusto) {
+      const destino = await prisma.situacao.findUnique({ where: { id: body.situacaoId }, select: { modulo: true, final: true, cancelamento: true, nome: true } });
+      if (destino?.modulo === 'OS' && destino.final && !destino.cancelamento) {
+        const os = await prisma.ordemServico.findUnique({ where: { id }, select: { numero: true, situacaoId: true, custoPeca: true, itens: { select: { tipo: true, descricao: true, custoUnitario: true, quantidade: true } } } });
+        if (!os) throw new NotFound('Ordem de serviço');
+        const pend = os.situacaoId === body.situacaoId ? [] : pendenciasCustoOs(os);
+        if (pend.length) {
+          throw new AppError(`Antes de marcar a OS nº ${os.numero} como "${destino.nome}": ${pend.map((p) => p.mensagem.replace(/\.$/, '')).join('; ')}. Preencha o custo (ou feche assim mesmo e preencha depois).`, 422, 'OS_CUSTO_PENDENTE', { pendencias: pend, osId: id, numero: os.numero });
+        }
+      }
+    }
     const r = await mudarSituacao({ modulo: 'OS', entidadeId: id, situacaoDestinoId: body.situacaoId, usuarioId: req.user.id, observacao: body.observacao, forcar: body.forcar });
     await auditar(req, 'OrdemServico', id, 'SITUACAO', { para: r.situacao.nome, acoes: r.acoes });
     if (r.alterado && r.situacao.nome === NOME_AGUARDANDO_APROVACAO) {
@@ -342,7 +387,7 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
     const body = z.object({ acoes: z.array(z.enum(['lancarEstoque', 'estornarEstoque', 'lancarContas', 'estornarContas', 'reservarEstoque', 'liberarReserva', 'gerarNfe'])).min(1) }).parse(req.body);
     await executarAcoes('OS', id, body.acoes as Acao[], req.user.id);
     await auditar(req, 'OrdemServico', id, 'ACAO', { acoes: body.acoes });
-    return { acoesExecutadas: body.acoes, os: await osCompleta(id) };
+    return { acoesExecutadas: body.acoes, os: comFechamento(req, await osCompleta(id)) };
   });
 
   // ---------------------------------------------------------------- aprovar orçamento
@@ -365,7 +410,7 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
       }
     }
     await auditar(req, 'OrdemServico', id, 'ACAO', { acao: 'aprovarOrcamento', aprovadoPor: body.aprovadoPor });
-    return { ok: true, orcamentoAprovado: true, situacao: mudou, os: await osCompleta(id) };
+    return { ok: true, orcamentoAprovado: true, situacao: mudou, os: comFechamento(req, await osCompleta(id)) };
   });
 
   // ---------------------------------------------------------------- anexos
@@ -489,7 +534,7 @@ function mesclarComAtual(atual: Awaited<ReturnType<typeof carregarOs>>, body: Re
     custoLogistica: atual.custoLogistica,
     custoMaoObraTerceiro: atual.custoMaoObraTerceiro,
     garantiaDias: atual.garantiaDias,
-    itens: atual.itens.map((i) => ({ tipo: i.tipo, produtoId: i.produtoId, descricao: i.descricao, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoVendedorPct: i.comissaoVendedorPct, comissaoTecnicoPct: i.comissaoTecnicoPct, depositoId: i.depositoId })),
+    itens: atual.itens.map((i) => ({ tipo: i.tipo, produtoId: i.produtoId, descricao: i.descricao, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, custoUnitario: i.custoInformado ? i.custoUnitario : null, comissaoVendedorPct: i.comissaoVendedorPct, comissaoTecnicoPct: i.comissaoTecnicoPct, depositoId: i.depositoId })),
     parcelas: atual.parcelas.map((p) => ({ dataVencimento: p.dataVencimento, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes })),
   };
   const { situacaoId: _s, ...resto } = body;

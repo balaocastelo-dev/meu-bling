@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 
@@ -12,8 +12,34 @@ export interface Aba {
 /** Abas horizontais (estilo sublinhado) */
 export function Tabs({ abas, ativa, onMudar, className }: { abas: Aba[]; ativa: string; onMudar: (id: string) => void; className?: string }) {
   const grupo = useId();
+  const ref = useRef<HTMLDivElement>(null);
+  // quando há mais abas do que cabem (celular), a borda do lado que continua some num degradê — sinal de que dá para rolar
+  const [sobra, setSobra] = useState({ esq: false, dir: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const medir = () => setSobra({ esq: el.scrollLeft > 2, dir: el.scrollLeft + el.clientWidth < el.scrollWidth - 2 });
+    medir();
+    el.addEventListener('scroll', medir, { passive: true });
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(medir) : null;
+    ro?.observe(el);
+    // a aba escolhida fica sempre à vista
+    // (rola só a faixa de abas, nunca a página)
+    const sel = el.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (sel && (sel.offsetLeft < el.scrollLeft || sel.offsetLeft + sel.offsetWidth > el.scrollLeft + el.clientWidth)) el.scrollLeft = sel.offsetLeft - 16;
+    return () => {
+      el.removeEventListener('scroll', medir);
+      ro?.disconnect();
+    };
+  }, [abas.length, ativa]);
+  const mascara = sobra.esq && sobra.dir ? 'linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent)' : sobra.dir ? 'linear-gradient(to right, #000 calc(100% - 28px), transparent)' : sobra.esq ? 'linear-gradient(to right, transparent, #000 24px)' : undefined;
   return (
-    <div className={clsx('flex gap-1 overflow-x-auto border-b border-slate-200', className)} role="tablist">
+    <div
+      ref={ref}
+      style={mascara ? { maskImage: mascara, WebkitMaskImage: mascara } : undefined}
+      className={clsx('relative flex gap-1 overflow-x-auto overscroll-x-contain border-b border-slate-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', className)}
+      role="tablist"
+    >
       {abas.map((a) => {
         const sel = a.id === ativa;
         return (
@@ -23,7 +49,7 @@ export function Tabs({ abas, ativa, onMudar, className }: { abas: Aba[]; ativa: 
             aria-selected={sel}
             onClick={() => onMudar(a.id)}
             className={clsx(
-              'relative -mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm font-medium transition-colors',
+              'relative -mb-px inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm font-medium transition-colors',
               sel ? 'text-brand-700' : 'text-slate-500 hover:border-slate-300 hover:text-slate-700',
             )}
           >
@@ -53,7 +79,7 @@ export function Segmentado<T extends string>({ opcoes, valor, onMudar, className
           onClick={() => onMudar(o.valor)}
           className={clsx(
             'relative inline-flex items-center gap-1.5 rounded px-2.5 font-medium transition-colors whitespace-nowrap',
-            tamanho === 'xs' ? 'h-6 text-xs' : 'h-7 text-xs',
+            tamanho === 'xs' ? 'h-6 text-xs pointer-coarse:h-9' : 'h-7 text-xs pointer-coarse:h-9',
             o.valor === valor ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700',
           )}
         >

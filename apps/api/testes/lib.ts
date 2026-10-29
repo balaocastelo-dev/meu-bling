@@ -53,8 +53,22 @@ export function igual(a: number, b: number, casas = 2) {
 
 export async function entrar(email: string, senha: string): Promise<Sessao> {
   const s = new Sessao('', email);
-  const r = await s.post('/auth/login', { email, senha }, 200);
-  s.token = r?.token || '';
+  // o login tem limite de 20/min por IP: com muitas etapas seguidas, espera a janela e tenta de novo
+  for (let tentativa = 0; tentativa < 4; tentativa++) {
+    const r = await fetch(BASE + '/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, senha }) });
+    if (r.status === 429) {
+      const espera = Number(r.headers.get('retry-after')) || 30;
+      await new Promise((ok) => setTimeout(ok, (Math.min(espera, 61) + 1) * 1000));
+      continue;
+    }
+    const corpo: any = await r.json().catch(() => ({}));
+    if (r.status === 200) {
+      placar.ok++;
+      s.token = corpo?.token || '';
+    } else falhar(`[${email}] POST /auth/login → ${r.status} (esperado 200) ${JSON.stringify(corpo).slice(0, 200)}`);
+    return s;
+  }
+  falhar(`[${email}] POST /auth/login → 429 depois de esperar o limite`);
   return s;
 }
 
@@ -88,5 +102,37 @@ export function secao(t: string) {
 
 export function encerrar(nome: string) {
   console.log(`\n${nome}: ${placar.ok} ok, ${placar.falhas} falhas`);
-  process.exit(placar.falhas ? 1 : 0);
+  // process.exit imediato dispara um assert do libuv no Windows (Node 24 + tsx) quando ainda há
+  // handles fechando ("Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)") e derruba suíte
+  // que passou — um respiro para o event loop fechar os handles antes de sair resolve
+  setTimeout(() => process.exit(placar.falhas ? 1 : 0), 300);
 }
+
+/** CPF válido (dígitos verificadores corretos) a partir de um sufixo. */
+export function cpfTeste(suf: string): string {
+  const base = `987${suf}`.replace(/\D/g, '').padEnd(9, '0').slice(0, 9);
+  const dv = (s: string, n: number) => {
+    let t = 0;
+    for (let i = 0; i < n; i++) t += Number(s[i]) * (n + 1 - i);
+    const r = (t * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  const d1 = dv(base, 9);
+  return base + d1 + dv(base + d1, 10);
+}
+
+/** Dados de cliente completos (o que a venda exige para ser finalizada). */
+export const clienteCompleto = (nome: string, suf = SUF) => ({
+  nome,
+  tipoPessoa: 'F',
+  documento: cpfTeste(suf),
+  celular: '19999990000',
+  email: `cli${suf}@example.com`,
+  logradouro: 'Av. Anchieta',
+  numero: '789',
+  bairro: 'Cambuí',
+  municipio: 'Campinas',
+  codigoMunicipio: '3509502',
+  uf: 'SP',
+  cep: '13025000',
+});

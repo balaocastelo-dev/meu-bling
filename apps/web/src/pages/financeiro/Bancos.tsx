@@ -1,15 +1,15 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { ArrowRightLeft, Ban, CircleCheck, FileUp, Landmark, Link2, Plus, PlugZap, RefreshCw, Unlink, Wallet } from 'lucide-react';
+import { ArrowRightLeft, Ban, Eye, EyeOff, Scale, CircleCheck, FileUp, Landmark, Link2, Plus, PlugZap, RefreshCw, Unlink, Wallet } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { abrirPluggyConnect } from '@/lib/pluggy';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useCategoriasFinanceiras, useContasFinanceiras, opcoesDe } from '@/hooks/useListas';
-import { Badge, BarraFiltros, Button, Card, DateInput, EmptyState, Input, Modal, MoneyInput, PageHeader, Pagination, Select, SelectFiltro, Skeleton, Tabs, Textarea } from '@/components/ui';
+import { Badge, BarraFiltros, Button, Card, DateInput, EmptyState, Input, Modal, MoneyInput, PageHeader, Pagination, PeriodoFiltro, Select, SelectFiltro, Skeleton, Tabs, Textarea } from '@/components/ui';
 import { data, dataHora, hoje, moeda, rotulo } from '@/lib/format';
 import type { ContaFinanceira, OpenFinanceStatus, Paginado, TransacaoBancaria } from '@/types';
 
@@ -27,6 +27,8 @@ export default function Bancos() {
   const [itemConta, setItemConta] = useState<number | ''>('');
   const [transfAberta, setTransfAberta] = useState(false);
   const [lancAberto, setLancAberto] = useState(false);
+  const [ajusteAberto, setAjusteAberto] = useState(false);
+  const [saldosAberto, setSaldosAberto] = useState(false);
 
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: ['contas-financeiras'] });
@@ -99,16 +101,46 @@ export default function Bancos() {
   });
 
   const saldoSistema = (contas ?? []).reduce((s, c) => s + c.saldoAtual, 0);
+  const [verSaldo, setVerSaldo] = useState(() => {
+    try {
+      return localStorage.getItem('bancos.verSaldo') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const alternarSaldo = () => {
+    const v = !verSaldo;
+    setVerSaldo(v);
+    try {
+      localStorage.setItem('bancos.verSaldo', v ? '1' : '0');
+    } catch {
+      /* sem armazenamento: só nesta tela */
+    }
+  };
 
   return (
     <div>
       <PageHeader
         titulo="Contas bancárias & conciliação"
-        descricao={contas ? `Saldo total no sistema: ${moeda(saldoSistema)}` : undefined}
+        descricao={
+          contas ? (
+            <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="whitespace-nowrap">Saldo total no sistema:</span>
+              <span className={clsx('num whitespace-nowrap rounded-lg px-2.5 py-0.5 text-lg font-bold transition', verSaldo ? (saldoSistema < 0 ? 'bg-red-50 text-red-700 ring-1 ring-red-200' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200') : 'bg-slate-100 text-slate-500 tracking-widest')}>
+                {verSaldo ? moeda(saldoSistema) : 'R$ ••••••'}
+              </span>
+              <button type="button" onClick={alternarSaldo} aria-label={verSaldo ? 'Esconder saldo' : 'Mostrar saldo'} title={verSaldo ? 'Esconder saldo' : 'Mostrar saldo'} className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800">
+                {verSaldo ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </span>
+          ) : undefined
+        }
         acoes={
           <>
             <Button variante="secundario" icone={<ArrowRightLeft className="h-4 w-4" />} onClick={() => setTransfAberta(true)}>Transferência</Button>
             <Button variante="secundario" icone={<Plus className="h-4 w-4" />} onClick={() => setLancAberto(true)}>Lançamento avulso</Button>
+            <Button variante="secundario" icone={<Scale className="h-4 w-4" />} onClick={() => setAjusteAberto(true)}>Ajustar saldo</Button>
+            <Button variante="secundario" icone={<Scale className="h-4 w-4" />} onClick={() => setSaldosAberto(true)}>Acertar saldos iniciais</Button>
             <Button variante="secundario" icone={<RefreshCw className={clsx('h-4 w-4', sincronizar.isPending && 'animate-spin')} />} onClick={() => sincronizar.mutate(undefined)} disabled={sincronizar.isPending || !of?.ativo}>Sincronizar todas</Button>
             <Button variante="primario" icone={<PlugZap className="h-4 w-4" />} carregando={conectar.isPending} onClick={() => conectar.mutate()} disabled={of ? !of.configurado : false} title={of && !of.configurado ? 'Configure o Open Finance em Configurações' : undefined}>
               Conectar banco (Open Finance)
@@ -162,6 +194,8 @@ export default function Bancos() {
 
       <TransferenciaModal aberto={transfAberta} onFechar={() => setTransfAberta(false)} contas={contas ?? []} onConcluido={invalidar} />
       <LancamentoModal aberto={lancAberto} onFechar={() => setLancAberto(false)} contas={contas ?? []} onConcluido={invalidar} />
+      <AjusteSaldoModal aberto={ajusteAberto} onFechar={() => setAjusteAberto(false)} contas={contas ?? []} onConcluido={invalidar} />
+      {saldosAberto && <SaldosIniciaisModal onFechar={() => setSaldosAberto(false)} contas={contas ?? []} onConcluido={invalidar} />}
     </div>
   );
 }
@@ -169,8 +203,19 @@ export default function Bancos() {
 function CardConta({ conta: c, onSincronizar, sincronizando, onDesvincular }: { conta: ContaFinanceira; onSincronizar: () => void; sincronizando: boolean; onDesvincular: () => void }) {
   const vinculada = !!c.openFinanceItemId;
   const diferenca = typeof c.saldoBanco === 'number' ? c.saldoBanco - c.saldoAtual : null;
+  const navegar = useNavigate();
   return (
-    <div className="v18-card rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card">
+    <div
+      role="link"
+      tabIndex={0}
+      title="Ver extrato"
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest('button,a')) return;
+        navegar(`/financeiro/bancos/${c.id}`);
+      }}
+      onKeyDown={(e) => e.key === 'Enter' && navegar(`/financeiro/bancos/${c.id}`)}
+      className="v18-card v18-hover cursor-pointer rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card"
+    >
       <div className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white" style={{ backgroundColor: c.cor || '#2563eb' }}>
           {c.tipo === 'CAIXA' ? <Wallet className="h-4 w-4" /> : <Landmark className="h-4 w-4" />}
@@ -202,6 +247,12 @@ function CardConta({ conta: c, onSincronizar, sincronizando, onDesvincular }: { 
         <p className={clsx('mt-2 rounded px-2 py-1 text-xs', Math.abs(diferenca) > 0.009 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700')}>Diferença de {moeda(diferenca)} — concilie as transações pendentes.</p>
       )}
       {diferenca !== null && Math.abs(diferenca) <= 0.009 && <p className="mt-2 inline-flex items-center gap-1 text-xs text-emerald-700"><CircleCheck className="h-3.5 w-3.5" /> Saldos conferem</p>}
+      {(c.taxaRecebimentoPct ?? 0) > 0 && (
+        <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200">
+          Taxa de {String(c.taxaRecebimentoPct).replace('.', ',')}% descontada: cada recebimento entra já com o valor menos a taxa.
+        </p>
+      )}
+      <p className="mt-3 text-xs font-medium text-brand-700">Ver extrato →</p>
       {vinculada && (
         <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
           <Button tamanho="xs" variante="secundario" icone={<RefreshCw className={clsx('h-3.5 w-3.5', sincronizando && 'animate-spin')} />} onClick={onSincronizar} disabled={sincronizando}>Sincronizar</Button>
@@ -222,7 +273,7 @@ function Conciliacao({ contas }: { contas: ContaFinanceira[] }) {
   const [catId, setCatId] = useState<number | ''>('');
   const [desc, setDesc] = useState('');
 
-  const params = { contaFinanceiraId: pg.getFiltro('contaFinanceiraId'), conciliado: pg.getFiltro('conciliado') || 'false', pagina: pg.pagina, limite: pg.limite };
+  const params = { contaFinanceiraId: pg.getFiltro('contaFinanceiraId'), conciliado: pg.getFiltro('conciliado') || 'false', dataInicial: pg.getFiltro('dataInicial'), dataFinal: pg.getFiltro('dataFinal'), pagina: pg.pagina, limite: pg.limite };
   const { data: resp, isLoading } = useQuery({ queryKey: ['transacoes', params], queryFn: () => api.get<Paginado<TransacaoBancaria>>('/bancos/transacoes', params), placeholderData: (p) => p });
 
   const invalidar = () => {
@@ -254,6 +305,7 @@ function Conciliacao({ contas }: { contas: ContaFinanceira[] }) {
       <BarraFiltros>
         <SelectFiltro valor={pg.getFiltro('contaFinanceiraId')} onChange={(v) => pg.setFiltro('contaFinanceiraId', v)} opcoes={opcoesDe(contas)} placeholder="Todas as contas" />
         <SelectFiltro valor={pg.getFiltro('conciliado') || 'false'} onChange={(v) => pg.setFiltro('conciliado', v)} placeholder="" opcoes={[{ valor: 'false', rotulo: 'Pendentes' }, { valor: 'true', rotulo: 'Conciliadas' }]} />
+        <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />
       </BarraFiltros>
       {isLoading ? (
         <div className="p-4"><Skeleton className="h-48" /></div>
@@ -340,11 +392,7 @@ function Extrato({ contas }: { contas: ContaFinanceira[] }) {
     <Card semPadding>
       <BarraFiltros>
         <SelectFiltro valor={pg.getFiltro('contaFinanceiraId')} onChange={(v) => pg.setFiltro('contaFinanceiraId', v)} opcoes={opcoesDe(contas)} placeholder="Todas as contas" />
-        <div className="flex items-center gap-1">
-          <input type="date" value={pg.getFiltro('dataInicial')} onChange={(e) => pg.setFiltro('dataInicial', e.target.value)} className="input-base h-8 w-36 py-0 text-sm" />
-          <span className="text-xs text-slate-400">até</span>
-          <input type="date" value={pg.getFiltro('dataFinal')} onChange={(e) => pg.setFiltro('dataFinal', e.target.value)} className="input-base h-8 w-36 py-0 text-sm" />
-        </div>
+        <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />
       </BarraFiltros>
       {isLoading ? (
         <div className="p-4"><Skeleton className="h-48" /></div>
@@ -420,6 +468,98 @@ function LancamentoModal({ aberto, onFechar, contas, onConcluido }: { aberto: bo
         <DateInput label="Data" value={f.data} onChange={(v) => setF({ ...f, data: v })} />
         <Select className="col-span-2" label="Categoria" value={f.categoriaId} onChange={(e) => setF({ ...f, categoriaId: e.target.value ? Number(e.target.value) : '' })} opcoes={opcoesDe((categorias ?? []).filter((c) => c.tipo === (f.tipo === 'ENTRADA' ? 'RECEITA' : 'DESPESA')))} placeholder="—" />
         <Textarea className="col-span-2" label="Descrição" rows={2} value={f.descricao} onChange={(e) => setF({ ...f, descricao: e.target.value })} />
+      </div>
+    </Modal>
+  );
+}
+
+/** Acerta o saldo de uma conta com o valor real (gaveta/extrato). A diferença não entra no DRE nem nos dashboards. */
+function AjusteSaldoModal({ aberto, onFechar, contas, onConcluido }: { aberto: boolean; onFechar: () => void; contas: ContaFinanceira[]; onConcluido: () => void }) {
+  const [f, setF] = useState({ contaFinanceiraId: '' as number | '', saldoReal: 0, data: hoje() });
+  const conta = contas.find((c) => c.id === f.contaFinanceiraId);
+  const diferenca = conta ? Math.round((f.saldoReal - conta.saldoAtual) * 100) / 100 : 0;
+  const m = useMutation({
+    mutationFn: () => api.post(`/contas-financeiras/${f.contaFinanceiraId}/ajustar-saldo`, { saldoReal: f.saldoReal, data: f.data }),
+    onSuccess: () => {
+      toast.success('Saldo ajustado.');
+      onConcluido();
+      onFechar();
+    },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
+  return (
+    <Modal
+      aberto={aberto}
+      onFechar={onFechar}
+      titulo="Ajustar saldo"
+      descricao="Informe quanto tem de verdade na conta. O sistema lança só a diferença, fora do DRE (não é receita nem despesa)."
+      rodape={<><Button variante="secundario" onClick={onFechar}>Cancelar</Button><Button variante="primario" carregando={m.isPending} disabled={!f.contaFinanceiraId || Math.abs(diferenca) < 0.01} onClick={() => m.mutate()}>Ajustar</Button></>}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <Select className="col-span-2" label="Conta" value={f.contaFinanceiraId} onChange={(e) => setF({ ...f, contaFinanceiraId: e.target.value ? Number(e.target.value) : '' })} opcoes={opcoesDe(contas)} placeholder="—" />
+        <MoneyInput label="Saldo real" value={f.saldoReal} onChange={(v) => setF({ ...f, saldoReal: v })} />
+        <DateInput label="Data" value={f.data} onChange={(v) => setF({ ...f, data: v })} />
+        {conta && (
+          <p className="col-span-2 text-sm text-slate-600">
+            Saldo no sistema: <b>{moeda(conta.saldoAtual)}</b> · diferença a lançar: <b className={diferenca < 0 ? 'text-red-600' : 'text-emerald-600'}>{moeda(diferenca)}</b>
+          </p>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Acertar os saldos de TODAS as contas de uma vez: informa quanto tem de verdade em cada banco hoje.
+ * A diferença é lançada como ajuste (fora do DRE); daí para frente o saldo segue os novos lançamentos.
+ */
+function SaldosIniciaisModal({ onFechar, contas, onConcluido }: { onFechar: () => void; contas: ContaFinanceira[]; onConcluido: () => void }) {
+  const ativas = contas.filter((c) => c.ativo);
+  const [reais, setReais] = useState<Record<number, number>>(() => Object.fromEntries(ativas.map((c) => [c.id, Math.round(c.saldoAtual * 100) / 100])));
+  const [dia, setDia] = useState(hoje());
+  const mudou = ativas.filter((c) => Math.abs((reais[c.id] ?? 0) - c.saldoAtual) >= 0.01);
+  const m = useMutation({
+    mutationFn: async () => {
+      for (const c of mudou) await api.post(`/contas-financeiras/${c.id}/ajustar-saldo`, { saldoReal: reais[c.id], data: dia, descricao: `Saldo inicial acertado: ${c.nome}` });
+    },
+    onSuccess: () => {
+      toast.success(`${mudou.length} saldo${mudou.length > 1 ? 's' : ''} acertado${mudou.length > 1 ? 's' : ''}.`);
+      onConcluido();
+      onFechar();
+    },
+    onError: (e) => {
+      toast.error(mensagemErro(e));
+      onConcluido();
+    },
+  });
+  const total = ativas.reduce((s, c) => s + (reais[c.id] ?? 0), 0);
+  return (
+    <Modal
+      aberto
+      onFechar={onFechar}
+      tamanho="lg"
+      titulo="Acertar saldos iniciais"
+      descricao="Digite quanto tem de verdade em cada banco hoje. O sistema lança só a diferença (fora do DRE) e, daqui para frente, o saldo acompanha os novos lançamentos."
+      rodape={<><Button variante="secundario" onClick={onFechar}>Cancelar</Button><Button variante="primario" carregando={m.isPending} disabled={!mudou.length} onClick={() => m.mutate()}>Acertar {mudou.length || ''} saldo{mudou.length === 1 ? '' : 's'}</Button></>}
+    >
+      <div className="space-y-3">
+        <DateInput label="Saldo na data de" value={dia} onChange={setDia} className="w-48" />
+        <div className="divide-y divide-slate-100 rounded-md border border-slate-200">
+          {ativas.map((c) => {
+            const dif = Math.round(((reais[c.id] ?? 0) - c.saldoAtual) * 100) / 100;
+            return (
+              <div key={c.id} className="grid items-center gap-2 p-2.5 sm:grid-cols-[1fr_9rem_10rem]">
+                <div className="text-sm">
+                  <p className="font-medium text-slate-800">{c.nome}</p>
+                  <p className="text-xs text-slate-500">no sistema: {moeda(c.saldoAtual)}</p>
+                </div>
+                <MoneyInput aria-label={`Saldo real ${c.nome}`} value={reais[c.id] ?? 0} onChange={(v) => setReais({ ...reais, [c.id]: v })} />
+                <span className={clsx('num text-right text-xs', Math.abs(dif) < 0.01 ? 'text-slate-400' : dif < 0 ? 'text-red-600' : 'text-emerald-600')}>{Math.abs(dif) < 0.01 ? 'sem ajuste' : `ajuste ${moeda(dif)}`}</span>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-right text-sm text-slate-600">Total em contas: <b className="num">{moeda(total)}</b></p>
       </div>
     </Modal>
   );

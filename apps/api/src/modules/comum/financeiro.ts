@@ -8,6 +8,26 @@ import { arredondar } from '../../lib/util.js';
 
 export type Db = Tx | typeof prisma;
 
+/**
+ * Marcadores em `MovimentoFinanceiro.observacoes` para lançamentos que mexem no saldo
+ * mas NÃO são receita nem despesa (não entram no DRE nem no caixa dos dashboards):
+ * transferência entre contas e ajuste de saldo (acerto com o saldo real).
+ */
+export const OBS_TRANSFERENCIA = 'TRANSFERENCIA';
+export const OBS_AJUSTE_SALDO = 'AJUSTE_SALDO';
+export const OBS_FORA_DO_RESULTADO = [OBS_TRANSFERENCIA, OBS_AJUSTE_SALDO];
+
+/** Lê FormaPagamento.contasPermitidas (JSON com ids de contas financeiras). */
+export function lerContasPermitidas(v: string | null | undefined): number[] {
+  if (!v) return [];
+  try {
+    const a = JSON.parse(v);
+    return Array.isArray(a) ? a.map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Busca (ou cria) uma categoria financeira padrão pelo nome. */
 export async function categoriaPadraoId(
   db: Db,

@@ -2,17 +2,17 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { endOfMonth, format, startOfMonth, startOfYear } from 'date-fns';
 import { Download } from 'lucide-react';
 import { api } from '@/lib/api';
+import { intervaloPeriodo } from '@/lib/periodo';
 import { Button, Card, Checkbox, EmptyState, PageHeader, PeriodoFiltro, Segmentado, Skeleton } from '@/components/ui';
-import { hoje, moeda, numero } from '@/lib/format';
+import { moeda, numero } from '@/lib/format';
 import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import type { Dre as Dados, DreLinha } from '@/types';
 
 /** DRE gerencial (competência / caixa) com comparativo e gráfico mensal */
 export default function Dre() {
-  const [periodo, setPeriodo] = useState({ i: format(startOfMonth(new Date()), 'yyyy-MM-dd'), f: format(endOfMonth(new Date()), 'yyyy-MM-dd') });
+  const [periodo, setPeriodo] = useState(() => { const r = intervaloPeriodo('mes'); return { i: r.dataInicial, f: r.dataFinal }; });
   const [regime, setRegime] = useState<'competencia' | 'caixa'>('competencia');
   const [comparar, setComparar] = useState(true);
   const { data, isLoading } = useQuery({
@@ -93,18 +93,9 @@ export default function Dre() {
     <div className="space-y-4">
       <PageHeader
         titulo="DRE — Demonstrativo de resultado"
-        descricao={regime === 'competencia' ? 'Regime de competência: vendas/OS concluídas pela data, despesas por vencimento/competência.' : 'Regime de caixa: recebimentos e pagamentos efetivos nas contas.'}
+        descricao={regime === 'competencia' ? 'Regime de competência: vendas/OS concluídas pela data; CMV = compras reais de mercadoria; todas as despesas por competência/vencimento.' : 'Regime de caixa: recebimentos e pagamentos efetivos nas contas (transferências e ajustes de saldo ficam fora).'}
         acoes={
           <div className="flex flex-wrap items-end gap-2">
-            <Segmentado
-              valor="x"
-              onMudar={(v) => {
-                const h = new Date();
-                if (v === 'mes') setPeriodo({ i: format(startOfMonth(h), 'yyyy-MM-dd'), f: format(endOfMonth(h), 'yyyy-MM-dd') });
-                if (v === 'ano') setPeriodo({ i: format(startOfYear(h), 'yyyy-MM-dd'), f: hoje() });
-              }}
-              opcoes={[{ valor: 'mes', rotulo: 'Este mês' }, { valor: 'ano', rotulo: 'Este ano' }]}
-            />
             <PeriodoFiltro inicial={periodo.i} final={periodo.f} onChange={(i, f) => setPeriodo({ i, f })} label="" limpavel={false} />
             <Segmentado valor={regime} onMudar={setRegime} opcoes={[{ valor: 'competencia', rotulo: 'Competência' }, { valor: 'caixa', rotulo: 'Caixa' }]} />
             <label className="flex h-8 items-center"><Checkbox label="Comparar período anterior" checked={comparar} onChange={(e) => setComparar(e.target.checked)} /></label>
@@ -189,6 +180,16 @@ export default function Dre() {
               <Skeleton className="h-40" />
             )}
           </Card>
+          {!!data?.informativo?.length && (
+            <Card titulo="Fora do resultado (só para conferência)">
+              <p className="mb-2 text-xs text-slate-500">Lançados no financeiro, mas fora do resultado para não contar duas vezes: o custo de cada venda já inclui produto, imposto e frete, e de cada empréstimo só os juros são despesa.</p>
+              <div className="space-y-1 text-sm">
+                {data.informativo.map((i) => (
+                  <div key={i.nome} className="flex justify-between"><span className="text-slate-600">{i.nome}</span><span className="num">{moeda(i.valor)}</span></div>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>

@@ -139,6 +139,8 @@ export type TipoFormaPagamento =
   | 'BOLETO'
   | 'TRANSFERENCIA'
   | 'CREDIARIO'
+  | 'CREDITO_BANCARIO'
+  | 'CARNE'
   | 'OUTRO';
 
 export interface FormaPagamento {
@@ -149,6 +151,12 @@ export interface FormaPagamento {
   taxaPct: number;
   diasRecebimento: number;
   maxParcelas: number;
+  /** banco/conta onde o dinheiro desta forma cai */
+  contaFinanceiraId?: number | null;
+  /** bancos que podem receber esta forma */
+  contasPermitidas?: number[];
+  /** CREDITO_BANCARIO: quem empresta (ex.: Lumicred) */
+  credorId?: number | null;
   ativo: boolean;
 }
 
@@ -180,12 +188,14 @@ export interface CategoriaProduto {
 export interface ContaFinanceira {
   id: number;
   nome: string;
-  tipo: 'CAIXA' | 'BANCO' | 'CARTAO' | 'INVESTIMENTO' | 'OUTRO';
+  tipo: 'CAIXA' | 'BANCO' | 'CARTAO' | 'INVESTIMENTO' | 'OUTRO' | 'COMPENSACAO';
   banco?: string | null;
   agencia?: string | null;
   conta?: string | null;
   saldoInicial: number;
   saldoAtual: number;
+  /** taxa descontada de cada recebimento (ex.: Mercado Pago 5%) */
+  taxaRecebimentoPct?: number;
   saldoBanco?: number | null;
   saldoBancoEm?: string | null;
   padrao: boolean;
@@ -348,9 +358,14 @@ export interface VendaItem {
   valorUnitario: number;
   desconto: number;
   total?: number;
-  custoUnitario?: number;
+  /** custo interno (nunca vai para o cliente) */
+  custoUnitario?: number | null;
+  /** true = custo digitado pelo vendedor; false = custo do cadastro do produto */
+  custoInformado?: boolean;
   comissaoPct?: number;
   comissaoValor?: number;
+  /** nº de série / IMEI (sai no certificado de garantia) */
+  numeroSerie?: string | null;
   /** vindo da API (GET /vendas/:id) */
   produto?: { id: number; nome: string; imagemUrl?: string | null; prontaEntrega?: boolean } | null;
   /** só na tela do formulário (não vai para a API) */
@@ -366,6 +381,8 @@ export interface Parcela {
   formaPagamentoId: number | null;
   formaPagamento?: Ref | null;
   observacoes?: string | null;
+  /** forma "Crédito bancário": quem paga o credor */
+  creditoPagador?: 'CLIENTE' | 'LOJA' | null;
   contaReceber?: { id: number; situacao: string; valorRecebido: number } | null;
   contaPagar?: { id: number; situacao: string; valorPago: number } | null;
 }
@@ -399,6 +416,8 @@ export interface VendaResumo {
   totalProdutos: number;
   notaId?: number | null;
   nota?: NotaRef | null;
+  /** robô de NF: PRONTA acende o selo "Pronto pra NF" */
+  roboNf?: { status: 'PRONTA' | 'PENDENTE' | 'EMITIDA' | 'IGNORADA'; erros: number } | null;
   estoqueLancado: boolean;
   contasLancadas: boolean;
   origem?: OrigemVenda;
@@ -439,11 +458,17 @@ export interface Venda extends VendaResumo {
   categoriaFinanceira?: Ref | null;
   origem: OrigemVenda;
   numeroPedidoLoja?: string | null;
+  linkPagamentoUrl?: string | null;
+  linkPagamentoValor?: number | null;
+  linkPagamentoEm?: string | null;
   descontoTipo: 'REAL' | 'PERCENTUAL';
   descontoValor: number;
   frete: number;
   outrasDespesas: number;
   custoTotal?: number;
+  custoLogistica?: number;
+  /** lucro/margem — só ADMIN/GERENTE (null para os demais) */
+  fechamento?: FechamentoVenda | null;
   observacoes?: string | null;
   observacoesInternas?: string | null;
   transportadoraId?: number | null;
@@ -456,9 +481,29 @@ export interface Venda extends VendaResumo {
   comissoes: Comissao[];
   historico: HistoricoSituacao[];
   situacoesPermitidas: SituacaoRef[];
+  /** o que falta para finalizar a venda (vazio = pode finalizar) */
+  finalizacao?: { podeFinalizar: boolean; pendencias: PendenciaFinalizacao[] };
   contato: Contato | Ref;
   linkPublico?: string;
   tokenPublico?: string;
+}
+
+export interface FechamentoVenda {
+  custoProdutos: number;
+  custoProdutoEstimado?: boolean;
+  custoProdutoPct?: number;
+  imposto?: number;
+  impostoPct?: number;
+  taxaCartao?: number;
+  taxaCartaoPct?: number;
+  parcelasCartao?: number;
+  frete?: number;
+  custoLogistica: number;
+  custoTotal: number;
+  lucro: number;
+  margemPct: number;
+  itensSemCusto: number;
+  itensCustoInformado: number;
 }
 
 export interface VendaPayload {
@@ -478,6 +523,7 @@ export interface VendaPayload {
   descontoValor: number;
   frete: number;
   outrasDespesas: number;
+  custoLogistica: number;
   transportadoraId: number | null;
   fretePorConta: number;
   quantidadeVolumes: number;
@@ -569,7 +615,10 @@ export interface OsItem {
   valorUnitario: number;
   desconto: number;
   total?: number;
-  custoUnitario?: number;
+  /** custo interno da peça (nunca sai para o cliente); null no envio = usar o custo do cadastro do produto */
+  custoUnitario?: number | null;
+  /** o técnico digitou o custo (true) ou veio do cadastro (false) */
+  custoInformado?: boolean;
   comissaoVendedorPct: number;
   comissaoTecnicoPct: number;
   depositoId: number | null;
@@ -604,6 +653,8 @@ export interface OsResumo {
   orcar: boolean;
   orcamentoAprovado: boolean;
   atrasada?: boolean;
+  /** peças sem custo nenhum (o técnico precisa preencher) */
+  pecasSemCusto?: number;
 }
 
 export interface OrdemServico extends OsResumo {
@@ -636,6 +687,8 @@ export interface OrdemServico extends OsResumo {
   custoMaoObraTerceiro: number;
   /** lucro/margem — só ADMIN/GERENTE (null para os demais) */
   fechamento?: FechamentoOs | null;
+  /** o que falta de custo (peça sem custo) — todo mundo vê, para o técnico preencher */
+  pendenciasCusto?: PendenciaCusto[];
   garantiaDias: number;
   estoqueLancado: boolean;
   contasLancadas: boolean;
@@ -684,14 +737,26 @@ export interface OsPayload {
   parcelas: Parcela[];
 }
 
+export interface PendenciaCusto {
+  campo: string;
+  mensagem: string;
+}
+
 export interface FechamentoOs {
   custoPecas: number;
   custoPecasOrigem: 'INFORMADO' | 'CADASTRO';
+  pecasSemCusto?: number;
+  imposto?: number;
+  impostoPct?: number;
+  taxaCartao?: number;
+  taxaCartaoPct?: number;
+  parcelasCartao?: number;
   custoLogistica: number;
   custoMaoObraTerceiro: number;
   custoTotal: number;
   lucro: number;
   margemPct: number;
+  pendencias?: PendenciaCusto[];
 }
 
 export interface TotaisAssistencia {
@@ -721,7 +786,7 @@ export interface DashboardAssistencia {
     semCusto: number;
     realizado: TotaisAssistencia;
     previsto: TotaisAssistencia;
-    comparativo: TotaisAssistencia;
+    comparativo: TotaisAssistencia | null;
   };
   series: { periodo: string; valorEntrada: number; custo: number; lucro: number; qtd: number }[];
   porTecnico: { id: number | null; nome: string; qtd: number; valorEntrada: number; maoDeObra: number; pecas: number; custo: number; lucro: number }[];
@@ -1023,6 +1088,26 @@ export interface MovimentoDashboard {
   categoria?: Ref | null;
 }
 
+export interface TotaisPanorama {
+  faturamento: number;
+  custo: number;
+  lucro: number;
+  margemPct: number;
+  qtd: number;
+  ticketMedio: number;
+  vendas: { valor: number; qtd: number; custo: number; lucro: number; margemPct: number; ticketMedio: number };
+  assistencia: { valor: number; qtd: number; maoDeObra: number; pecas: number; custoPecas: number; custoLogistica: number; custoTerceiros: number; custo: number; lucro: number; margemPct: number; ticketMedio: number };
+  caixa: { entradas: number; saidas: number; saldo: number };
+}
+
+export interface DashboardPanorama {
+  periodo: { dataInicial: string; dataFinal: string; agrupar: 'dia' | 'semana' | 'mes'; base: 'entrada' | 'conclusao' };
+  resumo: TotaisPanorama & { comparativo: TotaisPanorama | null; osSemCusto: number; melhorPeriodo: { periodo: string; valor: number } | null };
+  series: { periodo: string; vendas: number; assistencia: number; lucro: number; entradas: number; saidas: number }[];
+  porVendedor: { id: number | null; nome: string; valor: number; qtd: number; lucro: number }[];
+  porTecnico: { id: number | null; nome: string; valor: number; qtd: number; lucro: number }[];
+}
+
 export interface DashboardGeral {
   hoje: { vendas: number; valorVendas: number; osAbertas: number; osConcluidasHoje: number };
   financeiro: { saldoTotal: number; receberHoje: number; receberAtrasado: number; pagarHoje: number; pagarAtrasado: number; saldoContas?: ResumoFinanceiro['saldoContas'] } | null;
@@ -1044,6 +1129,7 @@ export interface DashboardVendas {
     itensVendidos: number;
     lucroBruto: number;
     margemPct: number;
+    semCusto?: number;
     comparativo?: { faturamento: number; qtdVendas: number; ticketMedio: number } | null;
   };
   series: { periodo: string; faturamento: number; qtd: number; lucro: number }[];
@@ -1072,6 +1158,8 @@ export interface Dre {
   linhas: DreLinha[];
   mensal: { competencia: string; receita: number; cmv: number; despesas: number; resultado: number }[];
   comparativo?: { linhas: DreLinha[] } | null;
+  /** contas lançadas que já estão cobertas pelo custo de cada venda (fora do resultado, só para conferência) */
+  informativo?: { nome: string; valor: number; categoriaId?: number | null }[];
 }
 
 // ---------------------------------------------------------------------
@@ -1110,6 +1198,11 @@ export interface Empresa {
   cfopPadraoForaUf: string;
   csosnPadrao: string;
   aliquotaSimplesPct: number;
+  taxaCartao1xPct?: number;
+  taxaCartao12xPct?: number;
+  freteVendaPadrao?: number;
+  custoProdutoMinPct?: number;
+  custoProdutoMaxPct?: number;
   provedorFiscal: 'mock' | 'sefaz';
   smtpHost?: string | null;
   smtpPort?: number | null;
@@ -1122,6 +1215,7 @@ export interface Empresa {
   whatsapp?: { ativo: boolean };
   openFinance?: { ativo: boolean; clientId?: string | null; temSecret: boolean };
   bling?: { temToken: boolean; expira?: string | null; clientId?: string | null; temSecret?: boolean };
+  mercadoPago?: { temToken: boolean };
   blingClientId?: string | null;
   temCscToken?: boolean;
 }
@@ -1224,7 +1318,10 @@ export interface VendaPublicaResposta {
 }
 
 // ---------------------------------------------------------------- metas, desafios e painel do vendedor
-export type TipoDesafio = 'VALOR' | 'QTD_VENDAS' | 'QTD_ITENS';
+/** vendedores: VALOR | QTD_VENDAS | QTD_ITENS · técnicos: VALOR_SERVICOS | QTD_OS */
+export type TipoDesafio = 'VALOR' | 'QTD_VENDAS' | 'QTD_ITENS' | 'VALOR_SERVICOS' | 'QTD_OS';
+export type PublicoDesafio = 'VENDEDORES' | 'TECNICOS';
+export type TipoMetaTecnico = 'VALOR_SERVICOS' | 'QTD_OS';
 export type StatusDesafioCard = 'EM_ANDAMENTO' | 'AGENDADO' | 'CONQUISTADO' | 'GANHO_POR_OUTRO' | 'ENCERRADO';
 
 export interface PeriodoPainel {
@@ -1256,6 +1353,7 @@ export interface DesafioCard {
   id: number;
   titulo: string;
   descricao?: string | null;
+  publico?: PublicoDesafio;
   tipo: TipoDesafio;
   alvo: number;
   premio: number;
@@ -1304,6 +1402,7 @@ export interface Desafio {
   id: number;
   titulo: string;
   descricao?: string | null;
+  publico: PublicoDesafio;
   tipo: TipoDesafio;
   alvo: number;
   produtoId?: number | null;
@@ -1316,8 +1415,117 @@ export interface Desafio {
   regra: 'TODOS' | 'PRIMEIRO';
   todosVendedores: boolean;
   vendedoresIds: number[];
+  tecnicosIds: number[];
   ativo: boolean;
   situacao: 'EM_ANDAMENTO' | 'AGENDADO' | 'FINALIZADO' | 'ENCERRADO';
-  participantes: { vendedorId: number; nome: string; atingido: number; pct: number; conquistou: boolean; conquistadoEm?: string | null; premioStatus?: Comissao['status'] | null }[];
+  participantes: { participanteId: number; vendedorId: number; nome: string; atingido: number; pct: number; conquistou: boolean; conquistadoEm?: string | null; premioStatus?: Comissao['status'] | null }[];
   totalPremios: number;
+}
+
+export interface MetaTecnicoLinha {
+  tecnicoId: number;
+  nome: string;
+  tipoPadrao: TipoMetaTecnico;
+  metaPadrao: number;
+  tipoMes: TipoMetaTecnico | null;
+  metaMes: number | null;
+  tipo: TipoMetaTecnico;
+  meta: number;
+  valorServicos: number;
+  osConcluidas: number;
+  atingido: number;
+  pct: number;
+}
+
+// ---------------------------------------------------------------- Meu Dashboard (29/10/2026)
+export interface Lembrete {
+  id: number;
+  titulo: string;
+  descricao?: string | null;
+  data: string;
+  link?: string | null;
+  concluidoEm?: string | null;
+  criadoEm: string;
+  paraUsuarioId: number;
+  para?: Ref | null;
+  criadoPor?: Ref | null;
+  situacao: 'ATRASADO' | 'HOJE' | 'FUTURO' | 'CONCLUIDO';
+}
+
+export interface AlertaDashboard {
+  id: string;
+  nivel: 'erro' | 'aviso' | 'info';
+  area: string;
+  titulo: string;
+  mensagem: string;
+  qtd: number;
+  link: string;
+  botao: 'Corrija' | 'Resolver' | 'Ver';
+  itens: { rotulo: string; link: string }[];
+}
+
+export interface MetaTecnicoPainel extends Omit<MetaPainel, 'vendido'> {
+  vendido: number;
+  tipo: TipoMetaTecnico;
+  atingido: number;
+  osConcluidas: number;
+  valorServicos: number;
+}
+
+export interface BlocoVendasDashboard extends PainelVendedor {
+  periodo: { faturamento: number; qtd: number; ticketMedio: number; comissao: number; anterior: { faturamento: number; qtd: number } | null };
+  serie: { periodo: string; valor: number; qtd: number }[];
+  topProdutos: { produtoId: number | null; nome: string; qtd: number; valor: number }[];
+}
+
+export interface BlocoAssistenciaDashboard {
+  tecnico: Ref;
+  agora: { comigo: number; emAndamento: number; aguardandoPeca: number; aguardandoAprovacao: number; prontas: number; atrasadas: number; semTecnico: number };
+  periodo: { entradas: number; concluidas: number; valorServicos: number; maoDeObra: number; pecas: number; ticketMedio: number; tempoMedioDias: number; anterior: { concluidas: number; valorServicos: number } | null };
+  meta: MetaTecnicoPainel;
+  ranking: { competencia: string; posicao: number; total: number; lista: { posicao: number; tecnicoId: number; nome: string; eu: boolean; valor: number | null; qtd: number | null }[] };
+  desafios: DesafioCard[];
+  porSituacao: { id: number; nome: string; cor: string; qtd: number }[];
+  fila: { id: number; numero: number; dataEntrada: string; dataPrevista?: string | null; equipamento?: string | null; marca?: string | null; modelo?: string | null; prioridade: string; total: number; orcar: boolean; orcamentoAprovado: boolean; contato: Ref; situacao: SituacaoRef; atrasada: boolean; diasNaLoja: number }[];
+  serie: { periodo: string; entradas: number; concluidas: number; valor: number }[];
+}
+
+export interface BlocoGerenteDashboard {
+  financeiro: ResumoFinanceiro;
+  periodo: { receita: number; vendas: { valor: number; qtd: number }; assistencia: { valor: number; qtd: number }; entradas: number; saidas: number; anterior: { receita: number; vendas: number; assistencia: number } | null };
+  avisos: { tipo: 'erro' | 'aviso' | 'info'; prioridade: number; mensagem: string; link: string }[];
+  caixinhas: { lista: { id: number; nome: string; valorMeta: number; saldo: number; falta: number; pct: number; diasRestantes: number; sugestaoHoje: number; situacao: string; dataUso: string }[]; sugestaoHojeTotal: number };
+  equipe: {
+    competencia: string;
+    vendedores: { id: number; nome: string; vendido: number; qtd: number; meta: number; pct: number }[];
+    tecnicos: { id: number; nome: string; valorServicos: number; osConcluidas: number; tipo: TipoMetaTecnico; meta: number; atingido: number; pct: number }[];
+  };
+  desafios: { id: number; titulo: string; publico: PublicoDesafio; tipo: TipoDesafio; alvo: number; premio: number; fim: string; regra: 'TODOS' | 'PRIMEIRO'; conquistados: string[] }[];
+  serie: { periodo: string; vendas: number; assistencia: number; entradas: number; saidas: number }[];
+  porVendedor: { id: number | null; nome: string; valor: number; qtd: number }[];
+  acontecimentos: { id: string; quando: string; usuario: string; categoria: string; texto: string; tom: 'verde' | 'vermelho' | 'azul' | 'amarelo' | 'neutro'; link: string | null }[];
+}
+
+export interface MeuDashboard {
+  usuario: { id: number; nome: string; perfil: Perfil };
+  verComo: boolean;
+  periodo: { dataInicial: string; dataFinal: string; agrupar: 'dia' | 'semana' | 'mes'; tudo?: boolean };
+  lembretes: Lembrete[];
+  alertas: AlertaDashboard[];
+  vendas?: BlocoVendasDashboard | null;
+  assistencia?: BlocoAssistenciaDashboard | null;
+  gerente?: BlocoGerenteDashboard;
+}
+
+export interface EquipeUsuario {
+  id: number;
+  nome: string;
+  perfil: Perfil;
+}
+
+/** Item que falta para finalizar uma venda (regra: cliente completo ou consumidor final, produto, custo, pagamento, vendedor). */
+export interface PendenciaFinalizacao {
+  campo: string;
+  mensagem: string;
+  onde: 'venda' | 'cliente';
 }

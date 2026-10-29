@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Plus, Save, Trash2, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, Plus, Save, Trash2, UserPlus, X } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { useCategoriasFinanceiras, useDepositos, useSituacoes, useTecnicos, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { useAuth } from '@/stores/auth';
 import { buscarContatos, buscarProdutos } from '@/lib/buscas';
-import { Button, Checkbox, DateInput, FormSkeleton, Input, MoneyInput, PageHeader, SearchSelect, Secao, Select, Textarea } from '@/components/ui';
+import { Button, Checkbox, DateInput, FormSkeleton, Input, Modal, MoneyInput, PageHeader, SearchSelect, Secao, Select, Textarea, ValorOculto } from '@/components/ui';
 import { ParcelasEditor, parcelasValidas } from '@/components/compartilhados/ParcelasEditor';
 import { ContatoRapidoDrawer } from '@/components/compartilhados/ContatoRapidoDrawer';
 import { arred, dataIso, hoje, moeda, rotulo } from '@/lib/format';
@@ -78,7 +78,7 @@ function deOs(o: OrdemServico): OsPayload {
     custoPeca: o.custoPeca ?? 0,
     custoLogistica: o.custoLogistica ?? 0,
     custoMaoObraTerceiro: o.custoMaoObraTerceiro ?? 0,
-    itens: o.itens.map((i) => ({ tipo: i.tipo, produtoId: i.produtoId, descricao: i.descricao, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoVendedorPct: i.comissaoVendedorPct, comissaoTecnicoPct: i.comissaoTecnicoPct, depositoId: i.depositoId })),
+    itens: o.itens.map((i) => ({ tipo: i.tipo, produtoId: i.produtoId, descricao: i.descricao, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, custoUnitario: i.custoUnitario ?? 0, custoInformado: !!i.custoInformado, comissaoVendedorPct: i.comissaoVendedorPct, comissaoTecnicoPct: i.comissaoTecnicoPct, depositoId: i.depositoId })),
     parcelas: o.parcelas.map((p) => ({ dataVencimento: dataIso(p.dataVencimento), valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes ?? '' })),
   };
 }
@@ -91,9 +91,10 @@ function GridItens({ tipo, itens, onChange, comissaoTecnico, comissaoVendedor, d
   const substituir = (nova: OsItem[]) => onChange([...itens.filter((i) => i.tipo !== tipo), ...nova]);
   const atualizar = (idx: number, patch: Partial<OsItem>) => substituir(lista.map((it, j) => (j === idx ? { ...it, ...patch } : it)));
   const remover = (idx: number) => substituir(lista.filter((_, j) => j !== idx));
+  // peça com produto cadastrado já vem com o custo do cadastro; linha livre começa sem custo (o técnico preenche)
   const adicionarProduto = (p: Produto) =>
-    substituir([...lista, { tipo, produtoId: p.id, descricao: p.nome, quantidade: 1, valorUnitario: p.preco, desconto: 0, comissaoVendedorPct: comissaoVendedor, comissaoTecnicoPct: comissaoTecnico, depositoId: null }]);
-  const adicionarLivre = () => substituir([...lista, { tipo, produtoId: null, descricao: '', quantidade: 1, valorUnitario: 0, desconto: 0, comissaoVendedorPct: comissaoVendedor, comissaoTecnicoPct: comissaoTecnico, depositoId: null }]);
+    substituir([...lista, { tipo, produtoId: p.id, descricao: p.nome, quantidade: 1, valorUnitario: p.preco, desconto: 0, custoUnitario: tipo === 'PECA' ? p.precoCusto ?? 0 : 0, custoInformado: false, comissaoVendedorPct: comissaoVendedor, comissaoTecnicoPct: comissaoTecnico, depositoId: null }]);
+  const adicionarLivre = () => substituir([...lista, { tipo, produtoId: null, descricao: '', quantidade: 1, valorUnitario: 0, desconto: 0, custoUnitario: 0, custoInformado: false, comissaoVendedorPct: comissaoVendedor, comissaoTecnicoPct: comissaoTecnico, depositoId: null }]);
 
   return (
     <div>
@@ -116,6 +117,7 @@ function GridItens({ tipo, itens, onChange, comissaoTecnico, comissaoVendedor, d
               <th className="w-24 text-right">Desc.</th>
               <th className="w-20 text-right">Com. téc. %</th>
               <th className="w-20 text-right">Com. vend. %</th>
+              {tipo === 'PECA' && <th className="w-28 text-right" title="Custo interno da peça: não aparece na impressão nem para o cliente">Custo un. 🔒</th>}
               <th className="w-28 text-right">Total</th>
               {!bloqueado && <th className="w-10" />}
             </tr>
@@ -123,7 +125,7 @@ function GridItens({ tipo, itens, onChange, comissaoTecnico, comissaoVendedor, d
           <tbody>
             {lista.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-4 text-center text-xs text-slate-400">
+                <td colSpan={10} className="py-4 text-center text-xs text-slate-400">
                   Nenhum {tipo === 'PECA' ? 'peça' : 'serviço'} adicionado.
                 </td>
               </tr>
@@ -144,6 +146,19 @@ function GridItens({ tipo, itens, onChange, comissaoTecnico, comissaoVendedor, d
                 <td data-rotulo="Desc."><MoneyInput value={it.desconto} onChange={(v) => atualizar(i, { desconto: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
                 <td data-rotulo="Com. téc. %"><MoneyInput value={it.comissaoTecnicoPct} onChange={(v) => atualizar(i, { comissaoTecnicoPct: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
                 <td data-rotulo="Com. vend. %"><MoneyInput value={it.comissaoVendedorPct} onChange={(v) => atualizar(i, { comissaoVendedorPct: v })} prefixo="" disabled={bloqueado} inputClassName="h-8 py-0" /></td>
+                {tipo === 'PECA' && (
+                  // custo da peça pode ser lançado mesmo com a OS já baixada/lançada (igual à venda)
+                  <td data-rotulo="Custo un. (interno)">
+                    <MoneyInput
+                      value={it.custoUnitario ?? 0}
+                      onChange={(v) => atualizar(i, { custoUnitario: v, custoInformado: true })}
+                      oculto
+                      prefixo=""
+                      inputClassName={`h-8 py-0 ${it.custoInformado ? 'bg-amber-50/60' : !it.custoUnitario ? 'border-amber-300' : 'text-slate-500'}`}
+                      title={it.custoInformado ? 'Custo informado por você' : it.custoUnitario ? 'Custo do cadastro do produto (digite para trocar)' : 'Sem custo: digite quanto a peça custou'}
+                    />
+                  </td>
+                )}
                 <td className="num text-right font-medium" data-rotulo="Total">{moeda(totalItem(it))}</td>
                 {!bloqueado && (
                   <td className="pilha-canto"><button type="button" onClick={() => remover(i)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></td>
@@ -215,6 +230,20 @@ export default function OsForm() {
   const bloqueado = !!os && (os.estoqueLancado || os.contasLancadas);
   const comissaoTec = tecnicos?.find((t) => t.id === form.tecnicoId)?.comissaoPadraoPct ?? 0;
   const comissaoVend = vendedores?.find((v) => v.id === form.vendedorId)?.comissaoPadraoPct ?? 0;
+  const veLucro = useAuth((s) => s.temPerfil('ADMIN', 'GERENTE'));
+  // custos internos (igual à venda): peças pela coluna "Custo un." (ou o total informado), logística e terceiro.
+  // Imposto e taxa de cartão entram no fechamento que a API calcula; aqui é só a prévia do que o técnico lança.
+  const custos = useMemo(() => {
+    const pecas = form.itens.filter((i) => i.tipo === 'PECA');
+    const somaPecas = arred(pecas.reduce((s, i) => s + (i.custoUnitario || 0) * i.quantidade, 0));
+    const custoPecas = form.custoPeca > 0 ? form.custoPeca : somaPecas;
+    const semCusto = form.custoPeca > 0 ? [] : pecas.filter((i) => !i.custoUnitario);
+    const total = arred(custoPecas + (form.custoLogistica || 0) + (form.custoMaoObraTerceiro || 0));
+    const lucro = arred(totais.total - total);
+    return { somaPecas, custoPecas, semCusto, total, lucro, margem: totais.total > 0 ? (lucro / totais.total) * 100 : 0 };
+  }, [form.itens, form.custoPeca, form.custoLogistica, form.custoMaoObraTerceiro, totais.total]);
+  const [lembreteCusto, setLembreteCusto] = useState(false);
+  const custosRef = useRef<HTMLDivElement>(null);
 
   const salvar = useMutation({
     mutationFn: (p: OsPayload) => (editando ? api.put<OrdemServico>(`/ordens-servico/${id}`, p) : api.post<OrdemServico>('/ordens-servico', p)),
@@ -228,7 +257,11 @@ export default function OsForm() {
     onError: (e) => toast.error(mensagemErro(e)),
   });
 
-  const submeter = () => {
+  const enviar = () =>
+    // custo só vai como "informado" quando o técnico digitou; senão o servidor usa o do cadastro do produto
+    salvar.mutate({ ...form, itens: form.itens.map((i) => ({ ...i, custoUnitario: i.tipo === 'PECA' && i.custoInformado ? i.custoUnitario ?? 0 : null })) });
+
+  const submeter = (ignorarCusto = false) => {
     const e: Record<string, string> = {};
     if (!form.contatoId) e.contatoId = 'Selecione o cliente';
     if (!form.equipamento.trim()) e.equipamento = 'Informe o equipamento';
@@ -237,13 +270,24 @@ export default function OsForm() {
     if (!parcelasValidas(form.parcelas, totais.total)) e.parcelas = 'A soma das parcelas deve ser igual ao total';
     setErros(e);
     if (Object.keys(e).length) return toast.error(Object.values(e)[0]);
-    salvar.mutate(form);
+    // LEMBRETE (abertura e lançamento de peças): peça sem custo → pergunta antes de salvar. Não trava: pode salvar
+    // assim mesmo e preencher depois (o Robô da Saúde lembra o técnico até o custo entrar).
+    if (!ignorarCusto && custos.semCusto.length) {
+      setLembreteCusto(true);
+      return;
+    }
+    setLembreteCusto(false);
+    enviar();
+  };
+  const irParaCustos = () => {
+    setLembreteCusto(false);
+    custosRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   if (editando && isLoading) return <FormSkeleton />;
 
   return (
-    <div className="pb-24">
+    <div className="espaco-barra-fixa">
       <PageHeader
         migalhas={[{ rotulo: 'Ordens de serviço', para: '/ordens-servico' }, { rotulo: editando ? `OS nº ${os?.numero ?? ''}` : 'Nova OS' }]}
         titulo={editando ? `Editar OS nº ${os?.numero ?? ''}` : 'Nova ordem de serviço'}
@@ -251,7 +295,7 @@ export default function OsForm() {
         acoes={
           <>
             <Button variante="secundario" icone={<X className="h-4 w-4" />} onClick={() => nav(editando ? `/ordens-servico/${id}` : '/ordens-servico')}>Cancelar</Button>
-            <Button variante="primario" icone={<Save className="h-4 w-4" />} carregando={salvar.isPending} onClick={submeter}>Salvar</Button>
+            <Button variante="primario" icone={<Save className="h-4 w-4" />} carregando={salvar.isPending} onClick={() => submeter()}>Salvar</Button>
           </>
         }
       />
@@ -301,7 +345,7 @@ export default function OsForm() {
         </Secao>
 
         <Secao titulo="Diagnóstico e serviço">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 lg:grid-cols-3">
             <Textarea label="Defeito relatado pelo cliente" obrigatorio erro={erros.defeitoRelatado} rows={4} value={form.defeitoRelatado} onChange={(e) => set('defeitoRelatado', e.target.value)} />
             <Textarea label="Diagnóstico técnico" rows={4} value={form.diagnostico} onChange={(e) => set('diagnostico', e.target.value)} />
             <Textarea label="Serviço executado" rows={4} value={form.servicoExecutado} onChange={(e) => set('servicoExecutado', e.target.value)} />
@@ -319,7 +363,7 @@ export default function OsForm() {
           <GridItens tipo="PECA" itens={form.itens} onChange={(l) => set('itens', l)} comissaoTecnico={comissaoTec} comissaoVendedor={comissaoVend} depositos={depositos ?? []} bloqueado={bloqueado} />
         </Secao>
 
-        <div className="grid gap-4 xl:grid-cols-3">
+        <div className="grid items-start gap-4 xl:grid-cols-3">
           <Secao titulo="Observações" className="xl:col-span-2">
             <div className="grid gap-3 sm:grid-cols-2">
               <Textarea label="Observações (visíveis ao cliente)" rows={3} value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} />
@@ -336,13 +380,39 @@ export default function OsForm() {
           </Secao>
         </div>
 
-        <Secao titulo="Custos internos (fechamento)" descricao="Só para o cálculo do fechamento. Não aparecem na impressão da OS nem para o cliente. Podem ser lançados depois da OS concluída.">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <MoneyInput label="Custo da peça" value={form.custoPeca} onChange={(v) => set('custoPeca', v)} ajuda={form.custoPeca ? undefined : 'Vazio = usa o custo das peças cadastradas'} />
-            <MoneyInput label="Custo de logística" value={form.custoLogistica} onChange={(v) => set('custoLogistica', v)} ajuda="Frete, motoboy, envio" />
-            <MoneyInput label="Mão de obra de terceiro" value={form.custoMaoObraTerceiro} onChange={(v) => set('custoMaoObraTerceiro', v)} ajuda="Técnico ou laboratório de fora" />
+        {/* Custos internos — os mesmos campos de despesa da venda: peça, logística, terceiro (+ imposto e cartão no fechamento) */}
+        <div ref={custosRef}>
+        <Secao titulo="Custos internos 🔒" descricao="Só para o fechamento, o lucro da assistência e o DRE. Não aparecem na impressão da OS, no link nem para o cliente. Podem ser lançados depois da OS concluída — mas o ideal é preencher na abertura ou ao lançar a peça.">
+          {custos.semCusto.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 shrink-0" /> {custos.semCusto.length === 1 ? 'Há 1 peça sem custo' : `Há ${custos.semCusto.length} peças sem custo`}: {custos.semCusto.slice(0, 3).map((i) => i.descricao || 'peça').join(', ')}{custos.semCusto.length > 3 ? '…' : ''}. Preencha a coluna <strong>Custo un.</strong> nas peças (ou o custo total abaixo).</span>
+              <span className="text-xs text-amber-700">O Robô da Saúde lembra quem deixar em branco.</span>
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">Custo das peças (pela coluna "Custo un.")</p>
+              <p className="num text-base font-semibold text-slate-800"><ValorOculto>{moeda(custos.somaPecas)}</ValorOculto></p>
+              <p className={`text-[11px] ${custos.semCusto.length ? 'text-amber-700' : 'text-slate-400'}`}>{custos.semCusto.length ? `${custos.semCusto.length} ${custos.semCusto.length === 1 ? 'peça' : 'peças'} sem custo` : form.custoPeca > 0 ? 'substituído pelo custo total informado' : 'soma do custo de cada peça'}</p>
+            </div>
+            <MoneyInput label="Custo total das peças (se for diferente)" oculto value={form.custoPeca} onChange={(v) => set('custoPeca', v)} ajuda={form.custoPeca ? 'Vale no lugar da soma por peça' : 'Vazio = soma do custo de cada peça'} />
+            <MoneyInput label="Custo de logística" oculto value={form.custoLogistica} onChange={(v) => set('custoLogistica', v)} ajuda="Frete, motoboy, envio (vazio = sem logística)" />
+            <MoneyInput label="Mão de obra de terceiro" oculto value={form.custoMaoObraTerceiro} onChange={(v) => set('custoMaoObraTerceiro', v)} ajuda="Técnico ou laboratório de fora" />
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">Custo lançado</p>
+              <p className="num text-base font-semibold text-slate-800"><ValorOculto>{moeda(custos.total)}</ValorOculto></p>
+              <p className="text-[11px] text-slate-400">peças + logística + terceiro (imposto e taxa de cartão entram sozinhos no fechamento)</p>
+            </div>
+            {veLucro && (
+              <div className={`rounded-md border px-3 py-2 ${custos.lucro < 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50/60'}`}>
+                <p className="text-xs text-slate-500">Lucro antes de imposto e cartão</p>
+                <p className={`num text-base font-bold ${custos.lucro < 0 ? 'text-red-600' : 'text-emerald-700'}`}><ValorOculto>{moeda(custos.lucro)}</ValorOculto></p>
+                <p className="num text-[11px] text-slate-500">margem <ValorOculto>{custos.margem.toFixed(1).replace('.', ',')}%</ValorOculto></p>
+              </div>
+            )}
           </div>
         </Secao>
+        </div>
 
         <Secao titulo="Pagamento / parcelas">
           {erros.parcelas && <p className="mb-2 text-xs text-red-600">{erros.parcelas}</p>}
@@ -350,17 +420,41 @@ export default function OsForm() {
         </Secao>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3 lg:left-64">
+      <div className="barra-fixa fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 pt-2.5 backdrop-blur sm:pt-3 lg:left-64">
         <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-2 sm:gap-3">
           <div className="min-w-0 text-xs text-slate-500 sm:text-sm">Total <span className="num font-semibold text-slate-900">{moeda(totais.total)}</span></div>
           <div className="flex shrink-0 gap-2">
             <Button variante="secundario" onClick={() => nav(editando ? `/ordens-servico/${id}` : '/ordens-servico')}>Cancelar</Button>
-            <Button variante="primario" icone={<Save className="h-4 w-4" />} carregando={salvar.isPending} onClick={submeter}>Salvar OS</Button>
+            <Button variante="primario" icone={<Save className="h-4 w-4" />} carregando={salvar.isPending} onClick={() => submeter()}>Salvar OS</Button>
           </div>
         </div>
       </div>
 
       <ContatoRapidoDrawer aberto={drawer} onFechar={() => setDrawer(false)} onCriado={(c: Contato) => { set('contatoId', c.id); setClienteNome(c.nome); }} />
+
+      {/* lembrete na abertura / no lançamento de peças: peça sem custo */}
+      <Modal
+        aberto={lembreteCusto}
+        onFechar={() => setLembreteCusto(false)}
+        titulo="Falta o custo das peças"
+        rodape={
+          <>
+            <Button variante="secundario" onClick={() => submeter(true)} carregando={salvar.isPending}>Salvar assim mesmo</Button>
+            <Button variante="primario" onClick={irParaCustos}>Preencher agora</Button>
+          </>
+        }
+      >
+        <div className="space-y-3 text-sm text-slate-700">
+          <p className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              {custos.semCusto.length === 1 ? 'Há 1 peça sem custo' : `Há ${custos.semCusto.length} peças sem custo`} nesta OS: <strong>{custos.semCusto.map((i) => i.descricao || 'peça').join(', ')}</strong>.
+            </span>
+          </p>
+          <p>Sem o custo da peça, o lucro da assistência e o DRE não ficam reais. Preencha a coluna <strong>Custo un.</strong> (ou o custo total das peças) — leva segundos.</p>
+          <p className="text-xs text-slate-500">Se ainda não souber o valor, pode salvar assim mesmo: o Robô da Saúde deixa um lembrete no seu painel até o custo entrar.</p>
+        </div>
+      </Modal>
     </div>
   );
 }

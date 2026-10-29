@@ -1,46 +1,26 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { BarChart3, CircleDollarSign, Crown, Layers, Package, PieChart as PieIcon, Percent, Receipt, ShoppingCart, Trophy, TrendingUp, Users } from 'lucide-react';
-import { format, startOfMonth, subDays } from 'date-fns';
 import { api } from '@/lib/api';
 import { useVendedores, opcoesDe } from '@/hooks/useListas';
-import { EmptyState, PeriodoFiltro, SelectFiltro, Skeleton } from '@/components/ui';
+import { EmptyState, SelectFiltro, Skeleton } from '@/components/ui';
+import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
 import { FotoProduto } from '@/components/compartilhados/ProdutoSite';
-import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, SegmentadoV18, listaVariants } from '@/components/dashboard/v18';
-import { hoje, inteiro, moeda, numero, percentual } from '@/lib/format';
+import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, listaVariants, FaixaKpis } from '@/components/dashboard/v18';
+import { inteiro, moeda, numero, percentual } from '@/lib/format';
 import { CORES, PALETA, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import type { DashboardVendas as Dados } from '@/types';
-
-type Periodo = 'hoje' | '7d' | '30d' | 'mes' | 'custom';
-
-function intervalo(p: Periodo, custom: { i: string; f: string }): { dataInicial: string; dataFinal: string } {
-  const h = new Date();
-  switch (p) {
-    case 'hoje':
-      return { dataInicial: hoje(), dataFinal: hoje() };
-    case '7d':
-      return { dataInicial: format(subDays(h, 6), 'yyyy-MM-dd'), dataFinal: hoje() };
-    case '30d':
-      return { dataInicial: format(subDays(h, 29), 'yyyy-MM-dd'), dataFinal: hoje() };
-    case 'mes':
-      return { dataInicial: format(startOfMonth(h), 'yyyy-MM-dd'), dataFinal: hoje() };
-    default:
-      return { dataInicial: custom.i, dataFinal: custom.f };
-  }
-}
 
 /** Dashboard de vendas — estilo V18 com as cores do sistema */
 export default function DashboardVendas() {
   const nav = useNavigate();
-  const [periodo, setPeriodo] = useState<Periodo>('30d');
-  const [custom, setCustom] = useState({ i: format(startOfMonth(new Date()), 'yyyy-MM-dd'), f: hoje() });
+  const { periodo, setPeriodo, custom, setCustom, dataInicial, dataFinal, faixa } = usePeriodoDashboard();
   const [vendedorId, setVendedorId] = useState('');
   const { data: vendedores } = useVendedores();
 
-  const { dataInicial, dataFinal } = useMemo(() => intervalo(periodo, custom), [periodo, custom]);
   const agrupar = 'dia';
 
   const { data, isLoading } = useQuery({
@@ -56,7 +36,6 @@ export default function DashboardVendas() {
   const totalVend = (data?.porVendedor ?? []).reduce((s, v) => s + v.faturamento, 0);
   const totalFormas = (data?.porFormaPagamento ?? []).reduce((s, x) => s + x.valor, 0);
   const maiorCliente = data?.topClientes[0]?.valor ?? 0;
-  const faixa = `${dataInicial.split('-').reverse().join('/')} a ${dataFinal.split('-').reverse().join('/')}`;
   const qtd = (n: number) => inteiro(Math.round(n));
 
   return (
@@ -66,38 +45,38 @@ export default function DashboardVendas() {
           <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Dashboard de vendas</h1>
           <p className="text-sm text-slate-500">Faturamento, vendedores, formas de pagamento e produtos mais vendidos.</p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <SegmentadoV18
-            id="periodo-vendas"
-            valor={periodo}
-            onMudar={setPeriodo}
-            opcoes={[
-              { valor: 'hoje', rotulo: 'Hoje' },
-              { valor: '7d', rotulo: '7 dias' },
-              { valor: '30d', rotulo: '30 dias' },
-              { valor: 'mes', rotulo: 'Este mês' },
-              { valor: 'custom', rotulo: 'Período' },
-            ]}
-          />
-          {periodo === 'custom' && <PeriodoFiltro inicial={custom.i} final={custom.f} onChange={(i, f) => setCustom({ i, f })} label="" atalhos={false} />}
+        <div className="flex min-w-0 max-w-full flex-wrap items-end gap-2">
+          <FiltroPeriodo id="periodo-vendas" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
           <SelectFiltro valor={vendedorId} onChange={setVendedorId} opcoes={opcoesDe(vendedores)} placeholder="Todos os vendedores" />
         </div>
       </Aparecer>
 
-      <Grupo className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiV18 rotulo="Faturamento" valor={r?.faturamento} anterior={comp?.faturamento} formato={moeda} icone={<CircleDollarSign className="h-4 w-4" />} tom="verde" carregando={isLoading} sub="vs. período anterior" />
+      {/* topo (Power BI): faturamento e lucro em destaque, o resto logo abaixo */}
+      <FaixaKpis colunas={4}>
+        <KpiV18 destaque className="col-span-2" rotulo={`Faturamento · ${faixa}`} valor={r?.faturamento} anterior={comp?.faturamento} formato={moeda} icone={<CircleDollarSign className="h-4 w-4" />} tom="verde" carregando={isLoading} sub={r ? `${inteiro(r.qtdVendas)} ${r.qtdVendas === 1 ? 'venda' : 'vendas'} · vs. período anterior` : 'vs. período anterior'} />
+        <KpiV18 destaque className="col-span-2" rotulo="Lucro bruto" valor={r?.lucroBruto} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="azul" carregando={isLoading} sub={r ? `margem ${percentual(r.margemPct)}` : undefined} />
+      </FaixaKpis>
+      <FaixaKpis colunas={4}>
         <KpiV18 rotulo="Vendas" valor={r?.qtdVendas} anterior={comp?.qtdVendas} formato={qtd} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={isLoading} onClick={() => nav('/vendas')} />
         <KpiV18 rotulo="Ticket médio" valor={r?.ticketMedio} anterior={comp?.ticketMedio} formato={moeda} icone={<Receipt className="h-4 w-4" />} tom="vermelho" carregando={isLoading} />
         <KpiV18 rotulo="Itens vendidos" valor={r?.itensVendidos} formato={qtd} icone={<Package className="h-4 w-4" />} tom="neutro" carregando={isLoading} />
-        <KpiV18 rotulo="Lucro bruto" valor={r?.lucroBruto} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={isLoading} />
         <KpiV18 rotulo="Margem" valor={r?.margemPct} formato={(n) => percentual(n)} icone={<Percent className="h-4 w-4" />} tom="amarelo" carregando={isLoading} />
-      </Grupo>
+      </FaixaKpis>
+
+      {!!r?.semCusto && (
+        <Aparecer className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span className="mt-0.5">⚠️</span>
+          <span>
+            {r.semCusto} venda{r.semCusto > 1 ? 's' : ''} com item sem custo — o lucro delas está contando o item como 100% lucro. Abra a venda, clique em Editar e preencha a coluna “Custo un.”.
+          </span>
+        </Aparecer>
+      )}
 
       <CardV18 titulo="Faturamento por dia" descricao={faixa} icone={<BarChart3 className="h-4 w-4" />} tom="azul">
         {isLoading ? (
-          <Skeleton className="h-64" />
+          <Skeleton className="h-52 sm:h-64" />
         ) : series.length ? (
-          <div className="h-64">
+          <div className="h-52 sm:h-64">
             <ResponsiveContainer>
               <AreaChart data={series} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                 <defs>
@@ -112,7 +91,7 @@ export default function DashboardVendas() {
                 </defs>
                 <CartesianGrid stroke={CORES.grade} strokeDasharray="3 4" vertical={false} />
                 <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={60} />
+                <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={52} />
                 <Tooltip content={<TooltipPadrao />} cursor={{ stroke: CORES.eixo, strokeDasharray: '3 3' }} />
                 <Area type="monotone" dataKey="faturamento" name="Faturamento" stroke={CORES.receita} fill="url(#gradFat)" strokeWidth={2.5} activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }} animationDuration={1100} />
                 <Area type="monotone" dataKey="lucro" name="Lucro" stroke={CORES.lucro} fill="url(#gradLucro)" strokeWidth={1.5} strokeDasharray="4 3" animationDuration={1300} />
@@ -204,7 +183,7 @@ export default function DashboardVendas() {
         {isLoading ? (
           <Skeleton className="h-48" />
         ) : data?.topProdutos.length ? (
-          <motion.div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" variants={listaVariants} initial="oculto" animate="visivel">
+          <motion.div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5" variants={listaVariants} initial="oculto" animate="visivel">
             {data.topProdutos.map((p, i) => (
               <motion.div
                 key={p.produtoId ?? `p-${i}`}

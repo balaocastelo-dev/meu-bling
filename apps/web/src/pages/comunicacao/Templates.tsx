@@ -126,7 +126,7 @@ export default function Templates() {
   return (
     <div>
       <PageHeader titulo="Templates de notificação" descricao="Mensagens automáticas por mudança de situação e envios manuais." acoes={<Button variante="primario" icone={<Plus className="h-4 w-4" />} onClick={() => setSel('novo')}>Novo template</Button>} />
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid items-start gap-4 lg:grid-cols-3">
         <Card semPadding className="lg:col-span-1">
           {isLoading ? (
             <div className="p-4"><Skeleton className="h-64" /></div>
@@ -139,8 +139,8 @@ export default function Templates() {
                   <button onClick={() => setSel(t.id)} className={clsx('flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-slate-50', sel === t.id && 'bg-brand-50/60')}>
                     <span className="mt-0.5 text-slate-400">{t.canal === 'WHATSAPP' ? <MessageCircle className="h-4 w-4 text-emerald-600" /> : <Mail className="h-4 w-4 text-blue-600" />}</span>
                     <span className="min-w-0 flex-1">
-                      <span className={clsx('block truncate text-sm font-medium', t.ativo ? 'text-slate-800' : 'text-slate-400 line-through')}>{t.nome}</span>
-                      <span className="block truncate text-xs text-slate-400">{rotulo(t.evento)}{t.situacao ? ` → ${t.situacao.nome}` : t.situacaoId ? ` → #${t.situacaoId}` : ''}</span>
+                      <span className={clsx('block text-sm font-medium leading-snug', t.ativo ? 'text-slate-800' : 'text-slate-400 line-through')}>{t.nome}</span>
+                      <span className="block text-xs leading-snug text-slate-400">{rotulo(t.evento)}{t.situacao ? ` → ${t.situacao.nome}` : t.situacaoId ? ` → #${t.situacaoId}` : ''}</span>
                     </span>
                   </button>
                 </li>
@@ -162,19 +162,19 @@ export default function Templates() {
                 </>
               }
             >
-              <div className="grid gap-3 md:grid-cols-12">
-                <Input className="md:col-span-6" label="Nome" obrigatorio value={form.nome} onChange={(e) => set('nome', e.target.value)} />
-                <Select className="md:col-span-3" label="Canal" value={form.canal} onChange={(e) => set('canal', e.target.value as Form['canal'])} opcoes={[{ valor: 'WHATSAPP', rotulo: 'WhatsApp' }, { valor: 'EMAIL', rotulo: 'E-mail' }]} />
-                <div className="flex items-end gap-4 pb-2 md:col-span-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
+                <Input className="xl:col-span-6" label="Nome" obrigatorio value={form.nome} onChange={(e) => set('nome', e.target.value)} />
+                <Select className="xl:col-span-3" label="Canal" value={form.canal} onChange={(e) => set('canal', e.target.value as Form['canal'])} opcoes={[{ valor: 'WHATSAPP', rotulo: 'WhatsApp' }, { valor: 'EMAIL', rotulo: 'E-mail' }]} />
+                <div className="flex items-end gap-4 pb-2 xl:col-span-3">
                   <Checkbox label="Ativo" checked={form.ativo} onChange={(e) => set('ativo', e.target.checked)} />
                   {form.canal === 'EMAIL' && <Checkbox label="Anexar PDF" checked={form.anexarPdf} onChange={(e) => set('anexarPdf', e.target.checked)} />}
                 </div>
-                <Select className="md:col-span-6" label="Evento" value={form.evento} onChange={(e) => { set('evento', e.target.value); set('situacaoId', null); }} opcoes={EVENTOS.map((ev) => ({ valor: ev, rotulo: rotulo(ev) }))} />
+                <Select className="xl:col-span-6" label="Evento" value={form.evento} onChange={(e) => { set('evento', e.target.value); set('situacaoId', null); }} opcoes={EVENTOS.map((ev) => ({ valor: ev, rotulo: rotulo(ev) }))} />
                 {modulo && form.evento.endsWith('_SITUACAO') && (
-                  <Select className="md:col-span-6" label="Disparar ao entrar na situação" value={form.situacaoId ?? ''} onChange={(e) => set('situacaoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(situacoes)} placeholder="Qualquer situação com ação “notificarCliente”" />
+                  <Select className="xl:col-span-6" label="Disparar ao entrar na situação" value={form.situacaoId ?? ''} onChange={(e) => set('situacaoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(situacoes)} placeholder="Qualquer situação com ação “notificarCliente”" />
                 )}
-                {form.canal === 'EMAIL' && <Input className="md:col-span-12" label="Assunto" value={form.assunto ?? ''} onChange={(e) => set('assunto', e.target.value)} />}
-                <div className="md:col-span-12">
+                {form.canal === 'EMAIL' && <Input className="sm:col-span-2 xl:col-span-12" label="Assunto" value={form.assunto ?? ''} onChange={(e) => set('assunto', e.target.value)} />}
+                <div className="sm:col-span-2 xl:col-span-12">
                   <Textarea ref={corpoRef} label="Mensagem" obrigatorio rows={8} value={form.corpo} onChange={(e) => set('corpo', e.target.value)} className="font-mono" />
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <span className="mr-1 text-xs text-slate-400">Inserir variável:</span>
@@ -183,7 +183,7 @@ export default function Templates() {
                     ))}
                   </div>
                 </div>
-                <div className="md:col-span-12">
+                <div className="sm:col-span-2 xl:col-span-12">
                   <p className="mb-1 text-xs font-medium text-slate-600">Pré-visualização (dados de exemplo)</p>
                   <div className={clsx('rounded-lg border p-3 text-sm whitespace-pre-line', form.canal === 'WHATSAPP' ? 'border-emerald-200 bg-[#e7ffdb] text-slate-800' : 'border-slate-200 bg-white text-slate-700')}>
                     {form.canal === 'EMAIL' && form.assunto && <p className="mb-2 border-b border-slate-100 pb-2 font-semibold">{form.assunto}</p>}
@@ -191,7 +191,7 @@ export default function Templates() {
                   </div>
                 </div>
                 {typeof sel === 'number' && (
-                  <div className="flex flex-wrap items-end gap-2 md:col-span-12">
+                  <div className="flex flex-wrap items-end gap-2 sm:col-span-2 xl:col-span-12">
                     <Select label="Preview com dados reais" value={origemPreview.tipo} onChange={(e) => setOrigemPreview({ ...origemPreview, tipo: e.target.value })} opcoes={[{ valor: 'VENDA', rotulo: 'Venda' }, { valor: 'OS', rotulo: 'OS' }, { valor: 'COMPRA', rotulo: 'Compra' }]} className="w-40" />
                     <Input label="ID" type="number" value={origemPreview.id} onChange={(e) => setOrigemPreview({ ...origemPreview, id: e.target.value })} className="w-28" placeholder="ex.: 12" />
                     <Button variante="secundario" icone={<Eye className="h-4 w-4" />} disabled={!origemPreview.id} carregando={previewM.isPending} onClick={() => previewM.mutate()}>Renderizar</Button>

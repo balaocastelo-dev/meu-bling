@@ -62,30 +62,30 @@ export default function Empresa() {
               <input ref={logoRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) logo.mutate(f); e.target.value = ''; }} />
               <Button tamanho="xs" variante="secundario" icone={<Upload className="h-3.5 w-3.5" />} carregando={logo.isPending} onClick={() => logoRef.current?.click()}>Enviar logo</Button>
             </div>
-            <div className="grid flex-1 gap-3 md:grid-cols-12">
-              <Input className="md:col-span-8" label="Razão social" obrigatorio value={form.razaoSocial} onChange={(e) => set('razaoSocial', e.target.value)} />
-              <Input className="md:col-span-4" label="CNPJ" obrigatorio value={form.cnpj} onChange={(e) => set('cnpj', e.target.value)} />
-              <Input className="md:col-span-6" label="Nome fantasia" value={form.nomeFantasia ?? ''} onChange={(e) => set('nomeFantasia', e.target.value)} />
-              <Input className="md:col-span-3" label="Inscrição estadual" value={form.ie ?? ''} onChange={(e) => set('ie', e.target.value)} />
-              <Input className="md:col-span-3" label="Inscrição municipal" value={form.im ?? ''} onChange={(e) => set('im', e.target.value)} />
-              <Select className="md:col-span-6" label="Regime tributário (CRT)" value={form.crt} onChange={(e) => set('crt', Number(e.target.value))} opcoes={[{ valor: 1, rotulo: '1 — Simples Nacional' }, { valor: 2, rotulo: '2 — Simples Nacional (excesso de sublimite)' }, { valor: 3, rotulo: '3 — Regime normal' }]} />
+            <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
+              <Input className="sm:col-span-2 xl:col-span-8" label="Razão social" obrigatorio value={form.razaoSocial} onChange={(e) => set('razaoSocial', e.target.value)} />
+              <Input className="xl:col-span-4" label="CNPJ" obrigatorio value={form.cnpj} onChange={(e) => set('cnpj', e.target.value)} />
+              <Input className="xl:col-span-6" label="Nome fantasia" value={form.nomeFantasia ?? ''} onChange={(e) => set('nomeFantasia', e.target.value)} />
+              <Input className="xl:col-span-3" label="Inscrição estadual" value={form.ie ?? ''} onChange={(e) => set('ie', e.target.value)} />
+              <Input className="xl:col-span-3" label="Inscrição municipal" value={form.im ?? ''} onChange={(e) => set('im', e.target.value)} />
+              <Select className="xl:col-span-6" label="Regime tributário (CRT)" value={form.crt} onChange={(e) => set('crt', Number(e.target.value))} opcoes={[{ valor: 1, rotulo: '1 — Simples Nacional' }, { valor: 2, rotulo: '2 — Simples Nacional (excesso de sublimite)' }, { valor: 3, rotulo: '3 — Regime normal' }]} />
             </div>
           </div>
         </Secao>
         <Secao titulo="Endereço">
-          <div className="grid gap-3 md:grid-cols-12">
-            <Input className="md:col-span-2" label="CEP" value={form.cep ?? ''} onChange={(e) => set('cep', e.target.value)} />
-            <Input className="md:col-span-6" label="Logradouro" value={form.logradouro ?? ''} onChange={(e) => set('logradouro', e.target.value)} />
-            <Input className="md:col-span-1" label="Nº" value={form.numero ?? ''} onChange={(e) => set('numero', e.target.value)} />
-            <Input className="md:col-span-3" label="Complemento" value={form.complemento ?? ''} onChange={(e) => set('complemento', e.target.value)} />
-            <Input className="md:col-span-4" label="Bairro" value={form.bairro ?? ''} onChange={(e) => set('bairro', e.target.value)} />
-            <Input className="md:col-span-4" label="Município" value={form.municipio ?? ''} onChange={(e) => set('municipio', e.target.value)} />
-            <Input className="md:col-span-1" label="UF" value={form.uf ?? ''} onChange={(e) => set('uf', e.target.value.toUpperCase())} maxLength={2} />
-            <Input className="md:col-span-3" label="Cód. IBGE do município" value={form.codigoMunicipio ?? ''} onChange={(e) => set('codigoMunicipio', e.target.value)} placeholder="3509502 (Campinas)" />
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
+            <Input className="xl:col-span-2" label="CEP" value={form.cep ?? ''} onChange={(e) => set('cep', e.target.value)} />
+            <Input className="xl:col-span-6" label="Logradouro" value={form.logradouro ?? ''} onChange={(e) => set('logradouro', e.target.value)} />
+            <Input className="xl:col-span-1" label="Nº" value={form.numero ?? ''} onChange={(e) => set('numero', e.target.value)} />
+            <Input className="xl:col-span-3" label="Complemento" value={form.complemento ?? ''} onChange={(e) => set('complemento', e.target.value)} />
+            <Input className="xl:col-span-4" label="Bairro" value={form.bairro ?? ''} onChange={(e) => set('bairro', e.target.value)} />
+            <Input className="xl:col-span-4" label="Município" value={form.municipio ?? ''} onChange={(e) => set('municipio', e.target.value)} />
+            <Input className="xl:col-span-1" label="UF" value={form.uf ?? ''} onChange={(e) => set('uf', e.target.value.toUpperCase())} maxLength={2} />
+            <Input className="xl:col-span-3" label="Cód. IBGE do município" value={form.codigoMunicipio ?? ''} onChange={(e) => set('codigoMunicipio', e.target.value)} placeholder="3509502 (Campinas)" />
           </div>
         </Secao>
         <Secao titulo="Contato">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Input label="Telefone" value={form.telefone ?? ''} onChange={(e) => set('telefone', e.target.value)} />
             <Input label="E-mail" type="email" value={form.email ?? ''} onChange={(e) => set('email', e.target.value)} />
             <Input label="Site" value={form.site ?? ''} onChange={(e) => set('site', e.target.value)} placeholder="www.balao.info" />

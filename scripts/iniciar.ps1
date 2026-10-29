@@ -1,5 +1,5 @@
 <#
-  MEU BLING — Iniciar o sistema (produção local)
+  MEU BLING - Iniciar o sistema (produção local)
   Sobe a API (que também serve o frontend compilado) em http://localhost:3333
   e abre o navegador. Feche esta janela para parar o sistema.
 
@@ -10,7 +10,7 @@ param([switch]$Dev)
 $ErrorActionPreference = 'Stop'
 $Raiz = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Raiz
-$Host.UI.RawUI.WindowTitle = 'MEU BLING — servidor (feche para parar)'
+$Host.UI.RawUI.WindowTitle = 'MEU BLING - servidor (feche para parar)'
 
 if (-not (Test-Path (Join-Path $Raiz 'node_modules'))) {
   Write-Host "Dependências não instaladas. Rode primeiro: .\scripts\instalar.ps1" -ForegroundColor Yellow
@@ -32,7 +32,7 @@ if ($Dev) {
   npm run dev
 } else {
   if (-not (Test-Path (Join-Path $Raiz 'apps\web\dist\index.html'))) {
-    Write-Host "Frontend não compilado — compilando agora..." -ForegroundColor Yellow
+    Write-Host "Frontend não compilado - compilando agora..." -ForegroundColor Yellow
     Push-Location (Join-Path $Raiz 'apps\web'); npm run build; Pop-Location
   }
   Start-Job -ScriptBlock { Start-Sleep 4; Start-Process 'http://localhost:3333' } | Out-Null

@@ -44,6 +44,8 @@ function linkOrigem(c: Conta): string | null {
       return `/comissoes`;
     case 'PAGAMENTO_TECNICO':
       return `/dashboard/assistencia`;
+    case 'CARNE':
+      return `/financeiro/carnes?id=${o.id}`;
     default:
       return null;
   }
@@ -243,9 +245,9 @@ export function ContasPage({ tipo }: Props) {
                   {(c.contato?.nome || c.categoria?.nome) && <p className="truncate text-xs text-slate-500">{[c.contato?.nome, c.categoria?.nome, c.parcela && `parc. ${c.parcela}`].filter(Boolean).join(' · ')}</p>}
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
                     <Badge tom={tomPorStatus(st)}>{rotulo(st)}</Badge>
-                    <span className={clsx(atr && 'font-medium text-red-600')}>vence {data(c.vencimento)}{atr ? ` · ${diasAtraso(c.vencimento)} dias` : ''}</span>
-                    {c.formaPagamento?.nome && <span>· {c.formaPagamento.nome}</span>}
-                    {c.situacao !== 'CANCELADO' && valorPago(c) > 0 && saldoDe(c) > 0 && <span>· pago {moeda(valorPago(c))} · falta {moeda(saldoDe(c))}</span>}
+                    <span className={clsx('whitespace-nowrap', atr && 'font-medium text-red-600')}>vence {data(c.vencimento)}{atr ? ` · ${diasAtraso(c.vencimento)} dias` : ''}</span>
+                    {c.formaPagamento?.nome && <span className="whitespace-nowrap">{c.formaPagamento.nome}</span>}
+                    {c.situacao !== 'CANCELADO' && valorPago(c) > 0 && saldoDe(c) > 0 && <span className="whitespace-nowrap">pago {moeda(valorPago(c))} · falta {moeda(saldoDe(c))}</span>}
                   </div>
                 </div>
               </div>

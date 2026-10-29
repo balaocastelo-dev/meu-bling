@@ -4,13 +4,15 @@
  * Agregações feitas em JS (SQLite) após filtrar por data no banco.
  */
 import type { FastifyInstance } from 'fastify';
+import { avisosCaixinhas } from '../caixinhas/service.js';
+import { OBS_FORA_DO_RESULTADO } from '../comum/financeiro.js';
 import { z } from 'zod';
 import { startOfDay, endOfDay, differenceInCalendarDays } from 'date-fns';
 import { prisma } from '../../lib/prisma.js';
 import { dataSchema, arredondar } from '../../lib/util.js';
 import { resumoFinanceiro } from '../financeiro/service.js';
 import { chavePeriodo, listarPeriodos, resolverPeriodo, periodoAnterior, agruparPadrao, type Agrupar } from '../financeiro/periodos.js';
-import { status as statusWhatsApp } from '../../integracoes/whatsapp/servico.js';
+import { status as statusWhatsApp } from '../../integracoes/whatsapp/provedor.js';
 import { ultimosAcontecimentos, ultimosLancamentos } from './atividades.js';
 import { fechamentoOs } from '../ordens-servico/service.js';
 import { AppError, NotFound } from '../../lib/errors.js';
@@ -18,6 +20,8 @@ import { auditar } from '../../lib/auditoria.js';
 import { competenciaDe } from '../../lib/util.js';
 import { categoriaPadraoId } from '../comum/financeiro.js';
 import { format } from 'date-fns';
+import { carregarCfgCustos, custosVenda } from '../comum/custos-venda.js';
+import { cfgCustosOs, SELECT_CUSTO_OS } from '../comum/custos-os.js';
 
 async function situacoesRealizadas(modulo: 'VENDA' | 'COMPRA' | 'OS') {
   const s = await prisma.situacao.findMany({ where: { modulo, final: true, cancelamento: false }, select: { id: true } });
@@ -34,14 +38,16 @@ function pct(parte: number, total: number) {
 }
 
 /** OS do dashboard de assistência no período (base = data de entrada ou de conclusão). */
-function ordensAssistencia(de: Date, ate: Date, base: 'entrada' | 'conclusao', tecnicoId: number | undefined, sitOk: number[]) {
+async function ordensAssistencia(de: Date, ate: Date, base: 'entrada' | 'conclusao', tecnicoId: number | undefined, sitOk: number[]) {
   const filtroTec = tecnicoId ? { tecnicoId } : {};
+  // carrega a configuração de custos (imposto, taxa de cartão) que o fechamentoOs() usa — mesma regra da venda
+  await cfgCustosOs();
   return prisma.ordemServico.findMany({
     where: base === 'conclusao' ? { dataConclusao: { gte: de, lte: ate }, situacaoId: { in: sitOk }, ...filtroTec } : { dataEntrada: { gte: de, lte: ate }, ...filtroTec },
     orderBy: [{ dataEntrada: 'desc' }, { numero: 'desc' }],
     select: {
       id: true, numero: true, dataEntrada: true, dataConclusao: true, equipamento: true, marca: true, modelo: true, situacaoId: true, tecnicoId: true,
-      total: true, totalServicos: true, totalPecas: true, descontoValor: true, custoTotal: true, custoPeca: true, custoLogistica: true, custoMaoObraTerceiro: true,
+      totalServicos: true, descontoValor: true, ...SELECT_CUSTO_OS,
       contato: { select: { id: true, nome: true } },
       tecnico: { select: { id: true, nome: true } },
       situacao: { select: { id: true, nome: true, cor: true } },
@@ -51,8 +57,9 @@ function ordensAssistencia(de: Date, ate: Date, base: 'entrada' | 'conclusao', t
 type LinhaAssistencia = Awaited<ReturnType<typeof ordensAssistencia>>[number];
 
 function somarAssistencia(lista: LinhaAssistencia[]) {
-  const t = { qtd: 0, valorEntrada: 0, maoDeObra: 0, pecas: 0, descontos: 0, custoPecas: 0, custoLogistica: 0, custoTerceiros: 0, custoTotal: 0, lucro: 0 };
+  const t = { qtd: 0, valorEntrada: 0, maoDeObra: 0, pecas: 0, descontos: 0, custoPecas: 0, custoImposto: 0, custoCartao: 0, custoLogistica: 0, custoTerceiros: 0, custoTotal: 0, lucro: 0, osSemCusto: 0 };
   for (const o of lista) {
+    // custo completo da OS (peças + imposto + cartão + logística + terceiro) — mesma regra da venda e do DRE
     const f = fechamentoOs(o);
     t.qtd += 1;
     t.valorEntrada += o.total;
@@ -60,10 +67,13 @@ function somarAssistencia(lista: LinhaAssistencia[]) {
     t.pecas += o.totalPecas;
     t.descontos += o.descontoValor;
     t.custoPecas += f.custoPecas;
+    t.custoImposto += f.imposto;
+    t.custoCartao += f.taxaCartao;
     t.custoLogistica += f.custoLogistica;
     t.custoTerceiros += f.custoMaoObraTerceiro;
     t.custoTotal += f.custoTotal;
     t.lucro += f.lucro;
+    if (f.pecasSemCusto > 0) t.osSemCusto += 1;
   }
   const r = Object.fromEntries(Object.entries(t).map(([k, v]) => [k, arredondar(v)])) as typeof t;
   return {
@@ -122,10 +132,12 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     }
     const abaixoMinimo = [...porProduto.values()].filter((p) => p.estoqueMinimo > 0 && p.saldo < p.estoqueMinimo).sort((a, b) => a.saldo - b.saldo);
 
-    const wa = statusWhatsApp();
+    const wa = await statusWhatsApp();
     const empresa = await prisma.empresa.findUnique({ where: { id: 1 }, select: { whatsappAtivo: true, smtpAtivo: true, certificadoValidade: true, ambienteFiscal: true } });
 
     const alertas: { tipo: 'erro' | 'aviso' | 'info'; mensagem: string; link: string }[] = [];
+    // caixinhas (Nubank) primeiro: completar no prazo é prioridade
+    for (const a of (await avisosCaixinhas()).avisos) alertas.push({ tipo: a.tipo, mensagem: a.mensagem, link: a.link });
     if (osAtrasadas) alertas.push({ tipo: 'aviso', mensagem: `${osAtrasadas} OS atrasada${osAtrasadas > 1 ? 's' : ''} (previsão vencida)`, link: '/ordens-servico?atrasadas=true' });
     if (financeiro.receberAtrasado > 0) alertas.push({ tipo: 'aviso', mensagem: `Contas a receber vencidas: R$ ${financeiro.receberAtrasado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, link: '/financeiro/receber?situacao=ATRASADO' });
     if (financeiro.pagarAtrasado > 0) alertas.push({ tipo: 'erro', mensagem: `Contas a pagar vencidas: R$ ${financeiro.pagarAtrasado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, link: '/financeiro/pagar?situacao=ATRASADO' });
@@ -140,16 +152,14 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       if (dias < 0) alertas.push({ tipo: 'erro', mensagem: 'Certificado digital A1 vencido', link: '/configuracoes/fiscal' });
       else if (dias <= 30) alertas.push({ tipo: 'aviso', mensagem: `Certificado digital vence em ${dias} dia${dias === 1 ? '' : 's'}`, link: '/configuracoes/fiscal' });
     }
-    // resultado da última verificação de "Saúde do sistema" (roda sozinha a cada 6 h)
-    const diag = await prisma.configuracao.findUnique({ where: { chave: 'diagnostico.ultimo' } }).catch(() => null);
-    if (diag) {
-      try {
-        const d = JSON.parse(diag.valor);
-        if (d.erro > 0) alertas.push({ tipo: 'erro', mensagem: `Saúde do sistema: ${d.erro} problema${d.erro > 1 ? 's' : ''} nos dados para corrigir`, link: '/configuracoes/saude' });
-        else if (d.aviso > 0) alertas.push({ tipo: 'aviso', mensagem: `Saúde do sistema: ${d.aviso} ponto${d.aviso > 1 ? 's' : ''} de atenção`, link: '/configuracoes/saude' });
-      } catch {
-        /* ignora */
-      }
+    // Robô da Saúde (roda a cada 5 min e logo depois de cada movimento): o que ainda precisa de um clique do ADMIN
+    if (req.user.perfil === 'ADMIN') {
+      const [errosRobo, pendRobo] = await Promise.all([
+        prisma.roboSaudeAviso.count({ where: { status: 'ABERTA', nivel: 'erro' } }).catch(() => 0),
+        prisma.roboSaudeAviso.count({ where: { status: 'ABERTA' } }).catch(() => 0),
+      ]);
+      if (errosRobo > 0) alertas.push({ tipo: 'erro', mensagem: `Robô da Saúde: ${errosRobo} problema${errosRobo > 1 ? 's' : ''} para resolver (${pendRobo} no total, a maioria com 1 clique)`, link: '/configuracoes/saude' });
+      else if (pendRobo > 0) alertas.push({ tipo: 'aviso', mensagem: `Robô da Saúde: ${pendRobo} ponto${pendRobo > 1 ? 's' : ''} de atenção para resolver com poucos cliques`, link: '/configuracoes/saude' });
     }
     if ((comissoesPendentes._count as number) > 0) alertas.push({ tipo: 'info', mensagem: `${comissoesPendentes._count} comiss${(comissoesPendentes._count as number) > 1 ? 'ões' : 'ão'} pendente${(comissoesPendentes._count as number) > 1 ? 's' : ''} de aprovação`, link: '/comissoes?status=PENDENTE' });
 
@@ -231,7 +241,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         todas: z.enum(['true', 'false']).default('true'),
       })
       .parse(req.query);
-    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
     const agrupar: Agrupar = q.agrupar || agruparPadrao(ini, fim);
     const sitOk = await situacoesRealizadas('VENDA');
     const sitCanc = await situacoesCanceladas('VENDA');
@@ -242,7 +252,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         where: { tipo: 'PEDIDO', data: { gte: de, lte: ate }, ...whereSit, ...(q.vendedorId ? { vendedorId: q.vendedorId } : {}) },
         include: {
           itens: { select: { produtoId: true, descricao: true, quantidade: true, total: true, custoUnitario: true, comissaoValor: true, produto: { select: { categoriaId: true, categoria: { select: { nome: true } } } } } },
-          parcelas: { select: { valor: true, formaPagamento: { select: { nome: true } } } },
+          parcelas: { select: { valor: true, formaPagamento: { select: { nome: true, tipo: true } } } },
           vendedor: { select: { id: true, nome: true } },
           contato: { select: { id: true, nome: true } },
           situacao: { select: { id: true, nome: true, cor: true } },
@@ -250,9 +260,11 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       });
 
     const vendas = await carregar(ini, fim);
+    // custo completo da venda: produto + imposto + taxa de cartão + frete (mesma regra do DRE)
+    const cfgC = await carregarCfgCustos();
     const resumoDe = (lista: typeof vendas) => {
       const faturamento = lista.reduce((s, v) => s + v.total, 0);
-      const custo = lista.reduce((s, v) => s + (v.custoTotal || v.itens.reduce((a, i) => a + i.custoUnitario * i.quantidade, 0)), 0);
+      const custo = lista.reduce((s, v) => s + custosVenda(v, cfgC).total, 0);
       const itensVendidos = lista.reduce((s, v) => s + v.itens.reduce((a, i) => a + i.quantidade, 0), 0);
       return {
         faturamento: arredondar(faturamento),
@@ -261,10 +273,13 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         itensVendidos: arredondar(itensVendidos),
         lucroBruto: arredondar(faturamento - custo),
         margemPct: pct(faturamento - custo, faturamento),
+        // vendas com algum item sem custo: o lucro delas está maior que o real
+        semCusto: lista.filter((v) => v.itens.some((i) => !i.custoUnitario)).length,
       };
     };
     const resumo: any = resumoDe(vendas);
-    if (q.comparar === 'true') {
+    // "todo o período": não há período anterior para comparar
+    if (q.comparar === 'true' && !tudo) {
       const ant = periodoAnterior(ini, fim);
       const r = resumoDe(await carregar(ant.ini, ant.fim));
       resumo.comparativo = {
@@ -291,7 +306,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const topClientes = new Map<number, { contatoId: number; nome: string; valor: number; qtd: number }>();
 
     for (const v of vendas) {
-      const custo = v.custoTotal || v.itens.reduce((a, i) => a + i.custoUnitario * i.quantidade, 0);
+      const custo = custosVenda(v, cfgC).total;
       acumula(serie, chavePeriodo(v.data, agrupar), () => ({ periodo: chavePeriodo(v.data, agrupar), faturamento: 0, qtd: 0, lucro: 0 }), (s) => {
         s.faturamento += v.total;
         s.qtd += 1;
@@ -361,7 +376,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const q = z
       .object({ dataInicial: dataSchema, dataFinal: dataSchema, tecnicoId: z.coerce.number().int().optional(), agrupar: z.enum(['dia', 'semana', 'mes']).optional() })
       .parse(req.query);
-    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
     const agrupar: Agrupar = q.agrupar || agruparPadrao(ini, fim);
     const sitOk = await situacoesRealizadas('OS');
     const sitCanc = await situacoesCanceladas('OS');
@@ -439,7 +454,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         agrupar: z.enum(['dia', 'semana', 'mes']).optional(),
       })
       .parse(req.query);
-    const { ini, fim } = resolverPeriodo(q, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
     const agrupar: Agrupar = q.agrupar || agruparPadrao(ini, fim);
     const [sitOk, sitCanc] = await Promise.all([situacoesRealizadas('OS'), situacoesCanceladas('OS')]);
     const dataBase = (o: { dataEntrada: Date; dataConclusao: Date | null }) => (q.base === 'conclusao' ? o.dataConclusao || o.dataEntrada : o.dataEntrada);
@@ -462,9 +477,11 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       // concluídas com peça mas sem custo nenhum: o lucro delas está inflado
       semCusto: concluidas.filter((o) => o.totalPecas > 0 && fechamentoOs(o).custoPecas === 0).length,
     };
-    const ant = periodoAnterior(ini, fim);
-    const anteriores = (await carregar(ant.ini, ant.fim)).filter((o) => !sitCanc.includes(o.situacaoId));
-    resumo.comparativo = { ...somar(anteriores), periodo: { dataInicial: ant.ini, dataFinal: ant.fim } };
+    if (!tudo) {
+      const ant = periodoAnterior(ini, fim);
+      const anteriores = (await carregar(ant.ini, ant.fim)).filter((o) => !sitCanc.includes(o.situacaoId));
+      resumo.comparativo = { ...somar(anteriores), periodo: { dataInicial: ant.ini, dataFinal: ant.fim } };
+    } else resumo.comparativo = null; // "todo o período": não há período anterior
 
     const serie = new Map(listarPeriodos(ini, fim, agrupar).map((p) => [p, { periodo: p, valorEntrada: 0, custo: 0, lucro: 0, qtd: 0 }]));
     const porTecnico = new Map<number, { id: number | null; nome: string; qtd: number; valorEntrada: number; maoDeObra: number; pecas: number; custo: number; lucro: number }>();
@@ -529,6 +546,125 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     };
   });
   // =====================================================================
+  // PANORAMA (só ADMIN) — tela inicial: vendas + assistência no período escolhido
+  // Vendas: pedidos não cancelados (igual ao dashboard de vendas). Assistência: OS não canceladas
+  // por data de entrada ou de conclusão (igual ao dashboard de assistência). Caixa: movimentos reais
+  // das contas no período, sem as transferências entre contas.
+  // =====================================================================
+  app.get('/api/v1/dashboard/panorama', { preHandler: app.exigirPerfil('ADMIN') }, async (req) => {
+    const q = z
+      .object({ dataInicial: dataSchema, dataFinal: dataSchema, base: z.enum(['entrada', 'conclusao']).default('entrada'), agrupar: z.enum(['dia', 'semana', 'mes']).optional() })
+      .parse(req.query);
+    const { ini, fim, tudo } = await resolverPeriodo(q, 'mes');
+    const agrupar: Agrupar = q.agrupar || agruparPadrao(ini, fim);
+    const [sitVendaCanc, sitOsOk, sitOsCanc] = await Promise.all([situacoesCanceladas('VENDA'), situacoesRealizadas('OS'), situacoesCanceladas('OS')]);
+
+    const carregarVendas = (de: Date, ate: Date) =>
+      prisma.venda.findMany({
+        where: { tipo: 'PEDIDO', data: { gte: de, lte: ate }, situacaoId: { notIn: sitVendaCanc } },
+        select: {
+          id: true, data: true, total: true, custoTotal: true, custoLogistica: true, vendedorId: true,
+          parcelas: { select: { valor: true, formaPagamento: { select: { tipo: true } } } },
+          vendedor: { select: { id: true, nome: true } },
+          itens: { select: { quantidade: true, custoUnitario: true } },
+        },
+      });
+    const carregarOs = async (de: Date, ate: Date) => (await ordensAssistencia(de, ate, q.base, undefined, sitOsOk)).filter((o) => !sitOsCanc.includes(o.situacaoId));
+    const carregarCaixa = async (de: Date, ate: Date) => {
+      // a conta "Encontro de contas (empréstimos)" não é dinheiro de verdade: fica de fora do caixa
+      const movs = await prisma.movimentoFinanceiro.findMany({ where: { data: { gte: de, lte: ate }, tipo: { in: ['ENTRADA', 'SAIDA'] }, contaFinanceira: { tipo: { not: 'COMPENSACAO' } } }, select: { data: true, tipo: true, valor: true, observacoes: true } });
+      return movs.filter((m) => !OBS_FORA_DO_RESULTADO.includes(m.observacoes || ''));
+    };
+    const cfgC = await carregarCfgCustos();
+    const custoVenda = (v: Parameters<typeof custosVenda>[0]) => custosVenda(v, cfgC).total;
+
+    type Vendas = Awaited<ReturnType<typeof carregarVendas>>;
+    type Caixa = Awaited<ReturnType<typeof carregarCaixa>>;
+    const resumir = (vendas: Vendas, ordens: LinhaAssistencia[], caixa: Caixa) => {
+      const vValor = vendas.reduce((s, v) => s + v.total, 0);
+      const vCusto = vendas.reduce((s, v) => s + custoVenda(v), 0);
+      const a = somarAssistencia(ordens);
+      const entradas = caixa.filter((m) => m.tipo === 'ENTRADA').reduce((s, m) => s + m.valor, 0);
+      const saidas = caixa.filter((m) => m.tipo === 'SAIDA').reduce((s, m) => s + m.valor, 0);
+      const faturamento = vValor + a.valorEntrada;
+      const lucro = vValor - vCusto + a.lucro;
+      const qtd = vendas.length + a.qtd;
+      return {
+        faturamento: arredondar(faturamento),
+        custo: arredondar(vCusto + a.custoTotal),
+        lucro: arredondar(lucro),
+        margemPct: pct(lucro, faturamento),
+        qtd,
+        ticketMedio: qtd ? arredondar(faturamento / qtd) : 0,
+        vendas: { valor: arredondar(vValor), qtd: vendas.length, custo: arredondar(vCusto), lucro: arredondar(vValor - vCusto), margemPct: pct(vValor - vCusto, vValor), ticketMedio: vendas.length ? arredondar(vValor / vendas.length) : 0 },
+        assistencia: { valor: a.valorEntrada, qtd: a.qtd, maoDeObra: a.maoDeObra, pecas: a.pecas, custoPecas: a.custoPecas, custoLogistica: a.custoLogistica, custoTerceiros: a.custoTerceiros, custo: a.custoTotal, lucro: a.lucro, margemPct: a.margemPct, ticketMedio: a.ticketMedio },
+        caixa: { entradas: arredondar(entradas), saidas: arredondar(saidas), saldo: arredondar(entradas - saidas) },
+      };
+    };
+
+    const [vendas, ordens, caixa] = await Promise.all([carregarVendas(ini, fim), carregarOs(ini, fim), carregarCaixa(ini, fim)]);
+    const resumo: any = resumir(vendas, ordens, caixa);
+    if (!tudo) {
+      const ant = periodoAnterior(ini, fim);
+      const [vendasAnt, ordensAnt, caixaAnt] = await Promise.all([carregarVendas(ant.ini, ant.fim), carregarOs(ant.ini, ant.fim), carregarCaixa(ant.ini, ant.fim)]);
+      resumo.comparativo = { ...resumir(vendasAnt, ordensAnt, caixaAnt), periodo: { dataInicial: ant.ini, dataFinal: ant.fim } };
+    } else resumo.comparativo = null; // "todo o período": não há período anterior
+    resumo.osSemCusto = ordens.filter((o) => sitOsOk.includes(o.situacaoId) && o.totalPecas > 0 && fechamentoOs(o).custoPecas === 0).length;
+
+    // série: vendas x assistência x lucro x caixa
+    const nova = (p: string) => ({ periodo: p, vendas: 0, assistencia: 0, lucro: 0, entradas: 0, saidas: 0 });
+    const serie = new Map(listarPeriodos(ini, fim, agrupar).map((p) => [p, nova(p)]));
+    const ponto = (d: Date) => {
+      const k = chavePeriodo(d, agrupar);
+      return serie.get(k) || serie.set(k, nova(k)).get(k)!;
+    };
+    for (const v of vendas) {
+      const s = ponto(v.data);
+      s.vendas += v.total;
+      s.lucro += v.total - custoVenda(v);
+    }
+    for (const o of ordens) {
+      const s = ponto(q.base === 'conclusao' ? o.dataConclusao || o.dataEntrada : o.dataEntrada);
+      s.assistencia += o.total;
+      s.lucro += fechamentoOs(o).lucro;
+    }
+    for (const m of caixa) {
+      const s = ponto(m.data);
+      if (m.tipo === 'ENTRADA') s.entradas += m.valor;
+      else s.saidas += m.valor;
+    }
+
+    // equipe
+    const porVendedor = new Map<number, { id: number | null; nome: string; valor: number; qtd: number; lucro: number }>();
+    for (const v of vendas) {
+      const k = v.vendedorId ?? 0;
+      const x = porVendedor.get(k) || porVendedor.set(k, { id: v.vendedorId ?? null, nome: v.vendedor?.nome || 'Sem vendedor', valor: 0, qtd: 0, lucro: 0 }).get(k)!;
+      x.valor += v.total;
+      x.qtd += 1;
+      x.lucro += v.total - custoVenda(v);
+    }
+    const porTecnico = new Map<number, { id: number | null; nome: string; valor: number; qtd: number; lucro: number }>();
+    for (const o of ordens) {
+      const k = o.tecnicoId ?? 0;
+      const x = porTecnico.get(k) || porTecnico.set(k, { id: o.tecnicoId ?? null, nome: o.tecnico?.nome || 'Sem técnico', valor: 0, qtd: 0, lucro: 0 }).get(k)!;
+      x.valor += o.total;
+      x.qtd += 1;
+      x.lucro += fechamentoOs(o).lucro;
+    }
+    const r2 = (o: any) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === 'number' ? arredondar(v) : v]));
+    const series = [...serie.values()].sort((a, b) => a.periodo.localeCompare(b.periodo)).map(r2);
+    const melhor = series.reduce<any>((m, s: any) => (!m || s.vendas + s.assistencia > m.vendas + m.assistencia ? s : m), null);
+    resumo.melhorPeriodo = melhor && melhor.vendas + melhor.assistencia > 0 ? { periodo: melhor.periodo, valor: arredondar(melhor.vendas + melhor.assistencia) } : null;
+    return {
+      periodo: { dataInicial: ini, dataFinal: fim, agrupar, base: q.base },
+      resumo,
+      series,
+      porVendedor: [...porVendedor.values()].sort((a, b) => b.valor - a.valor).slice(0, 6).map(r2),
+      porTecnico: [...porTecnico.values()].sort((a, b) => b.valor - a.valor).slice(0, 6).map(r2),
+    };
+  });
+
+  // =====================================================================
   // PAGAR TÉCNICO (só ADMIN): % do lucro da assistência no período → contas a pagar
   // O lucro é recalculado aqui (não confia no número da tela).
   // =====================================================================
@@ -555,7 +691,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const b = pagarTecnicoSchema.parse(req.body);
     const tecnico = await prisma.tecnico.findUnique({ where: { id: b.tecnicoId } });
     if (!tecnico) throw new NotFound('Técnico');
-    const { ini, fim } = resolverPeriodo(b, 'mes');
+    const { ini, fim, tudo } = await resolverPeriodo(b, 'mes');
     const [sitOk, sitCanc] = await Promise.all([situacoesRealizadas('OS'), situacoesCanceladas('OS')]);
     const todas = (await ordensAssistencia(ini, fim, b.base, b.filtroTecnicoId ?? undefined, sitOk)).filter((o) => !sitCanc.includes(o.situacaoId));
     const consideradas = b.escopo === 'TODAS' ? todas : todas.filter((o) => sitOk.includes(o.situacaoId));

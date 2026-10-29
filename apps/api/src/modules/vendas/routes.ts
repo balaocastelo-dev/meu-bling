@@ -4,13 +4,16 @@
  * nunca movimenta estoque/financeiro nem emite nota; "converter" gera a venda vinculada.
  */
 import type { FastifyInstance } from 'fastify';
+import { criarLinkPagamento } from '../../integracoes/mercadopago/link.js';
 import { z } from 'zod';
+import { previaCarneVenda } from '../carnes/service.js';
 import { prisma } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
-import { paginar, proximoNumero, respostaPaginada } from '../../lib/util.js';
+import { arredondar, dataSchema, paginar, proximoNumero, respostaPaginada } from '../../lib/util.js';
 import { eventos } from '../../core/eventos.js';
 import { vendedorDoUsuario } from '../comum/vendedores.js';
+import { vendedorRestrito, whereVendasDoUsuario } from '../comum/escopo-vendas.js';
 import { executarAcoes, mudarSituacao, registrarAcao, registrarModulo, situacaoInicial, type Acao } from '../../core/situacoes.js';
 import { idDe } from '../comum/zod.js';
 import { intervalo, hojeMeioDia } from '../comum/datas.js';
@@ -38,7 +41,20 @@ import {
   sequenciaDe,
   temReserva,
   transferirVendedor,
+  receberVendaPagaNaHora,
+  soRecebimentoAutomatico,
   vendaCompleta,
+  consumidorFinalId,
+  exigirVendaCompleta,
+  mensagemFinalizacao,
+  pendenciasFinalizacao,
+  situacaoFinalizar,
+  compraDaVenda,
+  parcelasParaFinalizar,
+  formasParaFinalizar,
+  aplicarRecebimentosFinalizacao,
+  validarRecebimentosFinalizacao,
+  registrarCompraDaVenda,
 } from './service.js';
 import { acoesBody, aprovarBody, CAMPOS_LIVRES, converterBody, gerarNfeBody, gerarParcelasBody, listaQuery, notificarBody, situacaoBody, transferirVendedorBody, vendaSchema } from './schemas.js';
 import { htmlVenda } from './imprimir.js';
@@ -78,6 +94,11 @@ async function moverVendaPorNota(notaId: number, destinoNome: 'NF emitida' | 'Fe
 }
 eventos.ouvir('nfe.autorizada', (d) => moverVendaPorNota(d.notaId, 'NF emitida', 'Automático: NF-e autorizada'));
 eventos.ouvir('nfe.cancelada', (d) => moverVendaPorNota(d.notaId, 'Fechada', 'Automático: NF-e cancelada'));
+// venda paga na hora (dinheiro/PIX/cartão/transferência) entra no caixa ao salvar — vale para tela, PDV, API e clonagem
+eventos.ouvir('venda.alterada', async (d) => {
+  if (d.tipo !== 'PEDIDO') return;
+  await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, d.vendaId));
+});
 
 /**
  * Resumo do que a lista está mostrando (painel à direita do filtro): total vendido, nº de vendas,
@@ -118,13 +139,20 @@ async function resumoLista(where: any, filtrouSituacao: boolean, usuario: { perf
 }
 
 export default async function vendasRoutes(app: FastifyInstance) {
+  // se a edição destravou uma venda "paga na hora", o recebimento volta para o caixa no fim (deu certo ou não)
+  app.addHook('onResponse', async (req) => {
+    const id = (req as any).religarPagoNaHora as number | undefined;
+    if (id) await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, id)).catch((e) => req.log.error(e, 'religar pago na hora'));
+  });
   // ---------------------------------------------------------------- listagem
   app.get('/api/v1/vendas', async (req) => {
     const q = listaQuery.parse(req.query);
+    // vendedor/técnico: a lista é sempre só das próprias vendas (o filtro de vendedor da query é ignorado)
+    const escopo = await whereVendasDoUsuario(req.user);
     const where: any = {
       tipo: q.tipo === 'TODOS' ? undefined : q.tipo,
       contatoId: q.contatoId,
-      vendedorId: q.vendedorId,
+      vendedorId: escopo.vendedorId ?? q.vendedorId,
       origem: q.origem,
       data: intervalo(q.dataInicial, q.dataFinal),
     };
@@ -150,6 +178,8 @@ export default async function vendasRoutes(app: FastifyInstance) {
           estoqueLancado: true, contasLancadas: true, numeroPedidoLoja: true, criadoEm: true, vendedorId: true,
           vendaGerada: { select: { id: true, numero: true } },
           orcamento: { select: { id: true, numero: true } },
+          // selo do robô de NF na lista ("Pronto pra NF")
+          roboNf: { select: { status: true, erros: true } },
           ...includeLista,
         },
       }),
@@ -159,7 +189,10 @@ export default async function vendasRoutes(app: FastifyInstance) {
   });
 
   // ---------------------------------------------------------------- detalhe
-  app.get('/api/v1/vendas/:id', async (req) => vendaCompleta(idDe(req)));
+  // lucro/margem do fechamento só para o dono e a gerência (o vendedor lança os custos, mas não vê o lucro)
+  const comFechamento = (req: { user: { perfil: string } }, v: Awaited<ReturnType<typeof vendaCompleta>>) => (req.user.perfil === 'ADMIN' || req.user.perfil === 'GERENTE' ? v : { ...v, fechamento: null });
+
+  app.get('/api/v1/vendas/:id', async (req) => comFechamento(req, await vendaCompleta(idDe(req))));
 
   // ---------------------------------------------------------------- criar
   app.post('/api/v1/vendas', async (req, reply) => {
@@ -170,16 +203,39 @@ export default async function vendasRoutes(app: FastifyInstance) {
       const proprio = await vendedorDoUsuario(req.user.id);
       if (proprio) body.vendedorId = proprio;
     }
+    // vendedor/técnico vende sempre no próprio nome (senão perderia o acesso à venda que acabou de fazer);
+    // para passar a venda a um colega existe "Transferir vendedor"
+    const restrito = await vendedorRestrito(req.user);
+    if (restrito !== null && restrito > 0) body.vendedorId = restrito;
+    // criar já numa situação final (Fechada / NF emitida) exige a venda completa
+    if (body.tipo !== 'ORCAMENTO' && body.situacaoId) {
+      const sit = await prisma.situacao.findUnique({ where: { id: body.situacaoId } });
+      if (sit?.final && !sit.cancelamento) {
+        const prep = await prepararVenda(prisma, body);
+        const pend = pendenciasFinalizacao({ tipo: body.tipo, vendedorId: body.vendedorId ?? null, contato: prep.contato, itens: prep.itens as any, parcelas: prep.parcelas as any });
+        if (pend.length) throw new AppError(mensagemFinalizacao(pend), 422, 'VENDA_INCOMPLETA', { pendencias: pend, contatoId: body.contatoId });
+      }
+    }
     const venda = await criarVenda(body, req.user.id);
     await auditar(req, body.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', venda.id, 'CRIAR', { numero: venda.numero, total: venda.total });
-    return reply.code(201).send(await vendaCompleta(venda.id));
+    return reply.code(201).send(comFechamento(req, await vendaCompleta(venda.id)));
   });
 
   // ---------------------------------------------------------------- alterar
   app.put('/api/v1/vendas/:id', async (req) => {
     const id = idDe(req);
-    const atual = await carregarVenda(prisma, id);
-    const bloqueada = atual.estoqueLancado || atual.contasLancadas;
+    let atual = await carregarVenda(prisma, id);
+    let bloqueada = atual.estoqueLancado || atual.contasLancadas;
+    // venda travada só porque foi recebida automaticamente (pago na hora, estoque ainda não baixado):
+    // desfaz o recebimento, deixa editar e recebe de novo no fim (hook onResponse)
+    if (bloqueada && !atual.estoqueLancado && atual.tipo === 'PEDIDO' && (await soRecebimentoAutomatico(prisma, id))) {
+      await prisma.$transaction((tx) =>
+        acaoEstornarContas({ modulo: 'VENDA', entidadeId: id, tx, usuarioId: req.user.id, situacaoOrigemId: atual.situacaoId, situacaoDestinoId: atual.situacaoId }),
+      );
+      (req as any).religarPagoNaHora = id;
+      atual = await carregarVenda(prisma, id);
+      bloqueada = atual.estoqueLancado || atual.contasLancadas;
+    }
 
     if (bloqueada) {
       // só campos livres (observações / transporte)
@@ -214,11 +270,29 @@ export default async function vendasRoutes(app: FastifyInstance) {
           { bloqueados: realmenteAlterados },
         );
       }
+      // só o que veio no corpo (o .partial() ainda aplica os defaults do schema e zeraria campos não enviados)
+      const corpo = req.body as Record<string, unknown>;
       const data: Record<string, unknown> = {};
-      for (const k of CAMPOS_LIVRES) if ((parcial as any)[k] !== undefined) data[k] = (parcial as any)[k];
-      await prisma.venda.update({ where: { id }, data });
-      await auditar(req, 'Venda', id, 'ALTERAR', data);
-      return vendaCompleta(id);
+      for (const k of CAMPOS_LIVRES) if (k in corpo && (parcial as any)[k] !== undefined) data[k] = (parcial as any)[k];
+      // custo interno dos itens pode ser lançado/corrigido mesmo com a venda fechada
+      const custosItens = (parcial.itens || [])
+        .map((n, i) => ({ n, a: atual.itens[i] }))
+        .filter(({ n, a }) => a && n.custoUnitario !== undefined && (n.custoUnitario ?? null) !== (a.custoInformado ? a.custoUnitario : null));
+      await prisma.$transaction(async (tx) => {
+        if (custosItens.length) {
+          const prods = await tx.produto.findMany({ where: { id: { in: custosItens.map(({ a }) => a.produtoId).filter((x): x is number => !!x) } }, select: { id: true, precoCusto: true } });
+          const doCadastro = new Map(prods.map((p) => [p.id, p.precoCusto]));
+          for (const { n, a } of custosItens) {
+            const informado = n.custoUnitario !== null && n.custoUnitario !== undefined;
+            await tx.vendaItem.update({ where: { id: a.id }, data: { custoUnitario: informado ? n.custoUnitario! : (a.produtoId ? doCadastro.get(a.produtoId) ?? 0 : 0), custoInformado: informado } });
+          }
+          const itens = await tx.vendaItem.findMany({ where: { vendaId: id }, select: { custoUnitario: true, quantidade: true } });
+          data.custoTotal = arredondar(itens.reduce((s, i) => s + i.custoUnitario * i.quantidade, 0));
+        }
+        if (Object.keys(data).length) await tx.venda.update({ where: { id }, data });
+      });
+      await auditar(req, 'Venda', id, 'ALTERAR', { ...data, ...(custosItens.length ? { custosItens: custosItens.length } : {}) });
+      return comFechamento(req, await vendaCompleta(id));
     }
 
     if (atual.nota && atual.nota.situacao === 'AUTORIZADA') {
@@ -226,7 +300,10 @@ export default async function vendasRoutes(app: FastifyInstance) {
     }
 
     // aceita body parcial: campos ausentes são mantidos da venda atual
-    const body = vendaSchema.parse(mesclarComAtual(atual, req.body as Record<string, unknown>));
+    // (vendedor/técnico não trocam o vendedor da venda ao editar — para isso existe "Transferir vendedor")
+    const corpoPut = { ...(req.body as Record<string, unknown>) };
+    if ((await vendedorRestrito(req.user)) !== null) delete corpoPut.vendedorId;
+    const body = vendaSchema.parse(mesclarComAtual(atual, corpoPut));
     await prisma.$transaction(async (tx) => {
       const { itens, totais, parcelas, data } = await prepararVenda(tx, body);
       // parcelas: preserva as já vinculadas a conta (não há, pois contas não lançadas) → recria
@@ -252,6 +329,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
           outrasDespesas: body.outrasDespesas,
           total: totais.total,
           custoTotal: totais.custoTotal,
+          custoLogistica: body.custoLogistica,
           observacoes: body.observacoes ?? null,
           observacoesInternas: body.observacoesInternas ?? null,
           transportadoraId: body.transportadoraId ?? null,
@@ -274,14 +352,20 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const depois = await vendaCompleta(id);
     eventos.emitir('venda.alterada', { vendaId: id, data: atual.data, tipo: atual.tipo });
     if (+new Date(depois.data) !== +atual.data) eventos.emitir('venda.alterada', { vendaId: id, data: new Date(depois.data), tipo: atual.tipo });
-    return depois;
+    return comFechamento(req, depois);
   });
 
   // ---------------------------------------------------------------- excluir
   app.delete('/api/v1/vendas/:id', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE') }, async (req) => {
     const id = idDe(req);
-    const v = await prisma.venda.findUnique({ where: { id }, include: { nota: true } });
+    let v = await prisma.venda.findUnique({ where: { id }, include: { nota: true } });
     if (!v) throw new NotFound('Venda');
+    // venda só recebida automaticamente (pago na hora) e sem estoque baixado: tira do caixa e deixa excluir
+    if (v.contasLancadas && !v.estoqueLancado && v.tipo === 'PEDIDO' && (await soRecebimentoAutomatico(prisma, id))) {
+      const sit = v.situacaoId;
+      await prisma.$transaction((tx) => acaoEstornarContas({ modulo: 'VENDA', entidadeId: id, tx, usuarioId: req.user.id, situacaoOrigemId: sit, situacaoDestinoId: sit }));
+      v = (await prisma.venda.findUnique({ where: { id }, include: { nota: true } }))!;
+    }
     if (v.estoqueLancado || v.contasLancadas) throw new AppError('Venda com estoque/contas lançados não pode ser excluída. Estorne (ou cancele) antes.', 422, 'VENDA_LANCADA');
     if (v.nota && v.nota.situacao === 'AUTORIZADA') throw new AppError('Venda com NF-e autorizada não pode ser excluída.', 422, 'NOTA_AUTORIZADA');
     await prisma.$transaction(async (tx) => {
@@ -295,6 +379,8 @@ export default async function vendasRoutes(app: FastifyInstance) {
         if (v.nota && v.nota.situacao === 'PENDENTE') await tx.notaFiscal.delete({ where: { id: v.notaId } });
       }
       await tx.venda.delete({ where: { id } });
+      // contas a receber canceladas (sem nenhum recebimento) da venda excluída não ficam órfãs
+      await tx.contaReceber.deleteMany({ where: { origemTipo: 'VENDA', origemId: id, situacao: 'CANCELADO', valorRecebido: 0 } });
     });
     await auditar(req, v.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', id, 'EXCLUIR', { numero: v.numero });
     eventos.emitir('venda.alterada', { vendaId: id, data: v.data, tipo: v.tipo });
@@ -308,9 +394,87 @@ export default async function vendasRoutes(app: FastifyInstance) {
     if (body.forcar && req.user.perfil !== 'ADMIN' && req.user.perfil !== 'GERENTE') throw new AppError('Somente ADMIN/GERENTE pode forçar transições.', 403, 'SEM_PERMISSAO');
     const atual = await prisma.venda.findUnique({ where: { id }, select: { tipo: true } });
     if (!atual) throw new NotFound('Venda');
-    const r = await mudarSituacao({ modulo: moduloDe(atual.tipo), entidadeId: id, situacaoDestinoId: body.situacaoId, usuarioId: req.user.id, observacao: body.observacao, forcar: body.forcar });
+    let forcar = body.forcar;
+    if (atual.tipo !== 'ORCAMENTO') {
+      const destino = await prisma.situacao.findUnique({ where: { id: body.situacaoId } });
+      // finalizar (Fechada / NF emitida): só com a venda completa, e vale a partir de qualquer situação, para qualquer perfil
+      if (destino?.modulo === 'VENDA' && destino.final && !destino.cancelamento) {
+        await exigirVendaCompleta(id);
+        forcar = true;
+      }
+    }
+    const r = await mudarSituacao({ modulo: moduloDe(atual.tipo), entidadeId: id, situacaoDestinoId: body.situacaoId, usuarioId: req.user.id, observacao: body.observacao, forcar });
     await auditar(req, 'Venda', id, 'SITUACAO', { para: r.situacao.nome, acoes: r.acoes });
     return { situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor }, acoesExecutadas: r.acoes, alterado: r.alterado };
+  });
+
+  // ---------------------------------------------------------------- finalizar venda
+  /** O que falta para finalizar (a tela pergunta "Deseja finalizar?" ou mostra a lista com links). */
+  app.get('/api/v1/vendas/:id/finalizacao', async (req) => {
+    const id = idDe(req);
+    const v = await carregarVenda(prisma, id);
+    const pendencias = pendenciasFinalizacao(v as any);
+    const destino = await situacaoFinalizar();
+    // itens consignados: a compra já existe e o pagamento ao consignante sai pela consignação
+    const produtoIds = v.itens.map((i: any) => i.produtoId).filter((x: any): x is number => !!x);
+    const consignados = produtoIds.length ? await prisma.consignacao.findMany({ where: { produtoId: { in: produtoIds } }, select: { id: true, numero: true, descricao: true, valorConsignante: true, produtoId: true, status: true } }) : [];
+    const idsConsignados = new Set(consignados.map((c) => c.produtoId));
+    const custoProdutos = arredondar(v.itens.filter((i: any) => !idsConsignados.has(i.produtoId)).reduce((s: number, i: any) => s + (i.custoUnitario || 0) * i.quantidade, 0));
+    const compraRegistrada = await compraDaVenda(v.numero);
+    return { consignados: consignados.map(({ produtoId, ...c }) => c), podeFinalizar: !pendencias.length, pendencias, jaFinalizada: !!v.situacao.final && !v.situacao.cancelamento, situacaoAtual: { id: v.situacao.id, nome: v.situacao.nome }, destino: { id: destino.id, nome: destino.nome, cor: destino.cor }, contatoId: v.contatoId, custoProdutos, compraRegistrada, parcelas: await parcelasParaFinalizar(id), formas: await formasParaFinalizar(), carne: { ...(await previaCarneVenda(v.contatoId ?? null)), taxaEscolhida: (v as any).carneTaxaPct ?? null } };
+  });
+
+  /** Finaliza (vai para "Fechada") a partir de qualquer situação, desde que a venda esteja completa. */
+  app.post('/api/v1/vendas/:id/finalizar', async (req) => {
+    const id = idDe(req);
+    const body = z
+      .object({
+        observacao: z.string().max(500).nullish(),
+        /** registrar o pedido de compra da mercadoria (com o custo da venda) e se já está paga */
+        compra: z
+          .object({
+            fornecedorId: z.coerce.number().int().positive().nullish(),
+            paga: z.boolean(),
+            contaFinanceiraId: z.coerce.number().int().positive().nullish(),
+            vencimento: dataSchema.nullish(),
+            /** compra paga com a forma "Crédito bancário" (Lumicred paga; devolução + taxa no contas a pagar) */
+            creditoBancario: z.boolean().nullish(),
+          })
+          .nullish(),
+        /** onde entrou o dinheiro de cada parcela (ou se fica em aberto) */
+        recebimentos: z
+          .array(z.object({ parcelaId: z.coerce.number().int().positive(), formaPagamentoId: z.coerce.number().int().positive().nullish(), recebido: z.boolean(), contaFinanceiraId: z.coerce.number().int().positive().nullish(), creditoPagador: z.enum(['CLIENTE', 'LOJA']).nullish() }))
+          .nullish(),
+        /** carnê próprio: juros ao mês escolhidos na hora (vazio = pelo risco do cliente) */
+        carne: z.object({ taxaPct: z.coerce.number().min(0).max(30).nullish() }).nullish(),
+      })
+      .parse(req.body ?? {});
+    const v = await exigirVendaCompleta(id);
+    exigirPedido(v, 'ser finalizado');
+    const destino = await situacaoFinalizar();
+    if (v.situacao.final && !v.situacao.cancelamento) return { situacao: { id: v.situacao.id, nome: v.situacao.nome, cor: v.situacao.cor }, acoesExecutadas: [], alterado: false };
+    // confere as escolhas de pagamento antes de lançar qualquer coisa
+    if (body.recebimentos?.length) await validarRecebimentosFinalizacao(id, body.recebimentos);
+    if (body.carne) await prisma.venda.update({ where: { id }, data: { carneTaxaPct: body.carne.taxaPct ?? null } });
+    // primeiro a compra (entra no estoque e fica ligada à venda), depois a venda baixa o estoque
+    let compra: Awaited<ReturnType<typeof registrarCompraDaVenda>> | null = null;
+    if (body.compra) {
+      compra = await registrarCompraDaVenda(id, body.compra, req.user.id);
+      if (compra.compra) await auditar(req, 'Compra', compra.compra.id, 'CRIAR', { numero: compra.compra.numero, deVenda: v.numero, paga: compra.paga, jaExistia: compra.jaExistia });
+    }
+    const r = await mudarSituacao({ modulo: 'VENDA', entidadeId: id, situacaoDestinoId: destino.id, usuarioId: req.user.id, observacao: body.observacao || 'Venda finalizada', forcar: true });
+    await auditar(req, 'Venda', id, 'SITUACAO', { para: r.situacao.nome, acoes: r.acoes, finalizar: true });
+    // garante as contas lançadas (pago na hora) e põe cada recebimento no banco escolhido
+    const recebimentos = body.recebimentos?.length
+      ? await aplicarRecebimentosFinalizacao(id, body.recebimentos)
+      : await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, id, req.user.id, { mesmoComContasLancadas: true }));
+    return { situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor }, acoesExecutadas: r.acoes, alterado: r.alterado, compra, recebimentos };
+  });
+
+  /** Contato "Consumidor Final" (cria se não existir) — botão da tela de venda. */
+  app.get('/api/v1/vendas/consumidor-final', async () => {
+    const id = await consumidorFinalId();
+    return prisma.contato.findUnique({ where: { id } });
   });
 
   app.post('/api/v1/vendas/:id/acoes', async (req) => {
@@ -320,7 +484,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     await executarAcoes('VENDA', id, body.acoes as Acao[], req.user.id);
     await auditar(req, 'Venda', id, 'ACAO', { acoes: body.acoes });
     const v = await vendaCompleta(id);
-    return { acoesExecutadas: body.acoes, venda: v };
+    return { acoesExecutadas: body.acoes, venda: comFechamento(req, v) };
   });
 
   // ---------------------------------------------------------------- NF-e
@@ -405,7 +569,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const body = aprovarBody.parse(req.body || {});
     const r = await aprovarOrcamento(id, { aprovadoPor: body.aprovadoPor || req.user.nome, observacao: body.observacao, usuarioId: req.user.id });
     await auditar(req, 'Orcamento', id, 'ACAO', { acao: 'aprovar', aprovadoPor: body.aprovadoPor || req.user.nome });
-    return { ok: true, ...r, orcamento: await vendaCompleta(id) };
+    return { ok: true, ...r, orcamento: comFechamento(req, await vendaCompleta(id)) };
   });
 
   app.post('/api/v1/vendas/:id/converter', async (req, reply) => {
@@ -417,10 +581,24 @@ export default async function vendasRoutes(app: FastifyInstance) {
     if (acoesIniciais.length) await executarAcoes('VENDA', venda.id, acoesIniciais, req.user.id);
     await auditar(req, 'Orcamento', id, 'ACAO', { acao: 'converter', vendaId: venda.id, numeroVenda: venda.numero });
     eventos.emitir('venda.criada', { vendaId: venda.id, usuarioId: req.user.id });
-    return reply.code(201).send(await vendaCompleta(venda.id));
+    return reply.code(201).send(comFechamento(req, await vendaCompleta(venda.id)));
   });
 
   // ---------------------------------------------------------------- transferir para outro vendedor
+  // ---------------------------------------------------------------- link de pagamento (Mercado Pago)
+  /** O vendedor gera o link do Mercado Pago dentro do pedido (padrão: total da venda). */
+  app.post('/api/v1/vendas/:id/link-pagamento', async (req) => {
+    const id = idDe(req);
+    const body = z.object({ valor: z.coerce.number().positive().nullish() }).parse(req.body ?? {});
+    const v = await prisma.venda.findUnique({ where: { id }, include: { contato: { select: { nome: true, email: true } } } });
+    if (!v) throw new NotFound('Venda');
+    const valor = body.valor ?? v.total;
+    const link = await criarLinkPagamento({ referencia: `venda-${v.id}`, titulo: `${v.tipo === 'ORCAMENTO' ? 'Orçamento' : 'Pedido'} nº ${v.numero} — Balão da Informática`, valor, email: v.contato?.email, nome: v.contato?.nome });
+    await prisma.venda.update({ where: { id }, data: { linkPagamentoUrl: link.url, linkPagamentoId: link.id, linkPagamentoValor: link.valor, linkPagamentoEm: new Date() } });
+    await auditar(req, 'Venda', id, 'ACAO', { acao: 'link-pagamento', valor: link.valor });
+    return { url: link.url, valor: link.valor };
+  });
+
   app.post('/api/v1/vendas/:id/transferir-vendedor', async (req) => {
     const id = idDe(req);
     const body = transferirVendedorBody.parse(req.body);
@@ -431,7 +609,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     }
     const r = await transferirVendedor(id, body.vendedorId, req.user.id);
     await auditar(req, 'Venda', id, 'ACAO', { acao: 'transferirVendedor', vendedorId: body.vendedorId, observacao: body.observacao });
-    return { ok: true, alterado: r.alterado, venda: await vendaCompleta(id) };
+    return { ok: true, alterado: r.alterado, venda: comFechamento(req, await vendaCompleta(id)) };
   });
 
   // ---------------------------------------------------------------- duplicar (clonar)
@@ -447,7 +625,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     await auditar(req, tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', nova.id, 'CRIAR', { duplicadaDe: orig.numero, numero: nova.numero });
     if (tipo === 'PEDIDO') eventos.emitir('venda.criada', { vendaId: nova.id, usuarioId: req.user.id });
     eventos.emitir('venda.alterada', { vendaId: nova.id, data: nova.data, tipo: nova.tipo });
-    return reply.code(201).send(await vendaCompleta(nova.id));
+    return reply.code(201).send(comFechamento(req, await vendaCompleta(nova.id)));
   });
 
   // ---------------------------------------------------------------- gerar parcelas (não salva)
@@ -490,12 +668,13 @@ function mesclarComAtual(atual: Awaited<ReturnType<typeof carregarVenda>>, body:
     descontoValor: atual.descontoValor,
     frete: atual.frete,
     outrasDespesas: atual.outrasDespesas,
+    custoLogistica: atual.custoLogistica,
     transportadoraId: atual.transportadoraId,
     fretePorConta: atual.fretePorConta,
     quantidadeVolumes: atual.quantidadeVolumes,
     pesoBruto: atual.pesoBruto,
-    itens: atual.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct })),
-    parcelas: atual.parcelas.map((p) => ({ dataVencimento: p.dataVencimento, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes })),
+    itens: atual.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct, custoUnitario: i.custoInformado ? i.custoUnitario : null })),
+    parcelas: atual.parcelas.map((p) => ({ dataVencimento: p.dataVencimento, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes, creditoPagador: p.creditoPagador })),
   };
   const { situacaoId: _s, tipo: _t, ...resto } = body;
   for (const [k, v] of Object.entries(resto)) if (v !== undefined) base[k] = v;

@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle2, FileSignature, FileText, Plus, ShoppingCart, Trophy } from 'lucide-react';
+import { CheckCircle2, DollarSign, FileSignature, FileText, Package, Plus, ShoppingCart, Trophy } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/stores/auth';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
-import { BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, StatusBadge, Table, atalhosPeriodo, type Coluna } from '@/components/ui';
+import { OPCOES_PERIODO, periodoDe } from '@/lib/periodo';
+import { BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, StatusBadge, Table, type Coluna } from '@/components/ui';
 import { VendaAcoes, rotaDe } from '@/components/compartilhados/VendaAcoes';
 import { data, inteiro, moeda, rotulo } from '@/lib/format';
 import type { Paginado, TipoVenda, VendaResumo } from '@/types';
@@ -19,8 +21,9 @@ interface ResumoLista {
 
 /** "Hoje", "Semana passada", "01/10 a 15/10", "Todo o período" */
 function nomePeriodo(i: string, f: string) {
-  const at = atalhosPeriodo().find((a) => a.i === i && a.f === f);
-  if (at) return at.nome;
+  const p = periodoDe(i, f);
+  const at = OPCOES_PERIODO.find((o) => o.valor === p && p !== 'custom');
+  if (at) return at.rotulo;
   const br = (x: string) => x.split('-').reverse().slice(0, 2).join('/');
   if (i && f) return i === f ? br(i) : `${br(i)} a ${br(f)}`;
   if (i) return `Desde ${br(i)}`;
@@ -29,19 +32,23 @@ function nomePeriodo(i: string, f: string) {
 }
 
 /** Painel à direita do filtro: total, nº de vendas e vendedor destaque do que está filtrado */
-function PainelResumo({ r, periodo, orcamento, carregando }: { r?: ResumoLista; periodo: string; orcamento: boolean; carregando: boolean }) {
+function PainelResumo({ r, periodo, orcamento, carregando, soMinhas }: { r?: ResumoLista; periodo: string; orcamento: boolean; carregando: boolean; soMinhas: boolean }) {
+  // vendedor/técnico: a lista já vem só com as vendas dele — o painel mostra "Minhas vendas" e não existe "destaque"
+  const titulo = soMinhas ? (orcamento ? 'Meus orçamentos' : 'Minhas vendas') : orcamento ? 'Total orçado' : 'Total vendido';
   return (
-    <div className={`grid w-full grid-cols-2 gap-2 transition-opacity sm:ml-auto sm:flex sm:w-auto sm:flex-wrap sm:items-stretch ${carregando ? 'opacity-50' : ''}`} aria-live="polite">
-      <div className="col-span-2 min-w-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 sm:min-w-[150px]">
-        <div className="text-[11px] font-medium text-emerald-700">{orcamento ? 'Total orçado' : 'Total vendido'} · {periodo}</div>
+    // faixa de 3 cartões na largura toda (no celular: total em cima, os outros dois lado a lado)
+    <div className={`grid w-full basis-full grid-cols-2 gap-2 transition-opacity ${soMinhas ? 'md:grid-cols-2' : 'md:grid-cols-3'} ${carregando ? 'opacity-50' : ''}`} aria-live="polite">
+      <div className={`min-w-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 ${soMinhas ? '' : 'col-span-2 md:col-span-1'}`}>
+        <div className="text-[11px] font-medium text-emerald-700">{titulo} · {periodo}</div>
         <div className="num text-lg font-semibold leading-tight text-emerald-800">{r ? moeda(r.valor) : '—'}</div>
       </div>
-      <div className="min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 sm:min-w-[110px]">
+      <div className="min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
         <div className="text-[11px] font-medium text-slate-500">{orcamento ? 'Orçamentos' : 'Vendas'}</div>
         <div className="num text-lg font-semibold leading-tight text-slate-900">{r ? inteiro(r.quantidade) : '—'}</div>
         {r && r.quantidade > 0 && <div className="num text-[11px] text-slate-500">ticket {moeda(r.ticketMedio)}</div>}
       </div>
-      <div className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 sm:min-w-[170px] sm:max-w-[260px]">
+      {!soMinhas && (
+      <div className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5">
         <div className="flex items-center gap-1 text-[11px] font-medium text-amber-700">
           <Trophy className="h-3 w-3" /> Vendedor destaque
         </div>
@@ -60,6 +67,7 @@ function PainelResumo({ r, periodo, orcamento, carregando }: { r?: ResumoLista; 
           <div className="text-sm text-slate-400">—</div>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -72,6 +80,10 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
   const base = rotaDe(tipo);
   const { data: situacoes } = useSituacoes(orcamento ? 'ORCAMENTO' : 'VENDA');
   const { data: vendedores } = useVendedores();
+  // vendedor e técnico só têm acesso às próprias vendas (regra do Thiago, 29/10/2026): o servidor já filtra;
+  // aqui some o filtro de vendedor e o painel vira "Minhas vendas"
+  const perfil = useAuth((s) => s.usuario?.perfil);
+  const soMinhas = perfil === 'VENDEDOR' || perfil === 'TECNICO';
 
   const params = { ...pg.filtros, tipo, pagina: pg.pagina, limite: pg.limite };
   const { data: resp, isLoading, isFetching } = useQuery({
@@ -133,16 +145,21 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
       titulo: 'Lanç.',
       ocultarMobile: true,
       render: (v) => (
-        <span className="flex gap-1 text-[10px] font-semibold">
-          <span className={`rounded px-1 ${v.estoqueLancado ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`} title="Estoque lançado">
-            EST
+        <span className="flex items-center gap-1">
+          <span className={`inline-flex rounded p-0.5 ${v.estoqueLancado ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-300'}`} title={v.estoqueLancado ? 'Estoque lançado' : 'Estoque ainda não lançado'} aria-label={v.estoqueLancado ? 'Estoque lançado' : 'Estoque não lançado'}>
+            <Package className="h-3.5 w-3.5" />
           </span>
-          <span className={`rounded px-1 ${v.contasLancadas ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`} title="Contas lançadas">
-            FIN
+          <span className={`inline-flex rounded p-0.5 ${v.contasLancadas ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-300'}`} title={v.contasLancadas ? 'Financeiro lançado (contas a receber)' : 'Financeiro ainda não lançado'} aria-label={v.contasLancadas ? 'Financeiro lançado' : 'Financeiro não lançado'}>
+            <DollarSign className="h-3.5 w-3.5" />
           </span>
           {v.nota && (
-            <span className={`inline-flex items-center gap-0.5 rounded px-1 ${v.nota.situacao === 'AUTORIZADA' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`} title={`NF-e ${v.nota.numero} ${v.nota.situacao}`}>
-              <FileText className="h-3 w-3" /> NF
+            <span className={`inline-flex rounded p-0.5 ${v.nota.situacao === 'AUTORIZADA' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'}`} title={`NF-e ${v.nota.numero} ${v.nota.situacao}`} aria-label={`NF-e ${v.nota.situacao}`}>
+              <FileText className="h-3.5 w-3.5" />
+            </span>
+          )}
+          {!v.nota && v.roboNf?.status === 'PRONTA' && (
+            <span className="inline-flex items-center gap-0.5 rounded bg-emerald-600 px-1 text-white" title="Robô de NF: tudo preenchido — pronto pra emitir a NF">
+              <CheckCircle2 className="h-3 w-3" /> NF
             </span>
           )}
         </span>
@@ -162,8 +179,8 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
       ),
     },
   ];
-  // orçamento não lança estoque/contas: sem a coluna "Lanç."
-  const colunasVisiveis = orcamento ? colunas.filter((c) => c.chave !== 'flags') : colunas;
+  // orçamento não lança estoque/contas: sem a coluna "Lanç."; vendedor/técnico: sem a coluna "Vendedor" (é sempre ele)
+  const colunasVisiveis = colunas.filter((c) => !(orcamento && c.chave === 'flags') && !(soMinhas && c.chave === 'vendedor'));
   const titulo = orcamento ? 'Orçamentos' : 'Pedidos de venda';
   const novo = orcamento ? 'Novo orçamento' : 'Nova venda';
 
@@ -171,7 +188,7 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
     <div>
       <PageHeader
         titulo={titulo}
-        descricao={resp ? `${resp.meta.total} ${orcamento ? 'orçamentos' : 'pedidos'}${orcamento ? ' · envie por e-mail/WhatsApp e converta em venda quando o cliente aprovar' : ''}` : undefined}
+        descricao={resp ? `${resp.meta.total} ${orcamento ? 'orçamentos' : 'pedidos'}${soMinhas ? ' · só os seus' : ''}${orcamento ? ' · envie por e-mail/WhatsApp e converta em venda quando o cliente aprovar' : ''}` : undefined}
         acoes={
           <>
             {!orcamento && (
@@ -192,7 +209,7 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
       <Card semPadding>
         <BarraFiltros>
           <BuscaFiltro valor={pg.getFiltro('pesquisa')} onChange={(v) => pg.setFiltro('pesquisa', v)} placeholder="Nº, cliente, documento…" />
-          <SelectFiltro valor={pg.getFiltro('vendedorId')} onChange={(v) => pg.setFiltro('vendedorId', v)} opcoes={opcoesDe(vendedores)} placeholder="Todos os vendedores" />
+          {!soMinhas && <SelectFiltro valor={pg.getFiltro('vendedorId')} onChange={(v) => pg.setFiltro('vendedorId', v)} opcoes={opcoesDe(vendedores)} placeholder="Todos os vendedores" />}
           <PeriodoFiltro
             inicial={pg.getFiltro('dataInicial')}
             final={pg.getFiltro('dataFinal')}
@@ -205,7 +222,7 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
             placeholder="Todas as origens"
             opcoes={['BALCAO', 'WHATSAPP', 'LOJA_VIRTUAL', 'TELEFONE', 'MARKETPLACE', 'OUTRO'].map((o) => ({ valor: o, rotulo: rotulo(o) }))}
           />
-          <PainelResumo r={resp?.resumo} periodo={nomePeriodo(pg.getFiltro('dataInicial'), pg.getFiltro('dataFinal'))} orcamento={orcamento} carregando={isFetching} />
+          <PainelResumo r={resp?.resumo} periodo={nomePeriodo(pg.getFiltro('dataInicial'), pg.getFiltro('dataFinal'))} orcamento={orcamento} carregando={isFetching} soMinhas={soMinhas} />
         </BarraFiltros>
         <div className="border-b border-slate-100 px-3 py-2">
           <ChipsSituacao situacoes={situacoes ?? []} valor={pg.getFiltro('situacoes')} onChange={(v) => pg.setFiltro('situacoes', v)} />

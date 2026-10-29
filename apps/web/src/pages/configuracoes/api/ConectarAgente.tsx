@@ -64,7 +64,7 @@ print(nova["numero"], nova["total"])`,
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-3">
+      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:grid-cols-3">
         <LinhaCopiavel rotulo="Endereço da API (REST)" valor={urlBase} />
         <LinhaCopiavel rotulo="Servidor MCP (agentes de IA)" valor={urlMcp} ajuda="POST JSON-RPC, cabeçalho X-API-Key" />
         <LinhaCopiavel rotulo="Documentação OpenAPI" valor={urlOpenApi} ajuda="Só com o que a chave pode usar" />

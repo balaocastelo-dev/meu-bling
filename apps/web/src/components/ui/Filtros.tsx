@@ -1,8 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
+import { motion } from 'framer-motion';
 import clsx from 'clsx';
 import { Search, X } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 import type { SituacaoRef } from '@/types';
+import { OPCOES_PERIODO, intervaloPeriodo, periodoDe, type Periodo } from '@/lib/periodo';
 
 /** Barra de filtros padrão das listagens */
 export function BarraFiltros({ children, className }: { children: ReactNode; className?: string }) {
@@ -23,9 +25,9 @@ export function BuscaFiltro({ valor, onChange, placeholder = 'Buscar…', classN
   return (
     <div className={clsx('relative w-full sm:w-auto', className)}>
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-      <input autoFocus={autoFocus} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={placeholder} className="input-base h-9 w-full pl-8 pr-7 text-sm sm:h-8 sm:w-56 md:w-72" />
+      <input autoFocus={autoFocus} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={placeholder} className="input-base h-10 w-full pl-8 pr-9 text-sm sm:h-8 sm:w-56 sm:pr-7 md:w-72" />
       {texto && (
-        <button onClick={() => setTexto('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Limpar busca">
+        <button onClick={() => setTexto('')} className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center text-slate-400 hover:text-slate-600 sm:right-2 sm:h-auto sm:w-auto" aria-label="Limpar busca">
           <X className="h-3.5 w-3.5" />
         </button>
       )}
@@ -47,7 +49,7 @@ export function ChipsSituacao({ situacoes, valor, onChange, contagens }: { situa
       <button
         type="button"
         onClick={() => onChange('')}
-        className={clsx('rounded-full border px-2.5 py-0.5 text-xs font-medium transition', sel.size === 0 ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300')}
+        className={clsx('rounded-full border px-2.5 py-0.5 text-xs font-medium transition pointer-coarse:py-1.5', sel.size === 0 ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300')}
       >
         Todas
       </button>
@@ -58,7 +60,7 @@ export function ChipsSituacao({ situacoes, valor, onChange, contagens }: { situa
             key={s.id}
             type="button"
             onClick={() => alternar(s.id)}
-            className={clsx('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition', ativo ? 'border-transparent' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300')}
+            className={clsx('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition pointer-coarse:py-1.5', ativo ? 'border-transparent' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300')}
             style={ativo ? { backgroundColor: `${s.cor}26`, color: s.cor, borderColor: `${s.cor}66` } : undefined}
           >
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: s.cor }} />
@@ -74,7 +76,8 @@ export function ChipsSituacao({ situacoes, valor, onChange, contagens }: { situa
 /** Select pequeno para filtros */
 export function SelectFiltro({ valor, onChange, opcoes, placeholder, className, label }: { valor: string; onChange: (v: string) => void; opcoes: { valor: string | number; rotulo: string }[]; placeholder?: string; className?: string; label?: string }) {
   return (
-    <div className={clsx('flex min-w-0 flex-1 basis-[calc(50%-0.25rem)] flex-col gap-0.5 sm:flex-none sm:basis-auto', className)}>
+    // celular estreito: um por linha (dois lado a lado cortavam o texto: "Todas cate…"); a partir de 420 px, dois por linha
+    <div className={clsx('flex min-w-0 flex-1 basis-full flex-col gap-0.5 min-[420px]:basis-[calc(50%-0.25rem)] sm:flex-none sm:basis-auto', className)}>
       {label && <span className="text-[11px] font-medium text-slate-500">{label}</span>}
       <select value={valor} onChange={(e) => onChange(e.target.value)} className="input-base h-9 w-full min-w-0 py-0 pr-8 text-sm sm:h-8 sm:w-auto sm:min-w-[140px]">
         <option value="">{placeholder ?? 'Todos'}</option>
@@ -117,43 +120,63 @@ export function atalhosPeriodo(hoje = new Date()): { id: string; nome: string; i
   ];
 }
 
-/** Período (data inicial/final) para filtros, com atalhos (hoje, semana, mês…) */
+/**
+ * Filtro de data do sistema — o mesmo dos dashboards: Todo o período · Hoje · Ontem · 7 dias · 30 dias · Este mês · Mês passado · Este ano · Ano passado · Últimos 12 meses · Período.
+ * "Todo o período": nas listas (limpavel) limpa as datas; onde o período é obrigatório (DRE, fluxo de caixa, relatórios)
+ * manda DESDE_SEMPRE..hoje e a API recua até o primeiro registro. Com atalhos=false mostra só as duas datas.
+ */
 export function PeriodoFiltro({ inicial, final, onChange, label = 'Período', atalhos = true, limpavel = true }: { inicial: string; final: string; onChange: (i: string, f: string) => void; label?: string; atalhos?: boolean; /** false onde o período é obrigatório (DRE, relatórios) */ limpavel?: boolean }) {
-  const opcoes = atalhos ? atalhosPeriodo() : [];
-  const ativo = opcoes.find((o) => o.i === inicial && o.f === final)?.id;
+  const idPill = useId();
+  const detectado = periodoDe(inicial, final);
+  const [livre, setLivre] = useState(false);
+  // sem datas onde o período é obrigatório = ainda não escolheu (datas livres)
+  const ativo: Periodo = livre ? 'custom' : detectado === 'tudo' && !limpavel && !inicial ? 'custom' : detectado;
+  const opcoes = OPCOES_PERIODO;
+  const escolher = (p: Periodo) => {
+    if (p === 'custom') {
+      setLivre(true);
+      if (!inicial && !final) {
+        const r = intervaloPeriodo('mes');
+        onChange(r.dataInicial, r.dataFinal);
+      }
+      return;
+    }
+    setLivre(false);
+    const r = intervaloPeriodo(p, undefined, !limpavel);
+    onChange(r.dataInicial, r.dataFinal);
+  };
+  const datas = (
+    <div className="flex w-full min-w-0 items-center gap-1 sm:w-auto">
+      <input type="date" aria-label="Data inicial" value={inicial} max={final || undefined} onChange={(e) => onChange(e.target.value, final)} className="input-base h-9 min-w-0 flex-1 py-0 text-sm sm:h-8 sm:w-36 sm:flex-none" />
+      <span className="text-xs text-slate-400">até</span>
+      <input type="date" aria-label="Data final" value={final} min={inicial || undefined} onChange={(e) => onChange(inicial, e.target.value)} className="input-base h-9 min-w-0 flex-1 py-0 text-sm sm:h-8 sm:w-36 sm:flex-none" />
+    </div>
+  );
   return (
     <div className="flex w-full flex-col gap-1 sm:w-auto">
       {label && <span className="text-[11px] font-medium text-slate-500">{label}</span>}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {opcoes.length > 0 && (
-          <div className="flex flex-wrap gap-1" role="group" aria-label="Atalhos de período">
+      {atalhos ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* quando não cabe numa linha, as opções descem dentro de um bloco de cantos arredondados — nada cortado, nada de oval torta */}
+          <div className="inline-flex max-w-full flex-wrap gap-0.5 rounded-2xl border border-slate-200 bg-white p-1 shadow-card" role="group" aria-label="Período">
             {opcoes.map((o) => (
               <button
-                key={o.id}
+                key={o.valor}
                 type="button"
-                onClick={() => (ativo === o.id && limpavel ? onChange('', '') : onChange(o.i, o.f))}
-                className={
-                  'h-8 whitespace-nowrap rounded-md border px-2.5 text-xs font-medium transition-colors ' +
-                  (ativo === o.id ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50')
-                }
-                aria-pressed={ativo === o.id}
+                onClick={() => escolher(o.valor)}
+                aria-pressed={o.valor === ativo}
+                className={clsx('relative h-7 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-medium transition-colors pointer-coarse:h-9', o.valor === ativo ? 'text-white' : 'text-slate-500 hover:text-slate-800')}
               >
-                {o.nome}
+                {o.valor === ativo && <motion.span layoutId={`periodo-${idPill}`} className="absolute inset-0 rounded-full bg-slate-900" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
+                <span className="relative">{o.rotulo}</span>
               </button>
             ))}
           </div>
-        )}
-        <div className="flex w-full min-w-0 items-center gap-1 sm:w-auto">
-          <input type="date" aria-label="Data inicial" value={inicial} max={final || undefined} onChange={(e) => onChange(e.target.value, final)} className="input-base h-9 min-w-0 flex-1 py-0 text-sm sm:h-8 sm:w-36 sm:flex-none" />
-          <span className="text-xs text-slate-400">até</span>
-          <input type="date" aria-label="Data final" value={final} min={inicial || undefined} onChange={(e) => onChange(inicial, e.target.value)} className="input-base h-9 min-w-0 flex-1 py-0 text-sm sm:h-8 sm:w-36 sm:flex-none" />
-          {limpavel && (inicial || final) && (
-            <button type="button" onClick={() => onChange('', '')} title="Limpar período" className="h-8 rounded-md px-2 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-              ✕
-            </button>
-          )}
+          {ativo === 'custom' && datas}
         </div>
-      </div>
+      ) : (
+        datas
+      )}
     </div>
   );
 }

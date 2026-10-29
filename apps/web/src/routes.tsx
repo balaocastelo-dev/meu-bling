@@ -12,9 +12,11 @@ import { PaginaSkeleton } from '@/components/ui/Skeleton';
 
 const Login = lazy(() => import('@/pages/auth/Login'));
 const Perfil = lazy(() => import('@/pages/auth/Perfil'));
-const DashboardGeral = lazy(() => import('@/pages/dashboard/DashboardGeral'));
 const DashboardVendas = lazy(() => import('@/pages/dashboard/DashboardVendas'));
 const DashboardAssistencia = lazy(() => import('@/pages/dashboard/DashboardAssistencia'));
+const DashboardConsignacao = lazy(() => import('@/pages/dashboard/DashboardConsignacao'));
+const Jarvis = lazy(() => import('@/pages/jarvis/Jarvis'));
+const MeuDashboard = lazy(() => import('@/pages/meu-dashboard/MeuDashboard'));
 const PainelVendedor = lazy(() => import('@/pages/vendedor/PainelVendedor'));
 const MetasDesafios = lazy(() => import('@/pages/vendedor/MetasDesafios'));
 
@@ -42,8 +44,15 @@ const Estoque = lazy(() => import('@/pages/estoque/Estoque'));
 const ContasReceber = lazy(() => import('@/pages/financeiro/ContasReceber'));
 const ContasPagar = lazy(() => import('@/pages/financeiro/ContasPagar'));
 const Bancos = lazy(() => import('@/pages/financeiro/Bancos'));
+const ExtratoConta = lazy(() => import('@/pages/financeiro/ExtratoConta'));
 const FluxoCaixa = lazy(() => import('@/pages/financeiro/FluxoCaixa'));
+const Caixinhas = lazy(() => import('@/pages/financeiro/Caixinhas'));
 const Comissoes = lazy(() => import('@/pages/financeiro/Comissoes'));
+const Emprestimos = lazy(() => import('@/pages/financeiro/Emprestimos'));
+const Carnes = lazy(() => import('@/pages/financeiro/Carnes'));
+const ConsignacoesLista = lazy(() => import('@/pages/consignacoes/ConsignacoesLista'));
+const ConsignacaoForm = lazy(() => import('@/pages/consignacoes/ConsignacaoForm'));
+const ConsignacaoDetalhe = lazy(() => import('@/pages/consignacoes/ConsignacaoDetalhe'));
 
 const NotasLista = lazy(() => import('@/pages/fiscal/NotasLista'));
 const NotaDetalhe = lazy(() => import('@/pages/fiscal/NotaDetalhe'));
@@ -52,6 +61,7 @@ const NotaForm = lazy(() => import('@/pages/fiscal/NotaForm'));
 const Dre = lazy(() => import('@/pages/relatorios/Dre'));
 const Relatorios = lazy(() => import('@/pages/relatorios/Relatorios'));
 
+const Chat = lazy(() => import('@/pages/chat/Chat'));
 const Notificacoes = lazy(() => import('@/pages/comunicacao/Notificacoes'));
 const Whatsapp = lazy(() => import('@/pages/comunicacao/Whatsapp'));
 const Templates = lazy(() => import('@/pages/comunicacao/Templates'));
@@ -68,14 +78,18 @@ const ConfigCategoriasFinanceiras = lazy(() => import('@/pages/configuracoes/Cat
 const ConfigDepositos = lazy(() => import('@/pages/configuracoes/Depositos'));
 const ConfigContasFinanceiras = lazy(() => import('@/pages/configuracoes/ContasFinanceiras'));
 const ConfigSmtp = lazy(() => import('@/pages/configuracoes/Smtp'));
+const ConfigMercadoPago = lazy(() => import('@/pages/configuracoes/MercadoPago'));
 const ConfigOpenFinance = lazy(() => import('@/pages/configuracoes/OpenFinance'));
 const ConfigBling = lazy(() => import('@/pages/configuracoes/Bling'));
 const ConfigSaude = lazy(() => import('@/pages/configuracoes/Saude'));
+const ConfigJarvis = lazy(() => import('@/pages/configuracoes/Jarvis'));
+const ConfigWhatsapp = lazy(() => import('@/pages/configuracoes/Whatsapp'));
 const ConfigApi = lazy(() => import('@/pages/configuracoes/ApiIntegracoes'));
 const BlingCallback = lazy(() => import('@/pages/configuracoes/BlingCallback'));
 
 const OsPublica = lazy(() => import('@/pages/publico/OsPublica'));
 const VendaPublica = lazy(() => import('@/pages/publico/VendaPublica'));
+const ConsignacaoPublica = lazy(() => import('@/pages/publico/ConsignacaoPublica'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
 
 const S = (el: ReactNode) => <Suspense fallback={<PaginaSkeleton />}>{el}</Suspense>;
@@ -93,14 +107,9 @@ function Somente({ perfis, children }: { perfis: Perfil[]; children: ReactNode }
   }
   return <>{children}</>;
 }
-/** Tela inicial: ADMIN vê o dashboard; o vendedor cai no painel dele; os demais na sua área de trabalho. */
+/** Tela inicial de todo mundo: o "Meu Dashboard" do perfil (gestor = dashboard completo; vendedor, técnico e gerente têm o seu). */
 function Inicio() {
-  const perfil = useAuth((s) => s.usuario?.perfil);
-  if (perfil === 'ADMIN') return S(<DashboardGeral />);
-  if (perfil === 'TECNICO') return <Navigate to="/ordens-servico" replace />;
-  if (perfil === 'FINANCEIRO') return <Navigate to="/financeiro/receber" replace />;
-  if (perfil === 'VENDEDOR') return <Navigate to="/meu-painel" replace />;
-  return <Navigate to="/vendas" replace />;
+  return S(<MeuDashboard />);
 }
 const ADMIN = (el: ReactNode) => S(<Somente perfis={['ADMIN']}>{el}</Somente>);
 const GESTAO = (el: ReactNode) => S(<Somente perfis={['ADMIN', 'GERENTE']}>{el}</Somente>);
@@ -111,16 +120,20 @@ export const router = createBrowserRouter(
   { path: '/login', element: S(<Login />) },
   { path: '/p/os/:token', element: S(<OsPublica />) },
   { path: '/p/venda/:token', element: S(<VendaPublica />) },
+  { path: '/p/consignacao/:token', element: S(<ConsignacaoPublica />) },
   {
     path: '/',
     element: <AppShell />,
     errorElement: <ErroPagina />,
     children: [
       { index: true, element: <Inicio /> },
+      { path: 'meu-dashboard', element: S(<MeuDashboard />) },
       { path: 'dashboard/vendas', element: ADMIN(<DashboardVendas />) },
       { path: 'dashboard/assistencia', element: ADMIN(<DashboardAssistencia />) },
+      { path: 'dashboard/consignacao', element: GESTAO(<DashboardConsignacao />) },
+      { path: 'jarvis', element: ADMIN(<Jarvis />) },
       { path: 'perfil', element: S(<Perfil />) },
-      { path: 'meu-painel', element: S(<Somente perfis={['ADMIN', 'GERENTE', 'VENDEDOR']}><PainelVendedor /></Somente>) },
+      { path: 'meu-painel', element: S(<Somente perfis={['ADMIN', 'GERENTE', 'VENDEDOR', 'TECNICO']}><PainelVendedor /></Somente>) },
       { path: 'metas-desafios', element: GESTAO(<MetasDesafios />) },
 
       { path: 'vendas', element: S(<VendasLista />) },
@@ -136,6 +149,10 @@ export const router = createBrowserRouter(
       { path: 'compras/nova', element: S(<CompraForm />) },
       { path: 'compras/:id', element: S(<CompraDetalhe />) },
       { path: 'compras/:id/editar', element: S(<CompraForm />) },
+
+      { path: 'consignacoes', element: S(<ConsignacoesLista />) },
+      { path: 'consignacoes/nova', element: S(<ConsignacaoForm />) },
+      { path: 'consignacoes/:id', element: S(<ConsignacaoDetalhe />) },
 
       { path: 'ordens-servico', element: S(<OsLista />) },
       { path: 'ordens-servico/nova', element: S(<OsForm />) },
@@ -157,7 +174,11 @@ export const router = createBrowserRouter(
       { path: 'financeiro/receber', element: FIN(<ContasReceber />) },
       { path: 'financeiro/pagar', element: FIN(<ContasPagar />) },
       { path: 'financeiro/bancos', element: FIN(<Bancos />) },
+      { path: 'financeiro/bancos/:id', element: FIN(<ExtratoConta />) },
       { path: 'financeiro/fluxo-caixa', element: FIN(<FluxoCaixa />) },
+      { path: 'financeiro/caixinhas', element: FIN(<Caixinhas />) },
+      { path: 'financeiro/emprestimos', element: FIN(<Emprestimos />) },
+      { path: 'financeiro/carnes', element: FIN(<Carnes />) },
       { path: 'comissoes', element: S(<Comissoes />) },
 
       { path: 'notas-fiscais', element: S(<NotasLista />) },
@@ -167,6 +188,8 @@ export const router = createBrowserRouter(
       { path: 'relatorios', element: FIN(<Relatorios />) },
       { path: 'relatorios/dre', element: FIN(<Dre />) },
 
+      { path: 'chat', element: S(<Chat />) },
+      { path: 'chat/:id', element: S(<Chat />) },
       { path: 'comunicacao', element: <Navigate to="/comunicacao/notificacoes" replace /> },
       { path: 'comunicacao/notificacoes', element: S(<Notificacoes />) },
       { path: 'comunicacao/whatsapp', element: S(<Whatsapp />) },
@@ -184,9 +207,12 @@ export const router = createBrowserRouter(
       { path: 'configuracoes/depositos', element: GESTAO(<ConfigDepositos />) },
       { path: 'configuracoes/contas-financeiras', element: GESTAO(<ConfigContasFinanceiras />) },
       { path: 'configuracoes/smtp', element: ADMIN(<ConfigSmtp />) },
+      { path: 'configuracoes/mercado-pago', element: ADMIN(<ConfigMercadoPago />) },
       { path: 'configuracoes/open-finance', element: ADMIN(<ConfigOpenFinance />) },
       { path: 'configuracoes/bling', element: ADMIN(<ConfigBling />) },
       { path: 'configuracoes/saude', element: ADMIN(<ConfigSaude />) },
+      { path: 'configuracoes/jarvis', element: ADMIN(<ConfigJarvis />) },
+      { path: 'configuracoes/whatsapp', element: ADMIN(<ConfigWhatsapp />) },
       { path: 'configuracoes/api', element: ADMIN(<ConfigApi />) },
       { path: 'configuracoes/bling/callback', element: ADMIN(<BlingCallback />) },
 

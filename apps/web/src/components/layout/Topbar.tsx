@@ -6,6 +6,9 @@ import { useAuth } from '@/stores/auth';
 import { api } from '@/lib/api';
 import { useWhatsappStatus } from '@/hooks/useEmpresa';
 import { iniciais, rotulo } from '@/lib/format';
+import { SinoRobo } from '@/components/compartilhados/RoboSaude';
+import { SinoLembretes } from '@/components/compartilhados/Lembretes';
+import { BotaoChat } from '@/components/chat/BotaoChat';
 
 function MenuFlutuante({ aberto, onFechar, children, alinhar = 'right' }: { aberto: boolean; onFechar: () => void; children: React.ReactNode; alinhar?: 'left' | 'right' }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -24,7 +27,7 @@ function MenuFlutuante({ aberto, onFechar, children, alinhar = 'right' }: { aber
 }
 
 /** Barra superior: menu mobile, busca global (Ctrl+K), + Novo, status WhatsApp, usuário */
-export function Topbar({ onAbrirMenu, onAbrirBusca }: { onAbrirMenu: () => void; onAbrirBusca: () => void }) {
+export function Topbar({ menuAberto = false, onAbrirMenu, onAbrirBusca }: { menuAberto?: boolean; onAbrirMenu: () => void; onAbrirBusca: () => void }) {
   const nav = useNavigate();
   const usuario = useAuth((s) => s.usuario);
   const logout = useAuth((s) => s.logout);
@@ -46,14 +49,24 @@ export function Topbar({ onAbrirMenu, onAbrirBusca }: { onAbrirMenu: () => void;
   const waCor = waStatus === 'CONECTADO' ? 'bg-emerald-500' : waStatus === 'DESCONECTADO' ? 'bg-red-500' : 'bg-amber-400';
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 min-w-0 items-center gap-2 border-b border-slate-200 bg-white px-3 md:px-4">
-      <button className="rounded-md p-2 text-slate-500 hover:bg-slate-100 lg:hidden" onClick={onAbrirMenu} aria-label="Abrir menu">
+    // pt/pl/pr com env(safe-area-inset-*): com viewport-fit=cover o cabeçalho não fica embaixo do entalhe do iPhone
+    <header
+      className="sticky top-0 z-30 flex min-w-0 items-center gap-1.5 border-b border-slate-200 bg-white px-2 sm:gap-2 sm:px-3 md:px-4"
+      style={{ paddingTop: 'env(safe-area-inset-top)', minHeight: 'calc(3.5rem + env(safe-area-inset-top))', paddingLeft: 'max(0.5rem, env(safe-area-inset-left))', paddingRight: 'max(0.5rem, env(safe-area-inset-right))' }}
+    >
+      <button
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 xl:hidden"
+        onClick={onAbrirMenu}
+        aria-label="Abrir menu"
+        aria-controls="menu-lateral"
+        aria-expanded={menuAberto}
+      >
         <Menu className="h-5 w-5" />
       </button>
 
       <button
         onClick={onAbrirBusca}
-        className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-400 transition hover:border-slate-300 hover:bg-white md:max-w-md"
+        className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-400 transition hover:border-slate-300 hover:bg-white sm:h-9 md:max-w-md"
         aria-label="Buscar"
       >
         <Search className="h-4 w-4 shrink-0" />
@@ -68,7 +81,8 @@ export function Topbar({ onAbrirMenu, onAbrirBusca }: { onAbrirMenu: () => void;
         <div className="relative">
           <button
             onClick={() => setNovoAberto((a) => !a)}
-            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand-600 px-3 text-sm font-medium text-white shadow-xs transition hover:bg-brand-700"
+            aria-label="Novo"
+            className="inline-flex h-10 items-center gap-1.5 rounded-md bg-brand-600 px-3 text-sm font-medium text-white shadow-xs transition hover:bg-brand-700 sm:h-9"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Novo</span>
@@ -76,13 +90,17 @@ export function Topbar({ onAbrirMenu, onAbrirBusca }: { onAbrirMenu: () => void;
           </button>
           <MenuFlutuante aberto={novoAberto} onFechar={() => setNovoAberto(false)}>
             {novos.map((n) => (
-              <Link key={n.para} to={n.para} onClick={() => setNovoAberto(false)} className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+              <Link key={n.para} to={n.para} onClick={() => setNovoAberto(false)} className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 pointer-coarse:py-2.5">
                 <n.icone className="h-4 w-4 text-slate-400" />
                 {n.rotulo}
               </Link>
             ))}
           </MenuFlutuante>
         </div>
+
+        <BotaoChat />
+        <SinoRobo />
+        <SinoLembretes />
 
         <Link
           to="/comunicacao/whatsapp"
@@ -94,7 +112,7 @@ export function Topbar({ onAbrirMenu, onAbrirBusca }: { onAbrirMenu: () => void;
         </Link>
 
         <div className="relative">
-          <button onClick={() => setUserAberto((a) => !a)} className="flex h-9 items-center gap-2 rounded-md px-1.5 transition hover:bg-slate-100">
+          <button onClick={() => setUserAberto((a) => !a)} aria-label="Minha conta" className="flex h-10 min-w-10 items-center justify-center gap-2 rounded-md px-1.5 transition hover:bg-slate-100 sm:h-9">
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-800 text-[11px] font-semibold uppercase text-white">{iniciais(usuario?.nome)}</span>
             <span className="hidden text-left leading-tight md:block">
               <span className="block max-w-[140px] truncate text-sm font-medium text-slate-800">{usuario?.nome}</span>

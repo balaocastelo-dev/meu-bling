@@ -71,14 +71,14 @@ export default function ContatoDetalhe() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard rotulo="Total comprado" valor={moeda(c.resumo?.totalVendas)} icone={<CircleDollarSign className="h-4 w-4" />} tom="verde" />
         <StatCard rotulo="Vendas" valor={inteiro(c.resumo?.qtdVendas)} sub={c.resumo?.ultimaCompra ? `última em ${data(c.resumo.ultimaCompra)}` : undefined} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" />
         <StatCard rotulo="Ordens de serviço" valor={inteiro(c.resumo?.qtdOs)} icone={<Wrench className="h-4 w-4" />} />
         <StatCard rotulo="Em aberto (a receber)" valor={moeda(totalReceber)} icone={<Wallet className="h-4 w-4" />} tom={totalReceber > 0 ? 'amarelo' : 'neutro'} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid items-start gap-4 lg:grid-cols-3">
         <Card titulo="Dados">
           <div className="space-y-3 text-sm">
             {(c.celular || c.telefone) && (

@@ -12,7 +12,7 @@ export default function ContasFinanceiras() {
       rota="/contas-financeiras"
       invalidar={['contas-financeiras', 'financeiro-resumo']}
       rotuloNovo="Nova conta"
-      vazio={{ nome: '', tipo: 'BANCO', banco: '', agencia: '', conta: '', saldoInicial: 0, padrao: false, ativo: true, cor: '#2563eb' }}
+      vazio={{ nome: '', tipo: 'BANCO', banco: '', agencia: '', conta: '', saldoInicial: 0, taxaRecebimentoPct: 0, padrao: false, ativo: true, cor: '#2563eb' }}
       validar={(f) => (!f.nome?.trim() ? 'Informe o nome.' : null)}
       antesDeSalvar={(f) => { const { saldoAtual: _s, saldoBanco: _b, saldoBancoEm: _e, openFinanceItemId: _i, openFinanceStatus: _st, ultimaSincronizacao: _u, ...resto } = f; return resto; }}
       colunas={[
@@ -32,7 +32,8 @@ export default function ContasFinanceiras() {
             <Input label="Banco" value={f.banco ?? ''} onChange={(e) => set({ banco: e.target.value })} />
             <Input label="Agência" value={f.agencia ?? ''} onChange={(e) => set({ agencia: e.target.value })} />
             <Input label="Conta" value={f.conta ?? ''} onChange={(e) => set({ conta: e.target.value })} />
-            <MoneyInput label="Saldo inicial" value={f.saldoInicial ?? 0} onChange={(v) => set({ saldoInicial: v })} disabled={!!f.id} />
+            <MoneyInput label="Saldo inicial" value={f.saldoInicial ?? 0} onChange={(v) => set({ saldoInicial: v })} ajuda={f.id ? 'Mudar aqui ajusta o saldo atual pela diferença.' : undefined} />
+            <MoneyInput label="Taxa nos recebimentos (%)" prefixo="" value={f.taxaRecebimentoPct ?? 0} onChange={(v) => set({ taxaRecebimentoPct: v })} ajuda="Ex.: Mercado Pago 5% — entra o valor menos a taxa." />
           </div>
           <Checkbox label="Conta padrão" checked={f.padrao ?? false} onChange={(e) => set({ padrao: e.target.checked })} />
           <Checkbox label="Ativa" checked={f.ativo ?? true} onChange={(e) => set({ ativo: e.target.checked })} />

@@ -54,7 +54,8 @@ async function main() {
   const vendedores = await req('GET', '/vendedores');
   const tecnicos = await req('GET', '/tecnicos');
   const depositos = await req('GET', '/depositos');
-  const formas = await req('GET', '/formas-pagamento');
+  // formas comuns (carnê e crédito bancário têm fluxo próprio, com testes próprios)
+  const formas = ((await req('GET', '/formas-pagamento')) as any[]).filter((f) => !['CARNE', 'CREDITO_BANCARIO'].includes(f.tipo));
   await req('GET', '/categorias-financeiras');
   await req('GET', '/contas-financeiras');
   const sitV = await req('GET', '/situacoes?modulo=VENDA');
@@ -71,7 +72,7 @@ async function main() {
   const forn = await req('POST', '/contatos', { nome: `Fornecedor Smoke ${SUF}`, tipo: 'FORNECEDOR', tipoPessoa: 'J', documento: `11222333${SUF}` }, 201);
 
   console.log('== Produtos / estoque');
-  const prod = await req('POST', '/produtos', { nome: `PRODUTO SMOKE SSD ${SUF}`, codigo: `SMK-${SUF}`, preco: 300, precoCusto: 200, ncm: '84717012', csosn: '102', estoqueMinimo: 1 }, 201);
+  const prod = await req('POST', '/produtos', { nome: `PRODUTO SMOKE SSD ${SUF}`, codigo: `SMK-${SUF}`, preco: 300, precoCusto: 200, ncm: '84717040', csosn: '102', estoqueMinimo: 1 }, 201);
   const dep = depositos.find((d: any) => d.padrao)?.id ?? depositos[0].id;
   await req('POST', '/estoque/ajuste', { produtoId: prod.id, depositoId: dep, tipo: 'ENTRADA', quantidade: 10, custoUnitario: 200, observacao: 'smoke' }, [200, 201]);
   const p = await req('GET', `/produtos/${prod.id}`);
@@ -261,7 +262,7 @@ async function main() {
   const desafio = await req('POST', '/desafios', { titulo: `Desafio smoke ${SUF}`, tipo: 'VALOR', alvo: 500, premio: 50, inicio: hoje, fim: hoje, regra: 'TODOS', todosVendedores: false, vendedoresIds: [vd.id] }, 201);
   await req('POST', '/desafios', { titulo: 'x', tipo: 'VALOR', alvo: 1, premio: 1, inicio: hoje, fim: hoje }, 400);
   const vendaVd = async () => {
-    const v = await req('POST', '/vendas', { contatoId: cli.id, vendedorId: vd.id, data: hoje, itens: [{ descricao: 'Item avulso smoke', quantidade: 1, valorUnitario: 300 }], parcelas: [{ dataVencimento: hoje, valor: 300, formaPagamentoId: formas[0].id }] }, 201);
+    const v = await req('POST', '/vendas', { contatoId: cli.id, vendedorId: vd.id, data: hoje, itens: [{ descricao: 'Item avulso smoke', quantidade: 1, valorUnitario: 300, custoUnitario: 150 }], parcelas: [{ dataVencimento: hoje, valor: 300, formaPagamentoId: formas[0].id }] }, 201);
     await req('POST', `/vendas/${v.id}/situacao`, { situacaoId: s(sitV, 'Fechada') }, 200, true);
     return v;
   };

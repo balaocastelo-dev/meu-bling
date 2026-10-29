@@ -5,7 +5,7 @@ import { Globe, Package, Plus } from 'lucide-react';
 import { api } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useCategoriasProduto } from '@/hooks/useListas';
-import { Badge, BarraFiltros, BuscaFiltro, Button, Card, EmptyState, PageHeader, Pagination, SelectFiltro, Table, type Coluna } from '@/components/ui';
+import { Badge, BarraFiltros, BuscaFiltro, Button, Card, EmptyState, PageHeader, Pagination, SelectFiltro, Table, type Coluna, ValorOculto } from '@/components/ui';
 import { moeda, numero } from '@/lib/format';
 import type { Paginado, Produto } from '@/types';
 import { CatalogoDoSite } from '@/components/compartilhados/CatalogoDoSite';
@@ -24,6 +24,7 @@ export default function ProdutosLista() {
     {
       chave: 'nome',
       titulo: 'Produto',
+      noCartao: 'titulo',
       render: (p) => (
         <div className="flex items-center gap-3">
           <FotoProduto url={p.imagemUrl} tamanho="md" />
@@ -51,7 +52,7 @@ export default function ProdutosLista() {
         </div>
       ),
     },
-    { chave: 'custo', titulo: 'Custo', direita: true, largura: '110px', ocultarMobile: true, render: (p) => <span className="text-slate-500">{moeda(p.precoCusto)}</span> },
+    { chave: 'custo', titulo: 'Custo', direita: true, largura: '110px', ocultarMobile: true, render: (p) => <ValorOculto className="text-slate-500">{moeda(p.precoCusto)}</ValorOculto> },
     {
       chave: 'estoque',
       titulo: 'Estoque',

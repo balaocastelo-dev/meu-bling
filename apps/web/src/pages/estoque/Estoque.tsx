@@ -6,7 +6,7 @@ import { ArrowRightLeft, Boxes, SlidersHorizontal, TriangleAlert } from 'lucide-
 import { api } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useDepositos, opcoesDe } from '@/hooks/useListas';
-import { Badge, BarraFiltros, BuscaFiltro, Button, Card, Checkbox, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, Table, Tabs, type Coluna } from '@/components/ui';
+import { Badge, BarraFiltros, BuscaFiltro, Button, Card, Checkbox, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, Table, Tabs, type Coluna, ValorOculto } from '@/components/ui';
 import { AjusteEstoqueModal, TransferenciaEstoqueModal } from '@/components/compartilhados/EstoqueModais';
 import { dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { MovimentoEstoque, Paginado, SaldoEstoque } from '@/types';
@@ -39,8 +39,8 @@ export default function Estoque() {
     { chave: 'saldo', titulo: 'Saldo', direita: true, render: (s) => <span className={clsx('font-medium', s.saldo <= 0 ? 'text-red-600' : s.saldo <= s.estoqueMinimo ? 'text-amber-600' : 'text-slate-800')}>{numero(s.saldo)}</span> },
     { chave: 'reservado', titulo: 'Reservado', direita: true, ocultarMobile: true, render: (s) => <span className="text-slate-500">{numero(s.reservado)}</span> },
     { chave: 'minimo', titulo: 'Mínimo', direita: true, ocultarMobile: true, render: (s) => <span className="text-slate-500">{numero(s.estoqueMinimo)}</span> },
-    { chave: 'custo', titulo: 'Custo', direita: true, ocultarMobile: true, render: (s) => <span className="text-slate-500">{moeda(s.precoCusto)}</span> },
-    { chave: 'valor', titulo: 'Valor em estoque', direita: true, ocultarMobile: true, render: (s) => moeda(s.saldo * (s.precoCusto || 0)) },
+    { chave: 'custo', titulo: 'Custo', direita: true, ocultarMobile: true, render: (s) => <ValorOculto className="text-slate-500">{moeda(s.precoCusto)}</ValorOculto> },
+    { chave: 'valor', titulo: 'Valor em estoque', direita: true, ocultarMobile: true, render: (s) => <ValorOculto>{moeda(s.saldo * (s.precoCusto || 0))}</ValorOculto> },
     {
       chave: 'acoes',
       titulo: '',
@@ -69,7 +69,7 @@ export default function Estoque() {
     <div>
       <PageHeader
         titulo="Estoque"
-        descricao={aba === 'saldos' && listaSaldos.length ? `${listaSaldos.length} registros · valor em estoque ${moeda(valorTotal)}` : 'Saldos por depósito e histórico de movimentos.'}
+        descricao={aba === 'saldos' && listaSaldos.length ? <>{listaSaldos.length} registros · valor em estoque <ValorOculto>{moeda(valorTotal)}</ValorOculto></> : 'Saldos por depósito e histórico de movimentos.'}
         acoes={
           <>
             <Button variante="secundario" icone={<SlidersHorizontal className="h-4 w-4" />} onClick={() => setAjuste({})}>Ajuste</Button>
