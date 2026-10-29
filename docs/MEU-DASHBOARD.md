@@ -2,7 +2,7 @@
 
 Endereço: **www.balao.info/sistema/** (tela inicial de todo mundo) e **/meu-dashboard**.
 
-Todo perfil entra no sistema e cai no **seu** dashboard, no estilo Power BI (números principais no topo, detalhes embaixo, ajustando-se a computador, tablet e celular), com o efeito V18 e o filtro de período completo (Hoje · 7 dias · 30 dias · Este mês · Mês passado · Este ano · Ano passado · Últimos 12 meses · Período), **abrindo sempre em "Hoje"**.
+Todo perfil entra no sistema e cai no **seu** dashboard, no estilo Power BI (números principais no topo, detalhes embaixo, ajustando-se a computador, tablet e celular), com o efeito V18 e o filtro de período completo (Hoje · Ontem · 7 dias · 30 dias · Este mês · Mês passado · Este ano · Ano passado · Últimos 12 meses · Período), **abrindo sempre em "Hoje"**.
 
 Todo alerta vem com o botão **Corrija** (ou Resolver/Ver), que abre o registro direto na tela onde se preenche o que falta.
 
