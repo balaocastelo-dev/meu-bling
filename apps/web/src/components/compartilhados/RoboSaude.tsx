@@ -6,6 +6,7 @@
  *   <ListaAvisosRobo />   a lista com os botões (usada no card, no sino e em Configurações → Saúde)
  */
 import { useEffect, useRef, useState } from 'react';
+import { TextoValores } from '@/components/compartilhados/TextoValores';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -111,7 +112,7 @@ export function AnelSaude({ pct, tamanho = 64 }: { pct: number; tamanho?: number
         <circle cx={tamanho / 2} cy={tamanho / 2} r={r} fill="none" stroke="currentColor" strokeWidth={6} className="text-slate-100" />
         <circle cx={tamanho / 2} cy={tamanho / 2} r={r} fill="none" stroke={traco(pct)} strokeWidth={6} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} style={{ transition: 'stroke-dashoffset .8s ease' }} />
       </svg>
-      <span className={clsx('absolute inset-0 flex items-center justify-center text-sm font-bold num', corSaude(pct))}>{pct}%</span>
+      <span className={clsx('absolute inset-0 flex items-center justify-center font-bold tracking-tight num', corSaude(pct))} style={{ fontSize: Math.max(10, Math.round(tamanho * 0.19)) }}>{pct}%</span>
     </div>
   );
 }
@@ -159,7 +160,7 @@ export function ListaAvisosRobo({ avisos, compacto, limite, onFeito }: { avisos:
               <I className={clsx('mt-0.5 h-4 w-4 shrink-0', COR[a.nivel])} />
               <div className="min-w-0 flex-1">
                 <p className={clsx('break-words text-sm', a.nivel === 'erro' ? 'font-semibold text-red-800' : 'font-medium text-slate-800')}>{a.titulo}</p>
-                {!compacto && <p className="mt-0.5 break-words text-xs text-slate-500">{a.mensagem}</p>}
+                {!compacto && <p className="mt-0.5 break-words text-xs text-slate-500"><TextoValores texto={a.mensagem} /></p>}
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   {a.acoes.map((ac) => (
                     <Button
@@ -260,9 +261,9 @@ export function CardRoboSaude({ className }: { className?: string }) {
     <div className={clsx('overflow-hidden rounded-2xl border bg-white shadow-card', pct >= 95 && !sugestoes.length ? 'border-emerald-200' : pct >= 80 ? 'border-amber-200' : 'border-red-200', className)}>
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3">
         <AnelSaude pct={pct} tamanho={56} />
-        <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
-            <Bot className="h-4 w-4 text-brand-600" /> Robô da Saúde
+        <div className="min-w-0 flex-[1_1_10rem]">
+          <p className="flex flex-wrap items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-slate-900">
+            <Bot className="h-4 w-4 shrink-0 text-brand-600" /> Robô da Saúde
             {!p.config.ligado && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">desligado</span>}
           </p>
           <p className="text-xs text-slate-500">
@@ -285,7 +286,7 @@ export function CardRoboSaude({ className }: { className?: string }) {
       {sugestoes.length ? (
         <ListaAvisosRobo avisos={sugestoes} compacto limite={5} />
       ) : (
-        <p className="flex items-center gap-2 px-4 py-3 text-sm text-emerald-700"><CheckCircle2 className="h-4 w-4" /> Sistema 100%: nada para você resolver agora.</p>
+        <p className="flex items-start gap-2 px-4 py-3 text-sm text-emerald-700"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> Sistema 100%: nada para você resolver agora.</p>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/60 px-4 py-2 text-xs">
         <span className="min-w-0 truncate text-slate-500">{p.correcoes[0] ? `Última correção: ${p.correcoes[0].mensagem}` : `Confiro a cada ${p.intervaloMin} min e logo depois de cada venda, pagamento ou NF.`}</span>

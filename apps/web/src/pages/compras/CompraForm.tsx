@@ -222,7 +222,7 @@ export default function CompraForm() {
           </div>
         </Secao>
 
-        <div className="grid gap-4 xl:grid-cols-3">
+        <div className="grid items-start gap-4 xl:grid-cols-3">
           <Secao titulo="Observações" className="xl:col-span-2">
             <div className="grid gap-3 sm:grid-cols-2">
               <Textarea label="Observações" value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} rows={3} />

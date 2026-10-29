@@ -74,17 +74,17 @@ export default function Fiscal() {
           <Secao titulo="Ambiente e provedor">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <Select label="Ambiente" value={form.ambienteFiscal} onChange={(e) => set('ambienteFiscal', Number(e.target.value))} opcoes={[{ valor: 2, rotulo: '2 — Homologação (testes)' }, { valor: 1, rotulo: '1 — Produção' }]} />
-              <Select label="Provedor" value={form.provedorFiscal} onChange={(e) => set('provedorFiscal', e.target.value as 'mock' | 'sefaz')} opcoes={[{ valor: 'mock', rotulo: 'Simulado (mock) — sem SEFAZ' }, { valor: 'sefaz', rotulo: 'SEFAZ direto (certificado A1)' }]} ajuda="Use “Simulado” para treinar sem transmitir." />
+              <Select label="Provedor" value={form.provedorFiscal} onChange={(e) => set('provedorFiscal', e.target.value as 'mock' | 'sefaz')} opcoes={[{ valor: 'mock', rotulo: 'Simulado — sem SEFAZ' }, { valor: 'sefaz', rotulo: 'SEFAZ direto (certificado A1)' }]} ajuda="Use “Simulado” para treinar sem transmitir." />
               <MoneyInput label="Alíquota Simples (%) p/ DRE" prefixo="" value={form.aliquotaSimplesPct} onChange={(v) => set('aliquotaSimplesPct', v)} ajuda="Imposto sobre cada venda (DRE e lucro)." />
             </div>
           </Secao>
           <Secao titulo="Custo de cada venda (DRE e dashboards)" descricao="Toda venda tem custo = produto + imposto (alíquota acima) + taxa do cartão + frete. Venda sem custo de produto informado usa uma estimativa fixa dentro da faixa abaixo.">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <MoneyInput label="Cartão 1x / débito (%)" prefixo="" value={form.taxaCartao1xPct ?? 5} onChange={(v) => set('taxaCartao1xPct', v)} />
               <MoneyInput label="Cartão 12x (%)" prefixo="" value={form.taxaCartao12xPct ?? 12} onChange={(v) => set('taxaCartao12xPct', v)} ajuda="De 2x a 11x sobe em linha reta." />
               <MoneyInput label="Frete por venda (R$)" value={form.freteVendaPadrao ?? 10} onChange={(v) => set('freteVendaPadrao', v)} ajuda="Usado quando a venda não tem logística lançada." />
-              <MoneyInput label="Custo do produto mín. (%)" prefixo="" value={form.custoProdutoMinPct ?? 40} onChange={(v) => set('custoProdutoMinPct', v)} />
-              <MoneyInput label="Custo do produto máx. (%)" prefixo="" value={form.custoProdutoMaxPct ?? 70} onChange={(v) => set('custoProdutoMaxPct', v)} />
+              <MoneyInput label="Custo produto mín. (%)" prefixo="" value={form.custoProdutoMinPct ?? 40} onChange={(v) => set('custoProdutoMinPct', v)} />
+              <MoneyInput label="Custo produto máx. (%)" prefixo="" value={form.custoProdutoMaxPct ?? 70} onChange={(v) => set('custoProdutoMaxPct', v)} />
             </div>
           </Secao>
           <Secao titulo="Séries e numeração">

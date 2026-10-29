@@ -93,7 +93,7 @@ export default function Situacoes() {
                       {s.sistema && <Badge tom="cinza"><Lock className="h-3 w-3" /> Sistema</Badge>}
                       {!s.ativo && <Badge tom="cinza">Inativa</Badge>}
                     </td>
-                    <td className="space-x-1" data-rotulo="Ações ao entrar">{s.acoes.length ? s.acoes.map((a) => <code key={a} className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700">{a}</code>) : <span className="text-xs text-slate-400">—</span>}</td>
+                    <td data-rotulo="Ações ao entrar"><div className="flex flex-wrap gap-1">{s.acoes.length ? s.acoes.map((a) => <code key={a} className="whitespace-nowrap rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700">{a}</code>) : <span className="text-xs text-slate-400">—</span>}</div></td>
                     <td className="pilha-canto">
                       <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                         <Button tamanho="xs" variante="fantasma" icone={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditando({ ...s })} />

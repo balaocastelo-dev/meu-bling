@@ -13,7 +13,7 @@ O teste **nunca toca o banco de verdade**: cria um banco novo numa pasta tempor�
 | Regras de vendas | painel do vendedor ao vivo (venda em aberto conta na hora, cancelada sai, transferir/editar/excluir), privacidade do ranking, períodos (hoje ⊂ semana ⊂ 7 dias…), metas, desafios (valor, nº de vendas, unidades, produto, categoria, "só o primeiro", agendado, encerrado, estorno do prêmio), vendedor sem cadastro, estoque e contas sem lançar em dobro, cálculo de totais e descontos |
 | API externa | chaves de API: só o ADMIN cria; leitura/gravação/exclusão por área; rotas de administração nunca abrem; chave inválida, desativada, vencida, IP errado, na URL sem permissão; limite por minuto; regenerar; OpenAPI e ferramentas MCP filtradas; webhook assinado chega quando a chave cria uma venda; registro de chamadas |
 | Telas no navegador | abre **todas** as páginas (lidas do `routes.tsx`, página nova entra sozinha) com os 5 perfis: erro de JavaScript, tela "Ops, algo deu errado", chamada à API com erro, "Sem permissão" indevido, tela proibida que abre |
-| Layout em 5 tamanhos | abre **todas** as páginas em celular pequeno (360 px), celular (390), tablet (768), tablet deitado (1024) e computador (1440) e reprova: página que rola para o lado, pedaço que sai da tela ou do card, texto cortado sem "…". Tabela larga que rola **dentro** do próprio card é só aviso |
+| Layout em 5 tamanhos | abre **todas** as páginas em celular pequeno (360 px), celular (390), tablet (768), tablet deitado (1024) e computador (1440) e reprova: página que rola para o lado, pedaço que sai da tela ou passa da borda do card, textos encavalados, valor em dinheiro/porcentagem partido em duas linhas, rótulo curto de botão quebrado, texto cortado sem "…". Tabela larga que rola **dentro** do próprio card é só aviso. Inclui a tela inicial (dashboard), o extrato do banco e o detalhe da consignação. Mede e fotografa com animações desligadas (números já no valor final) |
 | Links | todo link do código (API e telas) e todo link que o dashboard e a Saúde do sistema devolvem leva a uma tela que existe |
 | Integridade dos dados | roda a "Saúde do sistema" sobre o banco de teste: depois de tudo, saldos de contas, estoque, comissões e contas a receber têm que bater |
 | Robustez | chama **todas** as rotas da API (lidas do próprio app) sem login (tem que pedir login), com código inexistente, com lixo e com cada perfil: nunca pode dar erro interno (500) |
@@ -25,15 +25,18 @@ Arquivos: `apps/api/testes/` (rodar.ts, lib.ts, rotas.ts, regras-vendas.ts, tela
 
 ## Regras de tela para celular e tablet
 - **Listas** usam o componente `Table`: abaixo de 1024 px cada linha vira um cartão (2 por linha no tablet). Coluna com `ocultarMobile` some da tabela até 1280 px e aparece no cartão. Cartão próprio: `cartao={(linha) => …}` (vendas, compras, OS, notas e contas já têm).
-- **Tabelas de itens** (formulários e detalhes): `className="tbl tbl-pilha"` e, nas células, `data-rotulo="Qtd"`; `pilha-cheio` (linha inteira), `pilha-oculto` (some no celular), `pilha-canto` (botão no canto).
+- **Tabelas de itens** (formulários e detalhes): até 1279 px viram cartões (2 campos por linha no celular, 4 no tablet). `className="tbl tbl-pilha"` e, nas células, `data-rotulo="Qtd"`; `pilha-cheio` (linha inteira), `pilha-oculto` (some no celular), `pilha-canto` (botão no canto).
 - **Tabela solta** sempre dentro de `<div className="overflow-x-auto">`.
 - `.input-base` e `.tbl` ficam em `@layer components`: um `w-36`, `py-0` ou `text-right` no className vale por cima delas.
 - Itens de `grid` têm `min-width: 0` e o conteúdo quebra palavra comprida (`overflow-wrap`), ambos na camada base.
 - Formulários: grade de 2 colunas até 1280 px e de 12 colunas acima (`sm:grid-cols-2 xl:grid-cols-12`).
 - Grades de 3–4 colunas (cards de indicadores, campos) viram 2 no tablet: use `lg:grid-cols-3`/`lg:grid-cols-4` (ou `xl:`), nunca `sm:`/`md:` com 3+ colunas.
 - **Dashboards (padrão Power BI)**: todo dashboard abre com os números principais no topo — saldo em bancos + caixa, faturamento/vendas e lucro — e os detalhes menos importantes abaixo do separador `SecaoDetalhes`. Use `FaixaKpis` (2 por linha no celular, 3–4 no tablet, até 6 no computador) com `KpiV18`; o número principal leva `destaque` + `className="col-span-2"` (linha inteira no celular). Saldo de cada conta: `SaldosContas` (rola de lado no celular). Gráficos com altura `h-52 sm:h-64`. Filtro de período rola de lado no celular em vez de quebrar em várias linhas.
-- **Menu**: até 1024 px é gaveta (botão ☰), fecha ao escolher item, tocar fora ou Esc; acima fica fixo.
+- **Menu**: até 1279 px é gaveta (botão ☰), fecha ao escolher item, tocar fora ou Esc; a partir de 1280 fica fixo (tablet deitado ganha a largura toda).
 - **Modal** fica em tela cheia no celular com rolagem interna (o `tamanho="sm"` sobe como folha de baixo); `Drawer` e busca (Ctrl+K) também ocupam a tela toda no celular.
+- **Cabeçalho** (`PageHeader`): título e ações lado a lado quando cabem; senão as ações descem inteiras, em fila.
+- **Filtro de período das listas** (`PeriodoFiltro`): quando não cabem numa linha, as opções descem dentro de um bloco de cantos arredondados (nunca pílula oval torta).
+- **Valores**: coluna numérica (`num`), código, data e depósito não quebram linha (`.tbl td.nowrap`); texto com R$ dentro de frase usa `<TextoValores>`.
 - **Toque**: em tela de toque (`pointer-coarse:`) botões, itens de menu e campos têm no mínimo 40 px; no celular campos têm fonte de 16 px (sem zoom do iPhone). No computador nada muda.
 - **Barra fixa de Salvar** (venda/compra/OS): classe `barra-fixa` + `espaco-barra-fixa` no conteúdo, ambas com `env(safe-area-inset-bottom)`.
 - Altura de tela cheia com `dvh` (`min-h-dvh`, `h-dvh`), não `vh`/`h-screen`. O `index.html` tem `viewport-fit=cover`, então algo fixo no topo/rodapé precisa de `env(safe-area-inset-*)`.

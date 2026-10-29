@@ -356,7 +356,7 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
                         <div className="min-w-0 flex-1">
                           <input disabled={bloqueado} value={it.descricao} onChange={(e) => atualizarItem(i, { descricao: e.target.value })} className={`input-base h-8 py-0 ${erros[`item${i}`] ? 'input-erro' : ''}`} placeholder="Descrição do item" />
                           <span className="flex items-center gap-2">
-                            {it.codigo && <span className="text-[10px] text-slate-400">cód. {it.codigo}</span>}
+                            {it.codigo && <span className="whitespace-nowrap text-[10px] text-slate-400">cód. {it.codigo}</span>}
                             {it.prontaEntrega && <SeloProntaEntrega compacto />}
                             {it.produtoId && (
                               <input
@@ -451,7 +451,7 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
         </Secao>
 
         {/* Totais + transporte */}
-        <div className="grid gap-4 xl:grid-cols-3">
+        <div className="grid items-start gap-4 xl:grid-cols-3">
           <Secao titulo="Transporte" className="xl:col-span-2">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Select
