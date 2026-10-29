@@ -45,7 +45,7 @@ export default function DashboardVendas() {
           <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Dashboard de vendas</h1>
           <p className="text-sm text-slate-500">Faturamento, vendedores, formas de pagamento e produtos mais vendidos.</p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-end gap-2">
           <FiltroPeriodo id="periodo-vendas" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
           <SelectFiltro valor={vendedorId} onChange={setVendedorId} opcoes={opcoesDe(vendedores)} placeholder="Todos os vendedores" />
         </div>

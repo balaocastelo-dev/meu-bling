@@ -64,7 +64,7 @@ export default function DashboardConsignacao() {
             Estoque e lucro dos consignados{data ? ` · ${dataHora(data.atualizadoEm)}` : ''}
           </p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-end gap-2">
           <PeriodoFiltro inicial={periodo.i} final={periodo.f} onChange={(i, f) => setPeriodo({ i, f })} label="Vendas no período" />
           <Link to="/consignacoes" className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">Ver contratos</Link>
         </div>

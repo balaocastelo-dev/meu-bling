@@ -88,7 +88,7 @@ export default function DashboardAssistencia() {
           <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Dashboard de assistência técnica</h1>
           <p className="text-sm text-slate-500">Entradas das OS, mão de obra x peças, custos e lucro dos serviços.</p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-end gap-2">
           <FiltroPeriodo id="periodo-assistencia" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
           <SegmentadoV18
             id="base-assistencia"

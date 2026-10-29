@@ -343,7 +343,7 @@ export const listaVariants = lista;
 /** Seletor segmentado com a "pílula" deslizando até a opção escolhida */
 export function SegmentadoV18<T extends string>({ opcoes, valor, onMudar, id }: { opcoes: { valor: T; rotulo: ReactNode }[]; valor: T; onMudar: (v: T) => void; id: string }) {
   return (
-    <div className="inline-flex max-w-full flex-nowrap overflow-x-auto rounded-full border border-slate-200 bg-white p-1 shadow-card [scrollbar-width:none] sm:flex-wrap [&::-webkit-scrollbar]:hidden">
+    <div className="inline-flex min-w-0 max-w-full flex-nowrap overflow-x-auto rounded-full border border-slate-200 bg-white p-1 shadow-card [scrollbar-width:none] sm:flex-wrap [&::-webkit-scrollbar]:hidden">
       {opcoes.map((o) => (
         <button
           key={o.valor}
