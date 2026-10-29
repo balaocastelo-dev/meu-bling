@@ -20,6 +20,7 @@
  */
 import { prisma } from '../../lib/prisma.js';
 import { comContexto } from '../auditoria/contexto.js';
+import { CHAVE_FALHAS_TRILHA, falhasDaTrilha, zerarFalhasDaTrilha } from '../auditoria/trilha.js';
 import { AppError } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
 import { arredondar } from '../../lib/util.js';
@@ -427,6 +428,43 @@ const corretores: Corretor[] = [
         return `Mantive o saldo de ${c.nome} em ${brl(c.saldoAtual)} (saldo inicial corrigido para ${brl(ini)}).`;
       }
       throw new AppError('Ação desconhecida.', 422);
+    },
+  },
+
+  // ---------------------------------------------------------------- trilha de auditoria falhou
+  {
+    id: 'trilha-falhou',
+    buscar: async () => {
+      // memória desta instância + o que ficou gravado antes de um reinício
+      const mem = falhasDaTrilha();
+      const salvo = await prisma.configuracao.findUnique({ where: { chave: CHAVE_FALHAS_TRILHA } }).catch(() => null);
+      let persistido = { total: 0, ultima: null as string | null, quando: null as string | null };
+      try {
+        if (salvo?.valor) persistido = { ...persistido, ...(JSON.parse(salvo.valor) as typeof persistido) };
+      } catch {
+        /* valor ilegível: fica no zero */
+      }
+      const total = Math.max(mem.total, persistido.total);
+      if (!total) return [];
+      const recente = (mem.quando ?? '') > (persistido.quando ?? '') ? mem : persistido;
+      return [
+        {
+          alvo: `trilha:${recente.quando ?? 'sem-data'}`,
+          nivel: 'erro',
+          area: 'Auditoria',
+          titulo: `Histórico não gravado em ${total} gravação${total > 1 ? 'ões' : ''}`,
+          mensagem: `O sistema salvou normalmente, mas o Painel de auditoria não registrou — essas operações não aparecem no histórico e não podem ser revertidas. Última: ${recente.ultima ?? 'sem detalhe'}.`,
+          link: '/auditoria',
+          dados: { total, ultima: recente.ultima, quando: recente.quando },
+        },
+      ];
+    },
+    acoes: () => [{ codigo: 'marcar-visto', rotulo: 'Entendi, zerar o aviso', estilo: 'secundario' }],
+    executar: async (codigo) => {
+      if (codigo !== 'marcar-visto') throw new AppError('Ação desconhecida.', 422);
+      zerarFalhasDaTrilha();
+      await prisma.configuracao.deleteMany({ where: { chave: CHAVE_FALHAS_TRILHA } }).catch(() => undefined);
+      return 'Aviso zerado. Se a trilha falhar de novo, eu aviso na hora.';
     },
   },
 

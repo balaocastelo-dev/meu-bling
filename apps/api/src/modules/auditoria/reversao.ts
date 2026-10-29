@@ -70,13 +70,35 @@ export async function previaReversao(operacaoId: string): Promise<Previa> {
     const snap = depois ?? antes;
     const rotulo = rotuloRegistro(e.tabela, e.registroId, e.registroChave, snap);
     const link = linkRegistro(e.tabela, e.registroId, snap);
+    // ALTERAR restaura SÓ os campos que a operação mudou. Se essa lista vier ilegível, a
+    // reversão NÃO pode cair no "restaura tudo": isso sobrescreveria mudanças de outras
+    // operações no mesmo registro. Então a falha estreita o passo (PULAR), nunca o alarga.
+    let camposIlegiveis = false;
     const campos: string[] = (() => {
+      if (!e.campos) return [];
       try {
-        return e.campos ? (JSON.parse(e.campos) as string[]) : [];
+        const lista = JSON.parse(e.campos);
+        if (Array.isArray(lista) && lista.every((c) => typeof c === 'string')) return lista as string[];
       } catch {
-        return [];
+        /* cai no ilegível abaixo */
       }
+      camposIlegiveis = true;
+      return [];
     })();
+    if (e.tipo === 'ALTERAR' && (camposIlegiveis || !campos.length)) {
+      passos.push({
+        eventoId: e.id,
+        tabela: e.tabela,
+        registroId: e.registroId,
+        registroChave: e.registroChave,
+        acao: 'PULAR',
+        rotulo,
+        link,
+        campos,
+        motivo: camposIlegiveis ? 'lista de campos alterados ilegível — reverter sobrescreveria o que não foi desta operação' : 'sem campos alterados registrados',
+      });
+      continue;
+    }
     if (e.revertidoEm) {
       passos.push({ eventoId: e.id, tabela: e.tabela, registroId: e.registroId, registroChave: e.registroChave, acao: 'PULAR', rotulo, link, campos, motivo: 'já revertido' });
       continue;
@@ -181,7 +203,12 @@ export async function reverterOperacao(operacaoId: string, opts: { forcar: boole
                 pulados.push(`${passo.rotulo}: não existe mais (foi excluído depois)`);
                 continue;
               }
-              const data = dadosDoSnapshot(e.tabela, antes, passo.campos.length ? passo.campos : undefined);
+              if (!passo.campos.length) {
+                // nunca restaurar o registro inteiro: sem a lista de campos, não se sabe o que era desta operação
+                pulados.push(`${passo.rotulo}: sem a lista de campos alterados`);
+                continue;
+              }
+              const data = dadosDoSnapshot(e.tabela, antes, passo.campos);
               delete data[idc];
               if (!Object.keys(data).length) continue;
               await delegate.update({ where: { [idc]: chave }, data });

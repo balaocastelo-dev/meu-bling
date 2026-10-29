@@ -18,6 +18,34 @@ import type { PrismaClient } from '@prisma/client';
 import { autorDoContexto, contextoAtual, novoId, rotacionarSeRajada, type ContextoOperacao } from './contexto.js';
 
 export const IGNORAR = new Set(['Auditoria', 'AuditoriaOperacao', 'AuditoriaEvento', 'AuditoriaAchado', 'LogApi', 'EntregaWebhook']);
+
+/**
+ * FALHAS DA TRILHA — quando o histórico não consegue ser gravado, a gravação original segue
+ * (nunca derrubamos a tela do vendedor por causa da auditoria). Mas o buraco não pode ficar
+ * invisível: aquela operação some do histórico E deixa de ser reversível. Guardamos aqui para
+ * o Robô da Saúde avisar no painel. Memória + melhor esforço no banco (sobrevive a reinício).
+ */
+export const CHAVE_FALHAS_TRILHA = 'auditoria.falhasTrilha';
+let falhas = { total: 0, ultima: null as string | null, quando: null as string | null };
+
+export function falhasDaTrilha() {
+  return { ...falhas };
+}
+export function zerarFalhasDaTrilha() {
+  falhas = { total: 0, ultima: null, quando: null };
+}
+
+function anotarFalha(model: string, op: string, causa: unknown) {
+  falhas = { total: falhas.total + 1, ultima: `${model}.${op}: ${String(causa).slice(0, 300)}`, quando: new Date().toISOString() };
+  // melhor esforço: se o banco estiver de pé, deixa registrado para depois do reinício
+  void clienteSemTrilha()
+    .configuracao.upsert({
+      where: { chave: CHAVE_FALHAS_TRILHA },
+      create: { chave: CHAVE_FALHAS_TRILHA, valor: JSON.stringify(falhas) },
+      update: { valor: JSON.stringify(falhas) },
+    })
+    .catch(() => undefined);
+}
 export const NAO_REVERTER = new Set(['Sequencia']);
 /** campos que mudam sozinhos (carimbos): se só eles mudaram, não é um acontecimento */
 const CARIMBOS = new Set(['atualizadoEm', 'siteSincronizadoEm', 'ultimaSincronizacao', 'saldoBancoEm', 'ultimoLogin', 'ultimoUsoEm', 'ultimoIp', 'totalChamadas']);
@@ -297,6 +325,7 @@ export function comTrilha(base: PrismaClient) {
           } catch (e) {
             if (e && typeof e === 'object' && (e as any).__trilhaFalhou) {
               console.error('[trilha] falha ao registrar', model, op, (e as any).causa);
+              anotarFalha(model, op, (e as any).causa);
               return (e as any).resultado;
             }
             throw e;
