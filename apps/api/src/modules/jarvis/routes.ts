@@ -22,10 +22,11 @@ import { AppError, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
 import { encrypt, mask } from '../../lib/crypto.js';
 import { registrarServico } from '../../core/servicos.js';
-import { calcularCaixaLivre, mapaDoMilhao } from './caixa-livre.js';
-import { iaDisponivel, perguntarIa, testarChave, SISTEMA_PERGUNTA } from './ia.js';
+import { mapaDoMilhao } from './caixa-livre.js';
+import { iaDisponivel, testarChave } from './ia.js';
 import { iniciarWorker, medirResultados, obterConfig, rodarJarvis } from './worker.js';
 import { executarAcao } from './acoes.js';
+import { conversar, lerConversa, listarConversas } from './chat.js';
 
 // o worker de 30 min (ver worker.ts). Desliga com JARVIS=off
 registrarServico('jarvis', (app) => iniciarWorker(app));
@@ -204,70 +205,40 @@ export default async function jarvisRoutes(app: FastifyInstance) {
     return r ?? { ok: false, mensagem: 'Já há uma rodada em andamento.' };
   });
 
-  // ------------------------------------------------------------------ modo pergunta
+  // ------------------------------------------------------------------ chat do JARVIS
   app.post('/api/v1/jarvis/perguntar', admin, async (req) => {
-    const { pergunta } = z.object({ pergunta: z.string().min(3).max(1000) }).parse((req.body ?? {}) as any);
+    const { pergunta, conversaId } = z
+      .object({ pergunta: z.string().min(3).max(2000), conversaId: z.coerce.number().int().positive().nullish() })
+      .parse((req.body ?? {}) as any);
 
-    const cfg = await obterConfig();
-    const [caixa, abertas] = await Promise.all([
-      calcularCaixaLivre(),
-      prisma.jarvisSugestao.findMany({
-        where: { situacao: { in: ['ABERTA', 'ACEITA'] } },
-        orderBy: { prioridade: 'asc' },
-        take: 30,
-        select: { regra: true, titulo: true, texto: true, impactoEstimado: true, situacao: true },
-      }),
-    ]);
-
-    const contexto = {
-      caixaLivre: caixa.caixaLivre,
-      meta: cfg.metaCaixa,
-      falta: Math.max(0, cfg.metaCaixa - caixa.caixaLivre),
-      saldoBancos: caixa.saldoBancos,
-      saldoCaixa: caixa.saldoCaixa,
-      compromissosTotais: caixa.compromissosTotais,
-      aPagarProximos30Dias: caixa.aPagar30d,
-      caixinhasAtrasadas: caixa.caixinhasDevidas,
-      caixinhasAGuardarDepois: caixa.caixinhasFuturas,
-      emprestimosVencendoEm30Dias: caixa.emprestimos30d,
-      emprestimosDepois: caixa.emprestimosDepois,
-      contas: caixa.detalhes.contas,
-      sugestoes: abertas,
-    };
-
-    const r = await perguntarIa(
-      SISTEMA_PERGUNTA,
-      `Números de agora:\n${JSON.stringify(contexto, null, 1).slice(0, 20_000)}\n\nPergunta do dono: ${pergunta}`,
-      { maxTokens: 1200 },
-    );
-
-    if (!r) {
-      throw new AppError(
-        'A IA não está configurada ou não respondeu. Abra Configurações → JARVIS e cadastre a chave da Anthropic.',
-        422,
-        'IA_INDISPONIVEL',
-      );
-    }
-
-    const conversa = await prisma.jarvisConversa.create({
-      data: {
-        usuarioId: (req.user as any)?.id ?? null,
-        pergunta,
-        resposta: r.texto,
-        contexto: JSON.stringify({ ...contexto, tokens: r.tokens }),
-      },
+    const u = req.user as any;
+    const r = await conversar({
+      conversaId: conversaId ?? null,
+      pergunta,
+      usuarioId: u?.id ?? null,
+      usuarioNome: u?.nome ?? null,
     });
-
-    return { id: conversa.id, pergunta, resposta: r.texto, em: conversa.em, tokens: r.tokens };
+    return r;
   });
 
-  app.get('/api/v1/jarvis/conversas', admin, async () => {
-    const lista = await prisma.jarvisConversa.findMany({
-      orderBy: { em: 'desc' },
-      take: 20,
-      select: { id: true, em: true, pergunta: true, resposta: true },
-    });
-    return { data: lista };
+  app.get('/api/v1/jarvis/conversas', admin, async (req) => {
+    const u = req.user as any;
+    return { data: await listarConversas(u?.id ?? null) };
+  });
+
+  app.get('/api/v1/jarvis/conversas/:id', admin, async (req) => {
+    const c = await lerConversa(idDe(req));
+    if (!c) throw new NotFound('Conversa');
+    return c;
+  });
+
+  app.delete('/api/v1/jarvis/conversas/:id', admin, async (req) => {
+    const id = idDe(req);
+    const c = await prisma.jarvisConversa.findUnique({ where: { id } });
+    if (!c) throw new NotFound('Conversa');
+    await prisma.jarvisConversa.update({ where: { id }, data: { arquivada: true } });
+    await auditar(req, 'JarvisConversa', id, 'EXCLUIR', { titulo: c.titulo });
+    return { ok: true };
   });
 
   // ------------------------------------------------------------------ placar

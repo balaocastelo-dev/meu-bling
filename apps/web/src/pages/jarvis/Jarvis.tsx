@@ -17,6 +17,7 @@ import { Aparecer, CardV18, FaixaKpis, KpiV18, PaginaV18, SecaoDetalhes, listaVa
 import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
 import { CORES, TooltipPadrao, eixoMoeda } from '@/components/compartilhados/graficos';
 import { CartaoSugestao, type SugestaoJarvis } from '@/components/dashboard/SugestoesJarvis';
+import ChatJarvis from '@/components/dashboard/ChatJarvis';
 import { dataHora, moeda, percentual } from '@/lib/format';
 
 interface Painel {
@@ -58,8 +59,6 @@ export default function Jarvis() {
   const qc = useQueryClient();
   const nav = useNavigate();
   const { periodo, setPeriodo, custom, setCustom, dataInicial, dataFinal, faixa } = usePeriodoDashboard('30d');
-  const [pergunta, setPergunta] = useState('');
-  const [resposta, setResposta] = useState<string | null>(null);
 
   const { data: p, isLoading } = useQuery({
     queryKey: ['jarvis-painel'],
@@ -96,15 +95,6 @@ export default function Jarvis() {
       qc.invalidateQueries({ queryKey: ['jarvis-painel'] });
       qc.invalidateQueries({ queryKey: ['jarvis-placar'] });
       qc.invalidateQueries({ queryKey: ['jarvis-feed'] });
-    },
-    onError: (e) => toast.error(mensagemErro(e)),
-  });
-
-  const perguntar = useMutation({
-    mutationFn: () => api.post<{ resposta: string }>('/jarvis/perguntar', { pergunta }),
-    onSuccess: (r) => {
-      setResposta(r.resposta);
-      setPergunta('');
     },
     onError: (e) => toast.error(mensagemErro(e)),
   });
@@ -208,31 +198,8 @@ export default function Jarvis() {
         )}
       </CardV18>
 
-      {/* ===== modo pergunta ===== */}
-      <CardV18 titulo="Perguntar ao JARVIS" descricao="Ex.: o que faço com R$ 20 mil que entraram hoje?" icone={<Send className="h-4 w-4" />}>
-        <div className="flex flex-wrap items-end gap-2">
-          <Input
-            className="min-w-0 flex-1"
-            label="Sua pergunta"
-            value={pergunta}
-            onChange={(e) => setPergunta(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && pergunta.trim().length > 2) perguntar.mutate();
-            }}
-            placeholder="O que faço com o dinheiro que entrou hoje?"
-          />
-          <Button
-            variante="primario"
-            icone={<Send className="h-4 w-4" />}
-            carregando={perguntar.isPending}
-            disabled={pergunta.trim().length < 3}
-            onClick={() => perguntar.mutate()}
-          >
-            Perguntar
-          </Button>
-        </div>
-        {resposta && <p className="mt-3 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-sm text-slate-700 ring-1 ring-slate-200">{resposta}</p>}
-      </CardV18>
+      {/* ===== chat ===== */}
+      <ChatJarvis />
 
       <SecaoDetalhes dica="role para ver a evolução e o placar" />
 

@@ -11,7 +11,7 @@
 import { prisma } from '../../lib/prisma.js';
 import { renderTemplate } from '../../lib/util.js';
 import { enfileirar, montarVariaveis, type Canal } from '../notificacoes/service.js';
-import { status as statusWhatsapp } from '../../integracoes/whatsapp/servico.js';
+import { status as statusWhatsapp } from '../../integracoes/whatsapp/provedor.js';
 
 export type ResultadoAcao = { ok: boolean; mensagem: string; detalhes?: Record<string, unknown> };
 
@@ -36,7 +36,7 @@ export async function cobrarPorWhatsapp(dados: any): Promise<ResultadoAcao> {
   const contas: { id: number }[] = Array.isArray(dados?.contas) ? dados.contas : [];
   if (contas.length === 0) return { ok: false, mensagem: 'Nenhuma conta nessa sugestão para cobrar.' };
 
-  const wpp = statusWhatsapp();
+  const wpp = await statusWhatsapp();
   const templates = await prisma.templateNotificacao.findMany({
     where: { ativo: true, evento: { in: ['COBRANCA', 'CONTA_VENCENDO'] }, canal: 'WHATSAPP' },
     orderBy: { evento: 'asc' },
@@ -91,15 +91,21 @@ export async function cobrarPorWhatsapp(dados: any): Promise<ResultadoAcao> {
     enfileiradas++;
   }
 
-  const partes = [`${enfileiradas} cobrança(s) na fila do WhatsApp`];
+  const partes = enfileiradas > 0 ? [`${enfileiradas} cobrança(s) na fila do WhatsApp`] : [];
   if (repetidas) partes.push(`${repetidas} já tinham sido cobradas hoje`);
   if (semCelular) partes.push(`${semCelular} sem celular cadastrado`);
-  if (wpp.status !== 'CONECTADO')
+  if (enfileiradas > 0 && wpp.status !== 'CONECTADO')
     partes.push('o WhatsApp está desconectado — as mensagens saem assim que ele voltar (Comunicação → WhatsApp)');
 
+  // "já cobrei todo mundo hoje" não é erro: a sugestão pode ser aceita do mesmo jeito.
+  // Só é falha quando não havia ninguém a quem mandar.
+  const fezAlgo = enfileiradas > 0 || repetidas > 0;
+
   return {
-    ok: enfileiradas > 0,
-    mensagem: enfileiradas > 0 ? partes.join('; ') + '.' : 'Nada a cobrar agora: ' + partes.slice(1).join('; ') + '.',
+    ok: fezAlgo,
+    mensagem: partes.length
+      ? partes.join('; ') + '.'
+      : 'Nenhum desses clientes tem celular cadastrado — não deu para cobrar por aqui.',
     detalhes: { enfileiradas, repetidas, semCelular, whatsapp: wpp.status, template: template?.nome ?? 'texto padrão' },
   };
 }

@@ -55,13 +55,33 @@ async function main() {
   const longe = await adm.get('/jarvis/painel');
   verifica(igual(longe.aPagar30d, depois.aPagar30d), 'conta para daqui a 90 dias fica de fora dos 30 dias', longe.aPagar30d);
 
-  // caixinha ainda por completar também segura o caixa livre
+  // caixinha nova e em dia NÃO tira do caixa livre (só o que já deveria estar guardado entra)
   await adm.post('/caixinhas', { nome: `JARVIS 13º ${SUF}`, valorMeta: 3_000, dataUso: daqui(20), contaFinanceiraId: banco.id }, 201);
   const comCaixinha = await adm.get('/jarvis/painel');
   verifica(
-    igual(comCaixinha.caixinhas - longe.caixinhas, 3_000) && igual(longe.caixaLivre - comCaixinha.caixaLivre, 3_000),
-    'caixinha de 3.000 por completar sai do caixa livre',
-    { caixinhas: comCaixinha.caixinhas, caixaLivre: comCaixinha.caixaLivre },
+    igual(comCaixinha.caixaLivre, longe.caixaLivre),
+    'caixinha nova, dentro do ritmo, não mexe no caixa livre de hoje',
+    { antes: longe.caixaLivre, depois: comCaixinha.caixaLivre, atrasadas: comCaixinha.caixinhasDevidas },
+  );
+  verifica(
+    igual(comCaixinha.caixinhasFuturas - longe.caixinhasFuturas, 3_000),
+    'mas os 3.000 aparecem como compromisso para depois',
+    { futuras: comCaixinha.caixinhasFuturas },
+  );
+  verifica(
+    igual(longe.compromissosTotais - comCaixinha.compromissosTotais, 3_000),
+    'e entram nos compromissos totais',
+    { antes: longe.compromissosTotais, depois: comCaixinha.compromissosTotais },
+  );
+
+  // caixinha vencendo amanhã e sem nada guardado está atrasada: essa sim sai do caixa livre
+  const antesAtrasada = await adm.get('/jarvis/painel');
+  await adm.post('/caixinhas', { nome: `JARVIS IPTU ${SUF}`, valorMeta: 1_000, dataUso: daqui(1), contaFinanceiraId: banco.id }, 201);
+  const comAtrasada = await adm.get('/jarvis/painel');
+  verifica(
+    comAtrasada.caixaLivre < antesAtrasada.caixaLivre,
+    'caixinha que vence amanhã e está vazia baixa o caixa livre',
+    { antes: antesAtrasada.caixaLivre, depois: comAtrasada.caixaLivre, atrasadas: comAtrasada.caixinhasDevidas },
   );
 
   secao('Mapa do milhão: falta e ritmo por dia útil');
@@ -110,12 +130,14 @@ async function main() {
   });
 
   secao('Aceitar, adiar e recusar');
-  const alvo = painel2.sugestoes[0];
+  // pega sugestões sem ação executável, para testar só a mudança de situação
+  const semAcao = painel2.sugestoes.filter((x: any) => !x.acao || x.acao === 'NENHUMA' || x.acao === 'ABRIR_TELA');
+  const alvo = semAcao[0] ?? painel2.sugestoes[0];
   const aceita = await adm.post(`/jarvis/sugestoes/${alvo.id}/aceitar`, {});
   verifica(aceita.situacao === 'ACEITA', 'sugestão aceita', aceita.situacao);
   await adm.post(`/jarvis/sugestoes/${alvo.id}/aceitar`, {}, 422); // não decide duas vezes
 
-  const outra = painel2.sugestoes[1];
+  const outra = semAcao[1] ?? painel2.sugestoes[1];
   if (outra) {
     const adiada = await adm.post(`/jarvis/sugestoes/${outra.id}/adiar`, { dias: 5 });
     verifica(adiada.situacao === 'ADIADA' && !!adiada.adiadaAte, 'sugestão adiada por 5 dias', adiada.adiadaAte);
@@ -123,7 +145,7 @@ async function main() {
     verifica(!painel3.sugestoes.some((s: any) => s.id === outra.id), 'adiada some do painel', painel3.sugestoes.length);
   }
 
-  const terceira = painel2.sugestoes[2];
+  const terceira = semAcao[2] ?? painel2.sugestoes[2];
   if (terceira) {
     const recusada = await adm.post(`/jarvis/sugestoes/${terceira.id}/recusar`, { motivo: 'não quero agora' });
     verifica(recusada.situacao === 'RECUSADA', 'sugestão recusada', recusada.situacao);

@@ -83,6 +83,7 @@ const ConfigOpenFinance = lazy(() => import('@/pages/configuracoes/OpenFinance')
 const ConfigBling = lazy(() => import('@/pages/configuracoes/Bling'));
 const ConfigSaude = lazy(() => import('@/pages/configuracoes/Saude'));
 const ConfigJarvis = lazy(() => import('@/pages/configuracoes/Jarvis'));
+const ConfigWhatsapp = lazy(() => import('@/pages/configuracoes/Whatsapp'));
 const ConfigApi = lazy(() => import('@/pages/configuracoes/ApiIntegracoes'));
 const BlingCallback = lazy(() => import('@/pages/configuracoes/BlingCallback'));
 
@@ -211,6 +212,7 @@ export const router = createBrowserRouter(
       { path: 'configuracoes/bling', element: ADMIN(<ConfigBling />) },
       { path: 'configuracoes/saude', element: ADMIN(<ConfigSaude />) },
       { path: 'configuracoes/jarvis', element: ADMIN(<ConfigJarvis />) },
+      { path: 'configuracoes/whatsapp', element: ADMIN(<ConfigWhatsapp />) },
       { path: 'configuracoes/api', element: ADMIN(<ConfigApi />) },
       { path: 'configuracoes/bling/callback', element: ADMIN(<BlingCallback />) },
 
