@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { TextoValores } from '@/components/compartilhados/TextoValores';
 import { AvisosImportantes } from '@/components/compartilhados/AvisosImportantes';
 import { CardRoboSaude } from '@/components/compartilhados/RoboSaude';
 import { Link, useNavigate } from 'react-router-dom';
@@ -12,7 +13,7 @@ import {
 import { api, rotaIndisponivel } from '@/lib/api';
 import { Badge, EmptyState, Skeleton, tomPorStatus } from '@/components/ui';
 import { inteiro, moeda, numero, percentual, rotulo } from '@/lib/format';
-import { Aparecer, Avatar, BarraAnimada, CardV18, Contador, Grupo, KpiV18, LinhaV18, PaginaV18, SegmentadoV18, TONS, Variacao, listaVariants, type Tom } from '@/components/dashboard/v18';
+import { Aparecer, Avatar, BarraAnimada, CabecalhoV18, CardV18, Contador, Grupo, KpiV18, LinhaV18, PaginaV18, SecaoV18, SegmentadoV18, TONS, Variacao, listaVariants, type Tom } from '@/components/dashboard/v18';
 import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
 import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import { useAuth } from '@/stores/auth';
@@ -168,34 +169,36 @@ export default function DashboardGeral() {
 
   return (
     <PaginaV18 className="space-y-5">
-      {/* cabeçalho */}
-      <Aparecer className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-slate-400">{hojeExtenso.charAt(0).toUpperCase() + hojeExtenso.slice(1)}</p>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+      {/* cabeçalho + filtros (as segmentações do painel, como no Power BI) */}
+      <CabecalhoV18
+        sobre={hojeExtenso.charAt(0).toUpperCase() + hojeExtenso.slice(1)}
+        titulo={
+          <>
             {saudacao}, {usuario?.nome?.split(' ')[0]} <motion.span className="inline-block origin-[70%_70%]" animate={{ rotate: [0, 14, -8, 14, 0] }} transition={{ duration: 1.4, delay: 0.4 }}>👋</motion.span>
-          </h1>
-          <p className="text-sm text-slate-500">Vendas e assistência técnica somadas, no período que você escolher.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <StatusPilula icone={<MessageCircle className="h-3.5 w-3.5 text-slate-400" />} nome="WhatsApp" ok={data?.whatsapp.status === 'CONECTADO'} texto={rotulo(data?.whatsapp.status ?? 'DESCONECTADO')} tom={tomPorStatus(data?.whatsapp.status)} />
-          <StatusPilula icone={<FileText className="h-3.5 w-3.5 text-slate-400" />} nome="SEFAZ" ok={!!sefaz?.online} texto={sefaz ? (sefaz.online ? 'Online' : 'Offline') : '—'} tom={sefaz?.online ? 'verde' : sefaz ? 'vermelho' : 'neutro'} />
-        </div>
-      </Aparecer>
-
-      {/* filtros — os mesmos do dashboard de assistência */}
-      <Aparecer className="flex flex-wrap items-end gap-2">
-        <FiltroPeriodo id="periodo-geral" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
-        <SegmentadoV18
-          id="base-geral"
-          valor={base}
-          onMudar={setBase}
-          opcoes={[
-            { valor: 'entrada', rotulo: 'OS por entrada' },
-            { valor: 'conclusao', rotulo: 'OS por conclusão' },
-          ]}
-        />
-      </Aparecer>
+          </>
+        }
+        descricao="Vendas e assistência técnica somadas, no período que você escolher."
+        acoes={
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <StatusPilula icone={<MessageCircle className="h-3.5 w-3.5 text-slate-400" />} nome="WhatsApp" ok={data?.whatsapp.status === 'CONECTADO'} texto={rotulo(data?.whatsapp.status ?? 'DESCONECTADO')} tom={tomPorStatus(data?.whatsapp.status)} />
+            <StatusPilula icone={<FileText className="h-3.5 w-3.5 text-slate-400" />} nome="SEFAZ" ok={!!sefaz?.online} texto={sefaz ? (sefaz.online ? 'Online' : 'Offline') : '—'} tom={sefaz?.online ? 'verde' : sefaz ? 'vermelho' : 'neutro'} />
+          </div>
+        }
+        filtros={
+          <>
+            <FiltroPeriodo id="periodo-geral" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
+            <SegmentadoV18
+              id="base-geral"
+              valor={base}
+              onMudar={setBase}
+              opcoes={[
+                { valor: 'entrada', rotulo: 'OS por entrada' },
+                { valor: 'conclusao', rotulo: 'OS por conclusão' },
+              ]}
+            />
+          </>
+        }
+      />
 
       {indisponivel && (
         <Aparecer className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -423,11 +426,7 @@ export default function DashboardGeral() {
       </div>
 
       {/* AGORA — não depende do período */}
-      <Aparecer className="flex items-center gap-3 pt-2">
-        <span className="text-sm font-semibold text-slate-700">Agora na loja</span>
-        <span className="h-px flex-1 bg-slate-200" />
-        <span className="text-[11px] text-slate-400">não depende do período</span>
-      </Aparecer>
+      <SecaoV18 titulo="Agora na loja" nota="não depende do período" />
 
       <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiV18 rotulo="OS abertas" valor={h?.osAbertas} formato={qtd} sub={data ? `${inteiro(data.os.atrasadas)} atrasadas` : undefined} icone={<Wrench className="h-4 w-4" />} tom={data && data.os.atrasadas > 0 ? 'amarelo' : 'neutro'} carregando={isLoading} onClick={() => nav('/ordens-servico')} />
@@ -442,7 +441,7 @@ export default function DashboardGeral() {
             {data.alertas.map((a, i) => (
               <LinhaV18 key={i} onClick={a.link ? () => nav(a.link!) : undefined} className="text-sm">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
-                <span className="min-w-0 flex-1 text-slate-700">{a.mensagem}</span>
+                <span className="min-w-0 flex-1 text-slate-700"><TextoValores texto={a.mensagem} /></span>
                 {a.link && (
                   <Link to={a.link} onClick={(e) => e.stopPropagation()} className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
                     Ver <ArrowRight className="h-3 w-3" />

@@ -6,6 +6,7 @@
  *   <ListaAvisosRobo />   a lista com os botões (usada no card, no sino e em Configurações → Saúde)
  */
 import { useEffect, useRef, useState } from 'react';
+import { TextoValores } from '@/components/compartilhados/TextoValores';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -111,7 +112,7 @@ export function AnelSaude({ pct, tamanho = 64 }: { pct: number; tamanho?: number
         <circle cx={tamanho / 2} cy={tamanho / 2} r={r} fill="none" stroke="currentColor" strokeWidth={6} className="text-slate-100" />
         <circle cx={tamanho / 2} cy={tamanho / 2} r={r} fill="none" stroke={traco(pct)} strokeWidth={6} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} style={{ transition: 'stroke-dashoffset .8s ease' }} />
       </svg>
-      <span className={clsx('absolute inset-0 flex items-center justify-center text-sm font-bold num', corSaude(pct))}>{pct}%</span>
+      <span className={clsx('absolute inset-0 flex items-center justify-center font-bold tracking-tight num', corSaude(pct))} style={{ fontSize: Math.max(10, Math.round(tamanho * 0.19)) }}>{pct}%</span>
     </div>
   );
 }
@@ -159,7 +160,7 @@ export function ListaAvisosRobo({ avisos, compacto, limite, onFeito }: { avisos:
               <I className={clsx('mt-0.5 h-4 w-4 shrink-0', COR[a.nivel])} />
               <div className="min-w-0 flex-1">
                 <p className={clsx('break-words text-sm', a.nivel === 'erro' ? 'font-semibold text-red-800' : 'font-medium text-slate-800')}>{a.titulo}</p>
-                {!compacto && <p className="mt-0.5 break-words text-xs text-slate-500">{a.mensagem}</p>}
+                {!compacto && <p className="mt-0.5 break-words text-xs text-slate-500"><TextoValores texto={a.mensagem} /></p>}
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   {a.acoes.map((ac) => (
                     <Button

@@ -1,29 +1,42 @@
-/** Tela inicial da gerente: avisos mais importantes (caixinhas, contas, OS) e atalhos do dia a dia. */
+/** Tela inicial da gerente: avisos mais importantes (caixinhas, contas, OS) e atalhos do dia a dia — no padrão dos dashboards. */
 import { Link } from 'react-router-dom';
-import { Banknote, PiggyBank, ShoppingCart, Wallet, Wrench } from 'lucide-react';
-import { PageHeader } from '@/components/ui';
+import { motion } from 'framer-motion';
+import { Banknote, ChevronRight, PiggyBank, ShoppingCart, Wallet, Wrench } from 'lucide-react';
 import { AvisosImportantes } from '@/components/compartilhados/AvisosImportantes';
+import { Aparecer, CabecalhoV18, Grupo, PaginaV18, SecaoV18, TONS, type Tom } from '@/components/dashboard/v18';
+import clsx from 'clsx';
 
-const ATALHOS = [
-  { para: '/vendas', rotulo: 'Pedidos de venda', icone: ShoppingCart },
-  { para: '/ordens-servico', rotulo: 'Ordens de serviço', icone: Wrench },
-  { para: '/financeiro/pagar', rotulo: 'Contas a pagar', icone: Banknote },
-  { para: '/financeiro/receber', rotulo: 'Contas a receber', icone: Wallet },
-  { para: '/financeiro/caixinhas', rotulo: 'Caixinhas', icone: PiggyBank },
+const ATALHOS: { para: string; rotulo: string; icone: typeof Wallet; tom: Tom }[] = [
+  { para: '/vendas', rotulo: 'Pedidos de venda', icone: ShoppingCart, tom: 'azul' },
+  { para: '/ordens-servico', rotulo: 'Ordens de serviço', icone: Wrench, tom: 'vermelho' },
+  { para: '/financeiro/pagar', rotulo: 'Contas a pagar', icone: Banknote, tom: 'amarelo' },
+  { para: '/financeiro/receber', rotulo: 'Contas a receber', icone: Wallet, tom: 'verde' },
+  { para: '/financeiro/caixinhas', rotulo: 'Caixinhas', icone: PiggyBank, tom: 'neutro' },
 ];
 
 export default function InicioGerente() {
+  const hojeExtenso = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   return (
-    <div className="pb-6">
-      <PageHeader titulo="Início" descricao="O que precisa de atenção hoje." />
-      <AvisosImportantes className="mb-4" />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+    <PaginaV18 className="space-y-4 pb-6">
+      <CabecalhoV18 sobre={hojeExtenso.charAt(0).toUpperCase() + hojeExtenso.slice(1)} titulo="Início" descricao="O que precisa de atenção hoje." />
+      <Aparecer>
+        <AvisosImportantes />
+      </Aparecer>
+      <SecaoV18 titulo="Atalhos" />
+      <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {ATALHOS.map((a) => (
-          <Link key={a.para} to={a.para} className="v18-card v18-hover flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 text-sm font-medium text-slate-800 shadow-card">
-            <a.icone className="h-5 w-5 text-brand-600" /> {a.rotulo}
-          </Link>
+          <motion.div key={a.para} variants={{ oculto: { opacity: 0, y: 14 }, visivel: { opacity: 1, y: 0 } }} whileHover={{ y: -4 }} className="min-w-0">
+            <Link to={a.para} className="relative flex h-full items-center gap-3 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-3 text-sm font-medium text-slate-800 shadow-card sm:p-4">
+              <span aria-hidden className="absolute inset-x-0 top-0 h-[3px]" style={{ backgroundColor: TONS[a.tom].barra, opacity: 0.85 }} />
+              <span className={clsx('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', TONS[a.tom].chip)}>
+                <a.icone className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">{a.rotulo}</span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+            </Link>
+          </motion.div>
         ))}
-      </div>
-    </div>
+      </Grupo>
+    </PaginaV18>
   );
 }

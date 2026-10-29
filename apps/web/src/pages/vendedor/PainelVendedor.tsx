@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { Award, Gift, Medal, Plus, Settings2, Target, Trophy, UserX } from 'lucide-react';
+import { Award, CalendarDays, Gift, Medal, Plus, Receipt, Settings2, Target, Trophy, UserX } from 'lucide-react';
 import { api, ApiError, mensagemErro } from '@/lib/api';
 import { useAuth } from '@/stores/auth';
 import { useVendedores, opcoesDe } from '@/hooks/useListas';
-import { BadgeCor, Button, Card, EmptyState, PageHeader, Select, Skeleton } from '@/components/ui';
+import { BadgeCor, Button, EmptyState, Select, Skeleton } from '@/components/ui';
+import { CabecalhoV18, CardV18, Grupo, KpiV18, PaginaV18, SecaoV18 } from '@/components/dashboard/v18';
 import { DesafioCard } from '@/components/compartilhados/DesafioCard';
 import { competenciaLabel, data, inteiro, moeda } from '@/lib/format';
 import type { MetaPainel, PainelVendedor as Painel } from '@/types';
@@ -37,23 +38,25 @@ export default function PainelVendedor() {
   const semVinculo = error instanceof ApiError && error.code === 'SEM_VENDEDOR';
 
   return (
-    <div>
-      <PageHeader
+    <PaginaV18 className="space-y-4">
+      <CabecalhoV18
         titulo={gestor ? 'Painel do vendedor' : 'Meu painel'}
         descricao={p ? `${p.vendedor.nome} · ${competenciaLabel(p.meta.competencia)}` : 'Suas vendas, meta e desafios'}
+        filtros={
+          gestor ? (
+            <Select
+              className="w-full sm:w-56"
+              value={vendedorId || String(p?.vendedor.id ?? '')}
+              onChange={(e) => setParams(e.target.value ? { vendedorId: e.target.value } : {})}
+              opcoes={opcoesDe(vendedores).map((o) => ({ valor: String(o.valor), rotulo: o.rotulo }))}
+            />
+          ) : undefined
+        }
         acoes={
           gestor ? (
-            <>
-              <Select
-                className="w-56"
-                value={vendedorId || String(p?.vendedor.id ?? '')}
-                onChange={(e) => setParams(e.target.value ? { vendedorId: e.target.value } : {})}
-                opcoes={opcoesDe(vendedores).map((o) => ({ valor: String(o.valor), rotulo: o.rotulo }))}
-              />
-              <Link to="/metas-desafios">
-                <Button variante="secundario" icone={<Settings2 className="h-4 w-4" />}>Metas e desafios</Button>
-              </Link>
-            </>
+            <Link to="/metas-desafios">
+              <Button variante="secundario" icone={<Settings2 className="h-4 w-4" />}>Metas e desafios</Button>
+            </Link>
           ) : (
             <Link to="/vendas/nova">
               <Button icone={<Plus className="h-4 w-4" />}>Nova venda</Button>
@@ -73,41 +76,38 @@ export default function PainelVendedor() {
 
       {!error && (
         <div className="space-y-4">
-          {/* ---- vendas por período */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+          {/* ---- vendas por período (cartões de KPI do painel) */}
+          <SecaoV18 titulo="Minhas vendas" nota="comissão em cada período" />
+          <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
             {(p?.periodos ?? Array.from({ length: 6 }, () => null)).map((per, i) => (
-              <div key={per?.chave ?? i} className={clsx('v18-card v18-hover rounded-2xl border bg-white p-4 shadow-card', per?.chave === 'hoje' ? 'border-brand-200 ring-1 ring-brand-100' : 'border-slate-200')}>
-                {per ? (
-                  <>
-                    <p className="text-xs font-medium text-slate-500">{per.rotulo}</p>
-                    <p className="mt-1 text-xl font-semibold tracking-tight text-slate-900 num">{moeda(per.faturamento)}</p>
-                    <p className="mt-0.5 text-xs text-slate-500 num">
+              <KpiV18
+                key={per?.chave ?? i}
+                rotulo={per?.rotulo ?? '…'}
+                valor={per?.faturamento}
+                formato={moeda}
+                carregando={!per}
+                tom={per?.chave === 'hoje' ? 'vermelho' : 'neutro'}
+                icone={per?.chave === 'hoje' ? <Receipt className="h-4 w-4" /> : <CalendarDays className="h-4 w-4" />}
+                sub={
+                  per ? (
+                    <>
                       {inteiro(per.qtd)} {per.qtd === 1 ? 'venda' : 'vendas'}
-                      {per.qtd > 0 && <> · ticket {moeda(per.ticketMedio)}</>}
-                    </p>
-                    <p className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-500">
-                      Comissão <span className="font-semibold text-slate-700 num">{moeda(per.comissao)}</span>
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <Skeleton className="h-3 w-16" />
-                    <Skeleton className="mt-2 h-6 w-24" />
-                    <Skeleton className="mt-2 h-3 w-20" />
-                  </>
-                )}
-              </div>
+                      {per.qtd > 0 && <> · ticket {moeda(per.ticketMedio)}</>} · comissão <span className="font-semibold text-slate-600 num">{moeda(per.comissao)}</span>
+                    </>
+                  ) : undefined
+                }
+              />
             ))}
-          </div>
+          </Grupo>
 
           <div className="grid gap-4 lg:grid-cols-3">
             {/* ---- meta do mês */}
-            <Card className="lg:col-span-2" titulo={<span className="inline-flex items-center gap-2"><Target className="h-4 w-4 text-brand-600" /> Meta do mês</span>} descricao={p ? competenciaLabel(p.meta.competencia) : undefined}>
+            <CardV18 className="lg:col-span-2" titulo="Meta do mês" descricao={p ? competenciaLabel(p.meta.competencia) : undefined} icone={<Target className="h-4 w-4" />} tom="vermelho">
               {isLoading || !p ? <Skeleton className="h-24 w-full" /> : <BlocoMeta meta={p.meta} />}
-            </Card>
+            </CardV18>
 
             {/* ---- ranking */}
-            <Card titulo={<span className="inline-flex items-center gap-2"><Medal className="h-4 w-4 text-amber-500" /> Ranking do mês</span>} semPadding>
+            <CardV18 titulo="Ranking do mês" icone={<Medal className="h-4 w-4" />} tom="amarelo" semPadding>
               {!p ? (
                 <div className="p-4"><Skeleton className="h-24 w-full" /></div>
               ) : (
@@ -133,13 +133,13 @@ export default function PainelVendedor() {
                   </ol>
                 </>
               )}
-            </Card>
+            </CardV18>
           </div>
 
           {/* ---- desafios */}
           <div>
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800"><Trophy className="h-4 w-4 text-amber-500" /> Desafios</h2>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><Trophy className="h-4 w-4 text-amber-500" /> Desafios</h2>
               {p && p.meta.bonusDesafios > 0 && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"><Gift className="h-3.5 w-3.5" /> {moeda(p.meta.bonusDesafios)} em prêmios este mês</span>
               )}
@@ -151,14 +151,14 @@ export default function PainelVendedor() {
                 {p.desafios.map((d) => <DesafioCard key={d.id} d={d} />)}
               </div>
             ) : (
-              <Card>
+              <CardV18>
                 <EmptyState compacto icone={<Award className="h-5 w-5" />} titulo="Nenhum desafio no momento" descricao={gestor ? 'Lance um desafio em Metas e desafios — ele aparece aqui como card para o vendedor.' : 'Quando a gestão lançar um desafio, ele aparece aqui valendo prêmio em comissão.'} />
-              </Card>
+              </CardV18>
             )}
           </div>
 
           {/* ---- últimas vendas */}
-          <Card titulo="Últimas vendas" semPadding acoes={<Link to="/vendas" className="text-xs font-medium text-brand-600 hover:underline">Ver todas</Link>}>
+          <CardV18 titulo="Últimas vendas" icone={<Receipt className="h-4 w-4" />} tom="azul" semPadding acoes={<Link to="/vendas" className="text-xs font-medium text-brand-600 hover:underline">Ver todas</Link>}>
             {!p ? (
               <div className="p-4"><Skeleton className="h-24 w-full" /></div>
             ) : p.ultimasVendas.length ? (
@@ -183,11 +183,11 @@ export default function PainelVendedor() {
             ) : (
               <EmptyState compacto titulo="Nenhuma venda ainda" />
             )}
-          </Card>
+          </CardV18>
           <p className="text-center text-[11px] text-slate-400">Contam todas as vendas assim que são salvas (em aberto, fechadas, com NF). Cancelada sai da conta; orçamento não conta.</p>
         </div>
       )}
-    </div>
+    </PaginaV18>
   );
 }
 
@@ -200,12 +200,12 @@ function BlocoMeta({ meta }: { meta: MetaPainel }) {
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <p className="text-3xl font-bold tracking-tight text-slate-900 num">{moeda(meta.vendido)}</p>
+        <div className="min-w-0">
+          <p className="text-2xl font-bold tracking-tight text-slate-900 num sm:text-3xl">{moeda(meta.vendido)}</p>
           <p className="text-sm text-slate-500">de <span className="font-medium text-slate-700 num">{moeda(meta.valor)}</span></p>
         </div>
         <div className="text-right">
-          <p className={clsx('text-3xl font-bold num', r.texto)}>{meta.pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</p>
+          <p className={clsx('text-2xl font-bold num sm:text-3xl', r.texto)}>{meta.pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</p>
           <p className={clsx('text-xs font-semibold', r.texto)}>{r.rotulo}</p>
         </div>
       </div>
@@ -225,7 +225,7 @@ function BlocoMeta({ meta }: { meta: MetaPainel }) {
 
 function Info({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
-    <div className="rounded-md bg-slate-50 px-3 py-2">
+    <div className="min-w-0 rounded-xl bg-slate-50 px-3 py-2">
       <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{rotulo}</p>
       <p className="font-semibold text-slate-800 num">{valor}</p>
     </div>

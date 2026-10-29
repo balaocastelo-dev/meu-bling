@@ -10,7 +10,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { Boxes, CircleDollarSign, Clock, Handshake, PiggyBank, Repeat, ShoppingCart, TrendingUp, Users, Wallet } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PeriodoFiltro, Skeleton } from '@/components/ui';
-import { Aparecer, BarraAnimada, CardV18, Grupo, KpiV18, PaginaV18 } from '@/components/dashboard/v18';
+import { Aparecer, BarraAnimada, CabecalhoV18, CardV18, Grupo, KpiV18, PaginaV18, SecaoV18 } from '@/components/dashboard/v18';
 import { data as fmtData, dataHora, moeda } from '@/lib/format';
 import { intervaloPeriodo } from '@/lib/periodo';
 import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
@@ -53,26 +53,22 @@ export default function DashboardConsignacao() {
 
   return (
     <PaginaV18 className="space-y-4">
-      <Aparecer className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Dashboard de consignação</h1>
-          <p className="mt-0.5 flex items-center gap-2 text-sm text-slate-500">
-            <span className="relative flex h-2.5 w-2.5">
+      <CabecalhoV18
+        titulo="Dashboard de consignação"
+        descricao={
+          <span className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
               <span className={clsx('absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75', isFetching && 'animate-ping')} />
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
             </span>
             Estoque e lucro dos consignados{data ? ` · ${dataHora(data.atualizadoEm)}` : ''}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <PeriodoFiltro inicial={periodo.i} final={periodo.f} onChange={(i, f) => setPeriodo({ i, f })} label="Vendas no período" />
-          <Link to="/consignacoes" className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">Ver contratos</Link>
-        </div>
-      </Aparecer>
+          </span>
+        }
+        acoes={<Link to="/consignacoes" className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">Ver contratos</Link>}
+        filtros={<PeriodoFiltro inicial={periodo.i} final={periodo.f} onChange={(i, f) => setPeriodo({ i, f })} label="Vendas no período" />}
+      />
 
-      <Aparecer>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Em estoque agora</p>
-      </Aparecer>
+      <SecaoV18 titulo="Em estoque agora" />
       <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiV18 rotulo="Itens consignados na loja" valor={e?.qtd} formato={qtd} icone={<Boxes className="h-4 w-4" />} tom="azul" carregando={isLoading} sub={e ? `média de ${e.diasMedioEmLoja} dia(s) na loja · ${e.emDiarias} em diárias` : undefined} />
         <KpiV18 rotulo="Valor em estoque" sub="pelo preço de venda" valor={e?.valorVenda} formato={moedaKpi} icone={<ShoppingCart className="h-4 w-4" />} tom="neutro" carregando={isLoading} />
@@ -80,9 +76,7 @@ export default function DashboardConsignacao() {
         <KpiV18 rotulo="Lucro possível vendendo tudo" valor={e?.lucroPotencial} formato={moedaKpi} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={isLoading} sub={e ? `margem de ${pctTxt(e.margemPct)}` : undefined} />
       </Grupo>
 
-      <Aparecer>
-        <p className="mb-2 mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Vendas no período</p>
-      </Aparecer>
+      <SecaoV18 titulo="Vendas no período" />
       <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiV18 rotulo="Consignados vendidos" valor={v?.qtd} formato={qtd} icone={<Handshake className="h-4 w-4" />} tom="azul" carregando={isLoading} sub={v ? `vendem em ${v.diasMedioParaVender} dia(s) em média` : undefined} />
         <KpiV18 rotulo="Faturamento" valor={v?.faturamento} formato={moedaKpi} icone={<CircleDollarSign className="h-4 w-4" />} tom="neutro" carregando={isLoading} sub={v ? `ticket médio ${moeda(v.ticketMedio)}` : undefined} />

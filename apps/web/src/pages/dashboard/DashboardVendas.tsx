@@ -9,7 +9,7 @@ import { useVendedores, opcoesDe } from '@/hooks/useListas';
 import { EmptyState, SelectFiltro, Skeleton } from '@/components/ui';
 import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
 import { FotoProduto } from '@/components/compartilhados/ProdutoSite';
-import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, listaVariants } from '@/components/dashboard/v18';
+import { Aparecer, Avatar, BarraAnimada, CabecalhoV18, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, listaVariants } from '@/components/dashboard/v18';
 import { inteiro, moeda, numero, percentual } from '@/lib/format';
 import { CORES, PALETA, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import type { DashboardVendas as Dados } from '@/types';
@@ -40,16 +40,16 @@ export default function DashboardVendas() {
 
   return (
     <PaginaV18 className="space-y-5">
-      <Aparecer className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Dashboard de vendas</h1>
-          <p className="text-sm text-slate-500">Faturamento, vendedores, formas de pagamento e produtos mais vendidos.</p>
-        </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <FiltroPeriodo id="periodo-vendas" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
-          <SelectFiltro valor={vendedorId} onChange={setVendedorId} opcoes={opcoesDe(vendedores)} placeholder="Todos os vendedores" />
-        </div>
-      </Aparecer>
+      <CabecalhoV18
+        titulo="Dashboard de vendas"
+        descricao="Faturamento, vendedores, formas de pagamento e produtos mais vendidos."
+        filtros={
+          <>
+            <FiltroPeriodo id="periodo-vendas" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
+            <SelectFiltro valor={vendedorId} onChange={setVendedorId} opcoes={opcoesDe(vendedores)} placeholder="Todos os vendedores" />
+          </>
+        }
+      />
 
       <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <KpiV18 rotulo="Faturamento" valor={r?.faturamento} anterior={comp?.faturamento} formato={moeda} icone={<CircleDollarSign className="h-4 w-4" />} tom="verde" carregando={isLoading} sub="vs. período anterior" />

@@ -9,7 +9,7 @@ import { useTecnicos, opcoesDe } from '@/hooks/useListas';
 import { Button, EmptyState, SelectFiltro, Skeleton } from '@/components/ui';
 import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
 import { PagarTecnicoModal } from './PagarTecnico';
-import { Aparecer, Avatar, BarraAnimada, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, SegmentadoV18, listaVariants } from '@/components/dashboard/v18';
+import { Aparecer, Avatar, BarraAnimada, CabecalhoV18, CardV18, Grupo, KpiV18, LinhaV18, PaginaV18, SegmentadoV18, listaVariants } from '@/components/dashboard/v18';
 import { data as fmtData, inteiro, moeda, numero, percentual } from '@/lib/format';
 import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import type { DashboardAssistencia as Dados, TotaisAssistencia } from '@/types';
@@ -83,12 +83,12 @@ export default function DashboardAssistencia() {
 
   return (
     <PaginaV18 className="space-y-5">
-      <Aparecer className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Dashboard de assistência técnica</h1>
-          <p className="text-sm text-slate-500">Entradas das OS, mão de obra x peças, custos e lucro dos serviços.</p>
-        </div>
-        <div className="flex flex-wrap items-end gap-2">
+      <CabecalhoV18
+        titulo="Dashboard de assistência técnica"
+        descricao="Entradas das OS, mão de obra x peças, custos e lucro dos serviços."
+        acoes={<Button variante="primario" icone={<HandCoins className="h-4 w-4" />} onClick={() => setPagarAberto(true)}>Pagar técnico</Button>}
+        filtros={
+          <>
           <FiltroPeriodo id="periodo-assistencia" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
           <SegmentadoV18
             id="base-assistencia"
@@ -100,9 +100,9 @@ export default function DashboardAssistencia() {
             ]}
           />
           <SelectFiltro valor={tecnicoId} onChange={setTecnicoId} opcoes={opcoesDe(tecnicos)} placeholder="Todos os técnicos" />
-          <Button variante="primario" icone={<HandCoins className="h-4 w-4" />} onClick={() => setPagarAberto(true)}>Pagar técnico</Button>
-        </div>
-      </Aparecer>
+          </>
+        }
+      />
 
       <PagarTecnicoModal aberto={pagarAberto} onFechar={() => setPagarAberto(false)} dataInicial={dataInicial} dataFinal={dataFinal} base={base} filtroTecnicoId={tecnicoId} />
 

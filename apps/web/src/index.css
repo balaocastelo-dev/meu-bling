@@ -118,6 +118,13 @@ body {
 *::-webkit-scrollbar-track {
   background: transparent;
 }
+/* rolagem lateral sem barra (seletores de período e abas no celular) */
+.sem-barra {
+  scrollbar-width: none;
+}
+.sem-barra::-webkit-scrollbar {
+  display: none;
+}
 
 @layer base {
   /* Itens de grade não esticam por causa de conteúdo largo (tabela, texto comprido): sem isso, uma

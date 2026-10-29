@@ -95,12 +95,12 @@ export default function ExtratoConta() {
       {isLoading && <Skeleton className="h-60" />}
       {e && (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
-            <Card><p className="text-xs text-slate-500">Saldo antes do período</p><p className="num text-lg font-semibold">{moeda(e.saldoAnterior)}</p></Card>
-            <Card><p className="text-xs text-slate-500">Entrou</p><p className="num text-lg font-semibold text-emerald-700">{moeda(e.entradas)}</p></Card>
-            <Card><p className="text-xs text-slate-500">Saiu</p><p className="num text-lg font-semibold text-red-600">{moeda(e.saidas)}</p></Card>
-            <Card><p className="text-xs text-slate-500">Saldo no fim do período</p><p className="num text-lg font-semibold">{moeda(e.saldoFinal)}</p></Card>
-            <Card><p className="text-xs text-slate-500">Saldo hoje</p><p className={clsx('num text-lg font-bold', e.conta.saldoAtual < 0 ? 'text-red-600' : 'text-slate-900')}>{moeda(e.conta.saldoAtual)}</p></Card>
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
+            <Card><p className="text-xs text-slate-500">Saldo antes do período</p><p className="num whitespace-nowrap text-lg font-semibold">{moeda(e.saldoAnterior)}</p></Card>
+            <Card><p className="text-xs text-slate-500">Entrou</p><p className="num whitespace-nowrap text-lg font-semibold text-emerald-700">{moeda(e.entradas)}</p></Card>
+            <Card><p className="text-xs text-slate-500">Saiu</p><p className="num whitespace-nowrap text-lg font-semibold text-red-600">{moeda(e.saidas)}</p></Card>
+            <Card><p className="text-xs text-slate-500">Saldo no fim do período</p><p className="num whitespace-nowrap text-lg font-semibold">{moeda(e.saldoFinal)}</p></Card>
+            <Card><p className="text-xs text-slate-500">Saldo hoje</p><p className={clsx('num whitespace-nowrap text-lg font-bold', e.conta.saldoAtual < 0 ? 'text-red-600' : 'text-slate-900')}>{moeda(e.conta.saldoAtual)}</p></Card>
           </div>
           {e.cortado && <p className="mb-2 text-xs text-amber-700">Período com {e.total} lançamentos: mostrando os 3.000 mais recentes. Escolha um período menor para ver os mais antigos.</p>}
           {!e.lancamentos.length ? (

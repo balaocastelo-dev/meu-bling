@@ -41,8 +41,10 @@ export function ValorAnimado({ valor }: { valor: ReactNode }) {
   const [atual, setAtual] = useState<number | null>(null);
   const ultimo = useRef(0);
   useEffect(() => {
-    if (!visto || !Number.isFinite(alvo)) return;
+    if (!Number.isFinite(alvo)) return;
+    // sem animação (pedido do sistema, impressão, print): valor final na hora, mesmo fora da tela
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return setAtual(alvo);
+    if (!visto) return;
     const c = animate(ultimo.current, alvo, { duration: 0.9, ease: [0.16, 1, 0.3, 1], onUpdate: setAtual });
     ultimo.current = alvo;
     return () => c.stop();
@@ -67,23 +69,32 @@ const tons = {
   azul: 'text-blue-600 bg-blue-50',
 };
 
-/** Cartão de estatística simples (KPI sem comparativo) */
+const barras = { neutro: '#64748b', verde: '#16a34a', vermelho: '#dc2626', amarelo: '#f59e0b', azul: '#2563eb' };
+
+/** Cartão de estatística simples (KPI sem comparativo) — mesmo desenho do cartão dos dashboards (faixa de cor no topo, altura igual na linha) */
 export function StatCard({ rotulo, valor, sub, icone, tom = 'neutro', carregando, onClick, className }: StatCardProps) {
   return (
     <div
       onClick={onClick}
       className={clsx(
-        'v18-card flex min-w-0 items-start gap-2 rounded-2xl border border-slate-200/80 bg-gradient-to-b to-white to-60% p-3 shadow-card sm:gap-3 sm:p-4',
+        'v18-card @container relative flex h-full min-w-0 items-start gap-2 overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-b to-white to-60% p-3 shadow-card sm:gap-3 sm:p-4',
         faixas[tom],
         onClick && 'v18-hover cursor-pointer active:scale-[0.98]',
         className,
       )}
     >
-      {icone && <div className={clsx('hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl min-[420px]:flex', tons[tom])}>{icone}</div>}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-slate-500" title={typeof rotulo === 'string' ? rotulo : undefined}>{rotulo}</p>
-        {carregando ? <Skeleton className="mt-1.5 h-6 w-24" /> : <p className="mt-0.5 break-words text-base font-semibold leading-tight tracking-tight text-slate-900 num sm:text-lg xl:text-xl" title={typeof valor === 'string' ? valor : undefined}><ValorAnimado valor={valor} /></p>}
-        {sub && <p className="mt-0.5 truncate text-xs text-slate-400">{sub}</p>}
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[3px]" style={{ backgroundColor: barras[tom], opacity: 0.85 }} />
+      {icone && <div className={clsx('hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl @[13rem]:flex', tons[tom])}>{icone}</div>}
+      <div className="flex min-w-0 flex-1 flex-col self-stretch">
+        <p className="line-clamp-2 text-xs font-medium leading-4 text-slate-500" title={typeof rotulo === 'string' ? rotulo : undefined}>{rotulo}</p>
+        {carregando ? (
+          <Skeleton className="mt-1.5 h-6 w-24" />
+        ) : (
+          <p className="mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap text-base font-semibold leading-tight tracking-tight text-slate-900 num @[10rem]:text-lg @[15rem]:text-xl" title={typeof valor === 'string' ? valor : undefined}>
+            <ValorAnimado valor={valor} />
+          </p>
+        )}
+        {sub && <p className="mt-auto line-clamp-2 pt-0.5 text-xs leading-4 text-slate-400">{sub}</p>}
       </div>
     </div>
   );
@@ -114,13 +125,13 @@ export function KpiCard({ rotulo, valor, anterior, atual, inverter, sub, carrega
   const neutra = variacao === null || Math.abs(variacao) < 0.05;
 
   return (
-    <div className={clsx('v18-card v18-hover min-w-0 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-card sm:p-4', className)}>
-      <p className="text-xs font-medium text-slate-500">{rotulo}</p>
+    <div className={clsx('v18-card v18-hover @container relative h-full min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-3 shadow-card sm:p-4', className)}>
+      <p className="line-clamp-2 text-xs font-medium leading-4 text-slate-500">{rotulo}</p>
       {carregando ? (
         <Skeleton className="mt-2 h-7 w-28" />
       ) : (
         <div className="mt-1 flex flex-wrap items-baseline gap-2">
-          <span className="break-words text-xl font-semibold tracking-tight text-slate-900 num sm:text-2xl"><ValorAnimado valor={valor} /></span>
+          <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-lg font-semibold tracking-tight text-slate-900 num @[12rem]:text-xl @[16rem]:text-2xl"><ValorAnimado valor={valor} /></span>
           {variacao !== null && (
             <span
               className={clsx(

@@ -14,7 +14,7 @@ import { api } from '@/lib/api';
 import { intervaloPeriodo } from '@/lib/periodo';
 import { useContasFinanceiras, opcoesDe } from '@/hooks/useListas';
 import { EmptyState, PeriodoFiltro, SelectFiltro, Skeleton } from '@/components/ui';
-import { Aparecer, BarraAnimada, CardV18, Grupo, KpiV18, PaginaV18 } from '@/components/dashboard/v18';
+import { Aparecer, BarraAnimada, CabecalhoV18, CardV18, Grupo, KpiV18, PaginaV18 } from '@/components/dashboard/v18';
 import { data as fmtData, dataHora, moeda } from '@/lib/format';
 import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 
@@ -102,25 +102,27 @@ export default function FluxoCaixa() {
 
   return (
     <PaginaV18 className="space-y-4">
-      <Aparecer className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Fluxo de caixa</h1>
-          <p className="mt-0.5 flex items-center gap-2 text-sm text-slate-500">
-            <span className="relative flex h-2.5 w-2.5">
+      <CabecalhoV18
+        titulo="Fluxo de caixa"
+        descricao={
+          <span className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
               <span className={clsx('absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75', isFetching ? 'animate-ping' : '')} />
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
             </span>
             Ao vivo · atualiza a cada 30 s{data ? ` · ${dataHora(data.atualizadoEm)}` : ''}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <PeriodoFiltro inicial={periodo.i} final={periodo.f} onChange={(i, f) => setPeriodo({ i, f })} label="" limpavel={false} />
-          <SelectFiltro valor={agrupar} onChange={(v) => setAgrupar(v as typeof agrupar)} placeholder="" opcoes={[{ valor: 'dia', rotulo: 'Por dia' }, { valor: 'semana', rotulo: 'Por semana' }, { valor: 'mes', rotulo: 'Por mês' }]} />
-          <SelectFiltro valor={contaId} onChange={setContaId} opcoes={opcoesDe(contasLista)} placeholder="Todas as contas" />
-        </div>
-      </Aparecer>
+          </span>
+        }
+        filtros={
+          <>
+            <PeriodoFiltro inicial={periodo.i} final={periodo.f} onChange={(i, f) => setPeriodo({ i, f })} label="" limpavel={false} />
+            <SelectFiltro valor={agrupar} onChange={(v) => setAgrupar(v as typeof agrupar)} placeholder="" opcoes={[{ valor: 'dia', rotulo: 'Por dia' }, { valor: 'semana', rotulo: 'Por semana' }, { valor: 'mes', rotulo: 'Por mês' }]} />
+            <SelectFiltro valor={contaId} onChange={setContaId} opcoes={opcoesDe(contasLista)} placeholder="Todas as contas" />
+          </>
+        }
+      />
 
-      <Grupo className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <KpiV18 rotulo="Saldo hoje" valor={data?.saldoAgora} formato={moedaKpi} icone={<Wallet className="h-4 w-4" />} tom="azul" carregando={isLoading} sub="todas as contas, agora" onClick={() => nav('/financeiro/bancos')} />
         <KpiV18 rotulo="Entrou no período" valor={r?.entradas} formato={moedaKpi} icone={<ArrowDownRight className="h-4 w-4" />} tom="verde" carregando={isLoading} />
         <KpiV18 rotulo="Saiu no período" valor={r?.saidas} formato={moedaKpi} icone={<ArrowUpRight className="h-4 w-4" />} tom="vermelho" carregando={isLoading} />
