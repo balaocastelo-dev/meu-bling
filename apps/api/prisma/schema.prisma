@@ -1490,6 +1490,37 @@ model VendaRoboNf {
   @@index([status])
 }
 
+/// ROBÔ DA SAÚDE: o que o robô (que confere a "Saúde do sistema" 24h) corrigiu sozinho e o que ele
+/// sugere para o ADMIN resolver com um clique. Aparece no dashboard do ADMIN e em Configurações → Saúde.
+model RoboSaudeAviso {
+  id          Int       @id @default(autoincrement())
+  /// identifica o problema/alvo (ex.: "venda-final-sem-lancamento:venda:123"); sugestão aberta não se repete
+  chave       String
+  /// CORRECAO (o robô já resolveu) | SUGESTAO (precisa de um clique) | ALERTA (só avisar, com link)
+  tipo        String
+  /// erro | aviso | info
+  nivel       String
+  area        String
+  titulo      String
+  mensagem    String
+  link        String?
+  /// JSON: botões da sugestão [{ codigo, rotulo, estilo, confirmar }]
+  acoes       String?
+  /// JSON: dados que a ação precisa (ids, valores)
+  dados       String?
+  /// ABERTA | RESOLVIDA (o problema sumiu / o botão foi apertado) | IGNORADA | FEITA (correção do robô)
+  status      String    @default("ABERTA")
+  lida        Boolean   @default(false)
+  resolvidoPor String?
+  resolvidoEm DateTime?
+  criadoEm    DateTime  @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([status, tipo])
+  @@index([chave])
+  @@index([criadoEm])
+}
+
 // ---------------------------------------------------------------------
 // CARNÊ PRÓPRIO — o cliente paga cada parcela por PIX (QR Code) na conta da loja (Cora)
 // ---------------------------------------------------------------------

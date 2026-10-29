@@ -6,6 +6,7 @@ import { useAuth } from '@/stores/auth';
 import { api } from '@/lib/api';
 import { useWhatsappStatus } from '@/hooks/useEmpresa';
 import { iniciais, rotulo } from '@/lib/format';
+import { SinoRobo } from '@/components/compartilhados/RoboSaude';
 
 function MenuFlutuante({ aberto, onFechar, children, alinhar = 'right' }: { aberto: boolean; onFechar: () => void; children: React.ReactNode; alinhar?: 'left' | 'right' }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -94,6 +95,8 @@ export function Topbar({ menuAberto = false, onAbrirMenu, onAbrirBusca }: { menu
             ))}
           </MenuFlutuante>
         </div>
+
+        <SinoRobo />
 
         <Link
           to="/comunicacao/whatsapp"
