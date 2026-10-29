@@ -144,6 +144,36 @@ async function main() {
   verifica(vb2?.situacao.final && !vb2.situacao.cancelamento, 'venda do Bling ficou Fechada', vb2?.situacao.nome);
   verifica(!vb2?.contasLancadas && !vb2?.estoqueLancado && crb === 0, 'sem lançar caixa nem estoque de novo', { contas: vb2?.contasLancadas, estoque: vb2?.estoqueLancado, crb });
 
+  secao('Compra registrada ao finalizar uma venda que foi excluída (caso de 29/10): o robô desfaz e o dinheiro volta');
+  const mp = await adm.post('/contas-financeiras', { nome: `MP Saude ${SUF}`, tipo: 'BANCO', saldoInicial: 0, padrao: false, ativo: true }, [200, 201]);
+  const cf: any = await adm.get('/vendas/consumidor-final');
+  const vc = await adm.post('/vendas', { contatoId: cf.id, vendedorId: vend.id, data: hoje(), itens: [{ produtoId: prod.id, quantidade: 1, valorUnitario: 300, custoUnitario: 120 }], parcelas: [{ dataVencimento: hoje(), valor: 300, formaPagamentoId: pix.id }] }, 201);
+  const chk: any = await adm.get(`/vendas/${vc.id}/finalizacao`);
+  const fin: any = await adm.post(`/vendas/${vc.id}/finalizar`, { recebimentos: [{ parcelaId: chk.parcelas[0].id, recebido: false }], compra: { paga: true, contaFinanceiraId: mp.id } }, 200);
+  const compraId = fin.compra.compra.id as number;
+  // simula a versão antiga: a venda sumiu do banco e a compra (paga) ficou para trás
+  const cancel = await db.situacao.findFirst({ where: { modulo: 'VENDA', cancelamento: true, ativo: true } });
+  await db.venda.update({ where: { id: vc.id }, data: { situacaoId: cancel!.id, contasLancadas: false, estoqueLancado: false } });
+  await db.contaReceber.deleteMany({ where: { origemTipo: 'VENDA', origemId: vc.id } });
+  await db.vendaParcela.updateMany({ where: { vendaId: vc.id }, data: { contaReceberId: null } });
+  await db.historicoSituacao.deleteMany({ where: { entidadeTipo: 'VENDA', entidadeId: vc.id } });
+  await db.venda.delete({ where: { id: vc.id } });
+  for (const c of await db.contaFinanceira.findMany()) {
+    const somas = await db.movimentoFinanceiro.groupBy({ by: ['tipo'], where: { contaFinanceiraId: c.id }, _sum: { valor: true } });
+    const movs = somas.reduce((t, s) => t + (s.tipo === 'ENTRADA' ? 1 : -1) * (s._sum.valor || 0), 0);
+    await db.contaFinanceira.update({ where: { id: c.id }, data: { saldoAtual: Math.round((c.saldoInicial + movs) * 100) / 100 } });
+  }
+  const mpAntes = await db.contaFinanceira.findUnique({ where: { id: mp.id } });
+  const saidaCompra = await db.movimentoFinanceiro.findFirst({ where: { contaFinanceiraId: mp.id, tipo: 'SAIDA', contaPagar: { origemTipo: 'COMPRA', origemId: compraId } } });
+  verifica(!!saidaCompra && Math.abs(saidaCompra.valor - 120) < 0.01 && !(await db.venda.findUnique({ where: { id: vc.id } })), 'cenário montado: compra paga (120) saiu do banco e a venda não existe mais', { saida: saidaCompra?.valor, saldo: mpAntes?.saldoAtual });
+  p = await adm.post('/robo-saude/rodar');
+  const corrCompra = (p.correcoes as any[]).find((a: any) => a.chave === `compra-de-venda-cancelada:compra:${compraId}`);
+  verifica(corrCompra && corrCompra.status === 'FEITA' && /voltaram para o banco/.test(corrCompra.mensagem), 'robô desfez a compra órfã sozinho', corrCompra);
+  const compraDepois = await db.compra.findUnique({ where: { id: compraId } });
+  verifica(!compraDepois, 'compra apagada (a venda não existe mais)', compraDepois);
+  const mpDepois = await db.contaFinanceira.findUnique({ where: { id: mp.id } });
+  verifica(Math.abs((mpDepois?.saldoAtual ?? -1) - ((mpAntes?.saldoAtual ?? 0) + 120)) < 0.01, 'os 120 da compra voltaram para o banco', { antes: mpAntes?.saldoAtual, depois: mpDepois?.saldoAtual });
+
   secao('Desligar e religar');
   await adm.put('/robo-saude/config', { autoCorrigir: false });
   verifica((await adm.get('/robo-saude')).config.autoCorrigir === false, 'auto-correção desligada');
