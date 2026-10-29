@@ -7,6 +7,7 @@ import { useAuth } from '@/stores/auth';
 import { useVendedores, opcoesDe } from '@/hooks/useListas';
 import { BadgeCor, Button, Card, EmptyState, PageHeader, Select, Skeleton } from '@/components/ui';
 import { DesafioCard } from '@/components/compartilhados/DesafioCard';
+import { LembretesParaVoce } from '@/components/compartilhados/Lembretes';
 import { competenciaLabel, data, inteiro, moeda } from '@/lib/format';
 import type { MetaPainel, PainelVendedor as Painel } from '@/types';
 
@@ -73,6 +74,8 @@ export default function PainelVendedor() {
 
       {!error && (
         <div className="space-y-4">
+          {/* lembretes do Robô da Saúde (ex.: venda com produto sem custo) — some sozinho ao resolver */}
+          <LembretesParaVoce area="Vendas" />
           {/* ---- vendas por período */}
           {/* topo (Power BI): vendas por período — "Hoje" em destaque */}
           <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 xl:grid-cols-6">

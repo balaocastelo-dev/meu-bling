@@ -21,6 +21,7 @@ import { competenciaDe } from '../../lib/util.js';
 import { categoriaPadraoId } from '../comum/financeiro.js';
 import { format } from 'date-fns';
 import { carregarCfgCustos, custosVenda } from '../comum/custos-venda.js';
+import { cfgCustosOs, SELECT_CUSTO_OS } from '../comum/custos-os.js';
 
 async function situacoesRealizadas(modulo: 'VENDA' | 'COMPRA' | 'OS') {
   const s = await prisma.situacao.findMany({ where: { modulo, final: true, cancelamento: false }, select: { id: true } });
@@ -37,14 +38,16 @@ function pct(parte: number, total: number) {
 }
 
 /** OS do dashboard de assistência no período (base = data de entrada ou de conclusão). */
-function ordensAssistencia(de: Date, ate: Date, base: 'entrada' | 'conclusao', tecnicoId: number | undefined, sitOk: number[]) {
+async function ordensAssistencia(de: Date, ate: Date, base: 'entrada' | 'conclusao', tecnicoId: number | undefined, sitOk: number[]) {
   const filtroTec = tecnicoId ? { tecnicoId } : {};
+  // carrega a configuração de custos (imposto, taxa de cartão) que o fechamentoOs() usa — mesma regra da venda
+  await cfgCustosOs();
   return prisma.ordemServico.findMany({
     where: base === 'conclusao' ? { dataConclusao: { gte: de, lte: ate }, situacaoId: { in: sitOk }, ...filtroTec } : { dataEntrada: { gte: de, lte: ate }, ...filtroTec },
     orderBy: [{ dataEntrada: 'desc' }, { numero: 'desc' }],
     select: {
       id: true, numero: true, dataEntrada: true, dataConclusao: true, equipamento: true, marca: true, modelo: true, situacaoId: true, tecnicoId: true,
-      total: true, totalServicos: true, totalPecas: true, descontoValor: true, custoTotal: true, custoPeca: true, custoLogistica: true, custoMaoObraTerceiro: true,
+      totalServicos: true, descontoValor: true, ...SELECT_CUSTO_OS,
       contato: { select: { id: true, nome: true } },
       tecnico: { select: { id: true, nome: true } },
       situacao: { select: { id: true, nome: true, cor: true } },
@@ -54,8 +57,9 @@ function ordensAssistencia(de: Date, ate: Date, base: 'entrada' | 'conclusao', t
 type LinhaAssistencia = Awaited<ReturnType<typeof ordensAssistencia>>[number];
 
 function somarAssistencia(lista: LinhaAssistencia[]) {
-  const t = { qtd: 0, valorEntrada: 0, maoDeObra: 0, pecas: 0, descontos: 0, custoPecas: 0, custoLogistica: 0, custoTerceiros: 0, custoTotal: 0, lucro: 0 };
+  const t = { qtd: 0, valorEntrada: 0, maoDeObra: 0, pecas: 0, descontos: 0, custoPecas: 0, custoImposto: 0, custoCartao: 0, custoLogistica: 0, custoTerceiros: 0, custoTotal: 0, lucro: 0, osSemCusto: 0 };
   for (const o of lista) {
+    // custo completo da OS (peças + imposto + cartão + logística + terceiro) — mesma regra da venda e do DRE
     const f = fechamentoOs(o);
     t.qtd += 1;
     t.valorEntrada += o.total;
@@ -63,10 +67,13 @@ function somarAssistencia(lista: LinhaAssistencia[]) {
     t.pecas += o.totalPecas;
     t.descontos += o.descontoValor;
     t.custoPecas += f.custoPecas;
+    t.custoImposto += f.imposto;
+    t.custoCartao += f.taxaCartao;
     t.custoLogistica += f.custoLogistica;
     t.custoTerceiros += f.custoMaoObraTerceiro;
     t.custoTotal += f.custoTotal;
     t.lucro += f.lucro;
+    if (f.pecasSemCusto > 0) t.osSemCusto += 1;
   }
   const r = Object.fromEntries(Object.entries(t).map(([k, v]) => [k, arredondar(v)])) as typeof t;
   return {

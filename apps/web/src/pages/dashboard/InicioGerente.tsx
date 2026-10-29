@@ -6,6 +6,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Banknote, Clock, Landmark, PiggyBank, ShoppingCart, TriangleAlert, Wallet, Wrench } from 'lucide-react';
 import { AvisosImportantes } from '@/components/compartilhados/AvisosImportantes';
+import { LembretesParaVoce } from '@/components/compartilhados/Lembretes';
 import { Aparecer, FaixaKpis, KpiV18, PaginaV18, SaldosContas, SecaoDetalhes } from '@/components/dashboard/v18';
 import { api } from '@/lib/api';
 import { moeda } from '@/lib/format';
@@ -62,6 +63,9 @@ export default function InicioGerente() {
 
       <Aparecer>
         <AvisosImportantes />
+      </Aparecer>
+      <Aparecer>
+        <LembretesParaVoce />
       </Aparecer>
 
       <SecaoDetalhes titulo="Atalhos" />

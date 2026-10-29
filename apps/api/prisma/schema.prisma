@@ -895,7 +895,10 @@ model OrdemServicoItem {
   valorUnitario       Float        @default(0)
   desconto            Float        @default(0)
   total               Float        @default(0)
+  /// custo da peça (interno, nunca sai para o cliente): digitado pelo técnico ou vindo do cadastro do produto
   custoUnitario       Float        @default(0)
+  /// custo digitado pelo técnico (true) ou vindo do cadastro do produto (false)
+  custoInformado      Boolean      @default(false)
   comissaoVendedorPct Float        @default(0)
   comissaoTecnicoPct  Float        @default(0)
   deposito            Deposito?    @relation(fields: [depositoId], references: [id])
@@ -1513,12 +1516,17 @@ model RoboSaudeAviso {
   lida        Boolean   @default(false)
   resolvidoPor String?
   resolvidoEm DateTime?
+  /// para quem é o lembrete (aparece no painel desse técnico/vendedor, além do painel do ADMIN)
+  tecnicoId   Int?
+  vendedorId  Int?
   criadoEm    DateTime  @default(now())
   atualizadoEm DateTime @updatedAt
 
   @@index([status, tipo])
   @@index([chave])
   @@index([criadoEm])
+  @@index([status, tecnicoId])
+  @@index([status, vendedorId])
 }
 
 // ---------------------------------------------------------------------

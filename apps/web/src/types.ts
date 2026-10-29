@@ -615,7 +615,10 @@ export interface OsItem {
   valorUnitario: number;
   desconto: number;
   total?: number;
-  custoUnitario?: number;
+  /** custo interno da peça (nunca sai para o cliente); null no envio = usar o custo do cadastro do produto */
+  custoUnitario?: number | null;
+  /** o técnico digitou o custo (true) ou veio do cadastro (false) */
+  custoInformado?: boolean;
   comissaoVendedorPct: number;
   comissaoTecnicoPct: number;
   depositoId: number | null;
@@ -650,6 +653,8 @@ export interface OsResumo {
   orcar: boolean;
   orcamentoAprovado: boolean;
   atrasada?: boolean;
+  /** peças sem custo nenhum (o técnico precisa preencher) */
+  pecasSemCusto?: number;
 }
 
 export interface OrdemServico extends OsResumo {
@@ -682,6 +687,8 @@ export interface OrdemServico extends OsResumo {
   custoMaoObraTerceiro: number;
   /** lucro/margem — só ADMIN/GERENTE (null para os demais) */
   fechamento?: FechamentoOs | null;
+  /** o que falta de custo (peça sem custo) — todo mundo vê, para o técnico preencher */
+  pendenciasCusto?: PendenciaCusto[];
   garantiaDias: number;
   estoqueLancado: boolean;
   contasLancadas: boolean;
@@ -730,14 +737,26 @@ export interface OsPayload {
   parcelas: Parcela[];
 }
 
+export interface PendenciaCusto {
+  campo: string;
+  mensagem: string;
+}
+
 export interface FechamentoOs {
   custoPecas: number;
   custoPecasOrigem: 'INFORMADO' | 'CADASTRO';
+  pecasSemCusto?: number;
+  imposto?: number;
+  impostoPct?: number;
+  taxaCartao?: number;
+  taxaCartaoPct?: number;
+  parcelasCartao?: number;
   custoLogistica: number;
   custoMaoObraTerceiro: number;
   custoTotal: number;
   lucro: number;
   margemPct: number;
+  pendencias?: PendenciaCusto[];
 }
 
 export interface TotaisAssistencia {

@@ -13,6 +13,8 @@ import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, recriarCom
 import { criarNotaPendente } from '../comum/nfe.js';
 import { mensagemPendencias, verificarNfe } from '../comum/nfe-checagem.js';
 import { hojeMeioDia, inicioDia } from '../comum/datas.js';
+import { cfgCustosAtual, cfgCustosOs, custosOs, pendenciasCustoOs, type OsParaCusto, type PendenciaCusto } from '../comum/custos-os.js';
+import type { CfgCustos } from '../comum/custos-venda.js';
 
 type Db = Tx | typeof prisma;
 const texto = z.string().trim().nullable().optional();
@@ -26,6 +28,8 @@ export const itemOsSchema = z.object({
   quantidade: z.coerce.number().positive().default(1),
   valorUnitario: z.coerce.number().min(0).default(0),
   desconto: z.coerce.number().min(0).default(0),
+  /** custo interno da peça informado pelo técnico; omitido/null = custo do cadastro do produto */
+  custoUnitario: z.coerce.number().min(0).nullable().optional(),
   comissaoVendedorPct: z.coerce.number().min(0).max(100).nullable().optional(),
   comissaoTecnicoPct: z.coerce.number().min(0).max(100).nullable().optional(),
   depositoId: z.coerce.number().int().positive().nullable().optional(),
@@ -84,28 +88,39 @@ export const CAMPOS_LIVRES_OS = [
 ] as const;
 
 /**
- * Fechamento da OS (uso interno/ADMIN): custo efetivo e lucro.
- * Custo das peças = valor informado na OS (custoPeca) ou, se não informado, o custo das peças cadastradas (custoTotal).
+ * Fechamento da OS (uso interno/ADMIN): custo completo e lucro — a MESMA regra da venda (comum/custos-os.ts):
+ * peças (custo de cada peça, ou o total informado em custoPeca) + imposto + taxa de cartão + logística + terceiro.
+ * Traz também as pendências de custo (peça sem custo) que o técnico precisa preencher.
  */
-export function fechamentoOs(os: { total: number; totalServicos: number; totalPecas: number; descontoValor: number; custoTotal: number; custoPeca: number; custoLogistica: number; custoMaoObraTerceiro: number }) {
-  const custoPecas = arredondar(os.custoPeca > 0 ? os.custoPeca : os.custoTotal);
-  const custoTotalOs = arredondar(custoPecas + os.custoLogistica + os.custoMaoObraTerceiro);
-  const lucro = arredondar(os.total - custoTotalOs);
+export function fechamentoOs(os: OsParaCusto, cfg: CfgCustos = cfgCustosAtual()) {
+  const c = custosOs(os, cfg);
   return {
-    custoPecas,
-    custoPecasOrigem: (os.custoPeca > 0 ? 'INFORMADO' : 'CADASTRO') as 'INFORMADO' | 'CADASTRO',
-    custoLogistica: arredondar(os.custoLogistica),
-    custoMaoObraTerceiro: arredondar(os.custoMaoObraTerceiro),
-    custoTotal: custoTotalOs,
-    lucro,
-    margemPct: os.total > 0 ? arredondar((lucro / os.total) * 100, 1) : 0,
+    custoPecas: c.pecas,
+    custoPecasOrigem: (c.pecasOrigem === 'INFORMADO' ? 'INFORMADO' : 'CADASTRO') as 'INFORMADO' | 'CADASTRO',
+    pecasSemCusto: c.pecasSemCusto,
+    imposto: c.imposto,
+    impostoPct: c.impostoPct,
+    taxaCartao: c.taxaCartao,
+    taxaCartaoPct: c.taxaCartaoPct,
+    parcelasCartao: c.parcelasCartao,
+    custoLogistica: c.logistica,
+    custoMaoObraTerceiro: c.terceiros,
+    custoTotal: c.total,
+    lucro: c.lucro,
+    margemPct: c.margemPct,
+    pendencias: c.pendencias,
   };
 }
+
+export type { PendenciaCusto };
+export { pendenciasCustoOs };
 
 export const resumoSelect = {
   id: true, numero: true, dataEntrada: true, dataPrevista: true, dataConclusao: true, dataSaida: true,
   equipamento: true, marca: true, modelo: true, numeroSerie: true, defeitoRelatado: true, total: true, totalServicos: true, totalPecas: true,
   prioridade: true, orcar: true, orcamentoAprovado: true, estoqueLancado: true, contasLancadas: true, notaId: true, criadoEm: true,
+  // para a lista/kanban avisarem "peça sem custo" (o custo em si não aparece)
+  custoPeca: true, itens: { select: { tipo: true, custoUnitario: true } },
   contato: { select: { id: true, nome: true, celular: true, telefone: true, email: true } },
   tecnico: { select: { id: true, nome: true } },
   vendedor: { select: { id: true, nome: true } },
@@ -125,7 +140,7 @@ export const includeOs = {
     orderBy: { numero: 'asc' as const },
     include: {
       formaPagamento: { select: { id: true, nome: true, tipo: true, codigoFiscal: true } },
-      contaReceber: { select: { id: true, situacao: true, valorRecebido: true, valor: true, vencimento: true, dataRecebimento: true } },
+      contaReceber: { select: { id: true, situacao: true, valorRecebido: true, valor: true, vencimento: true, dataRecebimento: true, formaPagamento: { select: { id: true, nome: true, tipo: true } } } },
     },
   },
   anexos: { orderBy: { id: 'asc' as const } },
@@ -147,10 +162,12 @@ export async function carregarOs(db: Db, id: number) {
 
 export async function osCompleta(id: number) {
   const os = await carregarOs(prisma, id);
-  const [hist, permitidas] = await Promise.all([historico('OS', id), situacoesPermitidas('OS', os.situacaoId)]);
+  const [hist, permitidas, cfg] = await Promise.all([historico('OS', id), situacoesPermitidas('OS', os.situacaoId), cfgCustosOs()]);
   return {
     ...os,
-    fechamento: fechamentoOs(os),
+    fechamento: fechamentoOs(os, cfg),
+    // o que falta de custo (peça sem custo): todo mundo vê, para o técnico preencher
+    pendenciasCusto: pendenciasCustoOs(os),
     anexos: os.anexos.map((a) => ({ ...a, url: `/uploads/anexos/os-${os.id}/${a.caminho}` })),
     atrasada: calcularAtrasada(os),
     historico: hist,
@@ -197,7 +214,9 @@ export async function prepararOs(db: Db, body: OsInput) {
       valorUnitario: i.valorUnitario,
       desconto: arredondar(i.desconto || 0),
       total,
-      custoUnitario: p?.precoCusto ?? 0,
+      // custo da peça: o que o técnico digitou; senão o do cadastro do produto (serviço não tem custo de peça)
+      custoUnitario: tipo === 'PECA' ? i.custoUnitario ?? p?.precoCusto ?? 0 : 0,
+      custoInformado: tipo === 'PECA' && i.custoUnitario !== null && i.custoUnitario !== undefined,
       // comissão do técnico por padrão só sobre serviços; do vendedor sobre tudo
       comissaoVendedorPct: i.comissaoVendedorPct ?? comissaoVendedorPadrao,
       comissaoTecnicoPct: i.comissaoTecnicoPct ?? (tipo === 'SERVICO' ? comissaoTecnicoPadrao : 0),
