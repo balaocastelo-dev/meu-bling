@@ -33,7 +33,7 @@ situação do registro já mandava fazer, ou é só leitura/realinhamento.
 | Parcelas ≠ total (contas ainda não lançadas) | "Acertar a última parcela" — entra no **Resolver tudo** |
 | Venda fechada que o robô não conseguiu lançar | "Lançar contas e estoque" — entra no **Resolver tudo** |
 | NF gerada e não transmitida | "Transmitir à SEFAZ" (pede confirmação) |
-| Venda parada em aberto há mais de 7 dias | "Cancelar venda" (pede confirmação) ou Abrir para finalizar |
+| Venda parada em aberto há mais de 7 dias | se veio do Bling: "Marcar como Fechada" (regra da migração, sem lançar caixa/estoque; entra no **Resolver tudo**); senão "Cancelar venda" (pede confirmação) ou Abrir para finalizar |
 | Estoque negativo | "Zerar estoque" (pede confirmação) ou Abrir o produto |
 
 O resto da Saúde do sistema (NF rejeitada, OS atrasada, certificado…) vira **alerta** com o link de onde resolver.
