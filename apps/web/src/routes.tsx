@@ -60,6 +60,7 @@ const NotaForm = lazy(() => import('@/pages/fiscal/NotaForm'));
 const Dre = lazy(() => import('@/pages/relatorios/Dre'));
 const Relatorios = lazy(() => import('@/pages/relatorios/Relatorios'));
 
+const Chat = lazy(() => import('@/pages/chat/Chat'));
 const Notificacoes = lazy(() => import('@/pages/comunicacao/Notificacoes'));
 const Whatsapp = lazy(() => import('@/pages/comunicacao/Whatsapp'));
 const Templates = lazy(() => import('@/pages/comunicacao/Templates'));
@@ -183,6 +184,8 @@ export const router = createBrowserRouter(
       { path: 'relatorios', element: FIN(<Relatorios />) },
       { path: 'relatorios/dre', element: FIN(<Dre />) },
 
+      { path: 'chat', element: S(<Chat />) },
+      { path: 'chat/:id', element: S(<Chat />) },
       { path: 'comunicacao', element: <Navigate to="/comunicacao/notificacoes" replace /> },
       { path: 'comunicacao/notificacoes', element: S(<Notificacoes />) },
       { path: 'comunicacao/whatsapp', element: S(<Whatsapp />) },

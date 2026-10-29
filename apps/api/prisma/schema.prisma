@@ -131,8 +131,14 @@ model Usuario {
   auditorias        Auditoria[]
   historicos        HistoricoSituacao[]
   movimentosEstoque MovimentoEstoque[]
-  lembretes         Lembrete[]          @relation("LembretePara")
-  lembretesCriados  Lembrete[]          @relation("LembreteCriador")
+  lembretes         Lembrete[]             @relation("LembretePara")
+  lembretesCriados  Lembrete[]             @relation("LembreteCriador")
+  // chat da equipe (29/10/2026)
+  conversasCriadas  Conversa[]             @relation("ConversaCriador")
+  conversas         ConversaParticipante[]
+  mensagensChat     Mensagem[]
+  chamadasIniciadas Chamada[]
+  pushAssinaturas   PushAssinatura[]
 }
 
 /// Lembrete do "Meu Dashboard": do próprio usuário ou enviado pela gestão (gestor/gerente) para alguém da equipe.
@@ -1550,31 +1556,31 @@ model VendaRoboNf {
 /// ROBÔ DA SAÚDE: o que o robô (que confere a "Saúde do sistema" 24h) corrigiu sozinho e o que ele
 /// sugere para o ADMIN resolver com um clique. Aparece no dashboard do ADMIN e em Configurações → Saúde.
 model RoboSaudeAviso {
-  id          Int       @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   /// identifica o problema/alvo (ex.: "venda-final-sem-lancamento:venda:123"); sugestão aberta não se repete
-  chave       String
+  chave        String
   /// CORRECAO (o robô já resolveu) | SUGESTAO (precisa de um clique) | ALERTA (só avisar, com link)
-  tipo        String
+  tipo         String
   /// erro | aviso | info
-  nivel       String
-  area        String
-  titulo      String
-  mensagem    String
-  link        String?
+  nivel        String
+  area         String
+  titulo       String
+  mensagem     String
+  link         String?
   /// JSON: botões da sugestão [{ codigo, rotulo, estilo, confirmar }]
-  acoes       String?
+  acoes        String?
   /// JSON: dados que a ação precisa (ids, valores)
-  dados       String?
+  dados        String?
   /// ABERTA | RESOLVIDA (o problema sumiu / o botão foi apertado) | IGNORADA | FEITA (correção do robô)
-  status      String    @default("ABERTA")
-  lida        Boolean   @default(false)
+  status       String    @default("ABERTA")
+  lida         Boolean   @default(false)
   resolvidoPor String?
-  resolvidoEm DateTime?
+  resolvidoEm  DateTime?
   /// para quem é o lembrete (aparece no painel desse técnico/vendedor, além do painel do ADMIN)
-  tecnicoId   Int?
-  vendedorId  Int?
-  criadoEm    DateTime  @default(now())
-  atualizadoEm DateTime @updatedAt
+  tecnicoId    Int?
+  vendedorId   Int?
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
 
   @@index([status, tipo])
   @@index([chave])
@@ -1756,4 +1762,113 @@ model ConsignacaoEvento {
   usuarioId     Int?
 
   @@index([consignacaoId])
+}
+
+// ---------------------------------------------------------------------
+// CHAT DA EQUIPE (29/10/2026) — conversas entre os usuários do sistema:
+// direta (duas pessoas) ou sala de reunião privada (pessoas escolhidas),
+// com texto, áudio gravado, arquivos e chamadas de voz/vídeo pelo navegador.
+// O ADMIN pode abrir e ler qualquer conversa (decisão do Thiago).
+// ---------------------------------------------------------------------
+
+model Conversa {
+  id               Int       @id @default(autoincrement())
+  /// DIRETA (duas pessoas) | SALA (reunião privada com pessoas escolhidas)
+  tipo             String    @default("DIRETA")
+  /// nome da sala (conversa direta não tem nome: mostra o nome da outra pessoa)
+  nome             String?
+  /// conversa direta é única por par de usuários: "menorId:maiorId"
+  chaveDireta      String?   @unique
+  criadoPor        Usuario?  @relation("ConversaCriador", fields: [criadoPorId], references: [id])
+  criadoPorId      Int?
+  /// quando chegou a última mensagem (ordena a caixa de entrada)
+  ultimaMensagemEm DateTime?
+  criadoEm         DateTime  @default(now())
+  atualizadoEm     DateTime  @updatedAt
+
+  participantes ConversaParticipante[]
+  mensagens     Mensagem[]
+  chamadas      Chamada[]
+
+  @@index([ultimaMensagemEm])
+}
+
+model ConversaParticipante {
+  id            Int       @id @default(autoincrement())
+  conversa      Conversa  @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId    Int
+  usuario       Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId     Int
+  /// id da última mensagem que a pessoa leu (0 = nenhuma)
+  lidaAteId     Int       @default(0)
+  /// silenciar avisos desta conversa até a data (null = avisa)
+  silenciadaAte DateTime?
+  entrouEm      DateTime  @default(now())
+  /// saiu da sala (não recebe mais nada, mas o histórico fica)
+  saiuEm        DateTime?
+
+  @@unique([conversaId, usuarioId])
+  @@index([usuarioId, saiuEm])
+}
+
+model Mensagem {
+  id             Int       @id @default(autoincrement())
+  conversa       Conversa  @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId     Int
+  /// null = mensagem do sistema ("Fulano entrou na sala")
+  autor          Usuario?  @relation(fields: [autorId], references: [id])
+  autorId        Int?
+  /// TEXTO | AUDIO | ARQUIVO | SISTEMA | CHAMADA
+  tipo           String    @default("TEXTO")
+  texto          String?
+  /// anexo (áudio gravado ou arquivo): caminho no storage (chat/aaaa-mm/arquivo), nome original, tamanho, tipo e duração
+  arquivo        String?
+  arquivoNome    String?
+  arquivoTamanho Int?
+  arquivoMime    String?
+  duracaoSeg     Int?
+  /// resposta a outra mensagem da mesma conversa
+  respondeAId    Int?
+  /// mensagem de chamada: id da chamada (para mostrar duração/perdida)
+  chamadaId      Int?
+  editadaEm      DateTime?
+  apagadaEm      DateTime?
+  criadoEm       DateTime  @default(now())
+
+  @@index([conversaId, id])
+  @@index([autorId])
+}
+
+model Chamada {
+  id            Int       @id @default(autoincrement())
+  conversa      Conversa  @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  conversaId    Int
+  /// VOZ | VIDEO
+  tipo          String    @default("VOZ")
+  iniciadoPor   Usuario   @relation(fields: [iniciadoPorId], references: [id])
+  iniciadoPorId Int
+  /// ATIVA | ENCERRADA | PERDIDA | RECUSADA
+  situacao      String    @default("ATIVA")
+  /// ids (JSON) de quem está/esteve na chamada
+  participantes String    @default("[]")
+  iniciadaEm    DateTime  @default(now())
+  atendidaEm    DateTime?
+  encerradaEm   DateTime?
+
+  @@index([conversaId, situacao])
+}
+
+/// Navegador/celular inscrito para receber aviso (Web Push) com o sistema fechado
+model PushAssinatura {
+  id          Int       @id @default(autoincrement())
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId   Int
+  endpoint    String    @unique
+  p256dh      String
+  auth        String
+  userAgent   String?
+  criadoEm    DateTime  @default(now())
+  ultimoUsoEm DateTime?
+
+  @@index([usuarioId])
 }

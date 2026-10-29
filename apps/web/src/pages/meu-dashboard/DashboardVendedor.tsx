@@ -15,6 +15,7 @@ import { DesafioCard } from '@/components/compartilhados/DesafioCard';
 import { data as fmtData, inteiro, moeda, numero } from '@/lib/format';
 import type { MeuDashboard, PainelVendedor } from '@/types';
 import { AlertasCorrija, Cabecalho, Lembretes, MetaDoMes, RankingDoMes } from './partes';
+import { MensagensCard } from '@/components/chat/MensagensCard';
 
 export interface PropsRole {
   dados?: MeuDashboard;
@@ -106,6 +107,9 @@ export default function DashboardVendedor({ dados, carregando, faixa, filtros, v
           <CardV18><EmptyState compacto icone={<Award className="h-5 w-5" />} titulo="Nenhum desafio no momento" descricao="Quando a gestão lançar um desafio, ele aparece aqui valendo prêmio em comissão." /></CardV18>
         )}
       </Aparecer>
+
+      {/* ===== mensagens da equipe (some quando não há nada novo) ===== */}
+      <MensagensCard />
 
       {/* ===== alertas e lembretes ===== */}
       <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">

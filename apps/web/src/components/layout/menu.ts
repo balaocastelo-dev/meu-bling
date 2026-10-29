@@ -35,6 +35,7 @@ import {
   HandCoins,
   BookOpen,
   Handshake,
+  MessagesSquare,
 } from 'lucide-react';
 import type { Perfil } from '@/types';
 
@@ -126,6 +127,8 @@ export const MENU: GrupoMenu[] = [
   {
     titulo: 'Comunicação',
     itens: [
+      // chat da equipe: todo funcionário fala com todo mundo, salas de reunião, voz e vídeo (29/10/2026)
+      { rotulo: 'Chat da equipe', para: '/chat', icone: MessagesSquare },
       { rotulo: 'Notificações', para: '/comunicacao/notificacoes', icone: Bell },
       { rotulo: 'WhatsApp', para: '/comunicacao/whatsapp', icone: MessageCircle, perfis: GESTAO },
       { rotulo: 'Templates', para: '/comunicacao/templates', icone: FileCode2, perfis: GESTAO },

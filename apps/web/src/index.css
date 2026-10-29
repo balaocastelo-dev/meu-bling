@@ -406,3 +406,22 @@ body {
     transform: none;
   }
 }
+
+/* ---------------------------------------------------------------------
+   Chat da equipe: a tela ocupa a altura toda abaixo do cabeçalho
+   (cabeçalho 3.5rem + respiros do conteúdo), em qualquer tamanho de tela.
+   --------------------------------------------------------------------- */
+.chat-altura {
+  height: calc(100dvh - 5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  min-height: 24rem;
+}
+@media (min-width: 640px) {
+  .chat-altura {
+    height: calc(100dvh - 5.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
+@media (min-width: 768px) {
+  .chat-altura {
+    height: calc(100dvh - 6.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
