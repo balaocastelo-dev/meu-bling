@@ -12,7 +12,17 @@ import { api, mensagemErro } from '@/lib/api';
 import { Button, EmptyState, Skeleton } from '@/components/ui';
 import { CardV18 } from '@/components/dashboard/v18';
 import { dataHora } from '@/lib/format';
-import { escutar, estaFalando, falar, pararDeFalar, STT_DISPONIVEL, TTS_DISPONIVEL, type Escuta } from '@/lib/voz';
+import {
+  escutar,
+  falar,
+  monitorarVoz,
+  pararDeFalar,
+  pareceEco,
+  STT_DISPONIVEL,
+  TTS_DISPONIVEL,
+  type Escuta,
+  type MonitorVoz,
+} from '@/lib/voz';
 
 interface Mensagem {
   id: number;
@@ -45,7 +55,13 @@ export default function ChatJarvis() {
   const [ouvindo, setOuvindo] = useState('');
   const [falarSempre, setFalarSempre] = useState(() => localStorage.getItem('jarvis-falar') === '1');
   const escuta = useRef<Escuta | null>(null);
+  const monitor = useRef<MonitorVoz | null>(null);
   const ultimaFalada = useRef<number | null>(null);
+  /** o que o JARVIS acabou de falar — serve para descartar o próprio eco */
+  const ecoRecente = useRef<string>('');
+  /** enquanto ele fala, a transcrição fica desligada (senão ele responde a si mesmo) */
+  const falandoAgora = useRef(false);
+  const emLigacaoRef = useRef(false);
 
   // o que ele fez e o que está esperando a sua confirmação
   const [fez, setFez] = useState<string[]>([]);
@@ -73,19 +89,6 @@ export default function ChatJarvis() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [mensagens.length]);
 
-  // fala um texto e mantém o estado do botão em dia
-  const dizer = async (texto: string) => {
-    if (!TTS_DISPONIVEL) return;
-    setFalando(true);
-    await falar(texto);
-    setFalando(false);
-  };
-
-  const calar = () => {
-    pararDeFalar();
-    setFalando(false);
-  };
-
   const enviar = useMutation({
     mutationFn: (pergunta: string) =>
       api.post<{
@@ -101,41 +104,57 @@ export default function ChatJarvis() {
       setPendentes(r.pendentes ?? []);
       qc.invalidateQueries({ queryKey: ['jarvis-conversa', r.conversaId] });
       qc.invalidateQueries({ queryKey: ['jarvis-conversas'] });
-      // na ligação ele sempre responde falando; fora dela, só se estiver marcado
-      if (emLigacao || falarSempre) void dizer(r.resposta);
+      if (emLigacaoRef.current || falarSempre) void dizer(r.resposta);
     },
     onError: (e) => toast.error(mensagemErro(e)),
   });
 
-  // ---------------------------------------------------------------- modo ligação
-  const desligar = () => {
+  // Falar e ouvir ao mesmo tempo dá eco: o microfone capta a voz dele e o reconhecedor
+  // devolve como pergunta. Então enquanto ele fala a transcrição é DESLIGADA, e quem vigia
+  // o microfone é um medidor de volume: se o chefe falar, a fala é cortada e a escuta volta.
+  const dizer = async (texto: string) => {
+    if (!TTS_DISPONIVEL) return;
+    falandoAgora.current = true;
+    ecoRecente.current = texto;
     escuta.current?.parar();
     escuta.current = null;
-    calar();
-    setEmLigacao(false);
-    setOuvindo('');
+    setFalando(true);
+
+    await falar(texto);
+
+    falandoAgora.current = false;
+    setFalando(false);
+    // de volta à escuta, se a ligação continua
+    if (emLigacaoRef.current) religar();
   };
 
-  const atender = () => {
-    if (!STT_DISPONIVEL) {
-      toast.error('Para conversar por voz, use o Chrome ou o Edge — são os que ouvem o microfone.');
-      return;
-    }
+  const calar = () => {
+    pararDeFalar();
+    falandoAgora.current = false;
+    setFalando(false);
+  };
+
+  // ---------------------------------------------------------------- modo ligação
+
+  const religar = () => {
+    if (!emLigacaoRef.current || escuta.current) return;
     const e = escutar({
       onParcial: (t) => {
+        if (falandoAgora.current) return; // não mostra o próprio eco
         setOuvindo(t);
-        // barge-in: se o chefe começou a falar, o JARVIS cala e escuta
-        if (estaFalando()) calar();
       },
       onFrase: (t) => {
         setOuvindo('');
+        if (falandoAgora.current) return;
         const frase = t.trim();
         if (frase.length < 3 || enviar.isPending) return;
+        // segunda rede contra eco: se é quase o que ele acabou de dizer, ignora
+        if (ecoRecente.current && pareceEco(ecoRecente.current, frase)) return;
         if (/^(desligar|tchau|pode parar|encerrar)\b/i.test(frase)) {
-          void falar('Combinado, chefe. Até mais.');
           desligar();
           return;
         }
+        ecoRecente.current = '';
         enviar.mutate(frase);
       },
       onErro: (motivo) => {
@@ -145,19 +164,46 @@ export default function ChatJarvis() {
         }
       },
     });
-    if (!e) {
-      toast.error('Este navegador não ouve o microfone. Use o Chrome ou o Edge.');
+    escuta.current = e;
+  };
+
+  const desligar = () => {
+    emLigacaoRef.current = false;
+    escuta.current?.parar();
+    escuta.current = null;
+    monitor.current?.parar();
+    monitor.current = null;
+    calar();
+    setEmLigacao(false);
+    setOuvindo('');
+  };
+
+  const atender = async () => {
+    if (!STT_DISPONIVEL) {
+      toast.error('Para conversar por voz, use o Chrome ou o Edge — são os que ouvem o microfone.');
       return;
     }
-    escuta.current = e;
+
+    // o medidor de volume fica ligado a ligação inteira: é ele que permite interromper
+    monitor.current = await monitorarVoz(() => {
+      if (falandoAgora.current) calar(); // o chefe falou por cima: cala e escuta
+    });
+    if (!monitor.current) {
+      toast.error('Preciso da permissão do microfone para conversar por voz.');
+      return;
+    }
+
+    emLigacaoRef.current = true;
     setEmLigacao(true);
-    void dizer('Pode falar, chefe. Estou ouvindo.');
+    await dizer('Pode falar, chefe. Estou ouvindo.');
   };
 
   // desliga o microfone e a fala ao sair da tela
   useEffect(() => {
     return () => {
+      emLigacaoRef.current = false;
       escuta.current?.parar();
+      monitor.current?.parar();
       pararDeFalar();
     };
   }, []);

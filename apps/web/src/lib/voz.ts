@@ -42,17 +42,71 @@ if (TTS_DISPONIVEL) {
   };
 }
 
+
+// ---------------------------------------------------------------- dinheiro falado
+const UNID = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
+const DEZ = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
+const CEM = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+
+/** Número até 999 por extenso. */
+function ate999(n: number): string {
+  if (n === 0) return '';
+  if (n === 100) return 'cem';
+  const c = Math.floor(n / 100);
+  const r = n % 100;
+  const partes: string[] = [];
+  if (c) partes.push(CEM[c]);
+  if (r) partes.push(r < 20 ? UNID[r] : [DEZ[Math.floor(r / 10)], UNID[r % 10]].filter(Boolean).join(' e '));
+  return partes.join(' e ');
+}
+
+/**
+ * Dinheiro do jeito que a gente fala: R$ 40.500,45 vira "quarenta mil e quinhentos reais".
+ * Arredonda o que não muda a decisão — centavos somem acima de cem reais, e valores
+ * grandes vão para o milhar/milhão mais próximo.
+ */
+export function reaisFalados(valor: number): string {
+  const neg = valor < 0;
+  let v = Math.abs(valor);
+
+  // arredonda ANTES de decompor: a partir de mil, até a centena; a partir do
+  // milhão, até o milhar. É o jeito que se fala um número desses em voz alta.
+  if (v >= 1_000_000) v = Math.round(v / 1000) * 1000;
+  else if (v >= 1000) v = Math.round(v / 100) * 100;
+
+  const milhoes = Math.floor(v / 1_000_000);
+  const milhares = Math.floor((v % 1_000_000) / 1000);
+  const resto = Math.floor(v % 1000);
+
+  const partes: string[] = [];
+  if (milhoes) partes.push(milhoes === 1 ? 'um milhão' : `${ate999(milhoes)} milhões`);
+  if (milhares) partes.push(milhares === 1 ? 'mil' : `${ate999(milhares)} mil`);
+
+  // só um valor "pequeno" merece centavos — acima disso eles não mudam decisão
+  if (v < 1000) {
+    const centavos = Math.round((Math.abs(valor) - resto) * 100);
+    if (resto) partes.push(`${ate999(resto)} ${resto === 1 ? 'real' : 'reais'}`);
+    if (centavos && resto < 100) partes.push(`${ate999(centavos)} ${centavos === 1 ? 'centavo' : 'centavos'}`);
+    if (!partes.length) return 'zero reais';
+    return `${neg ? 'menos ' : ''}${partes.join(' e ')}`;
+  }
+
+  if (resto) partes.push(ate999(resto));
+  // "um milhão de reais", mas "um milhão e duzentos mil reais"
+  const fecho = partes.length === 1 && milhoes ? 'de reais' : 'reais';
+  return `${neg ? 'menos ' : ''}${partes.join(' e ')} ${fecho}`;
+}
+
 /** Deixa o texto pronto para ser falado: tira marcação e lê dinheiro como gente fala. */
 export function prepararFala(texto: string): string {
   return texto
     .replace(/[*_#`>]/g, '')
     .replace(/\r/g, '')
-    .replace(/R\$\s?([\d.]+),(\d{2})/g, (_m, inteiro: string, centavos: string) => {
-      const n = inteiro.replace(/\./g, '');
-      const c = Number(centavos);
-      return `${n} reais${c ? ` e ${c} centavos` : ''}`;
+    // dinheiro do jeito que se fala, sem centavos quando não importam
+    .replace(/R\$\s?(-?[\d.]+)(?:,(\d{2}))?/g, (_m, inteiro: string, centavos?: string) => {
+      const n = Number(`${inteiro.replace(/\./g, '')}.${centavos ?? '00'}`);
+      return Number.isFinite(n) ? reaisFalados(n) : _m;
     })
-    .replace(/R\$\s?([\d.]+)/g, (_m, n: string) => `${n.replace(/\./g, '')} reais`)
     .replace(/(\d+)%/g, '$1 por cento')
     .replace(/\s{2,}/g, ' ')
     .trim();
@@ -169,4 +223,94 @@ export function escutar(p: {
     },
     ativa: () => !parado,
   };
+}
+
+// ---------------------------------------------------------------- ouvir o volume (para o barge-in)
+/**
+ * O problema do duplex: o microfone escuta a própria voz do JARVIS, o reconhecedor
+ * transcreve e ele responde a si mesmo. A saída é NÃO transcrever enquanto ele fala —
+ * e, em vez disso, vigiar só o VOLUME do microfone. Se alguém falar alto por um tempinho,
+ * a fala do JARVIS é cortada e a escuta volta.
+ *
+ * O navegador já cancela o eco (echoCancellation), mas em caixa de som aberta sobra sinal,
+ * por isso o limiar e o tempo mínimo.
+ */
+export type MonitorVoz = { parar: () => void };
+
+export async function monitorarVoz(
+  aoFalar: () => void,
+  opcoes: { limiar?: number; msMinimo?: number } = {},
+): Promise<MonitorVoz | null> {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) return null;
+
+  const limiar = opcoes.limiar ?? 0.075;
+  const msMinimo = opcoes.msMinimo ?? 220;
+
+  let fluxo: MediaStream;
+  try {
+    fluxo = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch {
+    return null;
+  }
+
+  const Ctx: typeof AudioContext = (window as any).AudioContext ?? (window as any).webkitAudioContext;
+  const ctx = new Ctx();
+  const fonte = ctx.createMediaStreamSource(fluxo);
+  const analisador = ctx.createAnalyser();
+  analisador.fftSize = 1024;
+  fonte.connect(analisador);
+
+  const amostra = new Float32Array(analisador.fftSize);
+  let desde = 0;
+  let parado = false;
+  let quadro = 0;
+
+  const olhar = () => {
+    if (parado) return;
+    analisador.getFloatTimeDomainData(amostra);
+    let soma = 0;
+    for (let i = 0; i < amostra.length; i++) soma += amostra[i] * amostra[i];
+    const volume = Math.sqrt(soma / amostra.length);
+
+    if (volume > limiar) {
+      if (!desde) desde = performance.now();
+      else if (performance.now() - desde >= msMinimo) {
+        desde = 0;
+        aoFalar();
+      }
+    } else {
+      desde = 0;
+    }
+    quadro = requestAnimationFrame(olhar);
+  };
+  quadro = requestAnimationFrame(olhar);
+
+  return {
+    parar: () => {
+      parado = true;
+      cancelAnimationFrame(quadro);
+      fluxo.getTracks().forEach((t) => t.stop());
+      void ctx.close().catch(() => undefined);
+    },
+  };
+}
+
+/** Duas frases são "a mesma coisa"? Usado para descartar eco que escapou. */
+export function pareceEco(dito: string, ouvido: string): boolean {
+  const limpar = (t: string) =>
+    t
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9 ]/g, ' ')
+      .split(/\s+/)
+      .filter((x) => x.length > 3);
+
+  const a = new Set(limpar(dito));
+  const b = limpar(ouvido);
+  if (!b.length || a.size === 0) return false;
+  const iguais = b.filter((x) => a.has(x)).length;
+  return iguais / b.length > 0.6;
 }
