@@ -12,7 +12,7 @@ import { prisma } from '../../lib/prisma.js';
 import { dataSchema, arredondar } from '../../lib/util.js';
 import { resumoFinanceiro } from '../financeiro/service.js';
 import { chavePeriodo, listarPeriodos, resolverPeriodo, periodoAnterior, agruparPadrao, type Agrupar } from '../financeiro/periodos.js';
-import { status as statusWhatsApp } from '../../integracoes/whatsapp/servico.js';
+import { status as statusWhatsApp } from '../../integracoes/whatsapp/provedor.js';
 import { ultimosAcontecimentos, ultimosLancamentos } from './atividades.js';
 import { fechamentoOs } from '../ordens-servico/service.js';
 import { AppError, NotFound } from '../../lib/errors.js';
@@ -132,7 +132,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     }
     const abaixoMinimo = [...porProduto.values()].filter((p) => p.estoqueMinimo > 0 && p.saldo < p.estoqueMinimo).sort((a, b) => a.saldo - b.saldo);
 
-    const wa = statusWhatsApp();
+    const wa = await statusWhatsApp();
     const empresa = await prisma.empresa.findUnique({ where: { id: 1 }, select: { whatsappAtivo: true, smtpAtivo: true, certificadoValidade: true, ambienteFiscal: true } });
 
     const alertas: { tipo: 'erro' | 'aviso' | 'info'; mensagem: string; link: string }[] = [];

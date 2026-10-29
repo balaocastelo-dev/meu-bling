@@ -16,6 +16,11 @@
  *   Pedidos de VENDA, de COMPRA e ORDENS DE SERVIÇO: todos os perfis veem, criam,
  *   editam e mudam a situação (decisão do Thiago, 22/10/2026). Excluir e forçar
  *   transição continuam só com ADMIN/GERENTE.
+ *
+ *   VENDAS por vendedor (29/10/2026): VENDEDOR e TÉCNICO só enxergam as PRÓPRIAS vendas e
+ *   orçamentos (lista, detalhe, documentos, notas, histórico do cliente) e nunca o total vendido
+ *   da loja; ADMIN, GERENTE e FINANCEIRO veem todas — ver modules/comum/escopo-vendas.ts
+ *   (imposto em plugins/auth.ts para toda rota /vendas/:id e nas listagens).
  */
 import type { Perfil } from './auth.js';
 
@@ -53,6 +58,11 @@ const REGRAS: Regra[] = [
   // lembretes do Robô da Saúde para quem está logado (OS sem custo → técnico, venda sem custo → vendedor): todos
   { teste: /^\/robo-saude\/lembretes$/, perfis: 'TODOS' },
   { teste: /^\/robo-saude(\/|$)/, perfis: ['ADMIN'] },
+  // JARVIS: o feed de sugestões aparece no Meu Dashboard de todo mundo; o resto é só do gestor
+  { teste: /^\/jarvis\/feed$/, perfis: 'TODOS' },
+  { teste: /^\/jarvis(\/|$)/, perfis: ['ADMIN'] },
+  // Robô de e-mail dos bancos: mexe em dinheiro, então é só do gestor
+  { teste: /^\/email-banco(\/|$)/, perfis: ['ADMIN'] },
   { teste: /^\/notas-fiscais\/inutilizar/, perfis: GESTAO },
   { teste: /^\/whatsapp\/(conectar|desconectar)/, perfis: GESTAO },
   { metodos: MUT, teste: /^\/templates-notificacao(\/|$)/, perfis: GESTAO },
@@ -115,6 +125,6 @@ export const DESCRICAO_PERFIS: Record<Perfil, string> = {
   ADMIN: 'Acesso completo (dono): usuários, configurações, fiscal, integrações e tudo o mais.',
   GERENTE: 'Acesso administrativo: vendas, compras, OS, estoque, financeiro, fiscal, relatórios, cadastros e WhatsApp. Não altera usuários, certificado, SMTP, Open Finance, Bling, situações.',
   FINANCEIRO: 'Pedidos de venda, compra e OS; financeiro, bancos, comissões, relatórios e notas fiscais.',
-  VENDEDOR: 'Pedidos de venda, compra e OS, clientes, consulta de produtos/estoque, NF-e da venda e mensagens ao cliente.',
-  TECNICO: 'Ordens de serviço e também vendas (ganha cadastro de técnico e de vendedor sozinho), pedidos de compra, clientes e consulta de produtos/estoque. Não emite NF. Meu Dashboard sem lucro.',
+  VENDEDOR: 'Só as próprias vendas e orçamentos (não vê as dos colegas nem o total da loja), pedidos de compra e OS, clientes, consulta de produtos/estoque, NF-e da própria venda e mensagens ao cliente.',
+  TECNICO: 'Ordens de serviço e também vendas — só as próprias (ganha cadastro de técnico e de vendedor sozinho), pedidos de compra, clientes e consulta de produtos/estoque. Não emite NF. Meu Dashboard sem lucro.',
 };

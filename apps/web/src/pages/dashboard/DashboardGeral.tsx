@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { AvisosImportantes } from '@/components/compartilhados/AvisosImportantes';
 import { MensagensCard } from '@/components/chat/MensagensCard';
+import SugestoesJarvis from '@/components/dashboard/SugestoesJarvis';
+import { BlocosAlerta } from '@/components/dashboard/BlocosAlerta';
 import { CardRoboSaude } from '@/components/compartilhados/RoboSaude';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import clsx from 'clsx';
 import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
@@ -21,30 +22,52 @@ import type { DashboardGeral as Dados, DashboardPanorama, StatusSefaz } from '@/
 import { UltimosAcontecimentos } from './UltimasAtividades';
 import { useState } from 'react';
 
+/** cada bloco entra subindo, em cascata */
+const entradaBloco: Variants = {
+  oculto: { opacity: 0, y: 14 },
+  visivel: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 26 } },
+};
+
 const COR_VENDAS = CORES.receita; // azul
 const COR_ASSIST = '#dc2626'; // vermelho da marca
 const COR_LUCRO = CORES.lucro; // verde
 
-/** Distribuição por situação com barras que crescem */
-function BarrasSituacao({ itens, total, onClick }: { itens: { id: number; nome: string; cor: string; qtd: number }[]; total: number; onClick?: (id: number) => void }) {
+/**
+ * Distribuição por situação em BLOCOS (estilo Power BI) — Thiago, 29/10/2026.
+ * Cada situação vira um bloco com o número grande, o percentual e a barra de proporção.
+ * As situações zeradas ficam apagadas (sem clique), mas seguem na ordem do fluxo de trabalho.
+ */
+function BlocosSituacao({ itens, total, onClick }: { itens: { id: number; nome: string; cor: string; qtd: number }[]; total: number; onClick?: (id: number) => void }) {
   if (!itens.length) return <EmptyState compacto titulo="Sem dados" />;
   return (
-    <motion.ul className="space-y-1" variants={listaVariants} initial="oculto" animate="visivel">
+    <motion.ul className="grid grid-cols-2 gap-2" variants={listaVariants} initial="oculto" animate="visivel">
       {itens.map((s) => {
         const pct = total > 0 ? (s.qtd / total) * 100 : 0;
+        const vazio = s.qtd === 0;
+        const abre = onClick && !vazio ? () => onClick(s.id) : undefined;
         return (
-          <LinhaV18 key={s.id} onClick={onClick ? () => onClick(s.id) : undefined} bloco>
-            <div className="mb-1.5 flex items-center justify-between gap-2 text-xs">
-              <span className="flex min-w-0 items-center gap-1.5 text-slate-700">
-                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.cor }} />
-                <span className="truncate">{s.nome}</span>
-              </span>
-              <span className="num shrink-0 text-slate-500">
-                {inteiro(s.qtd)} <span className="text-slate-300">· {numero(pct, 0)}%</span>
-              </span>
+          <motion.li
+            key={s.id}
+            variants={entradaBloco}
+            whileHover={abre ? { y: -3 } : undefined}
+            transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+            onClick={abre}
+            className={clsx(
+              'min-w-0 rounded-xl border p-2.5 transition-colors',
+              vazio ? 'border-slate-200/60 bg-slate-50/60' : 'border-slate-200/80 bg-white hover:border-slate-300',
+              abre && 'cursor-pointer',
+            )}
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: vazio ? '#cbd5e1' : s.cor }} />
+              <span className={clsx('min-w-0 flex-1 truncate text-[11px] font-medium', vazio ? 'text-slate-400' : 'text-slate-500')}>{s.nome}</span>
             </div>
-            <BarraAnimada pct={pct} cor={s.cor} />
-          </LinhaV18>
+            <div className="mt-1 flex items-baseline gap-1.5">
+              <span className={clsx('num text-xl font-bold leading-none', vazio ? 'text-slate-300' : 'text-slate-900')}>{inteiro(s.qtd)}</span>
+              <span className="num text-[11px] text-slate-400">{numero(pct, 0)}%</span>
+            </div>
+            <BarraAnimada pct={pct} cor={vazio ? '#e2e8f0' : s.cor} className="mt-2 h-1.5" />
+          </motion.li>
         );
       })}
     </motion.ul>
@@ -248,13 +271,23 @@ export default function DashboardGeral({ acoesExtras }: { acoesExtras?: React.Re
         <KpiV18 rotulo="A receber hoje" valor={f?.receberHoje} formato={moeda} icone={<Clock className="h-4 w-4" />} tom="azul" carregando={isLoading} sub={f ? `a pagar hoje ${moeda(f.pagarHoje)}` : undefined} onClick={() => nav('/financeiro/receber')} />
       </FaixaKpis>
 
-      {/* avisos mais importantes (caixinhas no prazo, contas vencidas, OS atrasadas) */}
+      {/* ===== PRECISA DE VOCÊ: tudo que pede atenção agora, em blocos ===== */}
       <Aparecer>
         <MensagensCard />
+        <SugestoesJarvis />
       </Aparecer>
-      <Aparecer>
-        <AvisosImportantes />
-      </Aparecer>
+      {data && data.alertas.length > 0 && (
+        <Aparecer>
+          <CardV18
+            titulo="Precisa de você"
+            descricao={`${data.alertas.length} ${data.alertas.length > 1 ? 'pontos pedem' : 'ponto pede'} atenção · caixinhas, contas e pendências do sistema`}
+            icone={<TriangleAlert className="h-4 w-4" />}
+            tom="amarelo"
+          >
+            <BlocosAlerta alertas={data.alertas} />
+          </CardV18>
+        </Aparecer>
+      )}
 
       {/* evolução do período */}
       <CardV18
@@ -439,24 +472,6 @@ export default function DashboardGeral({ acoesExtras }: { acoesExtras?: React.Re
         <KpiV18 rotulo="Pagar atrasado" valor={f?.pagarAtrasado} formato={moeda} icone={<Wallet className="h-4 w-4" />} tom={f && f.pagarAtrasado > 0 ? 'vermelho' : 'neutro'} carregando={isLoading} onClick={() => nav('/financeiro/pagar')} />
       </FaixaKpis>
 
-      {data && data.alertas.length > 0 && (
-        <CardV18 titulo="Alertas" descricao={`${data.alertas.length} ${data.alertas.length > 1 ? 'pontos pedem' : 'ponto pede'} atenção`} icone={<TriangleAlert className="h-4 w-4" />} tom="amarelo" semPadding>
-          <motion.ul className="px-2 pb-2 sm:px-3" variants={listaVariants} initial="oculto" animate="visivel">
-            {data.alertas.map((a, i) => (
-              <LinhaV18 key={i} onClick={a.link ? () => nav(a.link!) : undefined} className="text-sm">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
-                <span className="min-w-0 flex-1 text-slate-700">{a.mensagem}</span>
-                {a.link && (
-                  <Link to={a.link} onClick={(e) => e.stopPropagation()} className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
-                    Ver <ArrowRight className="h-3 w-3" />
-                  </Link>
-                )}
-              </LinhaV18>
-            ))}
-          </motion.ul>
-        </CardV18>
-      )}
-
       <div className="grid gap-4 lg:grid-cols-3">
         <UltimosAcontecimentos className="lg:col-span-2" />
         <CardV18 titulo="Pendências" descricao="O que está esperando alguém" icone={<ListChecks className="h-4 w-4" />} className="self-start" semPadding>
@@ -477,10 +492,10 @@ export default function DashboardGeral({ acoesExtras }: { acoesExtras?: React.Re
 
       <div className="grid gap-4 lg:grid-cols-3">
         <CardV18 titulo="OS em aberto por situação" descricao={`${inteiro(totalOs)} ordens`} icone={<Wrench className="h-4 w-4" />} tom="azul" acoes={<Link to="/ordens-servico" className="text-xs font-medium text-brand-600 hover:underline">Ver kanban</Link>}>
-          {isLoading ? <Skeleton className="h-40" /> : <BarrasSituacao itens={data?.os.porSituacao ?? []} total={totalOs} onClick={(id) => nav(`/ordens-servico?situacoes=${id}&visao=lista`)} />}
+          {isLoading ? <Skeleton className="h-40" /> : <BlocosSituacao itens={data?.os.porSituacao ?? []} total={totalOs} onClick={(id) => nav(`/ordens-servico?situacoes=${id}&visao=lista`)} />}
         </CardV18>
         <CardV18 titulo="Vendas do mês por situação" descricao={`${inteiro(totalVendas)} pedidos`} icone={<ShoppingCart className="h-4 w-4" />} tom="verde" acoes={<Link to="/vendas" className="text-xs font-medium text-brand-600 hover:underline">Ver vendas</Link>}>
-          {isLoading ? <Skeleton className="h-40" /> : <BarrasSituacao itens={data?.vendas.porSituacao ?? []} total={totalVendas} onClick={(id) => nav(`/vendas?situacoes=${id}`)} />}
+          {isLoading ? <Skeleton className="h-40" /> : <BlocosSituacao itens={data?.vendas.porSituacao ?? []} total={totalVendas} onClick={(id) => nav(`/vendas?situacoes=${id}`)} />}
         </CardV18>
         <CardV18
           titulo="Estoque abaixo do mínimo"

@@ -92,29 +92,36 @@ baratos e mais caros).
 
 ## 5. Arquitetura
 
-### 5.1 Módulo da API — `apps/api/src/modules/jarvis/`
-
-Seguir o layout dos outros módulos (rotas + serviço + worker), como `modules/robo-saude`.
+### 5.1 Módulo da API — `apps/api/src/modules/jarvis/` ✅ etapa 1 no ar
 
 ```
 jarvis/
-  rotas.ts          GET /jarvis/painel · GET/POST /jarvis/sugestoes · POST /jarvis/sugestoes/:id/(aceitar|adiar|recusar)
-                    POST /jarvis/perguntar · GET /jarvis/placar · GET/PUT /jarvis/config (só ADMIN)
-                    GET /jarvis/feed?perfil=  (usado pelos Meu Dashboards; filtra pelo perfil do usuário logado)
-                    POST /jarvis/avaliar-usado · rotas do Mercado Livre (seção 8) · rotas da Central (seção 9)
-  caixa-livre.ts    cálculo da fórmula da seção 3 (reaproveita dashboard/bancos/financeiro/caixinhas/emprestimos)
+  routes.ts         GET /jarvis/painel · GET /jarvis/evolucao · GET /jarvis/sugestoes
+                    POST /jarvis/sugestoes/:id/(aceitar|adiar|recusar) · POST /jarvis/rodar
+                    POST /jarvis/perguntar · GET /jarvis/conversas · GET /jarvis/placar
+                    GET/PUT /jarvis/config · POST /jarvis/config/testar-ia  (tudo só ADMIN)
+                    GET /jarvis/feed  (todos os perfis; devolve só o que é do perfil de quem pediu)
+                    [etapa 2] POST /jarvis/avaliar-usado + rotas do Mercado Livre (seção 8)
+                    [etapa 3] rotas da Central de Anúncios (seção 9)
+  caixa-livre.ts    cálculo da fórmula da seção 3 + mapa do milhão
   regras.ts         catálogo de regras que geram sugestões (seção 6)
-  ia.ts             cliente da API da Anthropic (seção 7)
-  worker.ts         roda 1 min após subir e a cada 30 min (mesmo padrão do catálogo do site / robô da Saúde)
-  avaliador.ts      avaliador de usado (seção 4) usando mercadolivre.ts
-  mercadolivre.ts   OAuth + API do Mercado Livre (seção 8)
-  anuncios.ts       Central de Anúncios (seção 9)
+  ia.ts             cliente da API da Anthropic por fetch (sem dependência nova)
+  worker.ts         roda 1 min após subir e a cada 30 min, e mede o resultado das aceitas
+  [etapa 2] avaliador.ts · mercadolivre.ts   ·   [etapa 3] anuncios.ts
 ```
 
-Registrar em `app.ts` com o prefixo `/api/v1/jarvis`; iniciar o worker em `server.ts` junto dos outros robôs
-(`JARVIS_LIGADO=0` desliga, igual a `SITE_SINCRONIZAR=0`).
+**Convenções do repositório (valem mais que este documento):** o arquivo é `routes.ts` (o autoload do
+`app.ts` só enxerga esse nome) e cada rota declara o caminho completo `/api/v1/...`. **Não se edita `app.ts`
+nem `server.ts`**: o worker se registra com `registrarServico('jarvis', ...)` no topo do próprio `routes.ts`.
+Desligar: `JARVIS=off` no ambiente (ou "JARVIS ligado" desmarcado na tela). Toda rota nova precisa também da
+regra em `plugins/politicas.ts` — ali o `/jarvis/feed` é `'TODOS'` e o resto é `['ADMIN']`.
 
-### 5.2 Banco (Prisma, SQLite) — novos modelos
+### 5.2 Banco (Prisma, SQLite) — novos modelos ✅ criados
+
+O schema é **SQLite**: `Int @id @default(autoincrement())`, dinheiro em `Float`, JSON em `String?` com
+`/// JSON: ...` — nada de `Decimal`, `Json` ou `cuid()`. Os modelos abaixo estão no fim do
+`apps/api/prisma/schema.prisma` (`JarvisMetrica`, `JarvisSugestao`, `JarvisConversa`, `JarvisConfig`);
+o esboço original ficou aqui só como referência da intenção.
 
 ```prisma
 model JarvisMetrica {        // uma linha por rodada do worker
@@ -322,9 +329,11 @@ O "Anunciar" também cria um lembrete no Meu Dashboard do vendedor: "anúncio pu
 
 ## 11. Etapas (fazer nesta ordem, cada etapa vai para o ar)
 
-1. **Núcleo**: modelos Prisma, caixa livre, worker, regras `ESTOQUE_PARADO`, `CREDIARIO_VENCIDO`,
-   `CONSIGNADO_PRAZO`, `LUMICRED_CUSTO`, `CAIXINHA_ATRASADA`, `MAPA_MILHAO`; IA com chave na tela; painel
-   `/jarvis`; bloco nos Meu Dashboards; modo pergunta; placar; tela de configuração; testes.
+1. **Núcleo** ✅ **pronto (29/10/2026)**: modelos Prisma, caixa livre, worker de 30 min, regras
+   `ESTOQUE_PARADO`, `CREDIARIO_VENCIDO`, `CONSIGNADO_PRAZO`, `LUMICRED_CUSTO`, `CAIXINHA_ATRASADA`,
+   `TAXA_CARTAO`, `OPORTUNIDADE_COMPRA` e `MAPA_MILHAO`; IA com chave na tela (e funcionando sem ela);
+   painel `/jarvis`; bloco de sugestões nos quatro Meu Dashboards; modo pergunta; placar;
+   Configurações → JARVIS; `apps/api/testes/jarvis.ts` no `npm test`; workflow de deploy automático.
 2. **Mercado Livre**: OAuth, pesquisa de preço, avaliador de usado no pedido de compra, botão Anunciar no
    Mercado Livre, regra `PRECO_FORA_MERCADO` e `OPORTUNIDADE_COMPRA`.
 3. **Central de Anúncios**: site/blog (endpoint no `balao2026`), Facebook/Instagram (Graph API), Google e OLX

@@ -119,9 +119,11 @@ export function AnelSaude({ pct, tamanho = 64 }: { pct: number; tamanho?: number
 
 const ICONE = { erro: AlertOctagon, aviso: AlertTriangle, info: Info };
 const COR = { erro: 'text-red-600', aviso: 'text-amber-600', info: 'text-sky-600' };
+/** borda do card por gravidade (modo cards) */
+const BORDA = { erro: 'border-red-200 hover:border-red-300', aviso: 'border-amber-200 hover:border-amber-300', info: 'border-sky-200 hover:border-sky-300' };
 
 /** Lista de pendências com os botões de 1 clique */
-export function ListaAvisosRobo({ avisos, compacto, limite, onFeito }: { avisos: AvisoRobo[]; compacto?: boolean; limite?: number; onFeito?: () => void }) {
+export function ListaAvisosRobo({ avisos, compacto, cards, limite, onFeito }: { avisos: AvisoRobo[]; compacto?: boolean; /** cada aviso vira um card numa grade, em vez de linha corrida (Thiago, 29/10/2026) */ cards?: boolean; limite?: number; onFeito?: () => void }) {
   const atualizar = useAtualizarRobo();
   const [executando, setExecutando] = useState<string | null>(null);
   const [confirmar, setConfirmar] = useState<{ aviso: AvisoRobo; acao: AcaoRobo } | null>(null);
@@ -152,15 +154,25 @@ export function ListaAvisosRobo({ avisos, compacto, limite, onFeito }: { avisos:
   const lista = limite ? avisos.slice(0, limite) : avisos;
   return (
     <>
-      <ul className="divide-y divide-slate-100">
+      <ul className={clsx(cards ? 'grid gap-3 px-3 pb-3 sm:grid-cols-2 xl:grid-cols-3' : 'divide-y divide-slate-100')}>
         {lista.map((a) => {
           const I = ICONE[a.nivel] ?? Info;
           return (
-            <li key={a.id} className={clsx('flex items-start gap-3', compacto ? 'px-3 py-2.5' : 'px-4 py-3')}>
+            <li
+              key={a.id}
+              className={clsx(
+                'flex items-start gap-3',
+                cards
+                  ? clsx('min-w-0 rounded-2xl border bg-white p-3.5 shadow-card transition-colors', BORDA[a.nivel] ?? BORDA.info)
+                  : compacto
+                    ? 'px-3 py-2.5'
+                    : 'px-4 py-3',
+              )}
+            >
               <I className={clsx('mt-0.5 h-4 w-4 shrink-0', COR[a.nivel])} />
               <div className="min-w-0 flex-1">
                 <p className={clsx('break-words text-sm', a.nivel === 'erro' ? 'font-semibold text-red-800' : 'font-medium text-slate-800')}>{a.titulo}</p>
-                {!compacto && <p className="mt-0.5 break-words text-xs text-slate-500"><TextoValores texto={a.mensagem} /></p>}
+                {(!compacto || cards) && <p className="mt-0.5 break-words text-xs text-slate-500"><TextoValores texto={a.mensagem} /></p>}
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   {a.acoes.map((ac) => (
                     <Button
@@ -284,14 +296,14 @@ export function CardRoboSaude({ className }: { className?: string }) {
         </div>
       </div>
       {sugestoes.length ? (
-        <ListaAvisosRobo avisos={sugestoes} compacto limite={5} />
+        <ListaAvisosRobo avisos={sugestoes} cards limite={6} />
       ) : (
         <p className="flex items-start gap-2 px-4 py-3 text-sm text-emerald-700"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> Sistema 100%: nada para você resolver agora.</p>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/60 px-4 py-2 text-xs">
         <span className="min-w-0 truncate text-slate-500">{p.correcoes[0] ? `Última correção: ${p.correcoes[0].mensagem}` : `Confiro a cada ${p.intervaloMin} min e logo depois de cada venda, pagamento ou NF.`}</span>
         <Link to="/configuracoes/saude" className="inline-flex items-center gap-1 font-semibold text-brand-700 hover:underline">
-          {sugestoes.length > 5 ? `Ver as ${sugestoes.length}` : 'Ver tudo'} <ChevronRight className="h-3.5 w-3.5" />
+          {sugestoes.length > 6 ? `Ver as ${sugestoes.length}` : 'Ver tudo'} <ChevronRight className="h-3.5 w-3.5" />
         </Link>
       </div>
     </div>

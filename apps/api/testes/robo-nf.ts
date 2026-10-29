@@ -38,7 +38,8 @@ async function main() {
   adm.nome = 'ADMIN';
   const vend = (await adm.get('/vendedores')) as any[];
   const senha = 'senha-robo-123';
-  await adm.post('/usuarios', { nome: `Vendedor Robo ${SUF}`, email: `robo${SUF}@teste.com`, senha, perfil: 'VENDEDOR', vendedorId: (await adm.post('/vendedores', { nome: `Vend Robo ${SUF}` }, 201)).id }, 201);
+  const vendRobo = await adm.post('/vendedores', { nome: `Vend Robo ${SUF}` }, 201);
+  await adm.post('/usuarios', { nome: `Vendedor Robo ${SUF}`, email: `robo${SUF}@teste.com`, senha, perfil: 'VENDEDOR', vendedorId: vendRobo.id }, 201);
   const V = await entrar(`robo${SUF}@teste.com`, senha);
   V.nome = 'VENDEDOR';
   void vend;
@@ -52,7 +53,8 @@ async function main() {
   secao('Venda com produto sem NCM: o robô sugere e trava até confirmar');
   const prod = await adm.post('/produtos', { nome: `Notebook Robo Teste ${SUF}`, codigo: `ROBO-${SUF}`, preco: 3000, precoCusto: 2000, controlaEstoque: false }, 201);
   const cli = await adm.post('/contatos', clienteCompleto(`Cliente Robo ${SUF}`), 201);
-  const venda = await adm.post('/vendas', { contatoId: cli.id, data: hoje(), itens: [{ produtoId: prod.id, descricao: prod.nome, quantidade: 1, valorUnitario: 3000 }], parcelas: [{ dataVencimento: hoje(), valor: 3000, formaPagamentoId: pix.id }] }, 201);
+  // venda no nome do vendedor: ele só emite NF das próprias vendas (29/10/2026)
+  const venda = await adm.post('/vendas', { contatoId: cli.id, vendedorId: vendRobo.id, data: hoje(), itens: [{ produtoId: prod.id, descricao: prod.nome, quantidade: 1, valorUnitario: 3000 }], parcelas: [{ dataVencimento: hoje(), valor: 3000, formaPagamentoId: pix.id }] }, 201);
   let e = await adm.post(`/vendas/${venda.id}/robo-nf/conferir`);
   const p1 = await adm.get(`/produtos/${prod.id}`);
   verifica(p1.ncm === '84713012' && p1.ncmOrigem === 'SUGERIDO', 'robô preencheu o NCM 8471.30.12 como SUGERIDO', { ncm: p1.ncm, origem: p1.ncmOrigem });

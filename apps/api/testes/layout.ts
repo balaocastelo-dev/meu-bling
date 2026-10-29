@@ -220,7 +220,12 @@ async function main() {
       await page.goto(RAIZ + c, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => undefined);
       await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
       await page.waitForTimeout(250);
-      const achados = await page.evaluate(medir, t.w).catch((e) => [{ tipo: 'pagina' as const, onde: `erro ao medir: ${e.message}`, px: 0 }]);
+      // a página pode navegar no meio da medição (redirect tardio) — espera assentar e mede de novo
+      const achados = await page.evaluate(medir, t.w).catch(async (e) => {
+        await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
+        await page.waitForTimeout(400);
+        return page.evaluate(medir, t.w).catch(() => [{ tipo: 'pagina' as const, onde: `erro ao medir: ${e.message}`, px: 0 }]);
+      });
       if (PRINTS) {
         const arq = path.join(PRINTS, `${t.w}`, `${c.replace(/\//g, '_') || '_'}.png`);
         fs.mkdirSync(path.dirname(arq), { recursive: true });
