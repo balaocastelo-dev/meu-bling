@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { TextoValores } from '@/components/compartilhados/TextoValores';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Bell, Mail, MessageCircle, RefreshCw, X } from 'lucide-react';
@@ -38,7 +39,7 @@ export default function Notificacoes() {
     { chave: 'canal', titulo: 'Canal', largura: '90px', render: (n) => <span className="inline-flex items-center gap-1.5 text-xs text-slate-600">{n.canal === 'WHATSAPP' ? <MessageCircle className="h-4 w-4 text-emerald-600" /> : <Mail className="h-4 w-4 text-blue-600" />}{rotulo(n.canal)}</span> },
     { chave: 'data', titulo: 'Data', largura: '130px', render: (n) => <span className="text-xs text-slate-500">{dataHora(n.enviadaEm || n.agendadaPara || n.criadoEm)}</span> },
     { chave: 'dest', titulo: 'Destinatário', render: (n) => <div><p className="font-medium text-slate-800">{n.contato?.nome ?? n.destinatario}</p>{n.contato && <p className="text-xs text-slate-400">{n.destinatario}</p>}</div> },
-    { chave: 'conteudo', titulo: 'Mensagem', render: (n) => <div className="max-w-[360px]">{n.assunto && <p className="truncate text-xs font-medium text-slate-700">{n.assunto}</p>}<p className="truncate text-xs text-slate-500" title={n.corpo}>{truncar(n.corpo, 120)}</p></div> },
+    { chave: 'conteudo', titulo: 'Mensagem', render: (n) => <div className="max-w-[360px]">{n.assunto && <p className="truncate text-xs font-medium text-slate-700">{n.assunto}</p>}<p className="truncate text-xs text-slate-500" title={n.corpo}><TextoValores texto={truncar(n.corpo, 120)} /></p></div> },
     {
       chave: 'origem',
       titulo: 'Origem',
