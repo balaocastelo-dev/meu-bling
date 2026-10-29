@@ -10,12 +10,12 @@ import { executarAcoes, historico, mudarSituacao, situacaoInicial, situacoesPerm
 import { eventos } from '../../core/eventos.js';
 import { linkPublico, tokenPublico } from '../publico/token.js';
 import { depositoPadraoId, liberarReservas, movimentarEstoque, movimentaEstoque, reservarItens, reservasAtivas } from '../comum/estoque.js';
-import { acaoLancarContas as compraLancarContas, acaoLancarEstoque as compraLancarEstoque, alocarComprasParaVenda, desalocarComprasDaVenda, marcarCompraVendida } from '../compras/service.js';
+import { acaoEstornarContas as compraEstornarContas, acaoEstornarEstoque as compraEstornarEstoque, acaoLancarContas as compraLancarContas, acaoLancarEstoque as compraLancarEstoque, alocarComprasParaVenda, desalocarComprasDaVenda, marcarCompraVendida } from '../compras/service.js';
 import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, lerContasPermitidas, recriarComissoes } from '../comum/financeiro.js';
 import { criarNotaPendente } from '../comum/nfe.js';
 import { hojeMeioDia } from '../comum/datas.js';
 import { estornarCarneVenda, lancarCarneVenda, TIPO_CARNE } from '../carnes/service.js';
-import { estornarCreditoBancarioVenda, formaCreditoBancario, lancarCreditoBancarioVenda, TIPO_CREDITO_BANCARIO } from '../emprestimos/credito.js';
+import { estornarCreditoBancarioVenda, formaCreditoBancario, lancarCreditoBancarioVenda, OBS_PAGO_COM_CREDITO, TIPO_CREDITO_BANCARIO } from '../emprestimos/credito.js';
 import { carregarCfgCustos, custosVenda, type CfgCustos, type VendaParaCusto } from '../comum/custos-venda.js';
 import { baixarContaPagar, baixarContaReceber, saldoContaPagar, saldoContaReceber } from '../financeiro/service.js';
 import type { ItemInput, ParcelaInput, TipoVenda, VendaInput } from './schemas.js';
@@ -910,10 +910,143 @@ export async function situacaoFinalizar(db: Db = prisma) {
 // ---------------------------------------------------------------- finalizar venda + registrar a compra
 /** Texto que marca a compra gerada ao finalizar a venda (evita registrar duas vezes). */
 export const marcaCompraDaVenda = (numeroVenda: number) => `Compra registrada ao finalizar a venda nº ${numeroVenda}`;
+/** Observação do pagamento lançado sozinho quando o vendedor diz, ao finalizar, que a compra já está paga. */
+export const obsCompraPagaAoFinalizar = (numeroVenda: number) => `Pago — informado ao finalizar a venda nº ${numeroVenda}`;
 
-/** Compra já registrada para esta venda (pelo botão Finalizar), se houver. */
+/** Compra já registrada (e não cancelada) para esta venda pelo botão Finalizar, se houver. */
 export async function compraDaVenda(numeroVenda: number, db: Db = prisma) {
-  return db.compra.findFirst({ where: { observacoesInternas: { contains: marcaCompraDaVenda(numeroVenda) } }, select: { id: true, numero: true, total: true } });
+  return db.compra.findFirst({
+    where: { observacoesInternas: { contains: marcaCompraDaVenda(numeroVenda) }, situacao: { cancelamento: false } },
+    select: { id: true, numero: true, total: true },
+  });
+}
+
+export interface CompraDesfeita {
+  compraId: number;
+  numero: number;
+  /** false = a compra ficou como estava (motivo diz por quê) */
+  desfeita: boolean;
+  motivo?: string;
+  /** dinheiro que voltou para cada banco (pagamento automático estornado) */
+  devolvido: { contaFinanceiraId: number; valor: number }[];
+}
+
+/**
+ * Venda cancelada ou excluída: desfaz a compra que o sistema registrou sozinho ao finalizar essa venda —
+ * o pagamento automático volta para o banco, o contas a pagar é cancelado, a mercadoria sai do estoque e a
+ * compra vai para "Cancelado" (ou é apagada, quando a venda foi excluída). Nada disso é feito, e a compra fica
+ * como está, se ela foi paga à mão ou se a mercadoria dela já saiu em outra venda.
+ */
+export async function desfazerCompraDaVenda(tx: Tx, venda: { id: number; numero: number }, usuarioId: number | null, modo: 'cancelar' | 'excluir'): Promise<CompraDesfeita | null> {
+  if (modo === 'excluir') await apagarComprasCanceladasDaVenda(tx, venda.numero);
+  const compra = await tx.compra.findFirst({
+    where: { observacoesInternas: { contains: marcaCompraDaVenda(venda.numero) }, situacao: { cancelamento: false } },
+    include: { itens: true, situacao: true },
+  });
+  if (!compra) return null;
+  const r: CompraDesfeita = { compraId: compra.id, numero: compra.numero, desfeita: false, devolvido: [] };
+  const manter = async (motivo: string) => {
+    r.motivo = motivo;
+    // fica registrado na compra por que ela não foi desfeita junto com a venda
+    await tx.historicoSituacao.create({
+      data: { entidadeTipo: 'COMPRA', entidadeId: compra.id, deSituacaoId: compra.situacaoId, deSituacao: compra.situacao.nome, paraSituacaoId: compra.situacaoId, paraSituacao: compra.situacao.nome, usuarioId, observacao: `Venda nº ${venda.numero} ${modo === 'excluir' ? 'excluída' : 'cancelada'}: esta compra foi mantida porque ${motivo}.` },
+    });
+    return r;
+  };
+  // mercadoria desta compra já saiu em OUTRA venda: a compra é real, não se mexe
+  // (pelas alocações de verdade: quando a venda é apagada, as alocações dela somem em cascata e o contador fica velho)
+  const alocadaFora = await tx.alocacaoCompra.count({ where: { compraItem: { compraId: compra.id }, vendaItem: { vendaId: { not: venda.id } } } });
+  if (alocadaFora > 0) return manter('a mercadoria dela já saiu em outra venda');
+  for (const it of compra.itens) {
+    const soma = await tx.alocacaoCompra.aggregate({ where: { compraItemId: it.id, vendaItem: { vendaId: { not: venda.id } } }, _sum: { quantidade: true } });
+    const certo = arredondar(soma._sum.quantidade || 0, 4);
+    if (Math.abs(certo - it.quantidadeVendida) > 0.0001) await tx.compraItem.update({ where: { id: it.id }, data: { quantidadeVendida: certo } });
+  }
+
+  const obsAuto = obsCompraPagaAoFinalizar(venda.numero);
+  const contas = await tx.contaPagar.findMany({ where: { origemTipo: 'COMPRA', origemId: compra.id } });
+  const movsPorConta = new Map<number, { id: number; contaFinanceiraId: number; valor: number; juros: number; desconto: number; transacaoId: number | null; observacoes: string | null }[]>();
+  for (const cp of contas) {
+    const movs = await tx.movimentoFinanceiro.findMany({ where: { contaPagarId: cp.id } });
+    movsPorConta.set(cp.id, movs);
+    // pagamento feito à mão (ou importado): quem pagou decide — a compra fica
+    const automaticos = movs.filter((m) => (m.observacoes || '') === obsAuto || (m.observacoes || '').startsWith(OBS_PAGO_COM_CREDITO));
+    if (movs.length !== automaticos.length) return manter('o pagamento dela foi lançado à mão no contas a pagar');
+    const somaAuto = arredondar(automaticos.reduce((s, m) => s + m.valor, 0));
+    if (cp.valorPago > somaAuto + 0.009) return manter('ela tem pagamento lançado à mão no contas a pagar');
+  }
+
+  // 1. pagamento automático: dinheiro volta para o banco de onde saiu
+  for (const cp of contas) {
+    const movs = (movsPorConta.get(cp.id) || []).filter((m) => (m.observacoes || '') === obsAuto);
+    if (!movs.length) continue;
+    let pago = cp.valorPago;
+    for (const m of movs) {
+      await tx.contaFinanceira.update({ where: { id: m.contaFinanceiraId }, data: { saldoAtual: { increment: arredondar(m.valor) } } });
+      if (m.transacaoId) await tx.transacaoBancaria.update({ where: { id: m.transacaoId }, data: { conciliado: false } });
+      await tx.movimentoFinanceiro.delete({ where: { id: m.id } });
+      pago = arredondar(pago - m.valor);
+      r.devolvido.push({ contaFinanceiraId: m.contaFinanceiraId, valor: arredondar(m.valor) });
+    }
+    const zerada = pago < 0.01;
+    await tx.contaPagar.update({
+      where: { id: cp.id },
+      data: {
+        valorPago: zerada ? 0 : pago,
+        juros: zerada ? 0 : cp.juros,
+        desconto: zerada ? 0 : cp.desconto,
+        situacao: zerada ? 'ABERTO' : 'PARCIAL',
+        dataPagamento: zerada ? null : cp.dataPagamento,
+        observacoes: (cp.observacoes || '').split('\n').filter((l) => l !== obsAuto).join('\n') || null,
+      },
+    });
+  }
+  // 2. contas a pagar canceladas (crédito bancário: cancela o empréstimo — bloqueia se o credor já foi pago) e mercadoria fora do estoque
+  const ctx: ContextoAcao = { modulo: 'COMPRA', entidadeId: compra.id, tx, usuarioId, situacaoOrigemId: compra.situacaoId, situacaoDestinoId: compra.situacaoId };
+  try {
+    await compraEstornarContas(ctx);
+  } catch (e) {
+    if (e instanceof AppError) return manter(e.message.replace(/\.$/, ''));
+    throw e;
+  }
+  await compraEstornarEstoque(ctx);
+  r.desfeita = true;
+
+  if (modo === 'excluir' && (await apagarCompra(tx, compra.id))) return r; // a venda deixou de existir: a compra que nasceu dela some junto
+  const cancelado = await tx.situacao.findFirst({ where: { modulo: 'COMPRA', cancelamento: true, ativo: true }, orderBy: { ordem: 'asc' } });
+  if (cancelado) {
+    await tx.compra.update({ where: { id: compra.id }, data: { situacaoId: cancelado.id } });
+    await tx.historicoSituacao.create({
+      data: { entidadeTipo: 'COMPRA', entidadeId: compra.id, deSituacaoId: compra.situacaoId, deSituacao: compra.situacao.nome, paraSituacaoId: cancelado.id, paraSituacao: cancelado.nome, usuarioId, observacao: `Automático: venda nº ${venda.numero} cancelada` },
+    });
+  }
+  return r;
+}
+
+/** Apaga uma compra já sem estoque/contas lançados (contas canceladas sem pagamento e histórico junto). Não apaga se tem empréstimo ligado. */
+async function apagarCompra(tx: Tx, compraId: number) {
+  const c = await tx.compra.findUnique({ where: { id: compraId }, include: { _count: { select: { emprestimos: true } } } });
+  if (!c || c.estoqueLancado || c.contasLancadas || c._count.emprestimos > 0) return false;
+  if (await tx.alocacaoCompra.count({ where: { compraItem: { compraId } } })) return false;
+  if (await tx.contaPagar.count({ where: { origemTipo: 'COMPRA', origemId: compraId, OR: [{ valorPago: { gt: 0 } }, { situacao: { not: 'CANCELADO' } }] } })) return false;
+  await tx.contaPagar.deleteMany({ where: { origemTipo: 'COMPRA', origemId: compraId, situacao: 'CANCELADO', valorPago: 0 } });
+  await tx.historicoSituacao.deleteMany({ where: { entidadeTipo: 'COMPRA', entidadeId: compraId } });
+  await tx.compra.delete({ where: { id: compraId } });
+  return true;
+}
+
+/** Venda excluída: as compras registradas ao finalizá-la que já estavam canceladas (sem nada pago) também somem. */
+async function apagarComprasCanceladasDaVenda(tx: Tx, numeroVenda: number) {
+  const canceladas = await tx.compra.findMany({ where: { observacoesInternas: { contains: marcaCompraDaVenda(numeroVenda) }, situacao: { cancelamento: true } }, select: { id: true } });
+  for (const c of canceladas) await apagarCompra(tx, c.id);
+}
+
+/** Hook do motor: ao cancelar a venda, desfaz a compra registrada ao finalizar (se houver). */
+export async function aoCancelarVenda(ctx: ContextoAcao) {
+  const venda = await ctx.tx.venda.findUnique({ where: { id: ctx.entidadeId }, select: { id: true, numero: true, tipo: true } });
+  if (!venda || venda.tipo !== 'PEDIDO') return;
+  const r = await desfazerCompraDaVenda(ctx.tx, venda, ctx.usuarioId, 'cancelar');
+  if (r && ctx.extras) ctx.extras.compra = r;
 }
 
 /** Contato "Fornecedor não informado" (cria se não existir) — quando a compra é registrada sem escolher fornecedor. */
@@ -1016,7 +1149,7 @@ export async function registrarCompraDaVenda(vendaId: number, p: CompraDaVendaIn
       const cps = await tx.contaPagar.findMany({ where: { origemTipo: 'COMPRA', origemId: c.id, situacao: { in: ['ABERTO', 'PARCIAL'] } } });
       for (const cp of cps) {
         const saldo = saldoContaPagar(cp);
-        if (saldo >= 0.01) await baixarContaPagar({ id: cp.id, valor: saldo, data: hoje, contaFinanceiraId: contaId, observacoes: `Pago — informado ao finalizar a venda nº ${venda.numero}` }, tx);
+        if (saldo >= 0.01) await baixarContaPagar({ id: cp.id, valor: saldo, data: hoje, contaFinanceiraId: contaId, observacoes: obsCompraPagaAoFinalizar(venda.numero) }, tx);
       }
     }
     return { id: c.id, numero: c.numero, total };

@@ -59,6 +59,8 @@ export interface ContextoAcao {
   usuarioId: number | null;
   situacaoOrigemId: number | null;
   situacaoDestinoId: number;
+  /** o que as ações quiserem devolver para quem chamou (ex.: compra desfeita ao cancelar a venda) */
+  extras?: Record<string, unknown>;
 }
 
 type Handler = (ctx: ContextoAcao) => Promise<void>;
@@ -72,9 +74,15 @@ interface AdaptadorModulo {
 
 const handlers = new Map<string, Handler>();
 const adaptadores = new Map<Modulo, AdaptadorModulo>();
+/** Roda sempre que a entidade entra numa situação de cancelamento (depois das ações), seja qual for a configuração da situação. */
+const aoCancelar = new Map<Modulo, Handler>();
 
 export function registrarAcao(modulo: Modulo, acao: Acao, fn: Handler) {
   handlers.set(`${modulo}:${acao}`, fn);
+}
+
+export function registrarAoCancelar(modulo: Modulo, fn: Handler) {
+  aoCancelar.set(modulo, fn);
 }
 
 export function registrarModulo(modulo: Modulo, adaptador: AdaptadorModulo) {
@@ -136,7 +144,7 @@ export async function mudarSituacao(p: MudarSituacaoParams) {
     async (tx) => {
       const atualId = await adaptador.obterSituacaoId(p.entidadeId, tx);
       if (atualId === destino.id) {
-        return { alterado: false, atualId, acoes: [] as Acao[] };
+        return { alterado: false, atualId, acoes: [] as Acao[], extras: {} as Record<string, unknown> };
       }
       const atual = await tx.situacao.findUnique({ where: { id: atualId } });
 
@@ -169,6 +177,7 @@ export async function mudarSituacao(p: MudarSituacaoParams) {
         usuarioId: p.usuarioId,
         situacaoOrigemId: atualId,
         situacaoDestinoId: destino.id,
+        extras: {},
       };
 
       for (const acao of ordenar([...acoes])) {
@@ -176,6 +185,11 @@ export async function mudarSituacao(p: MudarSituacaoParams) {
         const h = handlers.get(`${p.modulo}:${acao}`);
         if (!h) continue; // ação não suportada pelo módulo: ignora
         await h(ctx);
+      }
+      // cancelamento: o módulo desfaz o que foi criado automaticamente junto (ex.: a compra registrada ao finalizar a venda)
+      if (destino.cancelamento && !atual?.cancelamento) {
+        const h = aoCancelar.get(p.modulo);
+        if (h) await h(ctx);
       }
 
       await adaptador.gravarSituacao(p.entidadeId, destino.id, tx);
@@ -192,7 +206,7 @@ export async function mudarSituacao(p: MudarSituacaoParams) {
         },
       });
 
-      return { alterado: true, atualId, acoes: [...acoes] };
+      return { alterado: true, atualId, acoes: [...acoes], extras: ctx.extras };
     },
     { timeout: 30000 },
   );

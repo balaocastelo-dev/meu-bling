@@ -94,6 +94,7 @@ async function main() {
     rodar('OS: custos internos (peça, logística, terceiros) fora da impressão + dashboard de assistência', NPX, ['tsx', 'testes/os-custos.ts', base]);
     rodar('Vendas: custo do produto e logística internos (fora do cliente) + ordem do contas a pagar', NPX, ['tsx', 'testes/venda-custos.ts', base]);
     rodar('Venda paga na hora entra no caixa + ajuste de saldo fora do DRE + DRE', NPX, ['tsx', 'testes/pago-na-hora.ts', base]);
+    rodar('Venda cancelada/excluída desfaz a compra registrada ao finalizar (dinheiro volta ao banco)', NPX, ['tsx', 'testes/venda-cancelada-compra.ts', base]);
     rodar('Empréstimos (Lumicred): repasse, cliente paga direto, capital de giro, cancelar; DRE só com juros', NPX, ['tsx', 'testes/emprestimos.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Crédito bancário como forma de pagamento: venda (cliente ou loja paga) e compra geram o empréstimo', NPX, ['tsx', 'testes/credito-bancario.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Carnê próprio: PIX no Cora, risco 7–15%, auditoria, venda no carnê, receber, DRE e impressão', NPX, ['tsx', 'testes/carnes.ts', base], { env: { TZ: 'America/Sao_Paulo' } });

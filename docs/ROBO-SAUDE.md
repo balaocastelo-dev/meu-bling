@@ -17,6 +17,7 @@ conciliando logo depois de cada movimento. Só o **ADMIN** vê.
 | Venda "Fechada"/"NF emitida" sem contas ou estoque | lança as contas (com baixa do que foi pago na hora: dinheiro/PIX/cartão) e baixa o estoque |
 | Venda cancelada ainda com estoque/contas | devolve o estoque e estorna contas/comissões (se tiver recebimento manual, vira sugestão) |
 | Comissão a pagar de venda cancelada | cancela a comissão |
+| Compra registrada ao finalizar uma venda que foi cancelada ou excluída (`compra-de-venda-cancelada`) | desfaz a compra: o pagamento automático volta para o banco, contas a pagar canceladas, mercadoria fora do estoque, compra "Cancelado" (apagada se a venda não existe mais). Se a compra foi paga à mão ou a mercadoria já saiu em outra venda, vira ALERTA com o motivo |
 | Conta a receber em aberto de venda cancelada (sem nada recebido) | cancela a conta |
 | Produto vendido sem NCM | preenche pelo histórico/tipo do produto (o "sugerido" continua pedindo confirmação no Robô de NF) |
 | Histórico do estoque diferente do saldo | grava um ajuste que realinha o histórico **sem mudar a quantidade** |
