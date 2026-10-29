@@ -31,6 +31,7 @@ Arquivos: `apps/api/testes/` (rodar.ts, lib.ts, rotas.ts, regras-vendas.ts, tela
 - Itens de `grid` têm `min-width: 0` e o conteúdo quebra palavra comprida (`overflow-wrap`), ambos na camada base.
 - Formulários: grade de 2 colunas até 1280 px e de 12 colunas acima (`sm:grid-cols-2 xl:grid-cols-12`).
 - Grades de 3–4 colunas (cards de indicadores, campos) viram 2 no tablet: use `lg:grid-cols-3`/`lg:grid-cols-4` (ou `xl:`), nunca `sm:`/`md:` com 3+ colunas.
+- **Dashboards (padrão Power BI)**: todo dashboard abre com os números principais no topo — saldo em bancos + caixa, faturamento/vendas e lucro — e os detalhes menos importantes abaixo do separador `SecaoDetalhes`. Use `FaixaKpis` (2 por linha no celular, 3–4 no tablet, até 6 no computador) com `KpiV18`; o número principal leva `destaque` + `className="col-span-2"` (linha inteira no celular). Saldo de cada conta: `SaldosContas` (rola de lado no celular). Gráficos com altura `h-52 sm:h-64`. Filtro de período rola de lado no celular em vez de quebrar em várias linhas.
 - **Menu**: até 1024 px é gaveta (botão ☰), fecha ao escolher item, tocar fora ou Esc; acima fica fixo.
 - **Modal** fica em tela cheia no celular com rolagem interna (o `tamanho="sm"` sobe como folha de baixo); `Drawer` e busca (Ctrl+K) também ocupam a tela toda no celular.
 - **Toque**: em tela de toque (`pointer-coarse:`) botões, itens de menu e campos têm no mínimo 40 px; no celular campos têm fonte de 16 px (sem zoom do iPhone). No computador nada muda.

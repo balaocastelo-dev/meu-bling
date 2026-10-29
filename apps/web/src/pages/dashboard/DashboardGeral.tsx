@@ -12,7 +12,7 @@ import {
 import { api, rotaIndisponivel } from '@/lib/api';
 import { Badge, EmptyState, Skeleton, tomPorStatus } from '@/components/ui';
 import { inteiro, moeda, numero, percentual, rotulo } from '@/lib/format';
-import { Aparecer, Avatar, BarraAnimada, CardV18, Contador, Grupo, KpiV18, LinhaV18, PaginaV18, SegmentadoV18, TONS, Variacao, listaVariants, type Tom } from '@/components/dashboard/v18';
+import { Aparecer, Avatar, BarraAnimada, CardV18, FaixaKpis, KpiV18, LinhaV18, PaginaV18, SaldosContas, SecaoDetalhes, SegmentadoV18, TONS, listaVariants, type Tom } from '@/components/dashboard/v18';
 import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
 import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import { useAuth } from '@/stores/auth';
@@ -167,15 +167,15 @@ export default function DashboardGeral() {
   ];
 
   return (
-    <PaginaV18 className="space-y-5">
+    <PaginaV18 className="space-y-4 sm:space-y-5">
       {/* cabeçalho */}
-      <Aparecer className="flex flex-wrap items-end justify-between gap-3">
+      <Aparecer className="flex flex-wrap items-end justify-between gap-2 sm:gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium text-slate-400">{hojeExtenso.charAt(0).toUpperCase() + hojeExtenso.slice(1)}</p>
           <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
             {saudacao}, {usuario?.nome?.split(' ')[0]} <motion.span className="inline-block origin-[70%_70%]" animate={{ rotate: [0, 14, -8, 14, 0] }} transition={{ duration: 1.4, delay: 0.4 }}>👋</motion.span>
           </h1>
-          <p className="text-sm text-slate-500">Vendas e assistência técnica somadas, no período que você escolher.</p>
+          <p className="hidden text-sm text-slate-500 sm:block">Vendas e assistência técnica somadas, no período que você escolher.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <StatusPilula icone={<MessageCircle className="h-3.5 w-3.5 text-slate-400" />} nome="WhatsApp" ok={data?.whatsapp.status === 'CONECTADO'} texto={rotulo(data?.whatsapp.status ?? 'DESCONECTADO')} tom={tomPorStatus(data?.whatsapp.status)} />
@@ -203,97 +203,89 @@ export default function DashboardGeral() {
         </Aparecer>
       )}
 
+      {/* ===== TOPO (estilo Power BI): o mais importante primeiro — saldo do banco e o que foi vendido ===== */}
+      <FaixaKpis colunas={4}>
+        <KpiV18
+          destaque
+          className="col-span-2"
+          rotulo="Saldo em bancos + caixa"
+          valor={f?.saldoTotal}
+          formato={moeda}
+          icone={<Landmark className="h-4 w-4" />}
+          tom="verde"
+          carregando={isLoading}
+          sub={f ? `agora, somando todas as contas · a pagar hoje ${moeda(f.pagarHoje)}` : 'agora, somando todas as contas'}
+          onClick={() => nav('/financeiro/bancos')}
+        />
+        <KpiV18
+          destaque
+          className="col-span-2"
+          rotulo={`Faturamento · ${faixa}`}
+          valor={r?.faturamento}
+          anterior={comp?.faturamento}
+          formato={moeda}
+          icone={<Sparkles className="h-4 w-4" />}
+          tom="azul"
+          carregando={carregando}
+          sub={r ? `${inteiro(r.vendas.qtd)} ${r.vendas.qtd === 1 ? 'venda' : 'vendas'} + ${inteiro(r.assistencia.qtd)} OS · ticket médio ${moeda(r.ticketMedio)}` : undefined}
+        />
+      </FaixaKpis>
+
+      {/* saldo de cada conta (Cora, Asaas, SumUp, caixa…) */}
+      <SaldosContas contas={f?.saldoContas} carregando={isLoading} formato={moeda} onClick={() => nav('/financeiro/bancos')} />
+
+      <FaixaKpis>
+        <KpiV18 rotulo="Vendas" valor={r?.vendas.valor} anterior={comp?.vendas.valor} formato={moeda} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={carregando} sub={r ? `${inteiro(r.vendas.qtd)} pedidos · ticket ${moeda(r.vendas.ticketMedio)}` : undefined} onClick={() => nav('/dashboard/vendas')} />
+        <KpiV18 rotulo="Assistência" valor={r?.assistencia.valor} anterior={comp?.assistencia.valor} formato={moeda} icone={<Wrench className="h-4 w-4" />} tom="vermelho" carregando={carregando} sub={r ? `${inteiro(r.assistencia.qtd)} OS · ticket ${moeda(r.assistencia.ticketMedio)}` : undefined} onClick={() => nav('/dashboard/assistencia')} />
+        <KpiV18 rotulo="Lucro" valor={r?.lucro} anterior={comp?.lucro} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={carregando} sub={r ? `margem ${percentual(r.margemPct)}` : undefined} />
+        <KpiV18 rotulo="Entrou (banco + caixa)" valor={r?.caixa.entradas} anterior={comp?.caixa.entradas} formato={moeda} icone={<ArrowDownRight className="h-4 w-4" />} tom="verde" carregando={carregando} sub="recebimentos no período" onClick={() => nav('/financeiro/fluxo-caixa')} />
+        <KpiV18 rotulo="Saiu (banco + caixa)" valor={r?.caixa.saidas} anterior={comp?.caixa.saidas} inverter formato={moeda} icone={<ArrowUpRight className="h-4 w-4" />} tom="neutro" carregando={carregando} sub="pagamentos no período" onClick={() => nav('/financeiro/pagar')} />
+        <KpiV18 rotulo="A receber hoje" valor={f?.receberHoje} formato={moeda} icone={<Clock className="h-4 w-4" />} tom="azul" carregando={isLoading} sub={f ? `a pagar hoje ${moeda(f.pagarHoje)}` : undefined} onClick={() => nav('/financeiro/receber')} />
+      </FaixaKpis>
+
       {/* avisos mais importantes (caixinhas no prazo, contas vencidas, OS atrasadas) */}
       <Aparecer>
         <AvisosImportantes />
       </Aparecer>
 
-      {/* Robô da Saúde (só ADMIN): corrige sozinho e deixa o resto com o botão pronto */}
-      <Aparecer>
-        <CardRoboSaude />
-      </Aparecer>
-
-      {/* destaque: faturamento total do período */}
-      <Aparecer>
-        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card sm:p-5">
-          <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-gradient-to-br from-red-100 to-transparent opacity-70 blur-2xl" />
-          <div className="pointer-events-none absolute -bottom-24 left-1/3 h-56 w-56 rounded-full bg-gradient-to-tr from-blue-100 to-transparent opacity-60 blur-2xl" />
-          <div className="relative grid gap-5 lg:grid-cols-5">
-            <div className="min-w-0 lg:col-span-2">
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400"><Sparkles className="h-3.5 w-3.5 text-brand-600" /> Faturamento do período · {faixa}</p>
-              {carregando ? (
-                <Skeleton className="mt-2 h-10 w-48" />
-              ) : (
-                <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <span className="break-words text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl"><Contador valor={r?.faturamento ?? 0} formato={moeda} /></span>
-                  <Variacao atual={r?.faturamento} anterior={comp?.faturamento} />
-                </div>
-              )}
-              <p className="mt-1 text-xs text-slate-500 num">
-                {r ? `${inteiro(r.vendas.qtd)} ${r.vendas.qtd === 1 ? 'venda' : 'vendas'} + ${inteiro(r.assistencia.qtd)} OS · ticket médio ${moeda(r.ticketMedio)}` : ' '}
-                {comp && <span className="text-slate-400"> · antes {moeda(comp.faturamento)}</span>}
-              </p>
-              {/* divisão vendas x assistência */}
-              <div className="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-slate-100">
-                <motion.div initial={{ width: 0 }} animate={{ width: `${pctVendas}%` }} transition={{ duration: 0.9, ease: 'easeOut' }} style={{ backgroundColor: COR_VENDAS }} title={`Vendas ${numero(pctVendas, 0)}%`} />
-                <motion.div initial={{ width: 0 }} animate={{ width: `${pctAssist}%` }} transition={{ duration: 0.9, ease: 'easeOut', delay: 0.1 }} style={{ backgroundColor: COR_ASSIST }} title={`Assistência ${numero(pctAssist, 0)}%`} />
-              </div>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                <Link to="/dashboard/vendas" className="inline-flex items-center gap-1.5 text-slate-600 hover:text-slate-900"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: COR_VENDAS }} />Vendas <span className="num font-semibold">{moeda(r?.vendas.valor ?? 0)}</span><span className="num text-slate-400">{numero(pctVendas, 0)}%</span></Link>
-                <Link to="/dashboard/assistencia" className="inline-flex items-center gap-1.5 text-slate-600 hover:text-slate-900"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: COR_ASSIST }} />Assistência <span className="num font-semibold">{moeda(r?.assistencia.valor ?? 0)}</span><span className="num text-slate-400">{numero(pctAssist, 0)}%</span></Link>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-emerald-50/70 p-3">
-                  <p className="text-[11px] font-medium text-emerald-700">Lucro</p>
-                  <p className={clsx('num text-lg font-bold', (r?.lucro ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700')}>{carregando ? '…' : <Contador valor={r?.lucro ?? 0} formato={moeda} />}</p>
-                  <p className="num text-[11px] text-emerald-700/70">margem {percentual(r?.margemPct ?? 0)}</p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-3">
-                  <p className="text-[11px] font-medium text-slate-500">Banco + caixa no período</p>
-                  <p className={clsx('num text-lg font-bold', (r?.caixa.saldo ?? 0) < 0 ? 'text-red-600' : 'text-slate-900')}>{carregando ? '…' : <Contador valor={r?.caixa.saldo ?? 0} formato={moeda} />}</p>
-                  <p className="num text-[11px] text-slate-400">entrou {moeda(r?.caixa.entradas ?? 0)}</p>
-                </div>
-              </div>
-            </div>
-            {/* gráfico principal */}
-            <div className="min-w-0 lg:col-span-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400"><BarChart3 className="h-3.5 w-3.5" /> Faturamento por {nomeAgrupado}</p>
-                {r?.melhorPeriodo && series.length > 1 && <span className="num rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">melhor {nomeAgrupado}: {rotuloPeriodo(r.melhorPeriodo.periodo)} · {moeda(r.melhorPeriodo.valor)}</span>}
-              </div>
-              {carregando ? (
-                <Skeleton className="h-60" />
-              ) : temMovimento ? (
-                <div className="h-60">
-                  <ResponsiveContainer>
-                    <ComposedChart data={series} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
-                      <CartesianGrid stroke={CORES.grade} strokeDasharray="3 4" vertical={false} />
-                      <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={60} />
-                      <Tooltip content={<TooltipPadrao />} cursor={{ fill: 'rgba(148,163,184,0.12)' }} />
-                      <Bar dataKey="vendas" name="Vendas" stackId="fat" fill={COR_VENDAS} maxBarSize={36} animationDuration={900} />
-                      <Bar dataKey="assistencia" name="Assistência" stackId="fat" fill={COR_ASSIST} radius={[6, 6, 0, 0]} maxBarSize={36} animationDuration={1100} />
-                      <Line type="monotone" dataKey="lucro" name="Lucro" stroke={COR_LUCRO} strokeWidth={2.5} dot={series.length <= 12 ? { r: 3, strokeWidth: 2, stroke: '#fff' } : false} animationDuration={1300} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <EmptyState compacto titulo="Sem vendas nem OS no período" descricao="Contam as vendas não canceladas e as OS não canceladas do período." />
-              )}
-            </div>
-          </div>
+      {/* evolução do período */}
+      <CardV18
+        titulo={`Faturamento por ${nomeAgrupado}`}
+        descricao={faixa}
+        icone={<BarChart3 className="h-4 w-4" />}
+        tom="azul"
+        acoes={r?.melhorPeriodo && series.length > 1 ? <span className="num hidden rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700 sm:inline">melhor {nomeAgrupado}: {rotuloPeriodo(r.melhorPeriodo.periodo)} · {moeda(r.melhorPeriodo.valor)}</span> : undefined}
+      >
+        {/* divisão vendas x assistência */}
+        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+          <motion.div initial={{ width: 0 }} animate={{ width: `${pctVendas}%` }} transition={{ duration: 0.9, ease: 'easeOut' }} style={{ backgroundColor: COR_VENDAS }} title={`Vendas ${numero(pctVendas, 0)}%`} />
+          <motion.div initial={{ width: 0 }} animate={{ width: `${pctAssist}%` }} transition={{ duration: 0.9, ease: 'easeOut', delay: 0.1 }} style={{ backgroundColor: COR_ASSIST }} title={`Assistência ${numero(pctAssist, 0)}%`} />
         </div>
-      </Aparecer>
-
-      {/* KPIs do período */}
-      <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <KpiV18 rotulo="Vendas" valor={r?.vendas.valor} anterior={comp?.vendas.valor} formato={moeda} icone={<ShoppingCart className="h-4 w-4" />} tom="azul" carregando={carregando} sub={r ? `${inteiro(r.vendas.qtd)} pedidos · ticket ${moeda(r.vendas.ticketMedio)}` : undefined} onClick={() => nav('/dashboard/vendas')} />
-        <KpiV18 rotulo="Assistência" valor={r?.assistencia.valor} anterior={comp?.assistencia.valor} formato={moeda} icone={<Wrench className="h-4 w-4" />} tom="vermelho" carregando={carregando} sub={r ? `${inteiro(r.assistencia.qtd)} OS · ticket ${moeda(r.assistencia.ticketMedio)}` : undefined} onClick={() => nav('/dashboard/assistencia')} />
-        <KpiV18 rotulo="Custos" valor={r?.custo} anterior={comp?.custo} inverter formato={moeda} icone={<Receipt className="h-4 w-4" />} tom="amarelo" carregando={carregando} sub="vendas + assistência" />
-        <KpiV18 rotulo="Lucro" valor={r?.lucro} anterior={comp?.lucro} formato={moeda} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={carregando} sub={r ? `margem ${percentual(r.margemPct)}` : undefined} />
-        <KpiV18 rotulo="Entrou (banco + caixa)" valor={r?.caixa.entradas} anterior={comp?.caixa.entradas} formato={moeda} icone={<ArrowDownRight className="h-4 w-4" />} tom="verde" carregando={carregando} sub="recebimentos baixados em todas as contas" onClick={() => nav('/financeiro/fluxo-caixa')} />
-        <KpiV18 rotulo="Saiu (banco + caixa)" valor={r?.caixa.saidas} anterior={comp?.caixa.saidas} inverter formato={moeda} icone={<ArrowUpRight className="h-4 w-4" />} tom="neutro" carregando={carregando} sub="pagamentos baixados em todas as contas" onClick={() => nav('/financeiro/pagar')} />
-      </Grupo>
+        <div className="mb-3 mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+          <Link to="/dashboard/vendas" className="inline-flex items-center gap-1.5 text-slate-600 hover:text-slate-900"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: COR_VENDAS }} />Vendas <span className="num font-semibold">{moeda(r?.vendas.valor ?? 0)}</span><span className="num text-slate-400">{numero(pctVendas, 0)}%</span></Link>
+          <Link to="/dashboard/assistencia" className="inline-flex items-center gap-1.5 text-slate-600 hover:text-slate-900"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: COR_ASSIST }} />Assistência <span className="num font-semibold">{moeda(r?.assistencia.valor ?? 0)}</span><span className="num text-slate-400">{numero(pctAssist, 0)}%</span></Link>
+          <span className="inline-flex items-center gap-1.5 text-slate-600"><span className="h-0.5 w-3 rounded-full" style={{ backgroundColor: COR_LUCRO }} />Lucro</span>
+        </div>
+        {carregando ? (
+          <Skeleton className="h-52 sm:h-64" />
+        ) : temMovimento ? (
+          <div className="h-52 sm:h-64">
+            <ResponsiveContainer>
+              <ComposedChart data={series} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+                <CartesianGrid stroke={CORES.grade} strokeDasharray="3 4" vertical={false} />
+                <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} minTickGap={12} />
+                <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={52} />
+                <Tooltip content={<TooltipPadrao />} cursor={{ fill: 'rgba(148,163,184,0.12)' }} />
+                <Bar dataKey="vendas" name="Vendas" stackId="fat" fill={COR_VENDAS} maxBarSize={36} animationDuration={900} />
+                <Bar dataKey="assistencia" name="Assistência" stackId="fat" fill={COR_ASSIST} radius={[6, 6, 0, 0]} maxBarSize={36} animationDuration={1100} />
+                <Line type="monotone" dataKey="lucro" name="Lucro" stroke={COR_LUCRO} strokeWidth={2.5} dot={series.length <= 12 ? { r: 3, strokeWidth: 2, stroke: '#fff' } : false} animationDuration={1300} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <EmptyState compacto titulo="Sem vendas nem OS no período" descricao="Contam as vendas não canceladas e as OS não canceladas do período." />
+        )}
+      </CardV18>
 
       {!!r?.osSemCusto && (
         <Aparecer className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -304,6 +296,14 @@ export default function DashboardGeral() {
           </span>
         </Aparecer>
       )}
+
+      {/* ===== DETALHES (menos importante) daqui para baixo ===== */}
+      <SecaoDetalhes dica="role para ver mais" />
+
+      {/* Robô da Saúde (só ADMIN): corrige sozinho e deixa o resto com o botão pronto */}
+      <Aparecer>
+        <CardRoboSaude />
+      </Aparecer>
 
       {/* fechamento + mix */}
       <div className="grid gap-4 xl:grid-cols-3">
@@ -422,19 +422,14 @@ export default function DashboardGeral() {
         </CardV18>
       </div>
 
-      {/* AGORA — não depende do período */}
-      <Aparecer className="flex items-center gap-3 pt-2">
-        <span className="text-sm font-semibold text-slate-700">Agora na loja</span>
-        <span className="h-px flex-1 bg-slate-200" />
-        <span className="text-[11px] text-slate-400">não depende do período</span>
-      </Aparecer>
+      <SecaoDetalhes titulo="Agora na loja" dica="não depende do período" />
 
-      <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <FaixaKpis colunas={4}>
         <KpiV18 rotulo="OS abertas" valor={h?.osAbertas} formato={qtd} sub={data ? `${inteiro(data.os.atrasadas)} atrasadas` : undefined} icone={<Wrench className="h-4 w-4" />} tom={data && data.os.atrasadas > 0 ? 'amarelo' : 'neutro'} carregando={isLoading} onClick={() => nav('/ordens-servico')} />
-        {(isLoading || f) && <KpiV18 rotulo="Saldo em contas" valor={f?.saldoTotal} formato={moeda} icone={<Wallet className="h-4 w-4" />} tom="neutro" carregando={isLoading} onClick={() => nav('/financeiro/bancos')} />}
-        {(isLoading || f) && <KpiV18 rotulo="A receber hoje" valor={f?.receberHoje} formato={moeda} sub={f ? `a pagar ${moeda(f.pagarHoje)}` : undefined} icone={<Clock className="h-4 w-4" />} tom="azul" carregando={isLoading} onClick={() => nav('/financeiro/receber')} />}
-        {(isLoading || f) && <KpiV18 rotulo="Receber atrasado" valor={f?.receberAtrasado} formato={moeda} sub={f ? `a pagar atrasado ${moeda(f.pagarAtrasado)}` : undefined} icone={<TriangleAlert className="h-4 w-4" />} tom={f && f.receberAtrasado > 0 ? 'vermelho' : 'neutro'} carregando={isLoading} onClick={() => nav('/financeiro/receber?situacao=ATRASADO')} />}
-      </Grupo>
+        <KpiV18 rotulo="Custos no período" valor={r?.custo} anterior={comp?.custo} inverter formato={moeda} icone={<Receipt className="h-4 w-4" />} tom="amarelo" carregando={carregando} sub="vendas + assistência" />
+        <KpiV18 rotulo="Receber atrasado" valor={f?.receberAtrasado} formato={moeda} icone={<TriangleAlert className="h-4 w-4" />} tom={f && f.receberAtrasado > 0 ? 'vermelho' : 'neutro'} carregando={isLoading} onClick={() => nav('/financeiro/receber?situacao=ATRASADO')} />
+        <KpiV18 rotulo="Pagar atrasado" valor={f?.pagarAtrasado} formato={moeda} icone={<Wallet className="h-4 w-4" />} tom={f && f.pagarAtrasado > 0 ? 'vermelho' : 'neutro'} carregando={isLoading} onClick={() => nav('/financeiro/pagar')} />
+      </FaixaKpis>
 
       {data && data.alertas.length > 0 && (
         <CardV18 titulo="Alertas" descricao={`${data.alertas.length} ${data.alertas.length > 1 ? 'pontos pedem' : 'ponto pede'} atenção`} icone={<TriangleAlert className="h-4 w-4" />} tom="amarelo" semPadding>

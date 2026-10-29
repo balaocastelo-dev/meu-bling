@@ -10,7 +10,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { Boxes, CircleDollarSign, Clock, Handshake, PiggyBank, Repeat, ShoppingCart, TrendingUp, Users, Wallet } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PeriodoFiltro, Skeleton } from '@/components/ui';
-import { Aparecer, BarraAnimada, CardV18, Grupo, KpiV18, PaginaV18 } from '@/components/dashboard/v18';
+import { Aparecer, BarraAnimada, CardV18, Grupo, KpiV18, PaginaV18, FaixaKpis } from '@/components/dashboard/v18';
 import { data as fmtData, dataHora, moeda } from '@/lib/format';
 import { intervaloPeriodo } from '@/lib/periodo';
 import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
@@ -73,35 +73,35 @@ export default function DashboardConsignacao() {
       <Aparecer>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Em estoque agora</p>
       </Aparecer>
-      <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <FaixaKpis colunas={4}>
         <KpiV18 rotulo="Itens consignados na loja" valor={e?.qtd} formato={qtd} icone={<Boxes className="h-4 w-4" />} tom="azul" carregando={isLoading} sub={e ? `média de ${e.diasMedioEmLoja} dia(s) na loja · ${e.emDiarias} em diárias` : undefined} />
         <KpiV18 rotulo="Valor em estoque" sub="pelo preço de venda" valor={e?.valorVenda} formato={moedaKpi} icone={<ShoppingCart className="h-4 w-4" />} tom="neutro" carregando={isLoading} />
         <KpiV18 rotulo="Custo dos consignantes" sub="o que a loja paga a eles" valor={e?.custo} formato={moedaKpi} icone={<Wallet className="h-4 w-4" />} tom="amarelo" carregando={isLoading} />
         <KpiV18 rotulo="Lucro possível vendendo tudo" valor={e?.lucroPotencial} formato={moedaKpi} icone={<TrendingUp className="h-4 w-4" />} tom="verde" carregando={isLoading} sub={e ? `margem de ${pctTxt(e.margemPct)}` : undefined} />
-      </Grupo>
+      </FaixaKpis>
 
       <Aparecer>
         <p className="mb-2 mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Vendas no período</p>
       </Aparecer>
-      <Grupo className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <FaixaKpis colunas={4}>
         <KpiV18 rotulo="Consignados vendidos" valor={v?.qtd} formato={qtd} icone={<Handshake className="h-4 w-4" />} tom="azul" carregando={isLoading} sub={v ? `vendem em ${v.diasMedioParaVender} dia(s) em média` : undefined} />
         <KpiV18 rotulo="Faturamento" valor={v?.faturamento} formato={moedaKpi} icone={<CircleDollarSign className="h-4 w-4" />} tom="neutro" carregando={isLoading} sub={v ? `ticket médio ${moeda(v.ticketMedio)}` : undefined} />
         <KpiV18 rotulo="Lucro realizado" valor={v ? v.lucro + v.taxasRetirada : undefined} formato={moedaKpi} icone={<PiggyBank className="h-4 w-4" />} tom="verde" carregando={isLoading} sub={v ? `margem ${pctTxt(v.margemPct)}${v.taxasRetirada ? ` · ${moeda(v.taxasRetirada)} de taxas de retirada` : ''}` : undefined} />
         <KpiV18 rotulo="Pago aos consignantes" valor={data?.pagamentos.pagoNoPeriodo} formato={moedaKpi} icone={<Wallet className="h-4 w-4" />} tom="vermelho" carregando={isLoading} sub={data ? `falta pagar ${moeda(data.pagamentos.aPagar)}` : undefined} />
-      </Grupo>
+      </FaixaKpis>
 
       <Grupo className="grid gap-4 xl:grid-cols-3">
         <CardV18 className="xl:col-span-2" titulo="Últimos 12 meses" descricao="faturamento e lucro das vendas de consignados" icone={<TrendingUp className="h-4 w-4" />} tom="azul">
           {isLoading ? (
-            <Skeleton className="h-64" />
+            <Skeleton className="h-52 sm:h-64" />
           ) : (
             <>
-              <div className="h-64">
+              <div className="h-52 sm:h-64">
                 <ResponsiveContainer>
                   <BarChart data={serie} margin={{ left: 0, right: 8, top: 8 }} barGap={2}>
                     <CartesianGrid stroke={CORES.grade} vertical={false} />
                     <XAxis dataKey="rotulo" tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={60} />
+                    <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={52} />
                     <Tooltip content={<TooltipPadrao />} cursor={{ fill: '#f1f5f9' }} />
                     <Bar dataKey="faturamento" name="Faturamento" fill={CORES.receita} radius={[4, 4, 0, 0]} maxBarSize={22} animationDuration={900} />
                     <Bar dataKey="lucro" name="Lucro" fill={CORES.lucro} radius={[4, 4, 0, 0]} maxBarSize={22} animationDuration={1100} />
