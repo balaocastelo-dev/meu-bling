@@ -290,7 +290,7 @@ async function caixinhaAtrasada(): Promise<Sugestao[]> {
 
     // o ritmo esperado até hoje: quanto já deveria ter sido guardado
     const totalDias = Math.max(1, Math.ceil((cx.dataUso.getTime() - cx.dataInicio.getTime()) / 86_400_000));
-    const decorridos = Math.max(0, Math.min(totalDias, Math.ceil((Date.now() - cx.dataInicio.getTime()) / 86_400_000)));
+    const decorridos = Math.max(0, Math.min(totalDias, Math.floor((Date.now() - cx.dataInicio.getTime()) / 86_400_000)));
     const esperado = arred((cx.valorMeta * decorridos) / totalDias);
     const atrasada = guardado < esperado - 0.01;
 

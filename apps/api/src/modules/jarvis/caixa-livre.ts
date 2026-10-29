@@ -99,7 +99,8 @@ export async function calcularCaixaLivre(): Promise<CaixaLivre> {
     if (falta <= 0) continue;
 
     const totalDias = Math.max(1, Math.ceil((cx.dataUso.getTime() - cx.dataInicio.getTime()) / 86_400_000));
-    const decorridos = Math.max(0, Math.min(totalDias, Math.ceil((agora.getTime() - cx.dataInicio.getTime()) / 86_400_000)));
+    // dias INTEIROS já passados: no primeiro dia ainda não se deve nada
+    const decorridos = Math.max(0, Math.min(totalDias, Math.floor((agora.getTime() - cx.dataInicio.getTime()) / 86_400_000)));
     const deveriaTer = (cx.valorMeta * decorridos) / totalDias;
     const atrasado = Math.max(0, Math.min(falta, deveriaTer - guardado));
 

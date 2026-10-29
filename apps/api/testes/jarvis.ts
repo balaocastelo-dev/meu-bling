@@ -158,9 +158,27 @@ async function main() {
   const placar = await adm.get('/jarvis/placar');
   verifica(placar.aceitas >= 1 && typeof placar.estimado === 'number', 'o placar conta as aceitas', placar);
 
-  secao('Modo pergunta sem chave boa responde com erro claro, não com 500');
-  await adm.post('/jarvis/perguntar', { pergunta: 'O que faço com o dinheiro de hoje?' }, 422);
+  secao('Chat: conversa com fio, mesmo sem a IA configurada');
+  const c1 = await adm.post('/jarvis/perguntar', { pergunta: 'O que faço com o dinheiro de hoje?' });
+  verifica(!!c1.conversaId && typeof c1.resposta === 'string' && c1.resposta.length > 0, 'abre a conversa e sempre responde algo', c1.titulo);
+  const c2 = await adm.post('/jarvis/perguntar', { pergunta: 'E amanhã?', conversaId: c1.conversaId });
+  verifica(c2.conversaId === c1.conversaId, 'a segunda mensagem continua na mesma conversa', c2.conversaId);
+
+  const conv = await adm.get(`/jarvis/conversas/${c1.conversaId}`);
+  verifica(conv.mensagens.length === 4, 'duas perguntas e duas respostas guardadas', conv.mensagens.length);
+  verifica(
+    conv.mensagens[0].papel === 'usuario' && conv.mensagens[1].papel === 'jarvis',
+    'as falas vêm na ordem certa',
+    conv.mensagens.map((m: any) => m.papel),
+  );
+
+  const listaConv = await adm.get('/jarvis/conversas');
+  verifica((listaConv.data ?? []).some((x: any) => x.id === c1.conversaId), 'a conversa aparece na lista', listaConv.data?.length);
+
   await adm.post('/jarvis/perguntar', { pergunta: 'oi' }, 400); // pergunta curta demais
+  await adm.del(`/jarvis/conversas/${c1.conversaId}`);
+  const listaDepois = await adm.get('/jarvis/conversas');
+  verifica(!(listaDepois.data ?? []).some((x: any) => x.id === c1.conversaId), 'conversa apagada sai da lista', listaDepois.data?.length);
 
   secao('Perfis: o painel é só do ADMIN; o feed é de todo mundo');
   const senha = 'Senha@12345';

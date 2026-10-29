@@ -36,7 +36,7 @@ export default function ChatJarvis() {
   const qc = useQueryClient();
   const [conversaId, setConversaId] = useState<number | null>(null);
   const [texto, setTexto] = useState('');
-  const fim = useRef<HTMLDivElement>(null);
+  const lista = useRef<HTMLDivElement>(null);
 
   const { data: conversas } = useQuery({
     queryKey: ['jarvis-conversas'],
@@ -53,8 +53,11 @@ export default function ChatJarvis() {
 
   const mensagens = conversa?.mensagens ?? [];
 
+  // rola só a lista de mensagens — scrollIntoView arrastaria a página inteira ao abrir o painel
   useEffect(() => {
-    fim.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    if (!mensagens.length) return;
+    const el = lista.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [mensagens.length]);
 
   const enviar = useMutation({
@@ -125,7 +128,7 @@ export default function ChatJarvis() {
         </div>
       }
     >
-      <div className="flex max-h-[26rem] min-h-[12rem] flex-col gap-3 overflow-y-auto pr-1">
+      <div ref={lista} className="flex max-h-[26rem] min-h-[12rem] flex-col gap-3 overflow-y-auto pr-1">
         {isLoading && conversaId ? (
           <>
             <Skeleton className="h-16" />
@@ -145,7 +148,6 @@ export default function ChatJarvis() {
             <Bot className="h-4 w-4 animate-pulse" /> JARVIS está pensando…
           </div>
         )}
-        <div ref={fim} />
       </div>
 
       {mensagens.length === 0 && (
