@@ -29,6 +29,7 @@ import { executarAcao } from './acoes.js';
 import { conversar, lerConversa, listarConversas } from './chat.js';
 import { executarFerramenta } from './ferramentas.js';
 import { CANAIS, INFO_CANAIS, criarAnuncio, listarAnuncios, marcarPublicado, montarRascunho, publicarCanal, type Canal } from './anuncios.js';
+import { conectar as mlConectar, desconectar as mlDesconectar, situacao as mlSituacao, urlAutorizacao as mlUrlAutorizacao, urlCallback as mlUrlCallback } from './mercadolivre.js';
 
 // o worker de 30 min (ver worker.ts). Desliga com JARVIS=off
 registrarServico('jarvis', (app) => iniciarWorker(app));
@@ -311,6 +312,11 @@ export default async function jarvisRoutes(app: FastifyInstance) {
       diasEstoqueParado: c.diasEstoqueParado,
       ultimaRodadaEm: c.ultimaRodadaEm,
       ultimoErro: c.ultimoErro,
+      // Mercado Livre: o Client ID é público (vai na URL de autorização); o Secret, nunca
+      mlClientId: c.mlClientId,
+      mlTemSecret: !!c.mlClientSecret,
+      mlSecretMascarado: mask(c.mlClientSecret),
+      mlListingType: c.mlListingType,
     };
   });
 
@@ -328,6 +334,9 @@ export default async function jarvisRoutes(app: FastifyInstance) {
         percCompraLacrado: z.coerce.number().int().min(5).max(100).optional(),
         percLojaConsignado: z.coerce.number().int().min(0).max(100).optional(),
         diasEstoqueParado: z.coerce.number().int().min(7).max(365).optional(),
+        mlClientId: z.string().max(100).optional().nullable(),
+        mlClientSecret: z.string().max(300).optional().nullable(),
+        mlListingType: z.enum(['gold_special', 'gold_pro']).optional(),
       })
       .strict()
       .parse((req.body ?? {}) as any);
@@ -339,6 +348,11 @@ export default async function jarvisRoutes(app: FastifyInstance) {
     if (body.chaveAnthropic === undefined) delete data.chaveAnthropic;
     else if (!body.chaveAnthropic || /^[*•]+/.test(body.chaveAnthropic)) delete data.chaveAnthropic;
     else data.chaveAnthropic = encrypt(body.chaveAnthropic);
+
+    // Client Secret do ML: mesmo tratamento da chave da IA — em branco ou mascarado não apaga o que está lá
+    if (body.mlClientSecret === undefined) delete data.mlClientSecret;
+    else if (!body.mlClientSecret || /^[*•]+/.test(body.mlClientSecret)) delete data.mlClientSecret;
+    else data.mlClientSecret = encrypt(body.mlClientSecret);
 
     if (body.dataAlvo !== undefined) data.dataAlvo = body.dataAlvo ? new Date(`${body.dataAlvo}T12:00:00`) : null;
 
@@ -458,5 +472,45 @@ export default async function jarvisRoutes(app: FastifyInstance) {
     const r = await marcarPublicado(id, b.canal as Canal, b.url ?? null, (req.user as any)?.nome ?? null);
     await auditar(req, 'JarvisAnuncio', id, 'ACAO', { acao: 'publiquei', canal: b.canal, url: b.url });
     return r;
+  });
+
+  // ---------------------------------------------------------------------
+  // MERCADO LIVRE — OAuth (docs/JARVIS.md §8)
+  // ---------------------------------------------------------------------
+
+  app.get('/api/v1/jarvis/ml/status', admin, async () => ({ ...(await mlSituacao()), redirectUri: mlUrlCallback() }));
+
+  /** Devolve o link para o Thiago autorizar a aplicação na conta dele. */
+  app.post('/api/v1/jarvis/ml/conectar', admin, async (req) => {
+    const url = await mlUrlAutorizacao();
+    await auditar(req, 'JarvisConfig', 1, 'ACAO', { acao: 'ml_conectar_iniciado' });
+    return { url };
+  });
+
+  /**
+   * Callback do Mercado Livre. É aberto pelo NAVEGADOR do Thiago depois de autorizar,
+   * então não dá para exigir o token JWT aqui — o que autentica é o `code`, que só o
+   * ML conhece e vale uma vez. Responde HTML porque quem lê é uma aba do navegador.
+   */
+  app.get('/api/v1/jarvis/ml/callback', async (req, reply) => {
+    const q = z.object({ code: z.string().optional(), error: z.string().optional(), error_description: z.string().optional() }).parse(req.query ?? {});
+    const pagina = (titulo: string, texto: string, ok: boolean) => `<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${titulo}</title></head><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;color:#0f172a"><h1 style="font-size:1.25rem">${titulo}</h1><p style="color:${ok ? '#15803d' : '#b91c1c'}">${texto}</p><p style="color:#64748b;font-size:.9rem">Pode fechar esta aba e voltar ao sistema.</p></body></html>`;
+
+    if (q.error || !q.code) {
+      return reply.type('text/html').code(400).send(pagina('Não deu certo', q.error_description || q.error || 'O Mercado Livre não devolveu o código de autorização.', false));
+    }
+    try {
+      const r = await mlConectar(q.code);
+      app.log.info({ userId: r.userId }, '[jarvis] conta do Mercado Livre conectada');
+      return reply.type('text/html').send(pagina('Conta conectada', `Mercado Livre ligado${r.apelido ? ` na conta ${r.apelido}` : ''}.`, true));
+    } catch (e: any) {
+      return reply.type('text/html').code(502).send(pagina('Não deu certo', String(e?.message || e), false));
+    }
+  });
+
+  app.post('/api/v1/jarvis/ml/desconectar', admin, async (req) => {
+    await mlDesconectar();
+    await auditar(req, 'JarvisConfig', 1, 'ACAO', { acao: 'ml_desconectar' });
+    return { ok: true };
   });
 }

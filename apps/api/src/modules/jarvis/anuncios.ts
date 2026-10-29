@@ -16,6 +16,7 @@ import { prisma } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { arredondar } from '../../lib/util.js';
 import { perguntarIa } from './ia.js';
+import { publicarItem } from './mercadolivre.js';
 
 export const CANAIS = ['MERCADO_LIVRE', 'SITE', 'BLOG', 'FACEBOOK', 'INSTAGRAM', 'GOOGLE_MEU_NEGOCIO', 'OLX'] as const;
 export type Canal = (typeof CANAIS)[number];
@@ -148,7 +149,34 @@ export async function publicarCanal(anuncioId: number, canal: Canal) {
     throw new AppError(`${info.rotulo} não publica sozinho. ${info.observacao}`, 422, 'CANAL_KIT');
   }
 
-  // Os provedores entram nas etapas 2 e 3 do docs/JARVIS.md. Até lá, dizemos o que falta.
+  if (canal === 'MERCADO_LIVRE') {
+    const anuncio = await prisma.jarvisAnuncio.findUnique({ where: { id: anuncioId } });
+    if (!anuncio) throw new NotFound('Anúncio');
+    const fotos: string[] = anuncio.fotos ? JSON.parse(anuncio.fotos) : [];
+    try {
+      const r = await publicarItem({
+        titulo: anuncio.titulo,
+        descricao: linha.texto || anuncio.descricao,
+        preco: anuncio.preco,
+        condicao: anuncio.condicao === 'usado' ? 'usado' : 'novo',
+        fotos,
+      });
+      return prisma.jarvisAnuncioCanal.update({
+        where: { id: linha.id },
+        data: { situacao: 'PUBLICADO', idExterno: r.id, url: r.permalink, publicadoEm: new Date(), erro: null },
+      });
+    } catch (e: any) {
+      // o erro do ML diz o que falta (foto, categoria, atributo): vai inteiro para a tela
+      const msg = String(e?.message || e).slice(0, 400);
+      const faltaLigar = /ML_NAO_CONECTADO|SEM_CREDENCIAL/.test(String(e?.code ?? ''));
+      return prisma.jarvisAnuncioCanal.update({
+        where: { id: linha.id },
+        data: { situacao: faltaLigar ? 'PRECISA_CONFIGURAR' : 'ERRO', erro: msg },
+      });
+    }
+  }
+
+  // Site, blog e Meta entram nas próximas etapas do docs/JARVIS.md. Até lá, dizemos o que falta.
   const motivo = `${info.rotulo}: ainda não conectado. ${info.observacao}`;
   return prisma.jarvisAnuncioCanal.update({
     where: { id: linha.id },

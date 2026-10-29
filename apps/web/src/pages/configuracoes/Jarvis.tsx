@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Bot, Save, Zap } from 'lucide-react';
+import { Bot, LinkIcon, Save, Unplug, Zap } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { Badge, Button, FormSkeleton, Input, PageHeader, Secao, Switch } from '@/components/ui';
 
@@ -25,15 +25,28 @@ interface ConfigJarvis {
   diasEstoqueParado: number;
   ultimaRodadaEm?: string | null;
   ultimoErro?: string | null;
+  mlClientId: string | null;
+  mlTemSecret: boolean;
+  mlSecretMascarado: string | null;
+  mlListingType: string;
+}
+
+interface StatusMl {
+  conectado: boolean;
+  configurado: boolean;
+  apelido?: string | null;
+  expiraEm?: string | null;
+  redirectUri: string;
 }
 
 export default function ConfigJarvis() {
   const qc = useQueryClient();
   const { data: cfg, isLoading } = useQuery({ queryKey: ['jarvis-config'], queryFn: () => api.get<ConfigJarvis>('/jarvis/config'), retry: 0 });
-  const [form, setForm] = useState<(ConfigJarvis & { chaveAnthropic: string }) | null>(null);
+  const [form, setForm] = useState<(ConfigJarvis & { chaveAnthropic: string; mlClientSecret: string }) | null>(null);
+  const { data: ml } = useQuery({ queryKey: ['jarvis-ml-status'], queryFn: () => api.get<StatusMl>('/jarvis/ml/status'), retry: 0 });
 
   useEffect(() => {
-    if (cfg && !form) setForm({ ...cfg, chaveAnthropic: '', dataAlvo: cfg.dataAlvo ? cfg.dataAlvo.slice(0, 10) : null });
+    if (cfg && !form) setForm({ ...cfg, chaveAnthropic: '', mlClientSecret: '', dataAlvo: cfg.dataAlvo ? cfg.dataAlvo.slice(0, 10) : null });
   }, [cfg, form]);
 
   const salvar = useMutation({
@@ -50,12 +63,15 @@ export default function ConfigJarvis() {
         percCompraLacrado: form?.percCompraLacrado,
         percLojaConsignado: form?.percLojaConsignado,
         diasEstoqueParado: form?.diasEstoqueParado,
+        mlClientId: form?.mlClientId || null,
+        mlClientSecret: form?.mlClientSecret || undefined,
       }),
     onSuccess: () => {
       toast.success('JARVIS atualizado.');
       qc.invalidateQueries({ queryKey: ['jarvis-config'] });
       qc.invalidateQueries({ queryKey: ['jarvis-painel'] });
-      setForm((f) => (f ? { ...f, chaveAnthropic: '' } : f));
+      qc.invalidateQueries({ queryKey: ['jarvis-ml-status'] });
+      setForm((f) => (f ? { ...f, chaveAnthropic: '', mlClientSecret: '' } : f));
     },
     onError: (e) => toast.error(mensagemErro(e)),
   });
@@ -66,8 +82,20 @@ export default function ConfigJarvis() {
     onError: (e) => toast.error(mensagemErro(e)),
   });
 
+  const conectarMl = useMutation({
+    mutationFn: () => api.post<{ url: string }>('/jarvis/ml/conectar', {}),
+    onSuccess: (r) => { window.open(r.url, '_blank', 'noopener'); toast.info('Autorize na aba que abriu e volte aqui.'); },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
+
+  const desconectarMl = useMutation({
+    mutationFn: () => api.post('/jarvis/ml/desconectar', {}),
+    onSuccess: () => { toast.success('Conta do Mercado Livre desconectada.'); qc.invalidateQueries({ queryKey: ['jarvis-ml-status'] }); },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
+
   if (isLoading || !form) return <FormSkeleton />;
-  const set = (campos: Partial<ConfigJarvis & { chaveAnthropic: string }>) => setForm((f) => (f ? { ...f, ...campos } : f));
+  const set = (campos: Partial<ConfigJarvis & { chaveAnthropic: string; mlClientSecret: string }>) => setForm((f) => (f ? { ...f, ...campos } : f));
 
   return (
     <>
@@ -185,6 +213,43 @@ export default function ConfigJarvis() {
             onChange={(e) => set({ diasEstoqueParado: Number(e.target.value) })}
           />
         </div>
+      </Secao>
+
+      <Secao
+        titulo="Mercado Livre"
+        descricao="Para o botão Anunciar publicar de verdade. Crie a aplicação em developers.mercadolivre.com.br e cole as credenciais aqui — o Client Secret é criptografado e nunca mais volta para esta tela."
+        acoes={ml ? <Badge tom={ml.conectado ? 'verde' : ml.configurado ? 'amarelo' : 'cinza'} ponto>{ml.conectado ? `Conectado${ml.apelido ? ` (${ml.apelido})` : ''}` : ml.configurado ? 'Falta conectar a conta' : 'Não configurado'}</Badge> : null}
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <Input label="Client ID (ID do aplicativo)" value={form.mlClientId ?? ''} onChange={(e) => set({ mlClientId: e.target.value })} autoComplete="off" placeholder="3415778559288261" />
+          <Input
+            label="Client Secret (chave secreta)"
+            type="password"
+            value={form.mlClientSecret}
+            onChange={(e) => set({ mlClientSecret: e.target.value })}
+            placeholder={form.mlTemSecret ? '•••••••• (guardado — preencha só para trocar)' : ''}
+            autoComplete="new-password"
+          />
+        </div>
+        <p className="mt-3 text-xs text-slate-500">
+          No cadastro da aplicação, use exatamente este <strong>Redirect URI</strong>:{' '}
+          <code className="inline-block max-w-full overflow-x-auto whitespace-nowrap rounded bg-slate-100 px-1 align-middle">{ml?.redirectUri ?? '—'}</code>
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            variante="secundario"
+            icone={<LinkIcon className="h-4 w-4" />}
+            carregando={conectarMl.isPending}
+            disabled={!form.mlClientId || !(form.mlTemSecret || form.mlClientSecret)}
+            onClick={() => conectarMl.mutate()}
+          >
+            {ml?.conectado ? 'Conectar outra conta' : 'Conectar minha conta'}
+          </Button>
+          {ml?.conectado ? (
+            <Button variante="perigo" icone={<Unplug className="h-4 w-4" />} carregando={desconectarMl.isPending} onClick={() => desconectarMl.mutate()}>Desconectar</Button>
+          ) : null}
+        </div>
+        <p className="mt-2 text-xs text-slate-400">Salve as credenciais antes de conectar. A autorização abre numa aba do Mercado Livre; ao voltar, atualize esta tela.</p>
       </Secao>
     </>
   );

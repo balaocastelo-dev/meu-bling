@@ -1996,6 +1996,17 @@ model JarvisConfig {
   ultimaRodadaEm     DateTime?
   ultimoErro         String?
   atualizadoEm       DateTime  @updatedAt
+
+  // ---- Mercado Livre (docs/JARVIS.md §8). Segredos com enc: (AES-256-GCM / APP_SECRET)
+  mlClientId     String?
+  mlClientSecret String?
+  mlAccessToken  String?
+  mlRefreshToken String?
+  mlExpiraEm     DateTime?
+  mlUserId       String?
+  mlApelido      String?
+  /// tipo de anúncio padrão no ML (gold_special = clássico)
+  mlListingType  String    @default("gold_special")
 }
 
 // ---------------------------------------------------------------------------
