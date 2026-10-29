@@ -46,7 +46,7 @@ export default function Smtp() {
   if (isLoading || !form) return <FormSkeleton />;
 
   return (
-    <div className="max-w-3xl pb-6">
+    <div className="pb-6">
       <PageHeader migalhas={[{ rotulo: 'Configurações', para: '/configuracoes' }, { rotulo: 'E-mail (SMTP)' }]} titulo="E-mail (SMTP)" descricao="Servidor usado para enviar pedidos, NF-e (XML+DANFE) e notificações por e-mail." acoes={<Button variante="primario" icone={<Save className="h-4 w-4" />} carregando={salvar.isPending} onClick={() => salvar.mutate(form)}>Salvar</Button>} />
       <div className="space-y-4">
         <Secao titulo="Servidor" acoes={<Switch checked={form.smtpAtivo} onChange={(v) => set('smtpAtivo', v)} label={form.smtpAtivo ? 'Ativo' : 'Inativo'} />}>

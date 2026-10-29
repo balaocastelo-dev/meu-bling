@@ -28,7 +28,7 @@ export default function MercadoPago() {
   if (isLoading) return <FormSkeleton />;
   const tem = !!emp?.mercadoPago?.temToken;
   return (
-    <div className="max-w-3xl pb-6">
+    <div className="pb-6">
       <PageHeader
         migalhas={[{ rotulo: 'Configurações', para: '/configuracoes' }, { rotulo: 'Mercado Pago' }]}
         titulo="Mercado Pago"

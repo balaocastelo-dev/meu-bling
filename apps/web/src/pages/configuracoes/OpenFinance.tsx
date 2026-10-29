@@ -33,7 +33,7 @@ export default function OpenFinance() {
   if (isLoading || !form) return <FormSkeleton />;
 
   return (
-    <div className="max-w-3xl pb-6">
+    <div className="pb-6">
       <PageHeader
         migalhas={[{ rotulo: 'Configurações', para: '/configuracoes' }, { rotulo: 'Open Finance' }]}
         titulo="Open Finance (Pluggy)"
@@ -58,7 +58,7 @@ export default function OpenFinance() {
             </li>
           </ol>
           <Link to="/financeiro/bancos" className="mt-3 inline-block"><Button variante="secundario" icone={<PlugZap className="h-4 w-4" />}>Ir para Bancos</Button></Link>
-          <p className="mt-3 text-xs text-slate-400">Webhook (opcional): cadastre na Pluggy a URL <code className="break-all rounded bg-slate-100 px-1">{location.origin}{API_BASE}/webhooks/pluggy</code> para sincronizar assim que o banco atualizar. Sem webhook, o sistema sincroniza sozinho a cada 30 minutos.</p>
+          <p className="mt-3 text-xs text-slate-400">Webhook (opcional): cadastre na Pluggy a URL <code className="inline-block max-w-full overflow-x-auto whitespace-nowrap rounded bg-slate-100 px-1 align-middle">{location.origin}{API_BASE}/webhooks/pluggy</code> para sincronizar assim que o banco atualizar. Sem webhook, o sistema sincroniza sozinho a cada 30 minutos.</p>
         </Secao>
       </div>
     </div>

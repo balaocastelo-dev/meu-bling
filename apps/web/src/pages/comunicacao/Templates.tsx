@@ -139,8 +139,8 @@ export default function Templates() {
                   <button onClick={() => setSel(t.id)} className={clsx('flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-slate-50', sel === t.id && 'bg-brand-50/60')}>
                     <span className="mt-0.5 text-slate-400">{t.canal === 'WHATSAPP' ? <MessageCircle className="h-4 w-4 text-emerald-600" /> : <Mail className="h-4 w-4 text-blue-600" />}</span>
                     <span className="min-w-0 flex-1">
-                      <span className={clsx('block truncate text-sm font-medium', t.ativo ? 'text-slate-800' : 'text-slate-400 line-through')}>{t.nome}</span>
-                      <span className="block truncate text-xs text-slate-400">{rotulo(t.evento)}{t.situacao ? ` → ${t.situacao.nome}` : t.situacaoId ? ` → #${t.situacaoId}` : ''}</span>
+                      <span className={clsx('block text-sm font-medium leading-snug', t.ativo ? 'text-slate-800' : 'text-slate-400 line-through')}>{t.nome}</span>
+                      <span className="block text-xs leading-snug text-slate-400">{rotulo(t.evento)}{t.situacao ? ` → ${t.situacao.nome}` : t.situacaoId ? ` → #${t.situacaoId}` : ''}</span>
                     </span>
                   </button>
                 </li>

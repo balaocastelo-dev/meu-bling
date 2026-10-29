@@ -125,7 +125,7 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
                       {colCorpo.map((c) => {
                         const v = c.render(linha, i);
                         // texto comprido (e-mail, endereço, código) ocupa a linha toda em vez de se partir no meio da palavra
-                        const longo = typeof v === 'string' && (v.includes('@') || v.length > 22);
+                        const longo = (typeof v === 'string' && (v.includes('@') || v.length > 22)) || (typeof c.titulo === 'string' && /e-?mail|url|endere[cç]o|link/i.test(c.titulo));
                         return (
                           <div key={c.chave} className={clsx('min-w-0', (c.noCartao === 'cheio' || longo) && 'col-span-2')}>
                             <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{c.titulo}</dt>
