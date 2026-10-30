@@ -116,6 +116,8 @@ export function paraVitrine(a: {
     prazoDias: a.prazoDias,
     garantiaDias: a.produto.garantiaDias,
     atendeCom: a.tecnico?.nome ?? a.vendedor?.nome ?? null,
-    link: `/a/${a.codigo}`,
+    // caminho da página NO SITE (repositório balao2026), não uma tela do sistema — por isso não se
+    // chama "link": nesta base, `link:` é sempre tela interna, e o teste de links confere isso.
+    caminhoNoSite: `/a/${a.codigo}`,
   };
 }

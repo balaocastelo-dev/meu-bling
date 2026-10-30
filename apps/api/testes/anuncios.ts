@@ -79,7 +79,7 @@ async function main() {
   verifica(naVitrine?.atendeCom === tec.nome, 'a vitrine mostra o nome do técnico responsável', naVitrine?.atendeCom);
   verifica(naVitrine && !JSON.stringify(naVitrine).includes('400'), 'a vitrine não expõe o custo de 400', JSON.stringify(naVitrine).slice(0, 120));
   verifica(naVitrine?.precoAPartirDe === 800, 'serviço sem preço fechado mostra "a partir de"', naVitrine?.precoAPartirDe);
-  verifica(naVitrine?.link === `/a/${anTec.codigo}`, 'o link sai pronto para mandar no WhatsApp', naVitrine?.link);
+  verifica(naVitrine?.caminhoNoSite === `/a/${anTec.codigo}`, 'o caminho da página no site vem pronto para montar o link', naVitrine?.caminhoNoSite);
   const umSo = await publico(`anuncios/${anTec.codigo}`);
   verifica(umSo?.titulo === anTec.titulo, 'a página do anúncio abre pelo código');
 
