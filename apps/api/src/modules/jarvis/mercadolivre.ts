@@ -137,10 +137,9 @@ export async function tokenValido(): Promise<string> {
 }
 
 export async function desconectar() {
-  await prisma.jarvisConfig.update({
-    where: { id: 1 },
-    data: { mlAccessToken: null, mlRefreshToken: null, mlExpiraEm: null, mlUserId: null, mlApelido: null },
-  });
+  // upsert: desconectar pode ser a primeira coisa que toca a configuração (banco novo)
+  const limpo = { mlAccessToken: null, mlRefreshToken: null, mlExpiraEm: null, mlUserId: null, mlApelido: null };
+  await prisma.jarvisConfig.upsert({ where: { id: 1 }, update: limpo, create: { id: 1, ...limpo } });
 }
 
 async function chamar<T>(caminho: string, opcoes: { metodo?: string; corpo?: unknown } = {}): Promise<T> {
@@ -174,6 +173,9 @@ export async function publicarItem(p: {
   titulo: string; descricao: string; preco: number; condicao: 'novo' | 'usado';
   quantidade?: number; fotos: string[]; categoriaId?: string | null; listingType?: string;
 }): Promise<ResultadoPublicacao> {
+  // A conta vem PRIMEIRO: sem ela ligada, não adianta mandar cadastrar foto — o que falta é conectar.
+  // (Antes o "sem foto" vinha antes e escondia o motivo real, virando ERRO em vez de PRECISA_CONFIGURAR.)
+  await tokenValido();
   if (!p.fotos.length) {
     throw new AppError('O Mercado Livre não aceita anúncio sem foto. Cadastre uma imagem no produto.', 422, 'SEM_FOTO');
   }
