@@ -97,6 +97,23 @@ interface Panorama {
   porTecnico: { id: number | null; nome: string; valor: number; qtd: number; lucro: number }[];
 }
 
+interface Geral {
+  hoje: { vendas: number; valorVendas: number; osAbertas: number; osConcluidasHoje: number };
+  financeiro: {
+    saldoTotal: number;
+    saldoContas: { id: number; nome: string; saldo: number; tipo?: string }[];
+    receberHoje: number;
+    receberAtrasado: number;
+    pagarHoje: number;
+    pagarAtrasado: number;
+  } | null;
+  os: { porSituacao: { id: number; nome: string; cor: string | null; qtd: number }[]; atrasadas: number };
+  vendas: { porSituacao: { id: number; nome: string; cor: string | null; qtd: number }[]; realizadasNoMes: number };
+  estoque: { abaixoMinimo: { produtoId: number; nome: string; codigo: string | null; saldo: number; estoqueMinimo: number }[]; qtdAbaixoMinimo: number };
+  comissoes: { pendentes: number; valorPendente: number } | null;
+  alertas: { tipo: 'erro' | 'aviso' | 'info'; mensagem: string; link: string }[];
+}
+
 interface Placar {
   aceitas: number;
   recusadas: number;
@@ -167,6 +184,18 @@ const ATALHOS: { icone: typeof Wallet; cor: string; titulo: string; dica: string
  * atalhos. O tablet é uma imagem (tablet.svg) — o vidro é só um recorte por onde
  * o chat aparece, nas medidas exatas do desenho.
  */
+/** Número pequeno dentro de um card: rótulo, valor e uma linha de apoio. */
+function Miniatura({ rotulo, valor, sub, tom }: { rotulo: string; valor: string; sub?: string; tom: 'verde' | 'vermelho' | 'amarelo' | 'neutro' }) {
+  const cor = tom === 'verde' ? 'text-emerald-600' : tom === 'vermelho' ? 'text-rose-600' : tom === 'amarelo' ? 'text-amber-600' : 'text-slate-900';
+  return (
+    <div className="rounded-xl px-3 py-2 ring-1 ring-slate-200">
+      <p className="text-xs text-slate-500">{rotulo}</p>
+      <p className={`text-lg font-semibold tabular-nums ${cor}`}>{valor}</p>
+      {sub && <p className="text-xs text-slate-400">{sub}</p>}
+    </div>
+  );
+}
+
 function PostoJarvis({ rodar, rodando }: { rodar: () => void; rodando: boolean }) {
   const [hora, setHora] = useState(() => new Date());
   const controle = useRef<ControleChat | null>(null);
@@ -238,6 +267,14 @@ export default function Jarvis() {
   });
 
   const { data: placar } = useQuery({ queryKey: ['jarvis-placar'], queryFn: () => api.get<Placar>('/jarvis/placar'), retry: 0 });
+
+  // o retrato de agora: hoje, atrasados, pipeline, estoque e alertas do sistema
+  const { data: geral } = useQuery({
+    queryKey: ['jarvis-geral'],
+    queryFn: () => api.get<Geral>('/dashboard/geral'),
+    refetchInterval: 60_000,
+    retry: 0,
+  });
 
   // números reais da operação, do mesmo lugar que alimenta os dashboards do sistema
   const { data: pano } = useQuery({
@@ -324,6 +361,153 @@ export default function Jarvis() {
         )}
       </CardV18>
     </div>
+  );
+
+  const fin = geral?.financeiro;
+  const atrasado = (fin?.receberAtrasado ?? 0) + (fin?.pagarAtrasado ?? 0);
+  const contasComSaldo = (fin?.saldoContas ?? []).filter((c) => Math.abs(c.saldo) > 0.005);
+  const pipelineVendas = (geral?.vendas.porSituacao ?? []).filter((x) => x.qtd > 0);
+  const pipelineOs = (geral?.os.porSituacao ?? []).filter((x) => x.qtd > 0);
+  const faltando = geral?.estoque.abaixoMinimo ?? [];
+  const alertas = geral?.alertas ?? [];
+
+  /** O que está acontecendo hoje — independe do filtro de data. */
+  const cardHoje = (
+    <CardV18 titulo="Hoje na loja" descricao="agora, sem depender do filtro acima" icone={<CalendarClock className="h-4 w-4" />} tom="azul">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <Miniatura rotulo="Vendido hoje" valor={moeda(geral?.hoje.valorVendas ?? 0)} sub={`${numero(geral?.hoje.vendas ?? 0, 0)} venda(s)`} tom="verde" />
+        <Miniatura rotulo="OS abertas" valor={numero(geral?.hoje.osAbertas ?? 0, 0)} sub="na bancada" tom="neutro" />
+        <Miniatura rotulo="OS concluídas hoje" valor={numero(geral?.hoje.osConcluidasHoje ?? 0, 0)} sub="prontas" tom="verde" />
+        <Miniatura
+          rotulo="Comissões a aprovar"
+          valor={moeda(geral?.comissoes?.valorPendente ?? 0)}
+          sub={`${numero(geral?.comissoes?.pendentes ?? 0, 0)} pendente(s)`}
+          tom={(geral?.comissoes?.pendentes ?? 0) > 0 ? 'amarelo' : 'neutro'}
+        />
+      </div>
+    </CardV18>
+  );
+
+  /** Dinheiro parado: atrasado é o que mais rápido vira caixa. */
+  const cardAtrasados = (
+    <CardV18
+      titulo="A receber e a pagar"
+      descricao={atrasado > 0 ? 'o atrasado é o caixa mais rápido de recuperar' : 'nada atrasado'}
+      icone={<HandCoins className="h-4 w-4" />}
+      tom={(fin?.receberAtrasado ?? 0) > 0 ? 'amarelo' : 'verde'}
+    >
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <Miniatura rotulo="Receber atrasado" valor={moeda(fin?.receberAtrasado ?? 0)} sub="já venceu" tom={(fin?.receberAtrasado ?? 0) > 0 ? 'amarelo' : 'neutro'} />
+        <Miniatura rotulo="Receber hoje" valor={moeda(fin?.receberHoje ?? 0)} sub="vence hoje" tom="verde" />
+        <Miniatura rotulo="Pagar atrasado" valor={moeda(fin?.pagarAtrasado ?? 0)} sub="já venceu" tom={(fin?.pagarAtrasado ?? 0) > 0 ? 'vermelho' : 'neutro'} />
+        <Miniatura rotulo="Pagar hoje" valor={moeda(fin?.pagarHoje ?? 0)} sub="vence hoje" tom="vermelho" />
+      </div>
+      {contasComSaldo.length > 0 && (
+        <div className="mt-3">
+          <p className="mb-1.5 text-xs font-medium text-slate-500">Saldo de cada conta</p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {contasComSaldo.map((c) => (
+              <div key={c.id} className="flex items-baseline justify-between gap-2 rounded-lg px-3 py-2 ring-1 ring-slate-200">
+                <span className="min-w-0 truncate text-sm text-slate-600">{c.nome}</span>
+                <span className={`shrink-0 text-sm font-semibold tabular-nums ${c.saldo < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{moeda(c.saldo)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </CardV18>
+  );
+
+  /** Em que pé estão vendas e OS — onde o trabalho está parado. */
+  const cardPipeline = (
+    <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
+      <CardV18 titulo="Vendas por situação" descricao={`${numero(geral?.vendas.realizadasNoMes ?? 0, 0)} fechada(s) no mês`} icone={<Tag className="h-4 w-4" />}>
+        {!pipelineVendas.length ? (
+          <EmptyState compacto titulo="Nenhuma venda em aberto" descricao="Tudo fechado ou cancelado." />
+        ) : (
+          <div className="space-y-2">
+            {pipelineVendas.map((x) => (
+              <BarraRanking key={x.id} nome={x.nome} valor={x.qtd} maximo={Math.max(...pipelineVendas.map((y) => y.qtd))} moeda={(n) => numero(n, 0)} cor={x.cor || '#2563eb'} />
+            ))}
+          </div>
+        )}
+      </CardV18>
+
+      <CardV18
+        titulo="OS por situação"
+        descricao={(geral?.os.atrasadas ?? 0) > 0 ? `${numero(geral!.os.atrasadas, 0)} atrasada(s)` : 'nenhuma atrasada'}
+        icone={<Wrench className="h-4 w-4" />}
+        tom={(geral?.os.atrasadas ?? 0) > 0 ? 'amarelo' : 'neutro'}
+      >
+        {!pipelineOs.length ? (
+          <EmptyState compacto titulo="Nenhuma OS em aberto" descricao="A bancada está limpa." />
+        ) : (
+          <div className="space-y-2">
+            {pipelineOs.map((x) => (
+              <BarraRanking key={x.id} nome={x.nome} valor={x.qtd} maximo={Math.max(...pipelineOs.map((y) => y.qtd))} moeda={(n) => numero(n, 0)} cor={x.cor || '#8b5cf6'} />
+            ))}
+          </div>
+        )}
+      </CardV18>
+    </div>
+  );
+
+  /** O que falta comprar, pela regra de estoque mínimo do próprio cadastro. */
+  const cardEstoque = (
+    <CardV18
+      titulo="Abaixo do estoque mínimo"
+      descricao={`${numero(geral?.estoque.qtdAbaixoMinimo ?? 0, 0)} produto(s)`}
+      icone={<Boxes className="h-4 w-4" />}
+      tom="amarelo"
+      acoes={
+        <Button variante="secundario" tamanho="xs" onClick={() => nav('/estoque?abaixoMinimo=true')}>
+          Ver tudo
+        </Button>
+      }
+    >
+      {!faltando.length ? (
+        <EmptyState compacto titulo="Nada abaixo do mínimo" descricao="O estoque dos produtos com mínimo definido está em dia." />
+      ) : (
+        <div className="space-y-1.5">
+          {faltando.slice(0, 8).map((e) => (
+            <div key={e.produtoId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-1.5 ring-1 ring-slate-200">
+              <span className="min-w-0 flex-1 truncate text-sm text-slate-700">
+                {e.nome}
+                {e.codigo && <span className="ml-1.5 text-xs text-slate-400">{e.codigo}</span>}
+              </span>
+              <span className="shrink-0 text-sm tabular-nums">
+                <strong className="text-rose-600">{numero(e.saldo, 0)}</strong>
+                <span className="text-slate-400"> / mín. {numero(e.estoqueMinimo, 0)}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </CardV18>
+  );
+
+  /** O que o próprio sistema está reclamando. */
+  const cardAlertas = (
+    <CardV18 titulo="O sistema está avisando" descricao={`${alertas.length} aviso(s)`} icone={<TrendingDown className="h-4 w-4" />} tom="vermelho">
+      {!alertas.length ? (
+        <EmptyState compacto titulo="Nada para avisar" descricao="Nenhuma pendência de nota, estoque, WhatsApp ou comissão." />
+      ) : (
+        <div className="space-y-1.5">
+          {alertas.map((a, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => nav(a.link)}
+              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ring-1 transition hover:bg-slate-50 ${
+                a.tipo === 'erro' ? 'text-rose-700 ring-rose-200' : a.tipo === 'aviso' ? 'text-amber-800 ring-amber-200' : 'text-slate-600 ring-slate-200'
+              }`}
+            >
+              <span className="min-w-0 flex-1 truncate">{a.mensagem}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </CardV18>
   );
 
   const serieOperacao = pano?.series ?? [];
@@ -469,7 +653,12 @@ export default function Jarvis() {
   const comConteudo = [
     { chave: 'sugestoes', tem: temSugestoes, conteudo: cardSugestoes },
     { chave: 'evolucao', tem: temEvolucao, conteudo: cardEvolucao },
+    { chave: 'hoje', tem: !!geral, conteudo: cardHoje },
+    { chave: 'alertas', tem: alertas.length > 0, conteudo: cardAlertas },
+    { chave: 'atrasados', tem: !!fin, conteudo: cardAtrasados },
     { chave: 'operacao', tem: temOperacao, conteudo: cardOperacao },
+    { chave: 'pipeline', tem: pipelineVendas.length > 0 || pipelineOs.length > 0, conteudo: cardPipeline },
+    { chave: 'estoque', tem: faltando.length > 0, conteudo: cardEstoque },
     { chave: 'equipe', tem: !!(pano?.porVendedor.length || pano?.porTecnico.length), conteudo: cardEquipe },
     { chave: 'caixa', tem: temOperacao, conteudo: cardCaixa },
     { chave: 'contas', tem: temContas, conteudo: cardContas },
