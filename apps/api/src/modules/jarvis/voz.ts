@@ -18,6 +18,8 @@ import { env } from '../../lib/env.js';
 import { azureLigada, falaAzure } from './voz-azure.js';
 
 const SERVIDOR = process.env.VOZ_CLONE_URL || 'http://172.16.1.1:8770';
+/** Kokoro: a reserva local e gratuita que roda na CPU do PC-servidor da loja. */
+const KOKORO = process.env.VOZ_KOKORO_URL || 'http://172.16.1.1:8771';
 /** Mais passos = fala mais natural. A URA fica em 16 (ligação não espera); aqui dá para 32. */
 const PASSOS = Number(process.env.JARVIS_VOZ_PASSOS || 32);
 const PERFIL = process.env.VOZ_CLONE_PERFIL || '2af6be27'; // "Thiago herrera 3"
@@ -39,12 +41,8 @@ const ESPERA_MS = 8_000;
  * com a voz do navegador.
  */
 const PAUSA_APOS_FALHA_MS = 60_000;
-let falhouEm = 0;
-
-/** Depois de uma falha recente, nem tenta: devolve na hora para não travar a fala. */
-function emPausa(): boolean {
-  return falhouEm > 0 && Date.now() - falhouEm < PAUSA_APOS_FALHA_MS;
-}
+/** Última falha de cada servidor de voz: o Kokoro cair não pode calar a clonada junto. */
+const falhas = new Map<string, number>();
 
 function digital(texto: string, marca: string): string {
   return crypto.createHash('sha1').update(`${marca}|${texto}`).digest('hex');
@@ -54,18 +52,52 @@ function digital(texto: string, marca: string): string {
 function vozEscolhida() {
   return azureLigada()
     ? { marca: `az|${process.env.JARVIS_VOZ_AZURE || 'thalita'}`, ext: 'mp3', tipo: 'audio/mpeg' as const }
-    : { marca: `cl|${PERFIL}|${TAXA}|${PASSOS}`, ext: 'wav', tipo: 'audio/wav' as const };
+    : { marca: `ko|${process.env.VOZ_KOKORO_VOZ || 'pf_dora'}`, ext: 'wav', tipo: 'audio/wav' as const };
+}
+
+/** Pede a frase a um servidor de voz do PC da loja (Kokoro ou a clonada). */
+async function falaDoPc(url: string, corpo: object): Promise<Buffer | null> {
+  // a pausa é por servidor: o Kokoro cair não pode calar a voz clonada junto
+  const ultima = falhas.get(url) ?? 0;
+  if (ultima > 0 && Date.now() - ultima < PAUSA_APOS_FALHA_MS) return null;
+  try {
+    const r = await fetch(`${url}/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo),
+      signal: AbortSignal.timeout(ESPERA_MS),
+    });
+    if (!r.ok) throw new Error(String(r.status));
+    const wav = Buffer.from(await r.arrayBuffer());
+    if (wav.length < 100) throw new Error('vazio');
+    falhas.delete(url); // voltou a responder
+    return wav;
+  } catch {
+    // As duas vozes moram no mesmo PC, atrás do mesmo túnel: se uma não atende,
+    // a outra também não vai atender. Marcar as duas evita esperar dois tempos
+    // seguidos — numa conversa, isso é o chefe olhando a tela em silêncio.
+    const agora = Date.now();
+    falhas.set(KOKORO, agora);
+    falhas.set(SERVIDOR, agora);
+    return null;
+  }
 }
 
 /** O PC está no ar e com a voz carregada? */
 export async function vozDisponivel(): Promise<boolean> {
   if (azureLigada()) return true;
   try {
+    const k = await fetch(`${KOKORO}/saude`, { signal: AbortSignal.timeout(2500) });
+    if (k.ok && ((await k.json()) as { ok?: boolean }).ok) return true;
+  } catch {
+    /* sem Kokoro: tenta a clonada */
+  }
+  try {
     const r = await fetch(`${SERVIDOR}/saude`, { signal: AbortSignal.timeout(2500) });
     if (!r.ok) return false;
     const s = (await r.json()) as { ok?: boolean };
     if (s.ok === true) {
-      falhouEm = 0; // respondeu: pode tentar falar de novo
+      falhas.delete(SERVIDOR); // respondeu: pode tentar falar de novo
       return true;
     }
     return false;
@@ -101,11 +133,17 @@ export async function falaDe(texto: string): Promise<{ audio: Buffer; tipo: stri
     return { audio: mp3, tipo: 'audio/mpeg' };
   }
 
-  // 2ª: a voz do PC da loja (o cache dela tem marca própria)
-  const wav = await falaClonada(limpo);
+  // 2ª: Kokoro, grátis, na CPU do PC da loja
+  const kokoro = await falaDoPc(KOKORO, { texto: limpo });
+  if (kokoro) {
+    await guardar(path.join(PASTA, `${digital(limpo, `ko|${process.env.VOZ_KOKORO_VOZ || 'pf_dora'}`)}.wav`), kokoro);
+    return { audio: kokoro, tipo: 'audio/wav' };
+  }
+
+  // 3ª: a voz clonada, na GPU do mesmo PC
+  const wav = await falaDoPc(SERVIDOR, { texto: limpo, perfil: PERFIL, taxa: TAXA, formato: 'wav', passos: PASSOS });
   if (!wav) return null;
-  const arquivoPc = path.join(PASTA, `${digital(limpo, `cl|${PERFIL}|${TAXA}|${PASSOS}`)}.wav`);
-  await guardar(arquivoPc, wav);
+  await guardar(path.join(PASTA, `${digital(limpo, `cl|${PERFIL}|${TAXA}|${PASSOS}`)}.wav`), wav);
   return { audio: wav, tipo: 'audio/wav' };
 }
 
@@ -119,31 +157,3 @@ async function guardar(arquivo: string, audio: Buffer) {
   }
 }
 
-/** A voz que roda no PC-servidor da loja (reserva). */
-async function falaClonada(texto: string): Promise<Buffer | null> {
-  if (emPausa()) return null;
-
-  let resposta: Response;
-  try {
-    resposta = await fetch(`${SERVIDOR}/tts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ texto, perfil: PERFIL, taxa: TAXA, formato: 'wav', passos: PASSOS }),
-      signal: AbortSignal.timeout(ESPERA_MS),
-    });
-  } catch {
-    falhouEm = Date.now();
-    return null; // PC desligado, túnel caído ou GPU ocupada demais
-  }
-  if (!resposta.ok) {
-    falhouEm = Date.now();
-    return null;
-  }
-  const wav = Buffer.from(await resposta.arrayBuffer());
-  if (wav.length < 100) {
-    falhouEm = Date.now();
-    return null;
-  }
-  falhouEm = 0; // voltou a responder
-  return wav;
-}
