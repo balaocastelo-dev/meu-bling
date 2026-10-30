@@ -22,8 +22,26 @@ const TAXA = Number(process.env.VOZ_CLONE_TAXA || 24000); // 24 kHz: 8 kHz é qu
 const LIMITE_TEXTO = 600;
 const PASTA = path.join(env.STORAGE_DIR, 'voz');
 
-/** Quanto tempo esperar o PC: gerar leva menos de 1s, mas a fila é de uma frase por vez. */
-const ESPERA_MS = 20_000;
+/**
+ * Quanto tempo esperar o PC. Gerar uma frase leva menos de 1s; 8s já é folga larga.
+ * Esperar mais não ajuda e atrasa a conversa: numa ligação, cada frase que trava
+ * aqui é o chefe olhando para a tela em silêncio.
+ */
+const ESPERA_MS = 8_000;
+
+/**
+ * Memória de falha. Quando o PC está desligado, a tentativa só descobre isso
+ * depois de segundos — e numa ligação são várias frases seguidas pagando esse
+ * preço. Depois de uma falha, as próximas desistem na hora e a conversa segue
+ * com a voz do navegador.
+ */
+const PAUSA_APOS_FALHA_MS = 60_000;
+let falhouEm = 0;
+
+/** Depois de uma falha recente, nem tenta: devolve na hora para não travar a fala. */
+function emPausa(): boolean {
+  return falhouEm > 0 && Date.now() - falhouEm < PAUSA_APOS_FALHA_MS;
+}
 
 function digital(texto: string): string {
   return crypto.createHash('sha1').update(`${PERFIL}|${TAXA}|${texto}`).digest('hex');
@@ -35,7 +53,11 @@ export async function vozDisponivel(): Promise<boolean> {
     const r = await fetch(`${SERVIDOR}/saude`, { signal: AbortSignal.timeout(2500) });
     if (!r.ok) return false;
     const s = (await r.json()) as { ok?: boolean };
-    return s.ok === true;
+    if (s.ok === true) {
+      falhouEm = 0; // respondeu: pode tentar falar de novo
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -56,6 +78,9 @@ export async function falaDe(texto: string): Promise<Buffer | null> {
     /* frase nova */
   }
 
+  // o cache acima vale sempre; daqui para baixo é ir ao PC
+  if (emPausa()) return null;
+
   let resposta: Response;
   try {
     resposta = await fetch(`${SERVIDOR}/tts`, {
@@ -65,12 +90,20 @@ export async function falaDe(texto: string): Promise<Buffer | null> {
       signal: AbortSignal.timeout(ESPERA_MS),
     });
   } catch {
+    falhouEm = Date.now();
     return null; // PC desligado, túnel caído ou GPU ocupada demais
   }
-  if (!resposta.ok) return null;
+  if (!resposta.ok) {
+    falhouEm = Date.now();
+    return null;
+  }
 
   const wav = Buffer.from(await resposta.arrayBuffer());
-  if (wav.length < 100) return null;
+  if (wav.length < 100) {
+    falhouEm = Date.now();
+    return null;
+  }
+  falhouEm = 0; // voltou a responder
 
   // guarda para a próxima vez; se o disco falhar, o áudio vai do mesmo jeito
   try {

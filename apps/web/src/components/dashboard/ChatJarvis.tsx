@@ -99,7 +99,7 @@ export default function ChatJarvis({ controle }: { controle?: { current: Control
         resposta: string;
         fez?: string[];
         pendentes?: { nome: string; descricao: string; argumentos: Record<string, unknown> }[];
-      }>('/jarvis/perguntar', { pergunta, conversaId }),
+      }>('/jarvis/perguntar', { pergunta, conversaId, porVoz: emLigacaoRef.current }),
     onSuccess: (r) => {
       setTexto('');
       setConversaId(r.conversaId);
