@@ -46,6 +46,8 @@ export const RECURSOS: Recurso[] = [
 /** Nunca abrem para chave de API, qualquer que seja a permissão. */
 const BLOQUEADAS: { teste: RegExp; metodos?: string[] }[] = [
   { teste: /^\/usuarios(\/|$)/ },
+  // Painel de auditoria (reversão, agentes, senha do dia): só pela tela do ADMIN
+  { teste: /^\/auditoria\/painel(\/|$)/ },
   { teste: /^\/auth(\/|$)/ },
   { teste: /^\/api-externa(\/|$)/ },
   { teste: /^\/empresa\/(certificado|smtp|logo)/ },

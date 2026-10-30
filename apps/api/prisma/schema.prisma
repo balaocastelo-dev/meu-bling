@@ -1420,8 +1420,115 @@ model Auditoria {
   detalhes   String? // JSON
   ip         String?
   data       DateTime @default(now())
+  /// operação (requisição/rodada de robô) em que esta ação aconteceu — liga ao Painel de auditoria
+  operacaoId String?
 
   @@index([entidade, entidadeId])
+  @@index([operacaoId])
+}
+
+// ---------------------------------------------------------------------
+// PAINEL DE AUDITORIA (só ADMIN, com a senha do dia) — pedido do Thiago (29/10/2026)
+//
+// Toda gravação no banco (criar, alterar, excluir — inclusive itens aninhados e o que apaga em cascata)
+// vira um AuditoriaEvento com o registro ANTES e DEPOIS, agrupado na AuditoriaOperacao (uma requisição
+// da tela/API ou uma rodada de robô). É isso que permite reverter qualquer coisa que o sistema fez.
+// Captura feita pela extensão do Prisma em modules/auditoria/trilha.ts — nenhum módulo precisa chamar nada.
+// ---------------------------------------------------------------------
+
+/// Uma operação = uma requisição (POST /vendas/12/finalizar) ou uma rodada de serviço de fundo.
+model AuditoriaOperacao {
+  id            String    @id
+  inicio        DateTime  @default(now())
+  fim           DateTime?
+  usuarioId     Int?
+  /// nome de quem fez: "Julia", "API: n8n", "Agente de IA (MCP): …", "Robô da Saúde", "PDV do site", "Sistema"
+  usuario       String
+  /// TELA | API | MCP | SITE | SERVICO | REVERSAO
+  origem        String
+  /// "POST /vendas/12/finalizar" (ou o nome do serviço)
+  rota          String?
+  ip            String?
+  /// HTTP que a requisição devolveu (erro + gravações = dado possivelmente incompleto)
+  status        Int?
+  /// categoria principal (vendas, os, compras, financeiro, estoque, fiscal, cadastros, consignacao, comunicacao, acessos, configuracoes, sistema)
+  categoria     String    @default("sistema")
+  /// frase legível montada no fim ("Finalizou a venda nº 24891 — R$ 1.200,00")
+  descricao     String?
+  /// quando esta operação foi revertida pelo painel
+  revertidaEm   DateTime?
+  revertidaPor  String?
+  /// operação (reversão) que desfez esta
+  revertidaOpId String?
+  /// esta operação é uma reversão da operação X
+  reverteOpId   String?
+  eventos       AuditoriaEvento[]
+
+  @@index([inicio])
+  @@index([usuarioId, inicio])
+  @@index([categoria, inicio])
+}
+
+/// Uma linha (registro) que a operação criou, alterou ou excluiu, com o conteúdo antes e depois.
+model AuditoriaEvento {
+  id            Int               @id @default(autoincrement())
+  operacao      AuditoriaOperacao @relation(fields: [operacaoId], references: [id], onDelete: Cascade)
+  operacaoId    String
+  /// ordem dentro da operação (a reversão anda ao contrário)
+  sequencia     Int
+  quando        DateTime          @default(now())
+  tabela        String
+  registroId    Int?
+  /// chave de tabelas sem id numérico (Configuracao.chave, Sequencia.nome)
+  registroChave String?
+  /// CRIAR | ALTERAR | EXCLUIR
+  tipo          String
+  antes         String? // JSON do registro antes (ALTERAR, EXCLUIR)
+  depois        String? // JSON do registro depois (CRIAR, ALTERAR)
+  /// JSON: nomes dos campos que mudaram (ALTERAR)
+  campos        String?
+  /// CASCATA (apagado junto com o pai), ANINHADO (item gravado dentro do pai), DIRETO
+  modo          String            @default("DIRETO")
+  /// false: Sequencia (numeração), notas já na SEFAZ… — fica no histórico mas a reversão pula
+  reversivel    Boolean           @default(true)
+  revertidoEm   DateTime?
+
+  @@index([operacaoId, sequencia])
+  @@index([tabela, registroId])
+  @@index([quando])
+}
+
+/// O que os agentes de auditoria encontraram (padrões, inconsistências, coisas suspeitas).
+model AuditoriaAchado {
+  id           Int      @id @default(autoincrement())
+  /// código do agente (exclusoes, descontos, dinheiro, estoque, horarios, comissoes, consistencia, padroes, analista)
+  agente       String
+  /// identifica o achado (não repete enquanto estiver aberto)
+  chave        String   @unique
+  /// alto | medio | baixo
+  nivel        String
+  categoria    String
+  titulo       String
+  explicacao   String
+  /// JSON: [{ rotulo, link?, operacaoId? }]
+  evidencias   String?
+  usuarioId    Int?
+  usuario      String?
+  operacaoId   String?
+  tabela       String?
+  registroId   Int?
+  /// ABERTO | VISTO | IGNORADO | RESOLVIDO
+  status       String   @default("ABERTO")
+  vistoPor     String?
+  vistoEm      DateTime?
+  /// quantas rodadas seguidas o agente confirmou o achado
+  vezes        Int      @default(1)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([status, nivel])
+  @@index([agente, status])
+  @@index([usuarioId])
 }
 
 // ---------------------------------------------------------------------

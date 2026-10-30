@@ -19,6 +19,7 @@
  * do ADMIN. Some sozinho assim que o custo é preenchido. O DRE e os dashboards precisam desse custo real.
  */
 import { prisma } from '../../lib/prisma.js';
+import { comContexto } from '../auditoria/contexto.js';
 import { AppError } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
 import { arredondar } from '../../lib/util.js';
@@ -975,7 +976,8 @@ export function agendarRodada(folgaMs = 45_000, origem = 'movimento no sistema')
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
     timer = null;
-    void rodarRobo(origem);
+    // a rodada é do robô, não da requisição que a agendou (trilha de auditoria)
+    void comContexto({ origem: 'SERVICO', servico: 'robo-saude' }, () => rodarRobo(origem));
   }, folgaMs);
   timer.unref?.();
 }

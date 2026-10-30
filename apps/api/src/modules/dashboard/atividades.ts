@@ -190,6 +190,21 @@ const NOME_ENTIDADE: Record<string, string> = {
   Notificacao: 'a mensagem',
   Empresa: 'os dados da empresa',
   Configuracao: 'as configurações',
+  ChaveApi: 'a chave de API',
+  WebhookSaida: 'o webhook',
+  PainelAuditoria: 'o Painel de auditoria',
+  RoboSaude: 'o Robô da Saúde',
+  Caixinha: 'a caixinha',
+  Emprestimo: 'o empréstimo',
+  Carne: 'o carnê',
+  Consignacao: 'a consignação',
+  Lembrete: 'o lembrete',
+  MetaTecnico: 'a meta do técnico',
+  Tecnico: 'o técnico',
+  Deposito: 'o depósito',
+  FormaPagamento: 'a forma de pagamento',
+  CategoriaFinanceira: 'a categoria financeira',
+  CategoriaProduto: 'a categoria de produto',
 };
 
 const CANAL: Record<string, string> = { WHATSAPP: 'WhatsApp', EMAIL: 'e-mail' };
@@ -259,9 +274,17 @@ function descrever(entidade: string, acao: string, entidadeId: number | null, d:
     case 'EXCLUIR':
       return { texto: `${d.desativado ? 'desativou' : 'excluiu'} ${alvo}`, tom: 'vermelho', link: d.desativado ? link : null };
     case 'ALTERAR':
+      if (entidade === 'PainelAuditoria') return { texto: 'alterou as regras dos agentes de auditoria', tom: 'neutro', link: '/auditoria?aba=agentes' };
       return { texto: `alterou ${alvo}`, tom: 'neutro', link };
     case 'ACAO': {
       const a = String(d.acao ?? '');
+      if (entidade === 'PainelAuditoria') {
+        if (a === 'painel-entrar') return d.ok === false ? { texto: 'errou a senha do Painel de auditoria', tom: 'vermelho', link: '/auditoria' } : { texto: 'abriu o Painel de auditoria', tom: 'azul', link: '/auditoria' };
+        if (a === 'rodar-agentes') return { texto: 'rodou os agentes de auditoria', tom: 'neutro', link: '/auditoria?aba=agentes' };
+        if (a === 'analista') return { texto: `pediu a análise do Analista (Claude)${d.erro ? ' — sem sucesso' : ''}`, tom: 'neutro', link: '/auditoria?aba=agentes' };
+        if (a === 'analista-chave') return { texto: `${d.configurada ? 'configurou' : 'removeu'} a chave do Analista (Claude)`, tom: 'amarelo', link: '/auditoria?aba=agentes' };
+        return { texto: `${a.replace(/[-_.]/g, ' ')} no Painel de auditoria`, tom: 'neutro', link: '/auditoria' };
+      }
       if (a === 'notificar') return { texto: `enviou ${alvo} por ${CANAL[d.canal] ?? d.canal ?? 'mensagem'}${d.anexo ? ' (com PDF)' : ''}`, tom: 'azul', link };
       if (a === 'converter') return { texto: `converteu ${alvo} na venda nº ${d.numeroVenda ?? '?'}`, tom: 'verde', link: d.vendaId ? `/vendas/${d.vendaId}` : link };
       if (a === 'aprovarOrcamentoOnline') return { texto: `— cliente aprovou ${alvo} pelo link${d.nome ? ` (${d.nome})` : ''}`, tom: 'verde', link };
@@ -305,6 +328,21 @@ function duplicadoDeOutraFonte(entidade: string, acao: string, d: Record<string,
   if ((entidade === 'ContaReceber' || entidade === 'ContaPagar') && acao === 'ACAO' && ['baixar', 'receber', 'pagar'].includes(String(d.acao))) return true;
   if (entidade === 'MovimentoFinanceiro' && acao === 'CRIAR') return true;
   return false;
+}
+
+/**
+ * Frases legíveis de registros da Auditoria (usado pelo Painel de auditoria para descrever
+ * cada operação: "criou a venda nº 24891 — R$ 119,00 · cliente X").
+ */
+export async function descreverAuditorias(regs: { id: number; entidade: string; entidadeId: number | null; acao: string; detalhes: string | null }[]): Promise<{ id: number; texto: string; tom: Tom; link: string | null; categoria: CategoriaAcontecimento }[]> {
+  if (!regs.length) return [];
+  const comJson = regs.map((r) => ({ ...r, d: lerJson(r.detalhes) }));
+  const refs = await carregarReferencias(comJson);
+  return comJson.map((r) => {
+    const ref = r.entidadeId ? refs.get(`${r.entidade}:${r.entidadeId}`) : undefined;
+    const { texto, tom, link } = descrever(r.entidade, r.acao, r.entidadeId, r.d, ref);
+    return { id: r.id, texto, tom, link, categoria: categoriaDe(r.entidade, r.acao) };
+  });
 }
 
 const MODULO_ENTIDADE: Record<string, string> = { VENDA: 'Venda', ORCAMENTO: 'Orcamento', OS: 'OrdemServico', COMPRA: 'Compra' };

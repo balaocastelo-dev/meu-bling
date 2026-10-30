@@ -60,6 +60,7 @@ const NotaDetalhe = lazy(() => import('@/pages/fiscal/NotaDetalhe'));
 const NotaForm = lazy(() => import('@/pages/fiscal/NotaForm'));
 
 const Dre = lazy(() => import('@/pages/relatorios/Dre'));
+const PainelAuditoria = lazy(() => import('@/pages/auditoria/PainelAuditoria'));
 const Relatorios = lazy(() => import('@/pages/relatorios/Relatorios'));
 
 const Chat = lazy(() => import('@/pages/chat/Chat'));
@@ -197,6 +198,9 @@ export const router = createBrowserRouter(
       { path: 'comunicacao/notificacoes', element: S(<Notificacoes />) },
       { path: 'comunicacao/whatsapp', element: S(<Whatsapp />) },
       { path: 'comunicacao/templates', element: S(<Templates />) },
+
+      // Painel de auditoria: só ADMIN (e a senha do dia, pedida pela própria tela)
+      { path: 'auditoria', element: ADMIN(<PainelAuditoria />) },
 
       { path: 'configuracoes', element: GESTAO(<ConfigIndex />) },
       { path: 'configuracoes/empresa', element: GESTAO(<ConfigEmpresa />) },

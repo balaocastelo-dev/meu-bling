@@ -13,6 +13,7 @@
  * a situação, quando a nota é autorizada/cancelada, e numa varredura a cada 5 minutos.
  */
 import { prisma } from '../../lib/prisma.js';
+import { comContexto } from '../auditoria/contexto.js';
 import { auditar } from '../../lib/auditoria.js';
 import { verificarNfe, type PendenciaNfe } from '../comum/nfe-checagem.js';
 import { completarCliente } from './cliente.js';
@@ -186,7 +187,8 @@ export function agendarConferencia(vendaId: number, folgaMs = FOLGA_MS) {
     vendaId,
     setTimeout(() => {
       fila.delete(vendaId);
-      conferirVenda(vendaId).catch((e) => console.error('[robo-nf] erro ao conferir venda', vendaId, e));
+      // a conferência é do robô, não da requisição que a agendou (trilha de auditoria)
+      comContexto({ origem: 'SERVICO', servico: 'robo-nf' }, () => conferirVenda(vendaId)).catch((e) => console.error('[robo-nf] erro ao conferir venda', vendaId, e));
     }, folgaMs),
   );
 }

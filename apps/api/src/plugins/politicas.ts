@@ -53,6 +53,8 @@ const REGRAS: Regra[] = [
   { metodos: MUT, teste: /^\/situacoes(\/|$)/, perfis: ['ADMIN'] },
   { teste: /^\/bling(\/|$)/, perfis: ['ADMIN'] },
   { metodos: MUT, teste: /^\/open-finance\/(connect-token|vincular|desvincular)/, perfis: ['ADMIN'] },
+  // Painel de auditoria (trilha completa, reversão, agentes): só o dono, e ainda com a senha do dia (modules/auditoria/acesso.ts)
+  { teste: /^\/auditoria\/painel(\/|$)/, perfis: ['ADMIN'] },
   { teste: /^\/auditoria(\/|$)/, perfis: GESTAO },
   { teste: /^\/diagnostico(\/|$)/, perfis: ['ADMIN'] },
   // lembretes do Robô da Saúde para quem está logado (OS sem custo → técnico, venda sem custo → vendedor): todos
