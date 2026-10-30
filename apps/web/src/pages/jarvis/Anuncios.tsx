@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Check, Copy, ExternalLink, Megaphone, Send, Sparkles } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { Badge, Button, EmptyState, Input, Modal, PageHeader, Secao, SearchSelect } from '@/components/ui';
+import { AnunciarModal } from '@/components/compartilhados/AnunciarModal';
 
 interface InfoCanal { canal: string; rotulo: string; modo: 'api' | 'kit'; observacao: string; link?: string; limiteTitulo?: number }
 interface CanalAnuncio { id: number; canal: string; situacao: string; url: string | null; erro: string | null; texto: string | null; publicadoEm: string | null; publicadoPor: string | null }
@@ -11,7 +12,6 @@ interface Anuncio {
   id: number; criadoEm: string; titulo: string; descricao: string; preco: number; condicao: string;
   fotos: string[]; geradoPorIa: boolean; canais: CanalAnuncio[]; produto?: { id: number; nome: string; imagemUrl: string | null } | null;
 }
-interface Rascunho { titulo: string; descricao: string; porCanal: Record<string, string>; geradoPorIa: boolean; preco: number; fotos: string[]; produtoId: number }
 
 const TOM: Record<string, 'verde' | 'amarelo' | 'vermelho' | 'cinza' | 'azul'> = {
   PUBLICADO: 'verde', KIT_PRONTO: 'azul', PENDENTE: 'amarelo', PRECISA_CONFIGURAR: 'amarelo', ERRO: 'vermelho',
@@ -24,8 +24,7 @@ const dinheiro = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', c
 /** Central de Anúncios: monta o anúncio uma vez e leva para cada canal. */
 export default function Anuncios() {
   const qc = useQueryClient();
-  const [novo, setNovo] = useState<Rascunho | null>(null);
-  const [canaisSel, setCanaisSel] = useState<string[]>([]);
+  const [montando, setMontando] = useState(false);
   const [kit, setKit] = useState<{ anuncio: Anuncio; canal: CanalAnuncio; info: InfoCanal } | null>(null);
   const [urlKit, setUrlKit] = useState('');
   const [produtoId, setProdutoId] = useState<number | null>(null);
@@ -36,21 +35,6 @@ export default function Anuncios() {
   const info = (c: string) => canais.data?.find((x) => x.canal === c);
 
   const recarregar = () => qc.invalidateQueries({ queryKey: ['jarvis-anuncios'] });
-
-  const rascunhar = useMutation({
-    mutationFn: () => api.post<Rascunho>('/jarvis/anuncios/rascunho', { produtoId, condicao }),
-    onSuccess: (r) => { setNovo(r); setCanaisSel(['SITE', 'OLX']); },
-    onError: (e) => toast.error(mensagemErro(e)),
-  });
-
-  const criar = useMutation({
-    mutationFn: () => api.post<Anuncio>('/jarvis/anuncios', {
-      produtoId: novo?.produtoId, titulo: novo?.titulo, descricao: novo?.descricao, preco: novo?.preco,
-      condicao, fotos: novo?.fotos ?? [], canais: canaisSel, porCanal: novo?.porCanal, geradoPorIa: novo?.geradoPorIa,
-    }),
-    onSuccess: () => { toast.success('Anúncio criado.'); setNovo(null); setProdutoId(null); recarregar(); },
-    onError: (e) => toast.error(mensagemErro(e)),
-  });
 
   const publicar = useMutation({
     mutationFn: (p: { id: number; canal: string }) => api.post<CanalAnuncio>(`/jarvis/anuncios/${p.id}/publicar`, { canal: p.canal }),
@@ -103,7 +87,7 @@ export default function Anuncios() {
                 <option value="usado">Usado (3 meses)</option>
               </select>
             </div>
-            <Button variante="primario" icone={<Sparkles className="h-4 w-4" />} carregando={rascunhar.isPending} disabled={!produtoId} onClick={() => rascunhar.mutate()}>
+            <Button variante="primario" icone={<Sparkles className="h-4 w-4" />} disabled={!produtoId} onClick={() => setMontando(true)}>
               Montar anúncio
             </Button>
           </div>
@@ -171,37 +155,12 @@ export default function Anuncios() {
         </Secao>
       </div>
 
-      {/* revisão antes de criar */}
-      <Modal aberto={!!novo} onFechar={() => setNovo(null)} titulo="Conferir antes de publicar" tamanho="lg"
-        descricao={novo?.geradoPorIa ? 'Texto escrito pela IA a partir dos dados do produto. Leia antes de publicar.' : 'A IA não está configurada, então este é o texto padrão. Dá para editar aqui mesmo.'}
-        rodape={<><Button variante="secundario" onClick={() => setNovo(null)}>Cancelar</Button><Button variante="primario" carregando={criar.isPending} disabled={!canaisSel.length} onClick={() => criar.mutate()}>Criar anúncio</Button></>}>
-        {novo ? (
-          <div className="space-y-3">
-            <Input label="Título" value={novo.titulo} onChange={(e) => setNovo({ ...novo, titulo: e.target.value })} />
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Descrição</label>
-              <textarea className="h-40 w-full rounded-lg border border-slate-300 p-3 text-sm" value={novo.descricao} onChange={(e) => setNovo({ ...novo, descricao: e.target.value })} />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">Onde publicar</label>
-              <div className="flex flex-wrap gap-2">
-                {canais.data?.map((c) => {
-                  const marcado = canaisSel.includes(c.canal);
-                  const estoura = !!c.limiteTitulo && novo.titulo.length > c.limiteTitulo;
-                  return (
-                    <button key={c.canal} type="button"
-                      onClick={() => setCanaisSel((s) => (marcado ? s.filter((x) => x !== c.canal) : [...s, c.canal]))}
-                      className={`rounded-lg border px-3 py-1.5 text-sm ${marcado ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-300 text-slate-600'}`}>
-                      {marcado ? <Check className="mr-1 inline h-3.5 w-3.5" /> : null}{c.rotulo}
-                      {estoura ? <span className="ml-1 text-xs text-amber-600">título passa de {c.limiteTitulo}</span> : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </Modal>
+      <AnunciarModal
+        aberto={montando}
+        onFechar={() => { setMontando(false); setProdutoId(null); }}
+        produtoId={produtoId}
+        condicao={condicao}
+      />
 
       {/* kit pronto */}
       <Modal aberto={!!kit} onFechar={() => { setKit(null); setUrlKit(''); }} titulo={`Publicar no ${kit?.info.rotulo ?? ''}`} tamanho="lg"

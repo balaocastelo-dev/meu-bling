@@ -213,8 +213,8 @@ export default async function jarvisRoutes(app: FastifyInstance) {
 
   // ------------------------------------------------------------------ chat do JARVIS
   app.post('/api/v1/jarvis/perguntar', admin, async (req) => {
-    const { pergunta, conversaId } = z
-      .object({ pergunta: z.string().min(3).max(2000), conversaId: z.coerce.number().int().positive().nullish() })
+    const { pergunta, conversaId, porVoz } = z
+      .object({ pergunta: z.string().min(3).max(2000), conversaId: z.coerce.number().int().positive().nullish(), porVoz: z.boolean().optional() })
       .parse((req.body ?? {}) as any);
 
 
@@ -224,6 +224,7 @@ export default async function jarvisRoutes(app: FastifyInstance) {
       pergunta,
       usuarioId: u?.id ?? null,
       usuarioNome: u?.nome ?? null,
+      porVoz: porVoz ?? false,
       app,
       req,
     });

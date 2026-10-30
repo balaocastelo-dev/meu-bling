@@ -103,6 +103,12 @@ export async function conversar(p: {
   req?: FastifyRequest;
   /** true quando o gestor apertou "pode fazer" para uma ação pendente */
   permitirTudo?: boolean;
+  /**
+   * Conversa por voz: a resposta é lida em voz alta, então precisa ser curta.
+   * Texto longo demora para a IA gerar E para a voz sintetizar — o chefe fica
+   * esperando duas vezes pela mesma frase comprida.
+   */
+  porVoz?: boolean;
 }): Promise<RespostaChat> {
   let conversa = p.conversaId
     ? await prisma.jarvisConversa.findUnique({ where: { id: p.conversaId } })
@@ -145,10 +151,16 @@ export async function conversar(p: {
 
   for (let volta = 0; volta < MAX_VOLTAS; volta++) {
     const r = await conversarComFerramentas({
-      sistema: SISTEMA_CHAT,
+      sistema: p.porVoz
+        ? SISTEMA_CHAT +
+          '\n\nESTA CONVERSA É POR VOZ: o chefe está ouvindo, não lendo. Responda em no máximo 2 ou 3 frases curtas, ' +
+          'em texto corrido, sem listas, sem títulos e sem marcação. Diga o número que importa e a ação, nada mais. ' +
+          'Se a resposta completa for longa, dê o essencial e ofereça o resto ("quer que eu detalhe?").'
+        : SISTEMA_CHAT,
       mensagens,
       ferramentas: podeFerramentas ? ferramentasParaIa() : [],
-      maxTokens: 3000,
+      // por voz a resposta é falada: curta sai mais rápido da IA e da síntese
+      maxTokens: p.porVoz ? 400 : 3000,
     });
 
     if (!r) {
