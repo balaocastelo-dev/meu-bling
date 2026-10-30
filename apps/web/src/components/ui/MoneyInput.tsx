@@ -42,13 +42,19 @@ export const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(function
   useImperativeHandle(ref, () => interno.current as HTMLInputElement);
   const escondido = !!oculto && !revelado;
 
-  // Sincroniza quando o valor externo muda (e o campo não está em edição)
+  // Sincroniza quando o valor externo muda (e o campo não está em edição).
+  // Confere também o foco real do navegador: se o input está com o cursor, não reformata o texto
+  // por baixo de quem está digitando (era o que embaralhava o custo — ver revelar()).
   useEffect(() => {
-    if (!focado) setTexto(formatar(value, casas));
+    if (!focado && interno.current !== document.activeElement) setTexto(formatar(value, casas));
   }, [value, casas, focado]);
 
   function revelar() {
     setRevelado(true);
+    // Entra em modo de edição já aqui: se a pessoa clicou no campo escondido antes de clicar no
+    // olho, o input JÁ está focado e o focus() abaixo não dispara onFocus — sem isto o campo
+    // seguiria "não focado" e o efeito de sincronia reformataria o texto a cada tecla digitada.
+    setFocado(true);
     setTexto(formatar(value, casas));
     // foca já com o valor à mostra para digitar
     setTimeout(() => {
