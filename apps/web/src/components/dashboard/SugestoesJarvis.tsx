@@ -77,7 +77,7 @@ export function CartaoSugestao({
               carregando={decidindo}
               onClick={() => decidir(s.id, 'aceitar')}
             >
-              {s.acao === 'COBRAR_WHATSAPP' ? 'Cobrar agora' : s.acao === 'DESCONTO_LOTE' ? 'Aplicar desconto' : 'Aceitar'}
+              {s.acao === 'COBRAR_WHATSAPP' ? 'Cobrar agora' : s.acao === 'AVISAR_PRONTO' ? 'Avisar que está pronto' : s.acao === 'DESCONTO_LOTE' ? 'Aplicar desconto' : 'Aceitar'}
             </Button>
             <Button variante="secundario" tamanho="sm" icone={<Clock className="h-4 w-4" />} onClick={() => decidir(s.id, 'adiar')}>
               Adiar

@@ -40,6 +40,7 @@ async function main() {
     '/ordens-servico',
     {
       contatoId: cliente.id,
+      situacaoId: retirada?.id,
       dataEntrada: diasAtras(12),
       dataConclusao: diasAtras(6),
       equipamento: 'Notebook',
@@ -51,7 +52,6 @@ async function main() {
     201,
   );
   verifica(os.total > 0, 'OS criada com valor', os.total);
-  if (retirada) await adm.post(`/ordens-servico/${os.id}/situacao`, { situacaoId: retirada.id, forcar: true, confirmarCusto: true }, [200, 422]);
 
   await adm.post('/jarvis/rodar', {});
   const pronta = await sugestao(adm, 'OS_PRONTA_PARADA');
@@ -75,7 +75,34 @@ async function main() {
   const recente = (comHoje?.dados?.ordens ?? []).find((o: any) => o.id === osHoje.id);
   verifica(!recente, 'a que ficou pronta hoje fica de fora', comHoje?.dados?.quantidade);
   // o impacto aqui é dinheiro já ganho: nada de estimativa com desconto
-  verifica(pronta?.acao === 'ABRIR_TELA' && pronta?.link === '/ordens-servico', 'leva o gestor para a lista de OS', { acao: pronta?.acao, link: pronta?.link });
+  verifica(pronta?.acao === 'AVISAR_PRONTO' && pronta?.link === '/ordens-servico', 'a ação é avisar o cliente, com a lista de OS atrás', { acao: pronta?.acao, link: pronta?.link });
+
+  secao('Aceitar avisa os clientes pelo WhatsApp de verdade');
+  const antes = await adm.get('/notificacoes?limite=200&canal=WHATSAPP');
+  const idsAntes = new Set(((antes?.data ?? antes ?? []) as any[]).map((n) => n.id));
+  const feito = await adm.post(`/jarvis/sugestoes/${pronta.id}/aceitar`, {});
+  verifica(typeof feito?.feito === 'string' && /aviso/i.test(feito.feito), 'o JARVIS conta quantos avisos entraram na fila', feito?.feito);
+
+  const depoisFila = await adm.get('/notificacoes?limite=200&canal=WHATSAPP');
+  const novas = ((depoisFila?.data ?? depoisFila ?? []) as any[]).filter((n) => !idsAntes.has(n.id));
+  const aviso = novas.find((n) => n.origemTipo === 'OS' && n.origemId === os.id);
+  verifica(!!aviso, 'entrou uma mensagem ligada a esta OS', aviso?.destinatario);
+  verifica(aviso?.destinatario?.includes('19999990000'), 'vai para o celular do cliente', aviso?.destinatario);
+  verifica(/pronto/i.test(aviso?.corpo ?? ''), 'a mensagem diz que está pronto', aviso?.corpo?.slice(0, 70));
+  // é lembrete, não o anúncio: a loja já avisou na hora em que o conserto ficou pronto
+  verifica(/lembrar|continua aqui/i.test(aviso?.corpo ?? ''), 'e soa como lembrete, não como se tivesse acabado agora', aviso?.corpo?.slice(0, 120));
+  verifica(/Notebook/i.test(aviso?.corpo ?? ''), 'e diz qual é o aparelho', aviso?.corpo?.slice(0, 120));
+  verifica(!/undefined|\{\{/.test(aviso?.corpo ?? ''), 'nenhuma variável do template sobrou sem preencher', aviso?.corpo);
+
+  secao('Não avisa o mesmo cliente duas vezes no mesmo dia');
+  await adm.post('/jarvis/rodar', {});
+  const denovo = await sugestao(adm, 'OS_PRONTA_PARADA');
+  if (denovo) {
+    const r2 = await adm.post(`/jarvis/sugestoes/${denovo.id}/aceitar`, {});
+    const fila2 = await adm.get('/notificacoes?limite=200&canal=WHATSAPP');
+    const repetidas = ((fila2?.data ?? fila2 ?? []) as any[]).filter((n) => n.origemTipo === 'OS' && n.origemId === os.id);
+    verifica(repetidas.length === 1, 'continua só uma mensagem para esta OS', { quantidade: repetidas.length, resposta: r2?.feito });
+  }
 
   secao('OS entregue sai da conta (o dinheiro entrou)');
   await adm.put(`/ordens-servico/${os.id}`, {
