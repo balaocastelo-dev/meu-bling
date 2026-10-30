@@ -1923,7 +1923,7 @@ model JarvisSugestao {
   prioridade      Int       @default(3)
   /// JSON: ids e números que a ação precisa
   dados           String?
-  /// ação de 1 clique: DESCONTO_LOTE | COBRAR_WHATSAPP | CRIAR_CAIXINHA | ABRIR_TELA | NENHUMA
+  /// ação de 1 clique: DESCONTO_LOTE | COBRAR_WHATSAPP | AVISAR_PRONTO | CRIAR_CAIXINHA | ABRIR_TELA | NENHUMA
   acao            String    @default("NENHUMA")
   /// link da tela quando a ação é ABRIR_TELA
   link            String?
