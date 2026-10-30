@@ -16,7 +16,7 @@ import { prisma } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { arredondar } from '../../lib/util.js';
 import { perguntarIa } from './ia.js';
-import { publicarItem } from './mercadolivre.js';
+import { publicarItem, situacao as situacaoMl } from './mercadolivre.js';
 
 export const CANAIS = ['MERCADO_LIVRE', 'SITE', 'BLOG', 'FACEBOOK', 'INSTAGRAM', 'GOOGLE_MEU_NEGOCIO', 'OLX'] as const;
 export type Canal = (typeof CANAIS)[number];
@@ -150,6 +150,20 @@ export async function publicarCanal(anuncioId: number, canal: Canal) {
   }
 
   if (canal === 'MERCADO_LIVRE') {
+    // a conta vem antes de tudo: sem ela, reclamar de foto ou categoria manda a pessoa
+    // procurar o problema errado
+    const conta = await situacaoMl();
+    if (!conta.configurado || !conta.conectado) {
+      return prisma.jarvisAnuncioCanal.update({
+        where: { id: linha.id },
+        data: {
+          situacao: 'PRECISA_CONFIGURAR',
+          erro: conta.configurado
+            ? 'Conta do Mercado Livre não está conectada. Configurações → JARVIS → Conectar minha conta.'
+            : 'Cadastre o Client ID e o Client Secret do Mercado Livre em Configurações → JARVIS.',
+        },
+      });
+    }
     const anuncio = await prisma.jarvisAnuncio.findUnique({ where: { id: anuncioId } });
     if (!anuncio) throw new NotFound('Anúncio');
     const fotos: string[] = anuncio.fotos ? JSON.parse(anuncio.fotos) : [];

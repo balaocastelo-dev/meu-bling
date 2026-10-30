@@ -137,10 +137,9 @@ export async function tokenValido(): Promise<string> {
 }
 
 export async function desconectar() {
-  await prisma.jarvisConfig.update({
-    where: { id: 1 },
-    data: { mlAccessToken: null, mlRefreshToken: null, mlExpiraEm: null, mlUserId: null, mlApelido: null },
-  });
+  // upsert: desconectar pode ser a primeira coisa que toca a configuração (banco novo)
+  const limpo = { mlAccessToken: null, mlRefreshToken: null, mlExpiraEm: null, mlUserId: null, mlApelido: null };
+  await prisma.jarvisConfig.upsert({ where: { id: 1 }, update: limpo, create: { id: 1, ...limpo } });
 }
 
 async function chamar<T>(caminho: string, opcoes: { metodo?: string; corpo?: unknown } = {}): Promise<T> {

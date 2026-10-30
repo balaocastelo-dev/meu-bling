@@ -15,7 +15,7 @@ import { prisma } from '../src/lib/prisma.js';
 import { encerrar, falhar, placar, secao, SUF } from './lib.js';
 
 /** Rotas que podem ser chamadas sem login (o resto tem que exigir login) */
-const PUBLICAS = [/^\/api\/v1\/auth\/(login|logout|perfis)$/, /^\/api\/v1\/saude$/, /^\/api\/v1\/publico\//, /^\/api\/v1\/webhooks\//, /^\/api\/v1\/integracoes\/site\//, /^\/uploads/, /^\/$/, /^\/\*$/, /^\/assets/, /^\/api\/v1\/bling\/callback/, /^\/api\/v1\/jarvis\/ml\/callback/];
+const PUBLICAS = [/^\/api\/v1\/auth\/(login|logout|perfis)$/, /^\/api\/v1\/saude$/, /^\/api\/v1\/publico\//, /^\/api\/v1\/webhooks\//, /^\/api\/v1\/integracoes\/site\//, /^\/uploads/, /^\/$/, /^\/\*$/, /^\/assets/, /^\/api\/v1\/bling\/callback/, /^\/api\/v1\/jarvis\/ml\/callback$/];
 
 /** Rotas que falam com serviços de fora (WhatsApp real, Bling, SEFAZ, site): não são disparadas aqui */
 const EXTERNAS = [/whatsapp\/(conectar|desconectar|reconectar|enviar-teste|eventos)/, /^\/api\/v1\/bling\//, /catalogo\/sincronizar/, /open-finance\/(sincronizar|connect-token|vincular)/, /notas-fiscais\/(:id\/)?(transmitir|consultar|cancelar|carta-correcao|inutilizar|enviar-email)/, /smtp\/testar/, /status-sefaz/, /contatos\/cep/, /notificacoes\/(processar|lembretes-contas)/, /\/notificar$/, /\/notificacoes\/:id\/reenviar/, /integracoes\/site\/notas/, /api-externa\/webhooks\/:id\/testar/, /api-externa\/entregas\/:id\/reenviar/];
