@@ -10,6 +10,8 @@ import { historico, situacoesPermitidas, type ContextoAcao } from '../../core/si
 import { linkPublico, tokenPublico } from '../publico/token.js';
 import { depositoPadraoId, liberarReservas, movimentarEstoque, movimentaEstoque, reservarItens } from '../comum/estoque.js';
 import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, recriarComissoes, type ComissaoNova } from '../comum/financeiro.js';
+import { comissoesDeAnuncio, itemPagoPorAnuncioDeTecnico } from '../anuncios/comissao.js';
+import { anunciosDaOrigem } from '../anuncios/origem.js';
 import { criarNotaPendente } from '../comum/nfe.js';
 import { mensagemPendencias, verificarNfe } from '../comum/nfe-checagem.js';
 import { hojeMeioDia, inicioDia } from '../comum/datas.js';
@@ -298,7 +300,9 @@ export async function acaoEstornarEstoque(ctx: ContextoAcao) {
 
 export async function acaoLancarContas(ctx: ContextoAcao) {
   const { tx, entidadeId: id } = ctx;
-  const os = await tx.ordemServico.findUnique({ where: { id }, include: { parcelas: { orderBy: { numero: 'asc' } }, itens: true } });
+  // parcelas COM a forma de pagamento: ver a nota em vendas/service.ts — o lucro que paga a
+  // comissão do anúncio tem que ser o mesmo que a tela da OS mostra.
+  const os = await tx.ordemServico.findUnique({ where: { id }, include: { parcelas: { orderBy: { numero: 'asc' }, include: { formaPagamento: true } }, itens: true } });
   if (!os) throw new NotFound('Ordem de serviço');
   if (os.contasLancadas) return;
   const categoriaId = os.categoriaFinanceiraId || (await categoriaPadraoId(tx, 'Prestação de serviços (OS)', 'RECEITA', 'RECEITA_BRUTA'));
@@ -332,8 +336,11 @@ export async function acaoLancarContas(ctx: ContextoAcao) {
   }
   // comissões
   const novas: ComissaoNova[] = [];
+  const anuncios = await anunciosDaOrigem(tx as any, os);
   if (os.tecnicoId) {
-    const itensT = os.itens.filter((i) => i.comissaoTecnicoPct > 0);
+    // item vindo de anúncio do próprio técnico NÃO entra aqui: ele já é pago pelo percentual do
+    // lucro do anúncio (33%). Sem esta linha o técnico receberia duas vezes pelo mesmo serviço.
+    const itensT = os.itens.filter((i) => i.comissaoTecnicoPct > 0 && !itemPagoPorAnuncioDeTecnico(i, anuncios.porId));
     const base = arredondar(itensT.reduce((s, i) => s + i.total, 0));
     const valor = arredondar(itensT.reduce((s, i) => s + i.total * (i.comissaoTecnicoPct / 100), 0));
     novas.push({ tipo: 'TECNICO', tecnicoId: os.tecnicoId, descricao: `OS nº ${os.numero}`, base, pct: base > 0 ? arredondar((valor / base) * 100, 4) : 0, valor });
@@ -343,6 +350,20 @@ export async function acaoLancarContas(ctx: ContextoAcao) {
     const base = arredondar(itensV.reduce((s, i) => s + i.total, 0));
     const valor = arredondar(itensV.reduce((s, i) => s + i.total * (i.comissaoVendedorPct / 100), 0));
     novas.push({ tipo: 'VENDEDOR', vendedorId: os.vendedorId, descricao: `OS nº ${os.numero}`, base, pct: base > 0 ? arredondar((valor / base) * 100, 4) : 0, valor });
+  }
+  if (anuncios.porId.size) {
+    const f = fechamentoOs(os as any);
+    novas.push(
+      ...comissoesDeAnuncio({
+        itens: os.itens.map((i) => ({ total: i.total, custo: arredondar(i.custoUnitario * i.quantidade), anuncioId: i.anuncioId })),
+        receitaTotal: os.total,
+        custoTotal: f.custoTotal,
+        custoProdutos: f.custoPecas,
+        anuncioDaOrigem: anuncios.daOrigem,
+        anunciosPorId: anuncios.porId,
+        descricaoOrigem: `OS nº ${os.numero}`,
+      }),
+    );
   }
   await recriarComissoes(tx, { origemTipo: 'OS', osId: os.id }, competencia, novas);
   await tx.ordemServico.update({ where: { id }, data: { contasLancadas: true, dataConclusao: os.dataConclusao || new Date() } });

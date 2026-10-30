@@ -20,6 +20,7 @@ const JarvisAnuncios = lazy(() => import('@/pages/jarvis/Anuncios'));
 const MeuDashboard = lazy(() => import('@/pages/meu-dashboard/MeuDashboard'));
 const PainelVendedor = lazy(() => import('@/pages/vendedor/PainelVendedor'));
 const MetasDesafios = lazy(() => import('@/pages/vendedor/MetasDesafios'));
+const MeusAnuncios = lazy(() => import('@/pages/anuncios/MeusAnuncios'));
 
 const VendasLista = lazy(() => import('@/pages/vendas/VendasLista'));
 const VendaForm = lazy(() => import('@/pages/vendas/VendaForm'));
@@ -138,6 +139,8 @@ export const router = createBrowserRouter(
       { path: 'perfil', element: S(<Perfil />) },
       { path: 'meu-painel', element: S(<Somente perfis={['ADMIN', 'GERENTE', 'VENDEDOR', 'TECNICO']}><PainelVendedor /></Somente>) },
       { path: 'metas-desafios', element: GESTAO(<MetasDesafios />) },
+      // Vitrine da equipe: cada vendedor/técnico cria e acompanha os anúncios dele; a gestão vê todos
+      { path: 'anuncios', element: S(<Somente perfis={['ADMIN', 'GERENTE', 'VENDEDOR', 'TECNICO']}><MeusAnuncios /></Somente>) },
 
       { path: 'vendas', element: S(<VendasLista />) },
       { path: 'vendas/nova', element: S(<VendaForm />) },

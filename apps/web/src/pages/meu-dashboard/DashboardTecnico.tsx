@@ -8,7 +8,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Award, Clock, HardHat, ListChecks, PackageSearch, Plus, ShoppingCart, Timer, Trophy, Wrench } from 'lucide-react';
+import { Award, Clock, HardHat, ListChecks, Megaphone, PackageSearch, Plus, ShoppingCart, Timer, Trophy, Wrench } from 'lucide-react';
 import { Badge, BadgeCor, Button, EmptyState, Skeleton } from '@/components/ui';
 import { Aparecer, BarraAnimada, CardV18, FaixaKpis, KpiV18, LinhaV18, PaginaV18, SecaoDetalhes, listaVariants } from '@/components/dashboard/v18';
 import { CORES, TooltipPadrao, rotuloPeriodo } from '@/components/compartilhados/graficos';
@@ -39,6 +39,10 @@ export default function DashboardTecnico({ dados, carregando, faixa, filtros, ve
         acoes={
           <>
             {verComo}
+            {/* o técnico é PJ: publicar os serviços dele é como ele traz trabalho e ganha mais */}
+            <Link to="/anuncios" title="Publique seus serviços de assistência na vitrine do site e ganhe 33% do lucro de cada venda">
+              <Button variante="secundario" icone={<Megaphone className="h-4 w-4" />}>Criar anúncio · ganhe 33%</Button>
+            </Link>
             <Link to="/ordens-servico/nova">
               <Button variante="primario" icone={<Plus className="h-4 w-4" />}>Nova OS</Button>
             </Link>

@@ -102,6 +102,7 @@ async function main() {
     rodar('Crédito bancário como forma de pagamento: venda (cliente ou loja paga) e compra geram o empréstimo', NPX, ['tsx', 'testes/credito-bancario.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Carnê próprio: PIX no Cora, risco 7–15%, auditoria, venda no carnê, receber, DRE e impressão', NPX, ['tsx', 'testes/carnes.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Consignação: contrato, assinatura pelo celular, desconto autorizado, venda na hora, diárias em dias úteis, quitação, retirada e vitrine do site', NPX, ['tsx', 'testes/consignacao.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
+    rodar('Vitrine da equipe: anúncio próprio do técnico (33%) e do vendedor (20%) com comissão sobre o lucro', NPX, ['tsx', 'testes/anuncios.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Caixinhas (Nubank): por dia, sugestão de hoje, guardar/retirar fora do DRE + avisos do gestor', NPX, ['tsx', 'testes/caixinhas.ts', base]);
     rodar('JARVIS: conserto pronto não retirado e orçamento parado viram sugestão com número real', NPX, ['tsx', 'testes/jarvis-caixa-parado.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Meu Dashboard: vendedor/técnico sem lucro, técnico que vende, alertas "Corrija", lembretes, metas e desafios de técnico, ver como', NPX, ['tsx', 'testes/meu-dashboard.ts', base], { env: { TZ: 'America/Sao_Paulo' } });

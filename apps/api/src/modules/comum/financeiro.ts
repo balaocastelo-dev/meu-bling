@@ -88,6 +88,8 @@ export interface ComissaoNova {
   base: number;
   pct: number;
   valor: number;
+  /** pagamento extra de um anúncio da vitrine da equipe (docs/VITRINE-EQUIPE.md) */
+  anuncioId?: number | null;
 }
 
 /**
@@ -122,6 +124,7 @@ export async function recriarComissoes(
           base: arredondar(n.base),
           pct: n.pct,
           valor: arredondar(n.valor),
+          anuncioId: n.anuncioId ?? null,
           status: 'PENDENTE',
           competencia,
         },
