@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { ArrowRightLeft, ExternalLink, Globe, Package, Pencil, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { ArrowRightLeft, ExternalLink, Globe, Megaphone, Package, Pencil, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, PageHeader, Pagination, StatCard, Table, Tabs, type Coluna, ValorOculto } from '@/components/ui';
@@ -11,6 +11,8 @@ import { AjusteEstoqueModal, TransferenciaEstoqueModal } from '@/components/comp
 import { dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { MovimentoEstoque, Paginado, Produto } from '@/types';
 import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/ProdutoSite';
+import { AnunciarModal } from '@/components/compartilhados/AnunciarModal';
+import { useAuth } from '@/stores/auth';
 
 /** Detalhe do produto: saldos por depósito, movimentos, fiscal */
 export default function ProdutoDetalhe() {
@@ -19,6 +21,8 @@ export default function ProdutoDetalhe() {
   const qc = useQueryClient();
   const pg = usePaginacao(30);
   const [aba, setAba] = useState('saldos');
+  const perfil = useAuth((st) => st.usuario?.perfil);
+  const [anunciar, setAnunciar] = useState<'novo' | 'usado' | null>(null);
   const [ajuste, setAjuste] = useState<{ depositoId?: number } | null>(null);
   const [transf, setTransf] = useState(false);
   const [excluir, setExcluir] = useState(false);
@@ -69,6 +73,9 @@ export default function ProdutoDetalhe() {
                 <Button variante="secundario" icone={<SlidersHorizontal className="h-4 w-4" />} onClick={() => setAjuste({})}>Ajustar estoque</Button>
                 <Button variante="secundario" icone={<ArrowRightLeft className="h-4 w-4" />} onClick={() => setTransf(true)}>Transferir</Button>
               </>
+            )}
+            {perfil === 'ADMIN' && p.tipo === 'P' && (
+              <Button variante="secundario" icone={<Megaphone className="h-4 w-4" />} onClick={() => setAnunciar('novo')}>Anunciar</Button>
             )}
             <Link to={`/produtos/${p.id}/editar`}><Button variante="primario" icone={<Pencil className="h-4 w-4" />}>Editar</Button></Link>
           </>
@@ -182,6 +189,13 @@ export default function ProdutoDetalhe() {
 
       <AjusteEstoqueModal aberto={!!ajuste} onFechar={() => setAjuste(null)} produtoId={p.id} produtoNome={p.nome} depositoId={ajuste?.depositoId} />
       <TransferenciaEstoqueModal aberto={transf} onFechar={() => setTransf(false)} produtoId={p.id} produtoNome={p.nome} />
+      <AnunciarModal
+        aberto={!!anunciar}
+        onFechar={() => setAnunciar(null)}
+        produtoId={p.id}
+        condicao={anunciar ?? 'novo'}
+        onCriado={() => nav('/jarvis/anuncios')}
+      />
       <ConfirmDialog aberto={excluir} onFechar={() => setExcluir(false)} titulo="Excluir produto?" descricao="Se houver movimentações, o produto será inativado." textoConfirmar="Excluir" onConfirmar={async () => { try { await api.del(`/produtos/${id}`); toast.success('Produto removido.'); qc.invalidateQueries({ queryKey: ['produtos'] }); nav('/produtos'); } catch (e) { toast.error(mensagemErro(e)); } }} />
     </div>
   );

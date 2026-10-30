@@ -9,10 +9,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   Bot,
   Check,
+  BarChart3,
+  Boxes,
   CalendarClock,
   Clock,
   HandCoins,
@@ -26,7 +28,9 @@ import {
   Target,
   TrendingDown,
   TrendingUp,
+  Users,
   Wallet,
+  Wrench,
 } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { Button, EmptyState, Input, Skeleton } from '@/components/ui';
@@ -36,7 +40,8 @@ import { CORES, TooltipPadrao, eixoMoeda } from '@/components/compartilhados/gra
 import { CartaoSugestao, type SugestaoJarvis } from '@/components/dashboard/SugestoesJarvis';
 import ChatJarvis, { type ControleChat } from '@/components/dashboard/ChatJarvis';
 import tabletPng from './tablet.svg';
-import { dataHora, moeda, percentual } from '@/lib/format';
+import { BarraRanking, MedidorMeta } from './medidor';
+import { dataHora, moeda, numero, percentual } from '@/lib/format';
 import './jarvis.css';
 
 interface Painel {
@@ -50,8 +55,6 @@ interface Painel {
   emprestimos30d: number;
   emprestimosDepois: number;
   meta: number;
-  falta: number;
-  percentual: number;
   escada: {
     degraus: { valor: number; nome: string; o: string; conquistado: boolean }[];
     atual: { valor: number; nome: string; o: string } | null;
@@ -62,6 +65,8 @@ interface Painel {
     total: number;
   };
   porDiaDoDegrau: number;
+  falta: number;
+  percentual: number;
   diasUteis: number;
   porDiaUtil: number;
   variacao7d: number | null;
@@ -72,6 +77,24 @@ interface Painel {
   ia: { ligada: boolean; modelo: string; ultimoErro: string | null };
   ultimaRodadaEm: string | null;
   ligado: boolean;
+}
+
+interface Panorama {
+  resumo: {
+    faturamento: number;
+    custo: number;
+    lucro: number;
+    margemPct: number;
+    qtd: number;
+    ticketMedio: number;
+    vendas: { valor: number; qtd: number; lucro: number; margemPct: number; ticketMedio: number };
+    assistencia: { valor: number; qtd: number; lucro: number; margemPct: number; ticketMedio: number };
+    caixa: { entradas: number; saidas: number; saldo: number };
+    comparativo?: { faturamento: number; lucro: number; margemPct: number; ticketMedio: number };
+  };
+  series: { periodo: string; vendas: number; assistencia: number; lucro: number; entradas: number; saidas: number }[];
+  porVendedor: { id: number | null; nome: string; valor: number; qtd: number; lucro: number }[];
+  porTecnico: { id: number | null; nome: string; valor: number; qtd: number; lucro: number }[];
 }
 
 interface Placar {
@@ -216,6 +239,13 @@ export default function Jarvis() {
 
   const { data: placar } = useQuery({ queryKey: ['jarvis-placar'], queryFn: () => api.get<Placar>('/jarvis/placar'), retry: 0 });
 
+  // números reais da operação, do mesmo lugar que alimenta os dashboards do sistema
+  const { data: pano } = useQuery({
+    queryKey: ['jarvis-panorama', dataInicial, dataFinal],
+    queryFn: () => api.get<Panorama>('/dashboard/panorama', { dataInicial, dataFinal }),
+    retry: 0,
+  });
+
   const rodar = useMutation({
     mutationFn: () => api.post('/jarvis/rodar', {}),
     onSuccess: () => {
@@ -276,9 +306,6 @@ export default function Jarvis() {
 
   const cardEvolucao = (
     <div className="space-y-4 sm:space-y-5">
-      <Aparecer className="flex flex-wrap items-end gap-2">
-        <FiltroPeriodo id="periodo-jarvis" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
-      </Aparecer>
       <CardV18 titulo="Evolução do caixa livre" descricao={faixa} icone={<TrendingUp className="h-4 w-4" />} tom="verde">
         {!temEvolucao ? (
           <EmptyState compacto titulo="Ainda sem histórico" descricao="O JARVIS grava uma medição a cada 30 minutos; em algumas horas o gráfico aparece." />
@@ -297,6 +324,102 @@ export default function Jarvis() {
         )}
       </CardV18>
     </div>
+  );
+
+  const serieOperacao = pano?.series ?? [];
+  const temOperacao = serieOperacao.length > 0;
+  const maxVendedor = Math.max(1, ...(pano?.porVendedor ?? []).map((v) => v.valor));
+  const maxTecnico = Math.max(1, ...(pano?.porTecnico ?? []).map((t) => t.valor));
+
+  /** Vendas x assistência x lucro no período — de onde o caixa vem. */
+  const cardOperacao = (
+    <CardV18 titulo="Vendas, assistência e lucro" descricao={faixa} icone={<BarChart3 className="h-4 w-4" />} tom="azul">
+      {!temOperacao ? (
+        <EmptyState compacto titulo="Sem movimento no período" descricao="Escolha outro período no filtro acima." />
+      ) : (
+        <div className="h-56 sm:h-64">
+          <ResponsiveContainer>
+            <ComposedChart data={serieOperacao} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+              <CartesianGrid stroke={CORES.grade} strokeDasharray="3 4" vertical={false} />
+              <XAxis dataKey="periodo" tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} minTickGap={12} />
+              <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={52} />
+              <Tooltip content={<TooltipPadrao />} cursor={{ fill: 'rgba(148,163,184,0.12)' }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="vendas" name="Vendas" fill={CORES.receita} radius={[3, 3, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="assistencia" name="Assistência" fill={CORES.entrada} radius={[3, 3, 0, 0]} maxBarSize={28} />
+              <Line type="monotone" dataKey="lucro" name="Lucro" stroke={CORES.lucro} strokeWidth={2.5} dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </CardV18>
+  );
+
+  /** Quem está vendendo e quem está consertando — ranking real do período. */
+  const cardEquipe = (
+    <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
+      <CardV18 titulo="Vendas por vendedor" descricao={faixa} icone={<Users className="h-4 w-4" />}>
+        {!(pano?.porVendedor.length) ? (
+          <EmptyState compacto titulo="Sem vendas no período" descricao="Assim que houver venda, o ranking aparece." />
+        ) : (
+          <div className="space-y-3">
+            {pano!.porVendedor.map((v) => (
+              <BarraRanking
+                key={`${v.id ?? 'sem'}-${v.nome}`}
+                nome={v.nome}
+                valor={v.valor}
+                maximo={maxVendedor}
+                moeda={moeda}
+                sub={`${numero(v.qtd)} venda(s) · lucro ${moeda(v.lucro)}`}
+              />
+            ))}
+          </div>
+        )}
+      </CardV18>
+
+      <CardV18 titulo="Assistência por técnico" descricao={faixa} icone={<Wrench className="h-4 w-4" />}>
+        {!(pano?.porTecnico.length) ? (
+          <EmptyState compacto titulo="Sem OS no período" descricao="O ranking usa as ordens de serviço do filtro de data." />
+        ) : (
+          <div className="space-y-3">
+            {pano!.porTecnico.map((t) => (
+              <BarraRanking
+                key={`${t.id ?? 'sem'}-${t.nome}`}
+                nome={t.nome}
+                valor={t.valor}
+                maximo={maxTecnico}
+                moeda={moeda}
+                cor="#8b5cf6"
+                sub={`${numero(t.qtd)} OS · lucro ${moeda(t.lucro)}`}
+              />
+            ))}
+          </div>
+        )}
+      </CardV18>
+    </div>
+  );
+
+  /** Entrou x saiu do caixa, por período. */
+  const cardCaixa = (
+    <CardV18 titulo="Entrou e saiu do caixa" descricao={faixa} icone={<Wallet className="h-4 w-4" />} tom="verde">
+      {!temOperacao ? (
+        <EmptyState compacto titulo="Sem movimento de caixa" descricao="Nada entrou nem saiu no período escolhido." />
+      ) : (
+        <div className="h-48 sm:h-56">
+          <ResponsiveContainer>
+            <BarChart data={serieOperacao} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+              <CartesianGrid stroke={CORES.grade} strokeDasharray="3 4" vertical={false} />
+              <XAxis dataKey="periodo" tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} minTickGap={12} />
+              <YAxis tickFormatter={eixoMoeda} tick={{ fontSize: 11, fill: CORES.eixo }} axisLine={false} tickLine={false} width={52} />
+              <Tooltip content={<TooltipPadrao />} cursor={{ fill: 'rgba(148,163,184,0.12)' }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="entradas" name="Entrou" fill={CORES.lucro} radius={[3, 3, 0, 0]} maxBarSize={24} />
+              <Bar dataKey="saidas" name="Saiu" fill={CORES.saida} radius={[3, 3, 0, 0]} maxBarSize={24} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </CardV18>
   );
 
   const cardContas = (
@@ -346,6 +469,9 @@ export default function Jarvis() {
   const comConteudo = [
     { chave: 'sugestoes', tem: temSugestoes, conteudo: cardSugestoes },
     { chave: 'evolucao', tem: temEvolucao, conteudo: cardEvolucao },
+    { chave: 'operacao', tem: temOperacao, conteudo: cardOperacao },
+    { chave: 'equipe', tem: !!(pano?.porVendedor.length || pano?.porTecnico.length), conteudo: cardEquipe },
+    { chave: 'caixa', tem: temOperacao, conteudo: cardCaixa },
     { chave: 'contas', tem: temContas, conteudo: cardContas },
     { chave: 'placar', tem: temPlacar, conteudo: cardPlacar },
   ];
@@ -391,42 +517,109 @@ export default function Jarvis() {
         </div>
       </Aparecer>
 
-      {/* ===== o número principal ===== */}
-      <FaixaKpis colunas={4}>
-        <KpiV18
-          destaque
-          className="col-span-2"
-          rotulo="Caixa livre hoje"
-          valor={p?.caixaLivre}
-          formato={moeda}
-          anterior={p && p.variacao7d !== null ? p.caixaLivre - p.variacao7d : undefined}
-          icone={<Wallet className="h-4 w-4" />}
-          tom={p && p.caixaLivre > 0 ? 'verde' : 'vermelho'}
-          carregando={isLoading}
-          sub={p ? (p.escada.atual ? `${p.escada.atual.nome} — degrau ${p.escada.vencidos} de ${p.escada.total}` : 'antes do primeiro degrau') : undefined}
-        />
-        <KpiV18
-          rotulo={p?.escada.proximo ? `Falta para: ${p.escada.proximo.nome}` : 'Objetivo alcançado'}
-          valor={p?.escada.faltaProximo}
-          formato={moeda}
-          icone={<Target className="h-4 w-4" />}
-          tom="azul"
-          carregando={isLoading}
-          sub={p?.escada.proximo ? p.escada.proximo.o : `${moeda(p?.meta ?? 0)} livres`}
-        />
-        <KpiV18
-          rotulo="Por dia útil, neste degrau"
-          valor={p?.porDiaDoDegrau}
-          formato={moeda}
-          icone={<TrendingUp className="h-4 w-4" />}
-          tom="amarelo"
-          carregando={isLoading}
-          sub={p?.emJogo ? `${moeda(p.emJogo)} em jogo nas sugestões` : undefined}
-        />
-      </FaixaKpis>
+      {/* o filtro vale para tudo que tem data nesta tela: fica no topo, não no meio */}
+      <Aparecer className="flex flex-wrap items-end gap-2">
+        <FiltroPeriodo id="periodo-jarvis" periodo={periodo} onPeriodo={setPeriodo} custom={custom} onCustom={setCustom} />
+      </Aparecer>
 
-      {/* ===== a escada: onde você está e o que já ficou para trás ===== */}
-      {p && <Escada escada={p.escada} caixaLivre={p.caixaLivre} emJogo={p.emJogo} />}
+      {/* ===== o milhão e os números do período ===== */}
+      <div className="grid gap-3 sm:gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <CardV18
+          titulo={p?.escada.proximo ? p.escada.proximo.nome : 'O milhão'}
+          descricao={p?.escada.proximo ? p.escada.proximo.o : 'objetivo alcançado'}
+          icone={<Target className="h-4 w-4" />}
+          tom="verde"
+        >
+          {/* o medidor mede o DEGRAU de agora: o milhão inteiro não muda de semana para semana */}
+          <MedidorMeta
+            valor={p?.caixaLivre}
+            meta={p?.escada.proximo?.valor ?? p?.meta}
+            percentual={p?.escada.progresso}
+            falta={p?.escada.faltaProximo}
+            porDiaUtil={p?.porDiaDoDegrau}
+            diasUteis={22}
+            moeda={moeda}
+            carregando={isLoading}
+          />
+          {p && <Degraus escada={p.escada} />}
+        </CardV18>
+
+        <div className="grid min-w-0 content-start gap-3 sm:gap-4">
+          <FaixaKpis colunas={4}>
+            <KpiV18
+              rotulo="Faturamento"
+              valor={pano?.resumo.faturamento}
+              formato={moeda}
+              anterior={pano?.resumo.comparativo?.faturamento}
+              icone={<BarChart3 className="h-4 w-4" />}
+              tom="azul"
+              sub={pano ? `${numero(pano.resumo.qtd)} venda(s) e OS` : undefined}
+            />
+            <KpiV18
+              rotulo="Lucro"
+              valor={pano?.resumo.lucro}
+              formato={moeda}
+              anterior={pano?.resumo.comparativo?.lucro}
+              icone={<TrendingUp className="h-4 w-4" />}
+              tom={pano && pano.resumo.lucro >= 0 ? 'verde' : 'vermelho'}
+              sub={pano ? `margem ${percentual(pano.resumo.margemPct)}` : undefined}
+            />
+            <KpiV18
+              rotulo="Ticket médio"
+              valor={pano?.resumo.ticketMedio}
+              formato={moeda}
+              anterior={pano?.resumo.comparativo?.ticketMedio}
+              icone={<HandCoins className="h-4 w-4" />}
+              tom="neutro"
+            />
+            <KpiV18
+              rotulo="Caixa do período"
+              valor={pano?.resumo.caixa.saldo}
+              formato={moeda}
+              icone={<Wallet className="h-4 w-4" />}
+              tom={pano && pano.resumo.caixa.saldo >= 0 ? 'verde' : 'vermelho'}
+              sub={pano ? `${moeda(pano.resumo.caixa.entradas)} entrou · ${moeda(pano.resumo.caixa.saidas)} saiu` : undefined}
+            />
+          </FaixaKpis>
+
+          <FaixaKpis colunas={4}>
+            <KpiV18
+              rotulo={p?.escada.proximo ? `Falta: ${p.escada.proximo.nome}` : 'Falta para o milhão'}
+              valor={p?.escada.faltaProximo ?? p?.falta}
+              formato={moeda}
+              icone={<Target className="h-4 w-4" />}
+              tom="amarelo"
+              carregando={isLoading}
+              sub={p ? `em ${p.diasUteis} dias úteis` : undefined}
+            />
+            <KpiV18
+              rotulo="Por dia útil, neste degrau"
+              valor={p?.porDiaDoDegrau}
+              formato={moeda}
+              icone={<TrendingUp className="h-4 w-4" />}
+              tom="azul"
+              carregando={isLoading}
+              sub={p?.emJogo ? `${moeda(p.emJogo)} em jogo` : undefined}
+            />
+            <KpiV18
+              rotulo="Vendas no período"
+              valor={pano?.resumo.vendas.valor}
+              formato={moeda}
+              icone={<Tag className="h-4 w-4" />}
+              tom="neutro"
+              sub={pano ? `${numero(pano.resumo.vendas.qtd)} venda(s) · margem ${percentual(pano.resumo.vendas.margemPct)}` : undefined}
+            />
+            <KpiV18
+              rotulo="Assistência no período"
+              valor={pano?.resumo.assistencia.valor}
+              formato={moeda}
+              icone={<Wrench className="h-4 w-4" />}
+              tom="neutro"
+              sub={pano ? `${numero(pano.resumo.assistencia.qtd)} OS · lucro ${moeda(pano.resumo.assistencia.lucro)}` : undefined}
+            />
+          </FaixaKpis>
+        </div>
+      </div>
 
       {p && (p.caixinhasFuturas > 0 || p.emprestimosDepois > 0) && (
         <Aparecer className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 ring-1 ring-slate-200">
@@ -446,91 +639,35 @@ export default function Jarvis() {
 }
 
 /**
- * A escada até o milhão.
+ * Os degraus até o milhão.
  *
- * Um milhão visto de longe não motiva ninguém: o número não muda de semana para semana.
- * Aqui o caminho aparece em degraus — o de agora com régua própria, os já vencidos
- * marcados — para que cada semana tenha um alvo que dá para alcançar.
+ * Um milhão visto de longe não motiva: o número não muda de uma semana para a outra.
+ * Em degraus, cada semana tem um alvo alcançável — e o que já foi vencido fica à vista,
+ * porque chegar até aqui também conta.
  */
-function Escada({
-  escada,
-  caixaLivre,
-  emJogo,
-}: {
-  escada: Painel['escada'];
-  caixaLivre: number;
-  emJogo: number;
-}) {
-  const { proximo, atual, faltaProximo, progresso, degraus } = escada;
-  const cobertura = faltaProximo > 0 ? Math.min(100, Math.round((emJogo / faltaProximo) * 100)) : 100;
-
+function Degraus({ escada }: { escada: Painel['escada'] }) {
   return (
-    <Aparecer>
-      <CardV18
-        titulo={proximo ? `Próximo degrau: ${proximo.nome}` : 'Objetivo alcançado'}
-        descricao={proximo ? proximo.o : 'o caixa livre passou do milhão'}
-        icone={<Target className="h-4 w-4" />}
-        tom="azul"
-      >
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-          <p className="text-sm text-slate-600">
-            {caixaLivre < 0 ? (
-              <>
-                Hoje o caixa fecha os 30 dias em <strong className="text-rose-600">{moeda(caixaLivre)}</strong>. Para
-                chegar no zero faltam <strong className="text-slate-900">{moeda(faltaProximo)}</strong>.
-              </>
-            ) : (
-              <>
-                Faltam <strong className="text-slate-900">{moeda(faltaProximo)}</strong> para{' '}
-                {proximo ? proximo.nome.toLowerCase() : 'o milhão'}.
-              </>
-            )}
-          </p>
-          {emJogo > 0 && (
-            <p className="text-sm text-slate-500">
-              As sugestões abertas somam <strong className="text-emerald-600">{moeda(emJogo)}</strong>
-              {faltaProximo > 0 && ` — ${cobertura}% deste degrau`}
-            </p>
-          )}
-        </div>
-
-        {/* a régua do degrau de agora */}
-        <div className="mb-1 h-2.5 overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-brand-500 to-emerald-500 transition-[width] duration-700"
-            style={{ width: `${Math.max(2, progresso)}%` }}
-          />
-        </div>
-        <div className="mb-5 flex justify-between text-xs text-slate-400">
-          <span>{atual ? atual.nome : 'no vermelho'}</span>
-          <span>{progresso}%</span>
-          <span>{proximo ? moeda(proximo.valor) : moeda(escada.degraus[escada.degraus.length - 1].valor)}</span>
-        </div>
-
-        {/* todos os degraus: o que já ficou para trás conta tanto quanto o que falta */}
-        <ol className="flex flex-wrap gap-1.5">
-          {degraus.map((d) => {
-            const agora = proximo?.valor === d.valor;
-            return (
-              <li
-                key={d.valor}
-                title={d.o}
-                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ring-1 ${
-                  d.conquistado
-                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-                    : agora
-                      ? 'bg-brand-50 font-medium text-brand-700 ring-brand-300'
-                      : 'bg-white text-slate-400 ring-slate-200'
-                }`}
-              >
-                {d.conquistado && <Check className="h-3 w-3" />}
-                {d.nome}
-              </li>
-            );
-          })}
-        </ol>
-      </CardV18>
-    </Aparecer>
+    <ol className="mt-4 flex flex-wrap gap-1.5 border-t border-slate-100 pt-4">
+      {escada.degraus.map((d) => {
+        const agora = escada.proximo?.valor === d.valor;
+        return (
+          <li
+            key={d.valor}
+            title={`${d.o} · ${moeda(d.valor)}`}
+            className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ring-1 ${
+              d.conquistado
+                ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                : agora
+                  ? 'bg-brand-50 font-semibold text-brand-700 ring-brand-300'
+                  : 'bg-white text-slate-400 ring-slate-200'
+            }`}
+          >
+            {d.conquistado && <Check className="h-3 w-3" />}
+            {d.nome}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

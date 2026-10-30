@@ -12,6 +12,7 @@
  */
 
 import { api } from '@/lib/api';
+import { emFrases } from '@/lib/frases';
 
 export const TTS_DISPONIVEL = typeof window !== 'undefined' && 'speechSynthesis' in window;
 
@@ -24,20 +25,21 @@ export const TTS_DISPONIVEL = typeof window !== 'undefined' && 'speechSynthesis'
 let audioAtual: HTMLAudioElement | null = null;
 /** Quando a voz clonada falhou, espera um pouco antes de tentar de novo. */
 let semClonadaAte = 0;
+/** marcado por pararDeFalar(): encerra a fila de frases em vez de tocar a próxima */
+let cortado = false;
 
-async function falarClonada(texto: string): Promise<boolean> {
-  if (Date.now() < semClonadaAte) return false;
+/** Pede o WAV de um pedaço. `null` quando o PC-servidor não respondeu. */
+async function wavDe(texto: string): Promise<Blob | null> {
   const blob = await api.blobPost('/jarvis/voz', { texto });
-  if (!blob || blob.size < 100) {
-    semClonadaAte = Date.now() + 5 * 60_000; // não insiste a cada frase
-    return false;
-  }
-  semClonadaAte = 0;
+  return blob && blob.size >= 100 ? blob : null;
+}
 
+/** Toca um WAV e resolve quando acaba (ou quando é cortado). */
+function tocar(blob: Blob): Promise<void> {
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
   audioAtual = audio;
-  await new Promise<void>((resolve) => {
+  return new Promise<void>((resolve) => {
     const fim = () => {
       URL.revokeObjectURL(url);
       if (audioAtual === audio) audioAtual = null;
@@ -47,6 +49,35 @@ async function falarClonada(texto: string): Promise<boolean> {
     audio.onerror = fim;
     audio.play().catch(fim);
   });
+}
+
+/**
+ * Fala com a voz clonada, em fila: toca a frase atual enquanto já pede a próxima.
+ * O tempo até o JARVIS abrir a boca passa a ser o da PRIMEIRA frase, não o do texto todo.
+ */
+async function falarClonada(texto: string): Promise<boolean> {
+  if (Date.now() < semClonadaAte) return false;
+
+  const partes = emFrases(texto);
+  if (!partes.length) return false;
+
+  const primeiro = await wavDe(partes[0]);
+  if (!primeiro) {
+    semClonadaAte = Date.now() + 5 * 60_000; // não insiste a cada frase
+    return false;
+  }
+  semClonadaAte = 0;
+
+  let atual: Blob | null = primeiro;
+  for (let i = 0; i < partes.length; i++) {
+    if (!atual) break;
+    // pede a próxima ANTES de tocar a atual: a geração acontece durante a fala
+    const proxima = i + 1 < partes.length ? wavDe(partes[i + 1]).catch(() => null) : Promise.resolve(null);
+    await tocar(atual);
+    // cortado pelo chefe (barge-in): para a fila aqui
+    if (!audioAtual && i + 1 < partes.length && cortado) { cortado = false; return true; }
+    atual = await proxima;
+  }
   return true;
 }
 
@@ -150,6 +181,7 @@ export function prepararFala(texto: string): string {
 }
 
 export function pararDeFalar() {
+  cortado = true;
   if (TTS_DISPONIVEL) window.speechSynthesis.cancel();
   if (audioAtual) {
     audioAtual.pause();
@@ -169,6 +201,7 @@ export async function falar(texto: string, opcoes: { velocidade?: number } = {})
   pararDeFalar();
 
   const pronto = prepararFala(texto);
+  cortado = false;
   if (await falarClonada(pronto)) return;
   if (!TTS_DISPONIVEL) return;
 

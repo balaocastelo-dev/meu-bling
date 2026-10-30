@@ -27,7 +27,7 @@ import { executarAcoes, mudarSituacao } from '../../core/situacoes.js';
 import { cancelarComissoes } from '../comum/financeiro.js';
 import { movimentarEstoque } from '../comum/estoque.js';
 import { vendedorDoUsuario } from '../comum/vendedores.js';
-import { receberVendaPagaNaHora, transferirVendedor } from '../vendas/service.js';
+import { desfazerCompraDaVenda, marcaCompraDaVenda, receberVendaPagaNaHora, transferirVendedor } from '../vendas/service.js';
 import { sugerirNcm } from '../robo-nf/ncm.js';
 import { consultar, transmitir } from '../../integracoes/fiscal/service.js';
 import { diagnosticar, type Achado, type Nivel } from '../diagnostico/service.js';
@@ -221,6 +221,46 @@ const corretores: Corretor[] = [
     auto: async (a) => estornarVenda(a.dados as any),
     acoes: () => [{ codigo: 'estornar', rotulo: 'Tentar estornar de novo', estilo: 'secundario' }],
     executar: async (_c, d) => (await estornarVenda(d)) ?? 'Nada a estornar: a venda já estava em dia.',
+  },
+
+  // ---------------------------------------------------------------- compra registrada ao finalizar uma venda cancelada/excluída
+  {
+    id: 'compra-de-venda-cancelada',
+    buscar: async () => {
+      const marca = marcaCompraDaVenda(0).replace(/ 0$/, ' ');
+      const compras = await prisma.compra.findMany({
+        where: { observacoesInternas: { contains: marca }, situacao: { cancelamento: false } },
+        select: { id: true, numero: true, total: true, observacoesInternas: true, situacao: { select: { nome: true } } },
+        take: 200,
+      });
+      const alvos: Alvo[] = [];
+      for (const c of compras) {
+        const m = new RegExp(marca.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\d+)').exec(c.observacoesInternas || '');
+        const numeroVenda = m ? Number(m[1]) : 0;
+        if (!numeroVenda) continue;
+        const venda = await prisma.venda.findFirst({ where: { tipo: 'PEDIDO', numero: numeroVenda }, select: { id: true, situacao: { select: { cancelamento: true, nome: true } } } });
+        if (venda && !venda.situacao.cancelamento) continue;
+        const pagas = await prisma.contaPagar.count({ where: { origemTipo: 'COMPRA', origemId: c.id, valorPago: { gt: 0 } } });
+        alvos.push({
+          alvo: `compra:${c.id}`,
+          nivel: 'erro',
+          area: 'Compras',
+          titulo: `Compra nº ${c.numero} (${brl(c.total)}) é da venda nº ${numeroVenda}, que foi ${venda ? 'cancelada' : 'excluída'}`,
+          mensagem: `A compra foi registrada ao finalizar essa venda e ficou "${c.situacao.nome}"${pagas ? ', com o pagamento saindo do banco' : ''}: a mercadoria e o dinheiro estão contando uma venda que não existe.`,
+          link: `/compras/${c.id}`,
+          dados: { compraId: c.id, numero: c.numero, vendaId: venda?.id ?? null, numeroVenda },
+        });
+      }
+      return alvos;
+    },
+    auto: async (a) => {
+      const d = a.dados as { compraId: number; numero: number; vendaId: number | null; numeroVenda: number };
+      const r = await prisma.$transaction((tx) => desfazerCompraDaVenda(tx, { id: d.vendaId ?? 0, numero: d.numeroVenda }, null, d.vendaId ? 'cancelar' : 'excluir'));
+      if (!r) return null;
+      if (!r.desfeita) throw new AppError(`Não desfiz sozinho: ${r.motivo}. Confira a compra e cancele/estorne à mão se for o caso.`, 422, 'COMPRA_MANTIDA');
+      const devolvido = r.devolvido.reduce((s, x) => s + x.valor, 0);
+      return `Desfiz a compra nº ${d.numero} da venda nº ${d.numeroVenda} (${d.vendaId ? 'cancelada' : 'excluída'})${devolvido > 0 ? `: ${brl(devolvido)} voltaram para o banco` : ''}.`;
+    },
   },
 
   // ---------------------------------------------------------------- comissão de venda cancelada

@@ -457,6 +457,8 @@ model Produto {
   nfItens     NotaFiscalItem[]
   consignacao Consignacao?
 
+  jarvisAnuncios JarvisAnuncio[]
+
   @@index([nome])
   @@index([prontaEntrega])
 }
@@ -580,6 +582,8 @@ model ContaFinanceira {
   carnes          Carne[]
   caixinhas       Caixinha[]
   transacoes      TransacaoBancaria[]
+
+  emailBancoRegras EmailBancoRegra[]
 }
 
 // ---------------------------------------------------------------------
@@ -1230,7 +1234,7 @@ model TransacaoBancaria {
   categoria         CategoriaFinanceira? @relation(fields: [categoriaId], references: [id])
   categoriaId       Int?
   conciliado        Boolean              @default(false)
-  /// OPEN_FINANCE | OFX | MANUAL
+  /// OPEN_FINANCE | OFX | MANUAL | EMAIL
   fonte             String               @default("OPEN_FINANCE")
   dadosBrutos       String? // JSON original
   importadoEm       DateTime             @default(now())
@@ -1972,24 +1976,163 @@ model JarvisMensagem {
 
 /// Configuração do JARVIS (uma linha só, id = 1). Segredos criptografados com APP_SECRET.
 model JarvisConfig {
-  id                Int       @id @default(1)
-  ligado            Boolean   @default(true)
-  metaCaixa         Float     @default(1000000)
-  dataAlvo          DateTime?
-  modeloIa          String    @default("claude-fable-5-1")
+  id                 Int       @id @default(1)
+  ligado             Boolean   @default(true)
+  metaCaixa          Float     @default(1000000)
+  dataAlvo           DateTime?
+  modeloIa           String    @default("claude-fable-5-1")
   /// chave da API da Anthropic (enc:...)
-  chaveAnthropic    String?
+  chaveAnthropic     String?
   /// % do valor de novo que o cliente paga num usado de boas condições
-  percVendaUsado    Int       @default(70)
+  percVendaUsado     Int       @default(70)
   /// % do valor de novo que a loja paga na compra, por condição
-  percCompraRegular Int       @default(30)
-  percCompraBom     Int       @default(50)
-  percCompraLacrado Int       @default(75)
+  percCompraRegular  Int       @default(30)
+  percCompraBom      Int       @default(50)
+  percCompraLacrado  Int       @default(75)
   /// dias sem venda para o produto entrar em ESTOQUE_PARADO
-  diasEstoqueParado Int       @default(45)
+  diasEstoqueParado  Int       @default(45)
   /// % da loja no consignado (o consignante fica com o resto)
-  percLojaConsignado Int      @default(20)
-  ultimaRodadaEm    DateTime?
-  ultimoErro        String?
-  atualizadoEm      DateTime  @updatedAt
+  percLojaConsignado Int       @default(20)
+  ultimaRodadaEm     DateTime?
+  ultimoErro         String?
+  atualizadoEm       DateTime  @updatedAt
+
+  // ---- Mercado Livre (docs/JARVIS.md §8). Segredos com enc: (AES-256-GCM / APP_SECRET)
+  mlClientId     String?
+  mlClientSecret String?
+  mlAccessToken  String?
+  mlRefreshToken String?
+  mlExpiraEm     DateTime?
+  mlUserId       String?
+  mlApelido      String?
+  /// tipo de anúncio padrão no ML (gold_special = clássico)
+  mlListingType  String    @default("gold_special")
+}
+
+// ---------------------------------------------------------------------------
+// ROBÔ DE E-MAIL DOS BANCOS
+// Lê as caixas de e-mail da loja, transforma aviso de banco em TransacaoBancaria
+// (fonte EMAIL) e deixa a conciliação existente fazer a baixa.
+// ---------------------------------------------------------------------------
+
+/// Configuração do robô de e-mail (uma linha só, id = 1).
+model EmailBancoConfig {
+  id              Int       @id @default(1)
+  ligado          Boolean   @default(true)
+  /// quantos dias olhar para trás na primeira leitura de cada caixa
+  diasIniciais    Int       @default(30)
+  /// dar baixa sozinho quando casar 1:1 com uma conta em aberto
+  baixaAutomatica Boolean   @default(true)
+  /// tolerância em minutos entre a hora do e-mail e a do lançamento
+  janelaMinutos   Int       @default(2880)
+  ultimaRodadaEm  DateTime?
+  ultimoErro      String?
+  atualizadoEm    DateTime  @updatedAt
+}
+
+/// Uma caixa de e-mail que o robô lê (IMAP do domínio próprio ou Gmail).
+model EmailBancoCaixa {
+  id              Int       @id @default(autoincrement())
+  nome            String
+  endereco        String    @unique
+  /// IMAP | GMAIL
+  tipo            String    @default("IMAP")
+  host            String?
+  porta           Int       @default(993)
+  usuario         String?
+  /// senha de IMAP ou refresh token do Gmail (enc:...)
+  segredo         String?
+  pasta           String    @default("INBOX")
+  ativo           Boolean   @default(true)
+  ultimaLeituraEm DateTime?
+  ultimoErro      String?
+  criadoEm        DateTime  @default(now())
+
+  mensagens EmailBancoMensagem[]
+}
+
+/// De qual remetente o robô aceita aviso, com qual parser e para qual conta.
+/// Remetente fora desta lista nunca vira lançamento.
+model EmailBancoRegra {
+  id                Int              @id @default(autoincrement())
+  nome              String
+  /// endereço exato (no-reply@sumup.com) ou domínio (@cora.com.br)
+  remetente         String
+  /// SUMUP_PIX | SUMUP_PAYOUT | CORA | ASAAS | MERCADOPAGO | BOLETO_FORNECEDOR
+  parser            String
+  contaFinanceira   ContaFinanceira? @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId Int?
+  ativo             Boolean          @default(true)
+  ordem             Int              @default(0)
+  criadoEm          DateTime         @default(now())
+
+  @@index([remetente])
+}
+
+/// Todo e-mail que o robô olhou, para não processar duas vezes e para auditoria.
+/// O Message-ID é único no mundo, então o mesmo aviso caindo em duas caixas entra uma vez só.
+model EmailBancoMensagem {
+  id           Int             @id @default(autoincrement())
+  caixa        EmailBancoCaixa @relation(fields: [caixaId], references: [id])
+  caixaId      Int
+  messageId    String          @unique
+  remetente    String
+  assunto      String
+  recebidoEm   DateTime
+  /// IMPORTADO | SEM_REGRA | SEM_DADOS | REMETENTE_SUSPEITO | ERRO
+  situacao     String          @default("SEM_REGRA")
+  motivo       String?
+  /// id da TransacaoBancaria gerada, quando virou lançamento
+  transacaoId  Int?
+  valor        Float?
+  processadoEm DateTime        @default(now())
+
+  @@index([situacao, recebidoEm])
+  @@index([recebidoEm])
+}
+
+/// CENTRAL DE ANÚNCIOS (docs/JARVIS.md §9) — um anúncio montado uma vez, publicado por canal.
+/// Canal com API oficial publica sozinho; canal sem API vira "kit pronto" para alguém publicar
+/// em um minuto. Automatizar site logado por navegador derruba a conta — não é feito aqui.
+model JarvisAnuncio {
+  id           Int      @id @default(autoincrement())
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+  produto      Produto? @relation(fields: [produtoId], references: [id])
+  produtoId    Int?
+  titulo       String
+  descricao    String
+  preco        Float
+  /// novo | usado
+  condicao     String   @default("novo")
+  /// JSON: ["url1", "url2"]
+  fotos        String?
+  geradoPorIa  Boolean  @default(true)
+
+  canais JarvisAnuncioCanal[]
+
+  @@index([criadoEm])
+  @@index([produtoId])
+}
+
+/// Situação do anúncio em cada canal.
+model JarvisAnuncioCanal {
+  id           Int           @id @default(autoincrement())
+  anuncio      JarvisAnuncio @relation(fields: [anuncioId], references: [id], onDelete: Cascade)
+  anuncioId    Int
+  /// MERCADO_LIVRE | SITE | BLOG | FACEBOOK | INSTAGRAM | GOOGLE_MEU_NEGOCIO | OLX
+  canal        String
+  /// PENDENTE | PUBLICADO | KIT_PRONTO | PRECISA_CONFIGURAR | ERRO
+  situacao     String        @default("PENDENTE")
+  idExterno    String?
+  url          String?
+  erro         String?
+  /// texto já adaptado ao canal (o kit mostra isto para copiar)
+  texto        String?
+  publicadoEm  DateTime?
+  /// quem marcou "publiquei" num canal de kit
+  publicadoPor String?
+
+  @@unique([anuncioId, canal])
+  @@index([situacao])
 }
