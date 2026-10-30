@@ -162,6 +162,52 @@ export async function calcularCaixaLivre(): Promise<CaixaLivre> {
   };
 }
 
+
+/**
+ * Os degraus até o milhão.
+ *
+ * Um milhão visto de −110 mil não é meta, é parede: o número não muda de semana para
+ * semana e desanima. Então o caminho é quebrado em degraus — o primeiro é sair do
+ * vermelho, o último é o milhão — e o painel mede sempre o degrau de agora. Assim
+ * cada semana tem um alvo que dá para alcançar, e dá para ver o anterior já vencido.
+ */
+export type Degrau = { valor: number; nome: string; o: string };
+
+const ESCADA: Degrau[] = [
+  { valor: 0, nome: 'Sair do vermelho', o: 'os próximos 30 dias pagos' },
+  { valor: 10_000, nome: 'Primeiro respiro', o: 'uma folga para não correr atrás' },
+  { valor: 25_000, nome: 'Semana tranquila', o: 'uma semana sem depender da venda do dia' },
+  { valor: 50_000, nome: 'Mês virado', o: 'um mês inteiro coberto' },
+  { valor: 100_000, nome: 'Os primeiros cem', o: 'caixa para comprar bem, à vista' },
+  { valor: 200_000, nome: 'Dobrou', o: 'estoque comprado sem financiar nada' },
+  { valor: 350_000, nome: 'Um terço do milhão', o: 'a loja andando com o próprio dinheiro' },
+  { valor: 500_000, nome: 'Metade do caminho', o: 'meio milhão livre no caixa' },
+  { valor: 750_000, nome: 'Reta final', o: 'três quartos do objetivo' },
+];
+
+export function escadaDoMilhao(caixaLivre: number, meta: number) {
+  const degraus = [...ESCADA.filter((d) => d.valor < meta), { valor: meta, nome: 'O milhão', o: 'o objetivo' }];
+
+  const vencidos = degraus.filter((d) => caixaLivre >= d.valor);
+  const atual = vencidos.length ? vencidos[vencidos.length - 1] : null;
+  const proximo = degraus.find((d) => caixaLivre < d.valor) ?? null;
+
+  // de onde começa a régua deste degrau: o degrau anterior, ou o fundo do buraco
+  const base = atual ? atual.valor : Math.min(caixaLivre, 0);
+  const topo = proximo ? proximo.valor : meta;
+  const vao = Math.max(1, topo - base);
+
+  return {
+    degraus: degraus.map((d) => ({ ...d, conquistado: caixaLivre >= d.valor })),
+    atual,
+    proximo,
+    faltaProximo: proximo ? arred(Math.max(0, proximo.valor - caixaLivre)) : 0,
+    progresso: Math.max(0, Math.min(100, arred(((caixaLivre - base) / vao) * 100))),
+    vencidos: vencidos.length,
+    total: degraus.length,
+  };
+}
+
 /** Grava a foto do momento (uma por rodada do worker). */
 export async function gravarMetrica(c: CaixaLivre) {
   return prisma.jarvisMetrica.create({
@@ -219,10 +265,15 @@ export async function mapaDoMilhao(meta: number, dataAlvo: Date | null) {
     }),
   ]);
 
+  const escada = escadaDoMilhao(atual.caixaLivre, meta);
+
   return {
     ...atual,
     meta,
     dataAlvo: alvo,
+    escada,
+    // o ritmo que importa é o do degrau de agora, não o do milhão
+    porDiaDoDegrau: arred(escada.faltaProximo / Math.max(1, diasUteis(new Date(), new Date(Date.now() + 30 * 86_400_000)))),
     falta: arred(falta),
     percentual: meta > 0 ? Math.min(100, arred((atual.caixaLivre / meta) * 100)) : 0,
     diasUteis: uteis,

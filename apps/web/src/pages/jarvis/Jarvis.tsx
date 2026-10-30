@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   Bot,
+  Check,
   CalendarClock,
   Clock,
   HandCoins,
@@ -51,6 +52,16 @@ interface Painel {
   meta: number;
   falta: number;
   percentual: number;
+  escada: {
+    degraus: { valor: number; nome: string; o: string; conquistado: boolean }[];
+    atual: { valor: number; nome: string; o: string } | null;
+    proximo: { valor: number; nome: string; o: string } | null;
+    faltaProximo: number;
+    progresso: number;
+    vencidos: number;
+    total: number;
+  };
+  porDiaDoDegrau: number;
   diasUteis: number;
   porDiaUtil: number;
   variacao7d: number | null;
@@ -392,20 +403,20 @@ export default function Jarvis() {
           icone={<Wallet className="h-4 w-4" />}
           tom={p && p.caixaLivre > 0 ? 'verde' : 'vermelho'}
           carregando={isLoading}
-          sub={p ? `${percentual(p.percentual)} da meta de ${moeda(p.meta)}` : undefined}
+          sub={p ? (p.escada.atual ? `${p.escada.atual.nome} — degrau ${p.escada.vencidos} de ${p.escada.total}` : 'antes do primeiro degrau') : undefined}
         />
         <KpiV18
-          rotulo="Falta para o milhão"
-          valor={p?.falta}
+          rotulo={p?.escada.proximo ? `Falta para: ${p.escada.proximo.nome}` : 'Objetivo alcançado'}
+          valor={p?.escada.faltaProximo}
           formato={moeda}
           icone={<Target className="h-4 w-4" />}
           tom="azul"
           carregando={isLoading}
-          sub={p ? `em ${p.diasUteis} dias úteis` : undefined}
+          sub={p?.escada.proximo ? p.escada.proximo.o : `${moeda(p?.meta ?? 0)} livres`}
         />
         <KpiV18
-          rotulo="Precisa entrar por dia útil"
-          valor={p?.porDiaUtil}
+          rotulo="Por dia útil, neste degrau"
+          valor={p?.porDiaDoDegrau}
           formato={moeda}
           icone={<TrendingUp className="h-4 w-4" />}
           tom="amarelo"
@@ -413,6 +424,9 @@ export default function Jarvis() {
           sub={p?.emJogo ? `${moeda(p.emJogo)} em jogo nas sugestões` : undefined}
         />
       </FaixaKpis>
+
+      {/* ===== a escada: onde você está e o que já ficou para trás ===== */}
+      {p && <Escada escada={p.escada} caixaLivre={p.caixaLivre} emJogo={p.emJogo} />}
 
       {p && (p.caixinhasFuturas > 0 || p.emprestimosDepois > 0) && (
         <Aparecer className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 ring-1 ring-slate-200">
@@ -428,6 +442,95 @@ export default function Jarvis() {
         <div key={b.chave}>{b.conteudo}</div>
       ))}
     </PaginaV18>
+  );
+}
+
+/**
+ * A escada até o milhão.
+ *
+ * Um milhão visto de longe não motiva ninguém: o número não muda de semana para semana.
+ * Aqui o caminho aparece em degraus — o de agora com régua própria, os já vencidos
+ * marcados — para que cada semana tenha um alvo que dá para alcançar.
+ */
+function Escada({
+  escada,
+  caixaLivre,
+  emJogo,
+}: {
+  escada: Painel['escada'];
+  caixaLivre: number;
+  emJogo: number;
+}) {
+  const { proximo, atual, faltaProximo, progresso, degraus } = escada;
+  const cobertura = faltaProximo > 0 ? Math.min(100, Math.round((emJogo / faltaProximo) * 100)) : 100;
+
+  return (
+    <Aparecer>
+      <CardV18
+        titulo={proximo ? `Próximo degrau: ${proximo.nome}` : 'Objetivo alcançado'}
+        descricao={proximo ? proximo.o : 'o caixa livre passou do milhão'}
+        icone={<Target className="h-4 w-4" />}
+        tom="azul"
+      >
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+          <p className="text-sm text-slate-600">
+            {caixaLivre < 0 ? (
+              <>
+                Hoje o caixa fecha os 30 dias em <strong className="text-rose-600">{moeda(caixaLivre)}</strong>. Para
+                chegar no zero faltam <strong className="text-slate-900">{moeda(faltaProximo)}</strong>.
+              </>
+            ) : (
+              <>
+                Faltam <strong className="text-slate-900">{moeda(faltaProximo)}</strong> para{' '}
+                {proximo ? proximo.nome.toLowerCase() : 'o milhão'}.
+              </>
+            )}
+          </p>
+          {emJogo > 0 && (
+            <p className="text-sm text-slate-500">
+              As sugestões abertas somam <strong className="text-emerald-600">{moeda(emJogo)}</strong>
+              {faltaProximo > 0 && ` — ${cobertura}% deste degrau`}
+            </p>
+          )}
+        </div>
+
+        {/* a régua do degrau de agora */}
+        <div className="mb-1 h-2.5 overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-brand-500 to-emerald-500 transition-[width] duration-700"
+            style={{ width: `${Math.max(2, progresso)}%` }}
+          />
+        </div>
+        <div className="mb-5 flex justify-between text-xs text-slate-400">
+          <span>{atual ? atual.nome : 'no vermelho'}</span>
+          <span>{progresso}%</span>
+          <span>{proximo ? moeda(proximo.valor) : moeda(escada.degraus[escada.degraus.length - 1].valor)}</span>
+        </div>
+
+        {/* todos os degraus: o que já ficou para trás conta tanto quanto o que falta */}
+        <ol className="flex flex-wrap gap-1.5">
+          {degraus.map((d) => {
+            const agora = proximo?.valor === d.valor;
+            return (
+              <li
+                key={d.valor}
+                title={d.o}
+                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ring-1 ${
+                  d.conquistado
+                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                    : agora
+                      ? 'bg-brand-50 font-medium text-brand-700 ring-brand-300'
+                      : 'bg-white text-slate-400 ring-slate-200'
+                }`}
+              >
+                {d.conquistado && <Check className="h-3 w-3" />}
+                {d.nome}
+              </li>
+            );
+          })}
+        </ol>
+      </CardV18>
+    </Aparecer>
   );
 }
 
