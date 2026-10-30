@@ -103,6 +103,7 @@ async function main() {
     rodar('Carnê próprio: PIX no Cora, risco 7–15%, auditoria, venda no carnê, receber, DRE e impressão', NPX, ['tsx', 'testes/carnes.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Consignação: contrato, assinatura pelo celular, desconto autorizado, venda na hora, diárias em dias úteis, quitação, retirada e vitrine do site', NPX, ['tsx', 'testes/consignacao.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Caixinhas (Nubank): por dia, sugestão de hoje, guardar/retirar fora do DRE + avisos do gestor', NPX, ['tsx', 'testes/caixinhas.ts', base]);
+    rodar('JARVIS: conserto pronto não retirado e orçamento parado viram sugestão com número real', NPX, ['tsx', 'testes/jarvis-caixa-parado.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Meu Dashboard: vendedor/técnico sem lucro, técnico que vende, alertas "Corrija", lembretes, metas e desafios de técnico, ver como', NPX, ['tsx', 'testes/meu-dashboard.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Robô de NF: NCM automático, cliente completo, Pronto pra NF, emitir com um clique, CFOP fora do estado', NPX, ['tsx', 'testes/robo-nf.ts', base]);
     rodar('Documentos da venda: recibo 80mm/A4, certificados de garantia, termo, licenças e versículo', NPX, ['tsx', 'testes/documentos.ts', base]);

@@ -665,6 +665,165 @@ async function vendaSemCusto(): Promise<Sugestao[]> {
   ];
 }
 
+// ------------------------------------------------------------------ OS_PRONTA_PARADA
+/**
+ * Conserto pronto que o cliente ainda não retirou.
+ *
+ * É o dinheiro mais barato de buscar na loja: o serviço já foi feito, a peça já foi
+ * paga e o valor só entra quando o cliente aparece. Enquanto isso o aparelho ocupa a
+ * prateleira e o risco é da loja. Um WhatsApp avisando que está pronto costuma
+ * resolver — por isso a sugestão traz o telefone de cada um.
+ *
+ * Não dá para confiar em `dataConclusao`: nesta loja "Concluída" e "Aguardando
+ * retirada" não são situações finais, e o sistema só grava essa data quando a
+ * situação é final. Quem diz que o conserto acabou é a situação da OS; a data de
+ * conclusão entra só para contar há quantos dias o aparelho está parado.
+ */
+async function osProntaParada(diasLimite = 3): Promise<Sugestao[]> {
+  const corte = new Date(Date.now() - diasLimite * 86_400_000);
+  const situacoes = await prisma.situacao.findMany({ where: { modulo: 'OS' }, select: { id: true, nome: true, final: true, cancelamento: true } });
+  // "entregue" é a mesma convenção que o resto do sistema usa para gravar a data de saída
+  const entregue = (s: { nome: string }) => /entreg/i.test(s.nome);
+  const pronta = (s: { nome: string; final: boolean; cancelamento: boolean }) =>
+    !s.cancelamento && !entregue(s) && (s.final || /conclu|retirad|pront|finaliz/i.test(s.nome));
+  const idsProntas = situacoes.filter(pronta).map((s) => s.id);
+  if (idsProntas.length === 0) return [];
+
+  // parada = acabou há mais de `diasLimite` dias e ainda não saiu da loja
+  const lista = await prisma.ordemServico.findMany({
+    where: {
+      situacaoId: { in: idsProntas },
+      dataSaida: null,
+      total: { gt: 0 },
+      OR: [{ dataConclusao: { lte: corte } }, { dataConclusao: null, atualizadoEm: { lte: corte } }],
+    },
+    select: {
+      id: true,
+      numero: true,
+      total: true,
+      dataConclusao: true,
+      atualizadoEm: true,
+      equipamento: true,
+      marca: true,
+      modelo: true,
+      situacao: { select: { nome: true } },
+      contato: { select: { id: true, nome: true, celular: true } },
+      tecnico: { select: { nome: true } },
+    },
+    orderBy: [{ dataConclusao: 'asc' }, { atualizadoEm: 'asc' }],
+  });
+  if (lista.length === 0) return [];
+
+  const alvos = lista.map((o) => ({
+    id: o.id,
+    numero: o.numero,
+    total: arred(o.total),
+    diasParada: dias(o.dataConclusao ?? o.atualizadoEm),
+    situacao: o.situacao.nome,
+    aparelho: [o.equipamento, o.marca, o.modelo].filter(Boolean).join(' ') || 'Equipamento',
+    cliente: o.contato?.nome ?? 'Cliente',
+    contatoId: o.contato?.id ?? null,
+    celular: o.contato?.celular ?? null,
+    tecnico: o.tecnico?.nome ?? null,
+  }));
+  const total = arred(alvos.reduce((s, o) => s + o.total, 0));
+  if (total <= 0) return [];
+
+  const maisVelha = alvos.reduce((a, b) => (a.diasParada > b.diasParada ? a : b));
+  const semTelefone = alvos.filter((o) => !o.celular).length;
+
+  return [
+    {
+      regra: 'OS_PRONTA_PARADA',
+      chave: 'OS_PRONTA_PARADA:geral',
+      perfis: 'ADMIN,GERENTE',
+      titulo: `${alvos.length} conserto(s) pronto(s) sem retirar: ${reais(total)}`,
+      texto:
+        `Tem ${reais(total)} em ${alvos.length} ordem(ns) de serviço já concluída(s) e ainda na prateleira. ` +
+        `A mais antiga é a nº ${maisVelha.numero} (${maisVelha.aparelho}, ${maisVelha.cliente}), parada há ${maisVelha.diasParada} dia(s). ` +
+        `O serviço já foi feito e a peça já foi paga: esse dinheiro entra assim que o cliente buscar. ` +
+        `Avise um por um pelo WhatsApp que está pronto${semTelefone ? ` (${semTelefone} sem celular no cadastro)` : ''}.`,
+      impactoEstimado: total,
+      prioridade: total > 3_000 ? 1 : 2,
+      dados: { total, quantidade: alvos.length, ordens: alvos.slice(0, 30) },
+      acao: 'ABRIR_TELA',
+      link: '/ordens-servico',
+    },
+  ];
+}
+
+// ------------------------------------------------------------------ ORCAMENTO_PARADO
+/**
+ * Orçamento que o cliente pediu e ninguém retomou.
+ *
+ * Orçamento não morre por "não": morre de silêncio. O valor abaixo não é caixa certo —
+ * é pipeline, e por isso o impacto estimado usa uma conversão conservadora de 30%,
+ * dita em voz alta no texto para ninguém somar isso como se fosse venda fechada.
+ */
+async function orcamentoParado(diasLimite = 5): Promise<Sugestao[]> {
+  const hoje = new Date();
+  const corte = new Date(Date.now() - diasLimite * 86_400_000);
+  const [finais, canceladas] = await Promise.all([
+    prisma.situacao.findMany({ where: { modulo: 'VENDA', final: true, cancelamento: false }, select: { id: true } }),
+    prisma.situacao.findMany({ where: { modulo: 'VENDA', cancelamento: true }, select: { id: true } }),
+  ]);
+  const fora = [...finais.map((x) => x.id), ...canceladas.map((x) => x.id)];
+
+  const lista = await prisma.venda.findMany({
+    where: { tipo: 'ORCAMENTO', situacaoId: { notIn: fora }, data: { lte: corte }, total: { gt: 0 } },
+    select: {
+      id: true,
+      numero: true,
+      total: true,
+      data: true,
+      validade: true,
+      contato: { select: { id: true, nome: true, celular: true } },
+      vendedor: { select: { nome: true } },
+    },
+    orderBy: { data: 'asc' },
+  });
+  if (lista.length === 0) return [];
+
+  const alvos = lista.map((v) => ({
+    id: v.id,
+    numero: v.numero,
+    total: arred(v.total),
+    diasParado: dias(v.data),
+    vencido: !!v.validade && v.validade < hoje,
+    cliente: v.contato?.nome ?? 'Cliente',
+    contatoId: v.contato?.id ?? null,
+    celular: v.contato?.celular ?? null,
+    vendedor: v.vendedor?.nome ?? null,
+  }));
+  const total = arred(alvos.reduce((s, v) => s + v.total, 0));
+  if (total <= 0) return [];
+
+  // pipeline, não caixa: 30% é o que costuma fechar quando alguém volta a falar com o cliente
+  const impacto = arred(total * 0.3);
+  const vencidos = alvos.filter((v) => v.vencido);
+  const maiores = [...alvos].sort((a, b) => b.total - a.total).slice(0, 3);
+
+  return [
+    {
+      regra: 'ORCAMENTO_PARADO',
+      chave: 'ORCAMENTO_PARADO:geral',
+      perfis: 'ADMIN,GERENTE',
+      titulo: `${alvos.length} orçamento(s) parado(s) há mais de ${diasLimite} dias`,
+      texto:
+        `São ${reais(total)} em orçamentos que ninguém retomou` +
+        `${vencidos.length ? `, ${vencidos.length} deles já passaram da validade` : ''}. ` +
+        `Os maiores são ${maiores.map((v) => `nº ${v.numero} ${v.cliente} (${reais(v.total)})`).join(', ')}. ` +
+        `Isso é pipeline, não caixa certo: contando uns 30% que costumam fechar quando alguém volta a falar com o cliente, ` +
+        `dá perto de ${reais(impacto)}. Vale uma ligação em cada um antes de o preço da peça mudar.`,
+      impactoEstimado: impacto,
+      prioridade: total > 10_000 ? 2 : 3,
+      dados: { total, impacto, quantidade: alvos.length, vencidos: vencidos.length, orcamentos: alvos.slice(0, 30) },
+      acao: 'ABRIR_TELA',
+      link: '/orcamentos',
+    },
+  ];
+}
+
 // ------------------------------------------------------------------ MAPA_MILHAO
 /** Uma vez por dia: onde estamos no caminho do R$ 1 milhão. */
 async function mapaMilhao(meta: number, caixa: Awaited<ReturnType<typeof calcularCaixaLivre>>): Promise<Sugestao[]> {
@@ -699,6 +858,8 @@ export async function rodarRegras(cfg: { diasEstoqueParado: number; metaCaixa: n
   const partes = await Promise.all([
     estoqueParado(cfg.diasEstoqueParado).catch(() => []),
     crediarioVencido().catch(() => []),
+    osProntaParada().catch(() => []),
+    orcamentoParado().catch(() => []),
     consignadoPrazo().catch(() => []),
     lumicredCusto(caixa.caixaLivre).catch(() => []),
     caixinhaAtrasada().catch(() => []),

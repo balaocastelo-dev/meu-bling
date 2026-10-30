@@ -140,7 +140,8 @@ model JarvisSugestao {
   id            String   @id @default(cuid())
   criadaEm      DateTime @default(now())
   regra         String   // ex.: ESTOQUE_PARADO, CREDIARIO_VENCIDO, CONSIGNADO_PRAZO, LUMICRED_CUSTO, CAIXINHA_ATRASADA,
-                         //      TAXA_CARTAO, OS_SEM_CUSTO, PRECO_FORA_MERCADO, OPORTUNIDADE_COMPRA, PERGUNTA_IA
+                         //      TAXA_CARTAO, OS_SEM_CUSTO, PRECO_FORA_MERCADO, OPORTUNIDADE_COMPRA,
+                         //      OS_PRONTA_PARADA, ORCAMENTO_PARADO, PERGUNTA_IA
   perfis        String   // para quem aparece: "ADMIN" | "ADMIN,GERENTE" | "VENDEDOR" | "TECNICO"...
   titulo        String
   texto         String   // instrução em português (gerada pela IA a partir dos números da regra)
@@ -236,6 +237,8 @@ Cada regra devolve alvos com números; a IA só escreve o texto. Impacto estimad
 | `MARGEM_BAIXA` | ADMIN | categorias com margem real (DRE) abaixo da média da loja | nenhuma |
 | `PRECO_FORA_MERCADO` | ADMIN, GERENTE | produto com preço > mediana do ML em mais de 15% (não vende) ou < custo + margem mínima (deixa dinheiro na mesa) | `ABRIR_TELA` do produto com o preço sugerido |
 | `OPORTUNIDADE_COMPRA` | ADMIN | itens que mais giram (vendas 30 dias) e estão com estoque abaixo de 7 dias de venda; sugere repor com o caixa livre | `ABRIR_TELA` do pedido de compra |
+| `OS_PRONTA_PARADA` | ADMIN, GERENTE | conserto pronto e não retirado há mais de 3 dias: serviço feito e peça paga, só falta o cliente buscar. **Lê a SITUAÇÃO da OS, não `dataConclusao`** — nesta loja "Concluída" e "Aguardando retirada" não são situações finais, e o sistema só grava a data de conclusão quando a situação é final; usar a data deixaria a regra sem enxergar quase nada. A data entra só para contar há quantos dias está parada (quando falta, usa `atualizadoEm`). Sai da conta quando tem `dataSaida` ou a situação é de entrega | `ABRIR_TELA` da lista de OS; a sugestão traz número, aparelho, cliente e celular para avisar um por um |
+| `ORCAMENTO_PARADO` | ADMIN, GERENTE | orçamentos abertos há mais de 5 dias, com destaque para os que passaram da validade. **Não é caixa certo**: o impacto usa conversão conservadora de 30%, dita em voz alta no texto para ninguém somar pipeline como venda fechada | `ABRIR_TELA` da lista de orçamentos |
 | `MAPA_MILHAO` | ADMIN | gerada 1x por dia: as 3 alavancas com maior impacto hoje (margem, giro, assistência, consignação, custo financeiro) | nenhuma |
 
 Aceitar executa a ação, muda a situação para ACEITA e agenda a medição; Adiar pede uma data; Recusar guarda o
