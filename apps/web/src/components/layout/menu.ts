@@ -37,6 +37,7 @@ import {
   BookOpen,
   Handshake,
   MessagesSquare,
+  Megaphone,
 } from 'lucide-react';
 import type { Perfil } from '@/types';
 
@@ -75,6 +76,8 @@ export const MENU: GrupoMenu[] = [
     titulo: 'Vendas',
     itens: [
       { rotulo: 'Painel do vendedor', para: '/meu-painel', icone: Gauge, perfis: GESTAO },
+      // Vitrine da equipe: o vendedor e o técnico publicam e acompanham o que os anúncios deles rendem
+      { rotulo: 'Meus anúncios', para: '/anuncios', icone: Megaphone, perfis: [...GESTAO, 'VENDEDOR', 'TECNICO'] },
       { rotulo: 'Pedidos de venda', para: '/vendas', icone: ShoppingCart },
       { rotulo: 'Orçamentos', para: '/orcamentos', icone: FileSignature },
       { rotulo: 'Clientes', para: '/contatos', icone: Users, alias: ['/contatos'] },

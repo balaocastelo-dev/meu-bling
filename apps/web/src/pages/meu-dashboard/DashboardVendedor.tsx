@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Award, Package, Plus, Receipt, ShoppingCart, TrendingUp, Trophy } from 'lucide-react';
+import { Award, Megaphone, Package, Plus, Receipt, ShoppingCart, TrendingUp, Trophy } from 'lucide-react';
 import { Button, BadgeCor, EmptyState, Skeleton } from '@/components/ui';
 import { Aparecer, CardV18, FaixaKpis, KpiV18, PaginaV18, SecaoDetalhes } from '@/components/dashboard/v18';
 import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
@@ -67,6 +67,11 @@ export default function DashboardVendedor({ dados, carregando, faixa, filtros, v
         acoes={
           <>
             {verComo}
+            {/* o anúncio próprio é dinheiro a mais no bolso do vendedor: fica ao lado da ação
+                principal, com o percentual à vista para dar vontade de publicar */}
+            <Link to="/anuncios" title="Publique um produto ou serviço seu na vitrine do site e ganhe 20% do lucro das vendas que ele trouxer">
+              <Button variante="secundario" icone={<Megaphone className="h-4 w-4" />}>Criar anúncio · ganhe 20%</Button>
+            </Link>
             <Link to="/vendas/nova">
               <Button variante="primario" icone={<Plus className="h-4 w-4" />}>Nova venda</Button>
             </Link>

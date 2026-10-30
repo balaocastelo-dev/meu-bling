@@ -16,6 +16,7 @@ import { Badge, EmptyState, Skeleton, tomPorStatus } from '@/components/ui';
 import { inteiro, moeda, numero, percentual, rotulo } from '@/lib/format';
 import { Aparecer, Avatar, BarraAnimada, CardV18, FaixaKpis, KpiV18, LinhaV18, PaginaV18, SaldosContas, SecaoDetalhes, SegmentadoV18, TONS, listaVariants, type Tom } from '@/components/dashboard/v18';
 import { FiltroPeriodo, usePeriodoDashboard } from '@/components/dashboard/periodo';
+import { CardAnunciosEquipe } from '@/components/dashboard/CardAnunciosEquipe';
 import { CORES, TooltipPadrao, eixoMoeda, rotuloPeriodo } from '@/components/compartilhados/graficos';
 import { useAuth } from '@/stores/auth';
 import type { DashboardGeral as Dados, DashboardPanorama, StatusSefaz } from '@/types';
@@ -462,6 +463,9 @@ export default function DashboardGeral({ acoesExtras }: { acoesExtras?: React.Re
           )}
         </CardV18>
       </div>
+
+      {/* Vitrine da equipe: o lucro que os anúncios trouxeram e o pagamento extra que sai dele */}
+      <CardAnunciosEquipe dataInicial={dataInicial} dataFinal={dataFinal} faixa={faixa} />
 
       <SecaoDetalhes titulo="Agora na loja" dica="não depende do período" />
 
