@@ -173,6 +173,9 @@ export async function publicarItem(p: {
   titulo: string; descricao: string; preco: number; condicao: 'novo' | 'usado';
   quantidade?: number; fotos: string[]; categoriaId?: string | null; listingType?: string;
 }): Promise<ResultadoPublicacao> {
+  // A conta vem PRIMEIRO: sem ela ligada, não adianta mandar cadastrar foto — o que falta é conectar.
+  // (Antes o "sem foto" vinha antes e escondia o motivo real, virando ERRO em vez de PRECISA_CONFIGURAR.)
+  await tokenValido();
   if (!p.fotos.length) {
     throw new AppError('O Mercado Livre não aceita anúncio sem foto. Cadastre uma imagem no produto.', 422, 'SEM_FOTO');
   }
