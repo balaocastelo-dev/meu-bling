@@ -15,6 +15,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { env } from '../../lib/env.js';
+import { azureLigada, falaAzure } from './voz-azure.js';
 
 const SERVIDOR = process.env.VOZ_CLONE_URL || 'http://172.16.1.1:8770';
 /** Mais passos = fala mais natural. A URA fica em 16 (ligação não espera); aqui dá para 32. */
@@ -45,12 +46,20 @@ function emPausa(): boolean {
   return falhouEm > 0 && Date.now() - falhouEm < PAUSA_APOS_FALHA_MS;
 }
 
-function digital(texto: string): string {
-  return crypto.createHash('sha1').update(`${PERFIL}|${TAXA}|${texto}`).digest('hex');
+function digital(texto: string, marca: string): string {
+  return crypto.createHash('sha1').update(`${marca}|${texto}`).digest('hex');
+}
+
+/** Quem fala agora: a Azure quando há chave, senão a voz do PC da loja. */
+function vozEscolhida() {
+  return azureLigada()
+    ? { marca: `az|${process.env.JARVIS_VOZ_AZURE || 'thalita'}`, ext: 'mp3', tipo: 'audio/mpeg' as const }
+    : { marca: `cl|${PERFIL}|${TAXA}|${PASSOS}`, ext: 'wav', tipo: 'audio/wav' as const };
 }
 
 /** O PC está no ar e com a voz carregada? */
 export async function vozDisponivel(): Promise<boolean> {
+  if (azureLigada()) return true;
   try {
     const r = await fetch(`${SERVIDOR}/saude`, { signal: AbortSignal.timeout(2500) });
     if (!r.ok) return false;
@@ -66,21 +75,52 @@ export async function vozDisponivel(): Promise<boolean> {
 }
 
 /**
- * Devolve o WAV da frase. Procura primeiro no que já foi falado antes;
- * só incomoda a GPU quando é frase nova. `null` = o PC não respondeu.
+ * Devolve o áudio da frase, com o tipo para o navegador tocar.
+ *
+ * Procura primeiro no que já foi falado antes — as falas do JARVIS se repetem muito,
+ * e repetida sai na hora sem gastar cota nem GPU. Frase nova vai para a Azure; se ela
+ * não responder, para a voz do PC da loja. `null` = ninguém atendeu, e aí quem fala
+ * é o próprio navegador.
  */
-export async function falaDe(texto: string): Promise<Buffer | null> {
+export async function falaDe(texto: string): Promise<{ audio: Buffer; tipo: string } | null> {
   const limpo = texto.trim().slice(0, LIMITE_TEXTO);
   if (!limpo) return null;
 
-  const arquivo = path.join(PASTA, `${digital(limpo)}.wav`);
+  const escolha = vozEscolhida();
+  const arquivo = path.join(PASTA, `${digital(limpo, escolha.marca)}.${escolha.ext}`);
   try {
-    return await fs.readFile(arquivo);
+    return { audio: await fs.readFile(arquivo), tipo: escolha.tipo };
   } catch {
     /* frase nova */
   }
 
-  // o cache acima vale sempre; daqui para baixo é ir ao PC
+  // 1ª escolha: a voz boa da Azure
+  const mp3 = await falaAzure(limpo);
+  if (mp3) {
+    await guardar(arquivo, mp3);
+    return { audio: mp3, tipo: 'audio/mpeg' };
+  }
+
+  // 2ª: a voz do PC da loja (o cache dela tem marca própria)
+  const wav = await falaClonada(limpo);
+  if (!wav) return null;
+  const arquivoPc = path.join(PASTA, `${digital(limpo, `cl|${PERFIL}|${TAXA}|${PASSOS}`)}.wav`);
+  await guardar(arquivoPc, wav);
+  return { audio: wav, tipo: 'audio/wav' };
+}
+
+/** Guarda a frase falada; se o disco falhar, o áudio vai do mesmo jeito. */
+async function guardar(arquivo: string, audio: Buffer) {
+  try {
+    await fs.mkdir(PASTA, { recursive: true });
+    await fs.writeFile(arquivo, audio);
+  } catch {
+    /* sem cache desta vez */
+  }
+}
+
+/** A voz que roda no PC-servidor da loja (reserva). */
+async function falaClonada(texto: string): Promise<Buffer | null> {
   if (emPausa()) return null;
 
   let resposta: Response;
@@ -88,7 +128,7 @@ export async function falaDe(texto: string): Promise<Buffer | null> {
     resposta = await fetch(`${SERVIDOR}/tts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ texto: limpo, perfil: PERFIL, taxa: TAXA, formato: 'wav', passos: PASSOS }),
+      body: JSON.stringify({ texto, perfil: PERFIL, taxa: TAXA, formato: 'wav', passos: PASSOS }),
       signal: AbortSignal.timeout(ESPERA_MS),
     });
   } catch {
@@ -99,20 +139,11 @@ export async function falaDe(texto: string): Promise<Buffer | null> {
     falhouEm = Date.now();
     return null;
   }
-
   const wav = Buffer.from(await resposta.arrayBuffer());
   if (wav.length < 100) {
     falhouEm = Date.now();
     return null;
   }
   falhouEm = 0; // voltou a responder
-
-  // guarda para a próxima vez; se o disco falhar, o áudio vai do mesmo jeito
-  try {
-    await fs.mkdir(PASTA, { recursive: true });
-    await fs.writeFile(arquivo, wav);
-  } catch {
-    /* sem cache desta vez */
-  }
   return wav;
 }

@@ -524,15 +524,15 @@ export default async function jarvisRoutes(app: FastifyInstance) {
 
   app.post('/api/v1/jarvis/voz', admin, async (req, reply) => {
     const { texto } = z.object({ texto: z.string().min(1).max(2000) }).parse(req.body);
-    const wav = await falaDe(texto);
-    if (!wav) {
+    const fala = await falaDe(texto);
+    if (!fala) {
       // o PC-servidor não respondeu: o navegador usa a própria voz
       return reply.code(503).send({ erro: 'VOZ_INDISPONIVEL', mensagem: 'A voz clonada não respondeu agora.' });
     }
     return reply
-      .header('Content-Type', 'audio/wav')
-      .header('Content-Length', String(wav.length))
+      .header('Content-Type', fala.tipo)
+      .header('Content-Length', String(fala.audio.length))
       .header('Cache-Control', 'private, max-age=86400')
-      .send(wav);
+      .send(fala.audio);
   });
 }
