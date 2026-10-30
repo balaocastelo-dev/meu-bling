@@ -169,6 +169,8 @@ export default function Bancos() {
             {contas?.map((c) => <CardConta key={c.id} conta={c} onSincronizar={() => sincronizar.mutate(c.id)} sincronizando={sincronizar.isPending} onDesvincular={() => { if (confirm('Desvincular esta conta do Open Finance?')) desvincular.mutate(c.id); }} />)}
           </div>
 
+          <UltimosLancamentos verSaldo={verSaldo} onVerExtrato={() => pg.setFiltro('aba', 'extrato')} />
+
           {of?.configurado && (
             <Card titulo="Vincular pelo Item ID (Meu Pluggy)" descricao="Caminho gratuito: conecte o banco em meu.pluggy.ai, autorize no app Demo da Pluggy e cole aqui o Item ID (menu ⋮ → “Copiar Item ID”). As contas do item são vinculadas na hora.">
               <div className="flex flex-wrap items-end gap-2">
@@ -378,7 +380,7 @@ function Extrato({ contas }: { contas: ContaFinanceira[] }) {
   const pg = usePaginacao(50);
   const qc = useQueryClient();
   const params = { contaFinanceiraId: pg.getFiltro('contaFinanceiraId'), dataInicial: pg.getFiltro('dataInicial'), dataFinal: pg.getFiltro('dataFinal'), pagina: pg.pagina, limite: pg.limite };
-  const { data: resp, isLoading } = useQuery({ queryKey: ['movimentos-fin', params], queryFn: () => api.get<Paginado<{ id: number; data: string; tipo: string; valor: number; descricao: string; categoria?: { nome: string } | null; contaFinanceira?: { nome: string } | null; conciliado: boolean }>>('/financeiro/movimentos', params), placeholderData: (p) => p });
+  const { data: resp, isLoading } = useQuery({ queryKey: ['movimentos-fin', params], queryFn: () => api.get<Paginado<MovimentoResumo>>('/financeiro/movimentos', params), placeholderData: (p) => p });
   const excluir = useMutation({
     mutationFn: (id: number) => api.del(`/financeiro/movimentos/${id}`),
     onSuccess: () => {
@@ -419,6 +421,51 @@ function Extrato({ contas }: { contas: ContaFinanceira[] }) {
         </div>
       )}
       {resp && <Pagination pagina={resp.meta.pagina} totalPaginas={resp.meta.totalPaginas} total={resp.meta.total} limite={resp.meta.limite} onPagina={pg.setPagina} />}
+    </Card>
+  );
+}
+
+type MovimentoResumo = { id: number; data: string; tipo: string; valor: number; descricao: string; categoria?: { nome: string } | null; contaFinanceira?: { nome: string } | null; conciliado: boolean };
+
+/** Últimos lançamentos — atalho de conferência direto na aba Contas, sem precisar abrir o extrato */
+function UltimosLancamentos({ verSaldo, onVerExtrato }: { verSaldo: boolean; onVerExtrato: () => void }) {
+  const { data: resp, isLoading } = useQuery({
+    queryKey: ['movimentos-fin', 'ultimos'],
+    queryFn: () => api.get<Paginado<MovimentoResumo>>('/financeiro/movimentos', { pagina: 1, limite: 15 }),
+    placeholderData: (p) => p,
+  });
+  return (
+    <Card
+      semPadding
+      titulo="Últimos lançamentos"
+      descricao="As 15 movimentações mais recentes de todas as contas, para conferir na hora."
+      acoes={<Button tamanho="xs" variante="secundario" onClick={onVerExtrato}>Ver extrato completo</Button>}
+    >
+      {isLoading ? (
+        <div className="p-4"><Skeleton className="h-40" /></div>
+      ) : !resp?.data.length ? (
+        <EmptyState titulo="Nenhum lançamento ainda" descricao="Assim que entrar ou sair dinheiro de uma conta, aparece aqui." />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="tbl">
+            <thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th>Categoria</th><th>Tipo</th><th className="text-right">Valor</th></tr></thead>
+            <tbody>
+              {resp.data.map((m) => (
+                <tr key={m.id}>
+                  <td className="whitespace-nowrap text-xs text-slate-500">{data(m.data)}</td>
+                  <td className="max-w-[22rem] truncate" title={m.descricao}>{m.descricao}</td>
+                  <td className="whitespace-nowrap text-slate-500">{m.contaFinanceira?.nome ?? '—'}</td>
+                  <td className="whitespace-nowrap text-xs text-slate-500">{m.categoria?.nome ?? '—'}</td>
+                  <td><Badge tom={m.tipo === 'ENTRADA' ? 'verde' : m.tipo === 'SAIDA' ? 'vermelho' : 'neutro'}>{rotulo(m.tipo)}</Badge></td>
+                  <td className={clsx('num whitespace-nowrap text-right font-medium', verSaldo ? (m.tipo === 'SAIDA' ? 'text-red-600' : 'text-emerald-700') : 'tracking-widest text-slate-400')}>
+                    {verSaldo ? `${m.tipo === 'SAIDA' ? '-' : '+'}${moeda(m.valor)}` : 'R$ ••••••'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Card>
   );
 }
