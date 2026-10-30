@@ -12,6 +12,7 @@ import { prisma } from '../../lib/prisma.js';
 import { dataSchema, arredondar } from '../../lib/util.js';
 import { resumoFinanceiro } from '../financeiro/service.js';
 import { chavePeriodo, listarPeriodos, resolverPeriodo, periodoAnterior, agruparPadrao, type Agrupar } from '../financeiro/periodos.js';
+import { comissaoDeAnuncioDoTecnico, painelAnuncios } from '../anuncios/painel.js';
 import { status as statusWhatsApp } from '../../integracoes/whatsapp/provedor.js';
 import { ultimosAcontecimentos, ultimosLancamentos } from './atividades.js';
 import { fechamentoOs } from '../ordens-servico/service.js';
@@ -696,12 +697,32 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const todas = (await ordensAssistencia(ini, fim, b.base, b.filtroTecnicoId ?? undefined, sitOk)).filter((o) => !sitCanc.includes(o.situacaoId));
     const consideradas = b.escopo === 'TODAS' ? todas : todas.filter((o) => sitOk.includes(o.situacaoId));
     const totais = somarAssistencia(consideradas);
-    const valor = arredondar((totais.lucro * b.percentual) / 100);
+    // Lucro já pago a este técnico pela vitrine da equipe no período (33% do anúncio dele).
+    // Tirar essa fatia da base evita pagar duas vezes pelo mesmo serviço — ver docs/VITRINE-EQUIPE.md.
+    const porAnuncio = await comissaoDeAnuncioDoTecnico(tecnico.id, ini, fim);
+    const lucroConsiderado = arredondar(Math.max(0, totais.lucro - porAnuncio.lucro));
+    const valor = arredondar((lucroConsiderado * b.percentual) / 100);
     const faixa = `${format(ini, 'dd/MM/yyyy')} a ${format(fim, 'dd/MM/yyyy')}`;
     const descricao = `Pagamento técnico ${tecnico.nome} — ${b.percentual}% do lucro da assistência (${faixa})`;
-    const previa = { tecnico: { id: tecnico.id, nome: tecnico.nome }, periodo: { dataInicial: ini, dataFinal: fim, base: b.base }, escopo: b.escopo, qtdOs: totais.qtd, lucro: totais.lucro, percentual: b.percentual, valor, descricao };
+    const previa = {
+      tecnico: { id: tecnico.id, nome: tecnico.nome },
+      periodo: { dataInicial: ini, dataFinal: fim, base: b.base },
+      escopo: b.escopo,
+      qtdOs: totais.qtd,
+      lucro: totais.lucro,
+      lucroConsiderado,
+      jaPagoPorAnuncio: porAnuncio,
+      percentual: b.percentual,
+      valor,
+      descricao,
+    };
     if (b.simular) return previa;
-    if (valor <= 0) throw new AppError(`O lucro considerado no período é ${totais.lucro.toFixed(2)}: não há valor a pagar. Confira o período, o escopo (só concluídas?) e os custos lançados nas OS.`, 422, 'SEM_LUCRO', previa);
+    if (valor <= 0) {
+      const porque = porAnuncio.lucro > 0
+        ? ` (do lucro de ${totais.lucro.toFixed(2)}, ${porAnuncio.lucro.toFixed(2)} já foi pago pelos anúncios da vitrine, em ${porAnuncio.qtd} venda(s))`
+        : '';
+      throw new AppError(`O lucro considerado no período é ${lucroConsiderado.toFixed(2)}${porque}: não há valor a pagar. Confira o período, o escopo (só concluídas?) e os custos lançados nas OS.`, 422, 'SEM_LUCRO', previa);
+    }
 
     const jaExiste = await prisma.contaPagar.findFirst({ where: { origemTipo: 'PAGAMENTO_TECNICO', origemId: tecnico.id, descricao: { contains: `(${faixa})` }, situacao: { not: 'CANCELADO' } } });
     if (jaExiste && !b.confirmarDuplicado) {
@@ -709,7 +730,12 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     }
     const vencimento = b.vencimento || new Date();
     const categoriaId = await categoriaPadraoId(prisma, 'Pagamento de técnicos (assistência)', 'DESPESA');
-    const detalhe = `${totais.qtd} OS ${b.escopo === 'TODAS' ? '(todas, inclusive em andamento)' : 'concluídas'} · ${b.base === 'conclusao' ? 'por data de conclusão' : 'por data de entrada'} · lucro ${totais.lucro.toFixed(2)} × ${b.percentual}%`;
+    const detalhe = [
+      `${totais.qtd} OS ${b.escopo === 'TODAS' ? '(todas, inclusive em andamento)' : 'concluídas'} · ${b.base === 'conclusao' ? 'por data de conclusão' : 'por data de entrada'}`,
+      porAnuncio.lucro > 0
+        ? `lucro ${totais.lucro.toFixed(2)} − ${porAnuncio.lucro.toFixed(2)} já pago pelos anúncios da vitrine = ${lucroConsiderado.toFixed(2)} × ${b.percentual}%`
+        : `lucro ${lucroConsiderado.toFixed(2)} × ${b.percentual}%`,
+    ].join(' · ');
     const conta = await prisma.contaPagar.create({
       data: {
         descricao,
@@ -724,6 +750,16 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     });
     await auditar(req, 'ContaPagar', conta.id, 'CRIAR', { origem: 'PAGAMENTO_TECNICO', tecnicoId: tecnico.id, valor, percentual: b.percentual, lucro: totais.lucro });
     return reply.code(201).send({ ...previa, contaPagar: { id: conta.id, valor: conta.valor, vencimento: conta.vencimento, situacao: conta.situacao } });
+  });
+
+  /**
+   * Pagamento extra por anúncio da equipe (vitrine) — card do dashboard principal do ADMIN.
+   * Thiago, 30/10/2026: quer ver no painel dele quanto a vitrine rendeu e quanto virou pagamento.
+   */
+  app.get('/api/v1/dashboard/anuncios', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE') }, async (req) => {
+    const q = z.object({ dataInicial: dataSchema, dataFinal: dataSchema }).parse(req.query);
+    const { ini, fim } = await resolverPeriodo(q, 'mes');
+    return { periodo: { dataInicial: ini, dataFinal: fim }, ...(await painelAnuncios(ini, fim)) };
   });
 
   // últimos pagamentos de técnico lançados (histórico na tela)

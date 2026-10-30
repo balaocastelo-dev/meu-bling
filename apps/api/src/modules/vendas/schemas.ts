@@ -23,6 +23,8 @@ export const itemSchema = z.object({
   custoUnitario: z.coerce.number().min(0).nullable().optional(),
   /** nº de série / IMEI (certificado de garantia) */
   numeroSerie: z.string().trim().max(120).nullable().optional(),
+  /** anúncio da vitrine da equipe de onde veio este item (docs/VITRINE-EQUIPE.md) */
+  anuncioId: z.coerce.number().int().positive().nullable().optional(),
 });
 
 export const parcelaSchema = z.object({
@@ -39,6 +41,8 @@ export const vendaSchema = z.object({
   tipo: z.enum(TIPOS_VENDA).default('PEDIDO'),
   contatoId: z.coerce.number().int().positive(),
   vendedorId: z.coerce.number().int().positive().nullable().optional(),
+  /** anúncio da vitrine da equipe que trouxe este cliente */
+  anuncioId: z.coerce.number().int().positive().nullable().optional(),
   data: dataSchema,
   dataPrevista: dataSchema,
   dataSaida: dataSchema,

@@ -186,6 +186,7 @@ model Vendedor {
   metas         MetaVendedor[]
   conquistas    DesafioConquista[]
   consignacoes  Consignacao[]
+  anuncios      Anuncio[]
 }
 
 /// Meta de vendas de um vendedor num mês específico (sobrepõe Vendedor.metaMensal)
@@ -280,6 +281,7 @@ model Tecnico {
   comissoes  Comissao[]
   metas      MetaTecnico[]
   conquistas DesafioConquista[]
+  anuncios   Anuncio[]
 }
 
 /// Meta de um técnico num mês específico (sobrepõe Tecnico.metaMensal/metaTipo)
@@ -458,6 +460,7 @@ model Produto {
   consignacao Consignacao?
 
   jarvisAnuncios JarvisAnuncio[]
+  anuncios       Anuncio[]
 
   @@index([nome])
   @@index([prontaEntrega])
@@ -657,7 +660,11 @@ model HistoricoSituacao {
 // ---------------------------------------------------------------------
 
 model Venda {
-  id                    Int                  @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
+  /// anúncio da vitrine da equipe que trouxe este cliente (docs/VITRINE-EQUIPE.md)
+  anuncio   Anuncio? @relation(fields: [anuncioId], references: [id])
+  anuncioId Int?
+
   /// PEDIDO (venda) | ORCAMENTO (proposta: não movimenta estoque/financeiro; vira venda ao converter)
   tipo                  String               @default("PEDIDO")
   /// numeração separada por tipo (sequências VENDA e ORCAMENTO)
@@ -739,6 +746,9 @@ model Venda {
 
 model VendaItem {
   id             Int      @id @default(autoincrement())
+  /// anúncio da vitrine da equipe de onde veio este item
+  anuncio        Anuncio? @relation(fields: [anuncioId], references: [id])
+  anuncioId      Int?
   venda          Venda    @relation(fields: [vendaId], references: [id], onDelete: Cascade)
   vendaId        Int
   produto        Produto? @relation(fields: [produtoId], references: [id])
@@ -874,7 +884,11 @@ model CompraParcela {
 // ---------------------------------------------------------------------
 
 model OrdemServico {
-  id                    Int                  @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
+  /// anúncio da vitrine da equipe que trouxe este cliente (docs/VITRINE-EQUIPE.md)
+  anuncio   Anuncio? @relation(fields: [anuncioId], references: [id])
+  anuncioId Int?
+
   numero                Int                  @unique
   dataEntrada           DateTime             @default(now())
   dataPrevista          DateTime?
@@ -948,6 +962,9 @@ model OrdemServico {
 
 model OrdemServicoItem {
   id                  Int          @id @default(autoincrement())
+  /// anúncio da vitrine da equipe de onde veio este item (serviço do portal do técnico)
+  anuncio             Anuncio?     @relation(fields: [anuncioId], references: [id])
+  anuncioId           Int?
   os                  OrdemServico @relation(fields: [osId], references: [id], onDelete: Cascade)
   osId                Int
   /// PECA | SERVICO
@@ -1029,9 +1046,13 @@ model Comissao {
   pagoEm       DateTime?
   contaPagar   ContaPagar?       @relation(fields: [contaPagarId], references: [id])
   contaPagarId Int?
+  /// quando a comissão é o pagamento extra de um anúncio da vitrine da equipe (docs/VITRINE-EQUIPE.md)
+  anuncio      Anuncio?          @relation(fields: [anuncioId], references: [id])
+  anuncioId    Int?
   criadoEm     DateTime          @default(now())
 
   @@index([competencia, status])
+  @@index([anuncioId])
 }
 
 // ---------------------------------------------------------------------
@@ -2135,4 +2156,51 @@ model JarvisAnuncioCanal {
 
   @@unique([anuncioId, canal])
   @@index([situacao])
+}
+
+/// Anúncio da vitrine da equipe: o vendedor ou o técnico publica o que é dele, com o nome dele,
+/// e ganha um percentual do LUCRO do que vender por ali. Ver docs/VITRINE-EQUIPE.md.
+///
+/// O anúncio é a vitrine; o `produto` é a coisa vendável (preço, custo, NCM, estoque). Quem cria
+/// um anúncio novo cria o produto por trás dele na mesma tela.
+model Anuncio {
+  id             Int       @id @default(autoincrement())
+  /// pedaço curto do link público (www.balao.info/a/<codigo>) — é por ele que o sistema sabe
+  /// que o cliente veio deste anúncio
+  codigo         String    @unique
+  titulo         String
+  descricao      String?
+  /// URLs das fotos, separadas por vírgula (a primeira é a capa)
+  fotos          String?
+  produto        Produto   @relation(fields: [produtoId], references: [id])
+  produtoId      Int
+  /// VENDEDOR | TECNICO
+  donoTipo       String
+  vendedor       Vendedor? @relation(fields: [vendedorId], references: [id])
+  vendedorId     Int?
+  tecnico        Tecnico?  @relation(fields: [tecnicoId], references: [id])
+  tecnicoId      Int?
+  /// % do lucro que o dono recebe. CONGELADO na criação (33 técnico, 20 vendedor): mudar a regra
+  /// da loja depois não reescreve o que já foi combinado nos anúncios antigos.
+  comissaoPct    Float
+  /// serviço sem preço fechado: "a partir de R$ 180" na vitrine
+  precoAPartirDe Float?
+  /// prazo de execução em dias, mostrado na vitrine
+  prazoDias      Int?
+  naVitrine      Boolean   @default(true)
+  ativo          Boolean   @default(true)
+  /// quantas vezes a página do anúncio foi aberta
+  visitas        Int       @default(0)
+  criadoEm       DateTime  @default(now())
+  atualizadoEm   DateTime  @updatedAt
+
+  vendas     Venda[]
+  vendaItens VendaItem[]
+  ordens     OrdemServico[]
+  osItens    OrdemServicoItem[]
+  comissoes  Comissao[]
+
+  @@index([donoTipo, vendedorId])
+  @@index([donoTipo, tecnicoId])
+  @@index([naVitrine, ativo])
 }

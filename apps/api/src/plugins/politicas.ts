@@ -78,6 +78,10 @@ const REGRAS: Regra[] = [
   // Meu Dashboard: todo perfil tem o seu (a rota devolve só o que o perfil pode ver — sem lucro para vendedor e técnico);
   // "ver como" outro usuário só ADMIN/GERENTE (conferido na rota). Lembretes: cada um os seus; a gestão manda para a equipe.
   { teste: /^\/meu-dashboard(\/|$)/, perfis: 'TODOS' },
+  // Vitrine da equipe: cada um cria e gerencia os PRÓPRIOS anúncios, sem aprovação (Thiago,
+  // 30/10/2026). A trava de "só mexe no que é seu" é por dono, em anuncios/service.ts — aqui
+  // só liberamos o acesso à área.
+  { teste: /^\/anuncios(\/|$)/, perfis: 'TODOS' },
   { teste: /^\/lembretes(\/|$)/, perfis: 'TODOS' },
 
   // ---- consignação: todos criam e acompanham contratos; o painel (com o caixa) e os pagamentos são do financeiro

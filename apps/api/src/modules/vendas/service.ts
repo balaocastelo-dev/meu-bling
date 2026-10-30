@@ -11,12 +11,14 @@ import { eventos } from '../../core/eventos.js';
 import { linkPublico, tokenPublico } from '../publico/token.js';
 import { depositoPadraoId, liberarReservas, movimentarEstoque, movimentaEstoque, reservarItens, reservasAtivas } from '../comum/estoque.js';
 import { acaoEstornarContas as compraEstornarContas, acaoEstornarEstoque as compraEstornarEstoque, acaoLancarContas as compraLancarContas, acaoLancarEstoque as compraLancarEstoque, alocarComprasParaVenda, desalocarComprasDaVenda, marcarCompraVendida } from '../compras/service.js';
-import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, lerContasPermitidas, recriarComissoes } from '../comum/financeiro.js';
+import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, lerContasPermitidas, recriarComissoes, type ComissaoNova } from '../comum/financeiro.js';
 import { criarNotaPendente } from '../comum/nfe.js';
 import { hojeMeioDia } from '../comum/datas.js';
 import { estornarCarneVenda, lancarCarneVenda, TIPO_CARNE } from '../carnes/service.js';
 import { estornarCreditoBancarioVenda, formaCreditoBancario, lancarCreditoBancarioVenda, OBS_PAGO_COM_CREDITO, TIPO_CREDITO_BANCARIO } from '../emprestimos/credito.js';
 import { carregarCfgCustos, custosVenda, type CfgCustos, type VendaParaCusto } from '../comum/custos-venda.js';
+import { comissoesDeAnuncio } from '../anuncios/comissao.js';
+import { anunciosDaOrigem } from '../anuncios/origem.js';
 import { baixarContaPagar, baixarContaReceber, saldoContaPagar, saldoContaReceber } from '../financeiro/service.js';
 import type { ItemInput, ParcelaInput, TipoVenda, VendaInput } from './schemas.js';
 
@@ -174,6 +176,7 @@ export async function montarItens(db: Db, itens: ItemInput[], comissaoPadraoPct:
       comissaoPct,
       comissaoValor: arredondar(total * (comissaoPct / 100)),
       numeroSerie: i.numeroSerie || null,
+      anuncioId: i.anuncioId ?? null,
       ordem: idx,
     };
   });
@@ -474,7 +477,10 @@ export async function acaoEstornarEstoque(ctx: ContextoAcao) {
 
 export async function acaoLancarContas(ctx: ContextoAcao) {
   const { tx, entidadeId: id } = ctx;
-  const venda = await tx.venda.findUnique({ where: { id }, include: { parcelas: { orderBy: { numero: 'asc' } }, itens: true, vendedor: true } });
+  // parcelas COM a forma de pagamento: sem ela o cálculo de custo presume cartão 1x e cobraria uma
+  // taxa que não existe — a comissão do anúncio é paga sobre este lucro e tem que bater, centavo a
+  // centavo, com o lucro que aparece na tela da venda.
+  const venda = await tx.venda.findUnique({ where: { id }, include: { parcelas: { orderBy: { numero: 'asc' }, include: { formaPagamento: true } }, itens: true, vendedor: true } });
   if (!venda) throw new NotFound('Venda');
   if (venda.contasLancadas) return;
   const categoriaId = venda.categoriaFinanceiraId || (await categoriaPadraoId(tx, 'Venda de produtos', 'RECEITA', 'RECEITA_BRUTA'));
@@ -506,15 +512,31 @@ export async function acaoLancarContas(ctx: ContextoAcao) {
     });
     await tx.vendaParcela.update({ where: { id: p.id }, data: { contaReceberId: cr.id } });
   }
-  // comissões do vendedor
+  // comissões: a normal do vendedor + o pagamento extra dos anúncios da vitrine da equipe.
+  // As duas vão na MESMA chamada porque recriarComissoes apaga e recria tudo da origem.
+  const comissoes: ComissaoNova[] = [];
   if (venda.vendedorId) {
     const base = arredondar(venda.itens.reduce((s, i) => s + (i.comissaoPct > 0 ? i.total : 0), 0));
     const valor = arredondar(venda.itens.reduce((s, i) => s + i.comissaoValor, 0));
     const pct = base > 0 ? arredondar((valor / base) * 100, 4) : 0;
-    await recriarComissoes(tx, { origemTipo: 'VENDA', vendaId: venda.id }, competencia, [
-      { tipo: 'VENDEDOR', vendedorId: venda.vendedorId, descricao: `Venda nº ${venda.numero}`, base, pct, valor },
-    ]);
+    comissoes.push({ tipo: 'VENDEDOR', vendedorId: venda.vendedorId, descricao: `Venda nº ${venda.numero}`, base, pct, valor });
   }
+  const anuncios = await anunciosDaOrigem(tx as any, venda);
+  if (anuncios.porId.size) {
+    const f = fechamentoVenda(venda as any, await carregarCfgCustos());
+    comissoes.push(
+      ...comissoesDeAnuncio({
+        itens: venda.itens.map((i) => ({ total: i.total, custo: arredondar(i.custoUnitario * i.quantidade), anuncioId: i.anuncioId })),
+        receitaTotal: venda.total,
+        custoTotal: f.custoTotal,
+        custoProdutos: f.custoProdutos,
+        anuncioDaOrigem: anuncios.daOrigem,
+        anunciosPorId: anuncios.porId,
+        descricaoOrigem: `Venda nº ${venda.numero}`,
+      }),
+    );
+  }
+  if (comissoes.length) await recriarComissoes(tx, { origemTipo: 'VENDA', vendaId: venda.id }, competencia, comissoes);
   await tx.venda.update({ where: { id }, data: { contasLancadas: true } });
   // parcelas pagas com "Crédito bancário" (Lumicred) viram empréstimo: dinheiro no banco, devolução no contas a pagar
   await lancarCreditoBancarioVenda(tx, id);
@@ -763,6 +785,7 @@ export async function criarVenda(body: VendaInput, usuarioId: number | null, obs
         dataSaida: body.dataSaida,
         contatoId: body.contatoId,
         vendedorId: body.vendedorId ?? null,
+        anuncioId: body.anuncioId ?? null,
         situacaoId: situacao.id,
         depositoId: body.depositoId ?? null,
         categoriaFinanceiraId: body.categoriaFinanceiraId ?? null,
