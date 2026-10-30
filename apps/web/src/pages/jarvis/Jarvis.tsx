@@ -14,11 +14,15 @@ import {
   Bot,
   Check,
   BarChart3,
+  ArrowLeftRight,
   Boxes,
   CalendarClock,
   Clock,
   HandCoins,
+  Handshake,
   Landmark,
+  PiggyBank,
+  Receipt,
   PackageSearch,
   PhoneCall,
   RefreshCw,
@@ -111,6 +115,17 @@ interface Geral {
   vendas: { porSituacao: { id: number; nome: string; cor: string | null; qtd: number }[]; realizadasNoMes: number };
   estoque: { abaixoMinimo: { produtoId: number; nome: string; codigo: string | null; saldo: number; estoqueMinimo: number }[]; qtdAbaixoMinimo: number };
   comissoes: { pendentes: number; valorPendente: number } | null;
+  fiscal: { pendentes: number; rejeitadas: number; ambiente: 'producao' | 'homologacao' };
+  ultimosMovimentos: {
+    id: number;
+    data: string;
+    tipo: string;
+    valor: number;
+    descricao: string;
+    conciliado: boolean;
+    contaFinanceira: { id: number; nome: string; cor: string | null } | null;
+    categoria: { id: number; nome: string } | null;
+  }[];
   alertas: { tipo: 'erro' | 'aviso' | 'info'; mensagem: string; link: string }[];
 }
 
@@ -122,6 +137,40 @@ interface Placar {
   real: number;
   acerto: number | null;
   medidas: { regra: string; titulo: string; impactoEstimado: number | null; resultadoReal: number | null }[];
+}
+
+/** Consignação: o que sai de caixa hoje e o que começa a sair se o prazo virar diária. */
+interface PainelConsig {
+  totais: {
+    qtdNoPrazo: number;
+    qtdEmDiarias: number;
+    qtdVendidosAPagar: number;
+    valorEmLoja: number;
+    devidoConsignantes: number;
+    pagarHoje: number;
+    atrasado: number;
+    vendidosAPagar: number;
+  };
+  diariaHoje: number;
+  pagarAgora: { id: number; numero: number; descricao: string; consignante: string; status: string; valor: number; atrasado: number; motivo: string }[];
+  vencendo: { id: number; numero: number; descricao: string; consignante: string; diasParaPrazo: number; precoVenda: number; diaria: number }[];
+  sugestoesQuitar: { id: number; numero: number; descricao: string; saldo: number; diariasRestantes: number; recomendado: boolean; texto: string }[];
+}
+
+/** Caixinha: dinheiro que já tem dono e dia marcado. */
+interface CaixinhaResumo {
+  id: number;
+  nome: string;
+  valorMeta: number;
+  dataUso: string;
+  saldo: number;
+  falta: number;
+  pct: number;
+  diasRestantes: number;
+  porDia: number;
+  guardadoHoje: number;
+  sugestaoHoje: number;
+  situacao: 'EM_DIA' | 'ATRASADA' | 'VENCIDA' | 'COMPLETA' | 'USADA';
 }
 
 /** Os nove atalhos: o que o gestor mais pede, a um toque. */
@@ -273,6 +322,22 @@ export default function Jarvis() {
     queryKey: ['jarvis-geral'],
     queryFn: () => api.get<Geral>('/dashboard/geral'),
     refetchInterval: 60_000,
+    retry: 0,
+  });
+
+  // consignação: diária de hoje e o que está a um passo de virar diária
+  const { data: consig } = useQuery({
+    queryKey: ['jarvis-consignacao'],
+    queryFn: () => api.get<PainelConsig>('/consignacoes/painel'),
+    refetchInterval: 120_000,
+    retry: 0,
+  });
+
+  // caixinhas: quanto guardar HOJE para cada compromisso com dia marcado
+  const { data: caixinhas } = useQuery({
+    queryKey: ['jarvis-caixinhas'],
+    queryFn: () => api.get<CaixinhaResumo[]>('/caixinhas', { ativas: 'true' }),
+    refetchInterval: 120_000,
     retry: 0,
   });
 
@@ -510,6 +575,245 @@ export default function Jarvis() {
     </CardV18>
   );
 
+  const caixinhasAbertas = (caixinhas ?? []).filter((c) => c.situacao !== 'COMPLETA' && c.situacao !== 'USADA');
+  const guardarHoje = caixinhasAbertas.reduce((t, c) => t + c.sugestaoHoje, 0);
+  const jaGuardadoHoje = caixinhasAbertas.reduce((t, c) => t + Math.max(0, c.guardadoHoje), 0);
+
+  /**
+   * Caixinhas: o ritmo de hoje.
+   *
+   * Caixinha é dinheiro que já tem dono e dia marcado — ele aparece no banco, mas não
+   * é caixa livre. O número que resolve é "quanto guardar hoje": guardando esse valor
+   * todo dia, o compromisso fecha no prazo sem susto no fim.
+   */
+  const cardCaixinhas = (
+    <CardV18
+      titulo="Caixinhas: quanto guardar hoje"
+      descricao={guardarHoje > 0 ? `${moeda(guardarHoje)} no total de hoje` : 'nada a guardar hoje'}
+      icone={<PiggyBank className="h-4 w-4" />}
+      tom={caixinhasAbertas.some((c) => c.situacao === 'VENCIDA' || c.situacao === 'ATRASADA') ? 'amarelo' : 'verde'}
+      acoes={
+        <Button variante="secundario" tamanho="xs" onClick={() => nav('/financeiro/caixinhas')}>
+          Abrir caixinhas
+        </Button>
+      }
+    >
+      {!caixinhasAbertas.length ? (
+        <EmptyState compacto titulo="Nenhuma caixinha em aberto" descricao="Caixinha é dinheiro guardado para um compromisso com dia marcado — décimo terceiro, imposto, fornecedor." />
+      ) : (
+        <>
+          <div className="mb-3 grid gap-2 sm:grid-cols-3">
+            <Miniatura rotulo="Guardar hoje" valor={moeda(guardarHoje)} sub={`${caixinhasAbertas.length} caixinha(s)`} tom={guardarHoje > 0 ? 'amarelo' : 'verde'} />
+            <Miniatura rotulo="Já guardado hoje" valor={moeda(jaGuardadoHoje)} sub="movimentos de hoje" tom="verde" />
+            <Miniatura
+              rotulo="Falta no total"
+              valor={moeda(caixinhasAbertas.reduce((t, c) => t + c.falta, 0))}
+              sub="até o dia de cada uma"
+              tom="neutro"
+            />
+          </div>
+          <div className="space-y-2">
+            {caixinhasAbertas.map((c) => {
+              const prazo = c.diasRestantes < 0 ? 'passou do dia' : c.diasRestantes === 0 ? 'usa hoje' : c.diasRestantes === 1 ? 'usa amanhã' : `usa em ${c.diasRestantes} dias`;
+              const tomTexto = c.situacao === 'VENCIDA' ? 'text-rose-600' : c.situacao === 'ATRASADA' ? 'text-amber-700' : 'text-slate-900';
+              return (
+                <div key={c.id} className="rounded-xl px-3 py-2 ring-1 ring-slate-200">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                    <span className="min-w-0 truncate text-sm font-medium text-slate-700">{c.nome}</span>
+                    <span className={`shrink-0 text-sm font-semibold tabular-nums ${tomTexto}`}>
+                      {c.sugestaoHoje > 0 ? `guardar ${moeda(c.sugestaoHoje)}` : 'em dia hoje'}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className={`h-full rounded-full ${c.situacao === 'VENCIDA' ? 'bg-rose-500' : c.situacao === 'ATRASADA' ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                      style={{ width: `${Math.max(2, Math.min(100, c.pct))}%` }}
+                    />
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    {moeda(c.saldo)} de {moeda(c.valorMeta)} · faltam {moeda(c.falta)} · {prazo}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </CardV18>
+  );
+
+  /**
+   * Consignação: o caixa que sai todo dia.
+   *
+   * Consignado que passa do prazo começa a render diária para o consignante — é saída
+   * de caixa diária que não para sozinha. Por isso o que está a 3 dias do prazo vale
+   * mais atenção que o que já está pago: ali ainda dá para vender, dar destaque ou
+   * renegociar antes de a diária começar.
+   */
+  const cardConsignados = (
+    <CardV18
+      titulo="Consignados e diárias"
+      descricao={
+        consig
+          ? consig.totais.pagarHoje > 0
+            ? `${moeda(consig.totais.pagarHoje)} a pagar hoje`
+            : `${numero(consig.totais.qtdNoPrazo + consig.totais.qtdEmDiarias, 0)} em loja, nada a pagar hoje`
+          : undefined
+      }
+      icone={<Handshake className="h-4 w-4" />}
+      tom={consig && (consig.totais.atrasado > 0 || consig.totais.pagarHoje > 0) ? 'amarelo' : 'verde'}
+      acoes={
+        <Button variante="secundario" tamanho="xs" onClick={() => nav('/consignacoes')}>
+          Abrir consignações
+        </Button>
+      }
+    >
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <Miniatura rotulo="Pagar hoje" valor={moeda(consig?.totais.pagarHoje ?? 0)} sub="diárias e vendidos" tom={(consig?.totais.pagarHoje ?? 0) > 0 ? 'amarelo' : 'neutro'} />
+        <Miniatura rotulo="Atrasado" valor={moeda(consig?.totais.atrasado ?? 0)} sub="já devia ter saído" tom={(consig?.totais.atrasado ?? 0) > 0 ? 'vermelho' : 'neutro'} />
+        <Miniatura rotulo="Diária de hoje" valor={moeda(consig?.diariaHoje ?? 0)} sub="compromisso do dia" tom="neutro" />
+        <Miniatura
+          rotulo="Mercadoria em loja"
+          valor={moeda(consig?.totais.valorEmLoja ?? 0)}
+          sub={`devendo ${moeda(consig?.totais.devidoConsignantes ?? 0)}`}
+          tom="verde"
+        />
+      </div>
+
+      {consig?.vencendo.length ? (
+        <div className="mt-3">
+          <p className="mb-1.5 text-xs font-medium text-slate-500">Perto de começar a render diária — ainda dá tempo de agir</p>
+          <div className="space-y-1.5">
+            {consig.vencendo.slice(0, 6).map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => nav(`/consignacoes/${v.id}`)}
+                className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-left ring-1 ring-amber-200 transition hover:bg-amber-50"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm text-slate-700">
+                  Nº {v.numero} {v.descricao}
+                  <span className="ml-1.5 text-xs text-slate-400">{v.consignante}</span>
+                </span>
+                <span className="shrink-0 text-sm tabular-nums text-amber-800">
+                  {v.diasParaPrazo <= 0 ? 'prazo termina hoje' : `faltam ${v.diasParaPrazo}d`} · diária {moeda(v.diaria)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {consig?.sugestoesQuitar.filter((x) => x.recomendado).length ? (
+        <div className="mt-3 space-y-1.5">
+          {consig.sugestoesQuitar
+            .filter((x) => x.recomendado)
+            .slice(0, 3)
+            .map((x) => (
+              <p key={x.id} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 ring-1 ring-emerald-200">
+                Nº {x.numero} {x.descricao}: {x.texto}
+              </p>
+            ))}
+        </div>
+      ) : null}
+    </CardV18>
+  );
+
+  /**
+   * Fiscal.
+   *
+   * NF-e parada não é só burocracia: enquanto não transmite, a venda não existe para
+   * o fisco e o cliente não tem a nota. E nota emitida em homologação não vale nada —
+   * é o erro mais caro de passar batido, então ele aparece em vermelho.
+   */
+  const homologacao = geral?.fiscal?.ambiente === 'homologacao';
+  const cardFiscal = (
+    <CardV18
+      titulo="Notas fiscais"
+      descricao={homologacao ? 'ambiente de testes' : 'ambiente de produção'}
+      icone={<Receipt className="h-4 w-4" />}
+      tom={homologacao || (geral?.fiscal?.rejeitadas ?? 0) > 0 ? 'vermelho' : (geral?.fiscal?.pendentes ?? 0) > 0 ? 'amarelo' : 'verde'}
+      acoes={
+        <Button variante="secundario" tamanho="xs" onClick={() => nav('/notas-fiscais')}>
+          Abrir notas
+        </Button>
+      }
+    >
+      <div className="grid gap-2 sm:grid-cols-3">
+        <Miniatura
+          rotulo="Pendentes de transmissão"
+          valor={numero(geral?.fiscal?.pendentes ?? 0, 0)}
+          sub="venda sem nota no fisco"
+          tom={(geral?.fiscal?.pendentes ?? 0) > 0 ? 'amarelo' : 'verde'}
+        />
+        <Miniatura
+          rotulo="Rejeitadas ou com erro"
+          valor={numero(geral?.fiscal?.rejeitadas ?? 0, 0)}
+          sub="precisam de correção"
+          tom={(geral?.fiscal?.rejeitadas ?? 0) > 0 ? 'vermelho' : 'verde'}
+        />
+        <Miniatura rotulo="Ambiente" valor={homologacao ? 'Homologação' : 'Produção'} sub={homologacao ? 'nota sem valor legal' : 'nota vale'} tom={homologacao ? 'vermelho' : 'verde'} />
+      </div>
+      {homologacao && (
+        <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800 ring-1 ring-rose-200">
+          O sistema está emitindo em homologação: as notas saem, mas não valem para o fisco nem para o cliente. Antes
+          de vender com nota, troque para produção em Configurações → Fiscal.
+        </p>
+      )}
+    </CardV18>
+  );
+
+  const movimentos = geral?.ultimosMovimentos ?? [];
+
+  /** O extrato ao vivo: cada entrada e saída do caixa, na ordem em que aconteceu. */
+  const cardMovimentos = (
+    <CardV18
+      titulo="Últimos movimentos do caixa"
+      descricao={`${movimentos.length} lançamento(s) mais recentes`}
+      icone={<ArrowLeftRight className="h-4 w-4" />}
+      acoes={
+        <Button variante="secundario" tamanho="xs" onClick={() => nav('/financeiro/fluxo-caixa')}>
+          Ver fluxo de caixa
+        </Button>
+      }
+    >
+      {!movimentos.length ? (
+        <EmptyState compacto titulo="Nenhum movimento ainda" descricao="Toda venda paga, baixa de conta e transferência aparece aqui na hora." />
+      ) : (
+        <div className="space-y-1.5">
+          {movimentos.map((m) => {
+            const entrada = m.tipo === 'ENTRADA';
+            const transferencia = m.tipo === 'TRANSFERENCIA';
+            const cor = transferencia ? 'text-slate-600' : entrada ? 'text-emerald-600' : 'text-rose-600';
+            return (
+              <button
+                key={m.id}
+                type="button"
+                disabled={!m.contaFinanceira}
+                onClick={() => m.contaFinanceira && nav(`/financeiro/bancos/${m.contaFinanceira.id}`)}
+                className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-0.5 rounded-lg px-3 py-1.5 text-left ring-1 ring-slate-200 transition enabled:hover:bg-slate-50"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-slate-700">{m.descricao}</span>
+                  <span className="block truncate text-xs text-slate-400">
+                    {dataHora(m.data)}
+                    {m.contaFinanceira ? ` · ${m.contaFinanceira.nome}` : ''}
+                    {m.categoria ? ` · ${m.categoria.nome}` : ''}
+                    {m.conciliado ? ' · conciliado' : ''}
+                  </span>
+                </span>
+                <span className={`shrink-0 text-sm font-semibold tabular-nums ${cor}`}>
+                  {transferencia ? '' : entrada ? '+ ' : '− '}
+                  {moeda(m.valor)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </CardV18>
+  );
+
   const serieOperacao = pano?.series ?? [];
   const temOperacao = serieOperacao.length > 0;
   const maxVendedor = Math.max(1, ...(pano?.porVendedor ?? []).map((v) => v.valor));
@@ -656,11 +960,15 @@ export default function Jarvis() {
     { chave: 'hoje', tem: !!geral, conteudo: cardHoje },
     { chave: 'alertas', tem: alertas.length > 0, conteudo: cardAlertas },
     { chave: 'atrasados', tem: !!fin, conteudo: cardAtrasados },
+    { chave: 'consignados', tem: !!consig && (consig.totais.qtdNoPrazo + consig.totais.qtdEmDiarias + consig.totais.qtdVendidosAPagar) > 0, conteudo: cardConsignados },
+    { chave: 'caixinhas', tem: caixinhasAbertas.length > 0, conteudo: cardCaixinhas },
     { chave: 'operacao', tem: temOperacao, conteudo: cardOperacao },
     { chave: 'pipeline', tem: pipelineVendas.length > 0 || pipelineOs.length > 0, conteudo: cardPipeline },
     { chave: 'estoque', tem: faltando.length > 0, conteudo: cardEstoque },
+    { chave: 'fiscal', tem: !!geral?.fiscal && (homologacao || geral.fiscal.pendentes > 0 || geral.fiscal.rejeitadas > 0), conteudo: cardFiscal },
     { chave: 'equipe', tem: !!(pano?.porVendedor.length || pano?.porTecnico.length), conteudo: cardEquipe },
     { chave: 'caixa', tem: temOperacao, conteudo: cardCaixa },
+    { chave: 'movimentos', tem: movimentos.length > 0, conteudo: cardMovimentos },
     { chave: 'contas', tem: temContas, conteudo: cardContas },
     { chave: 'placar', tem: temPlacar, conteudo: cardPlacar },
   ];
