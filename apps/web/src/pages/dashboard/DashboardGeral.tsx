@@ -8,7 +8,7 @@ import { motion, type Variants } from 'framer-motion';
 import clsx from 'clsx';
 import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
-  AlertCircle, AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, BadgePercent, BarChart3, Boxes, CheckCircle2, ChevronRight, CircleDollarSign, Clock, Crown, FileText, FileWarning,
+  AlertCircle, AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, BadgePercent, BarChart3, Boxes, CheckCircle2, ChevronRight, CircleDollarSign, Clock, Crown, FileText, FileWarning, Inbox,
   HardHat, Landmark, ListChecks, MessageCircle, Package, PieChart as PieIcon, Receipt, ShoppingCart, Sparkles, TrendingUp, TriangleAlert, Trophy, Wallet, Wrench,
 } from 'lucide-react';
 import { api, rotaIndisponivel } from '@/lib/api';
@@ -210,6 +210,30 @@ export default function DashboardGeral({ acoesExtras }: { acoesExtras?: React.Re
           <StatusPilula icone={<MessageCircle className="h-3.5 w-3.5 text-slate-400" />} nome="WhatsApp" ok={data?.whatsapp.status === 'CONECTADO'} texto={rotulo(data?.whatsapp.status ?? 'DESCONECTADO')} tom={tomPorStatus(data?.whatsapp.status)} />
           <StatusPilula icone={<FileText className="h-3.5 w-3.5 text-slate-400" />} nome="SEFAZ" ok={!!sefaz?.online} texto={sefaz ? (sefaz.online ? 'Online' : 'Offline') : '—'} tom={sefaz?.online ? 'verde' : sefaz ? 'vermelho' : 'neutro'} />
         </div>
+      </Aparecer>
+
+      <Aparecer>
+        <Link
+          to="/financeiro/lancamentos-automaticos"
+          className={clsx(
+            'flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-sm transition',
+            (data?.lancamentosAutomaticos?.pendentes ?? 0) > 0
+              ? 'border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100'
+              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+          )}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <Inbox className="h-4 w-4 shrink-0" />
+            <span>
+              <strong className="num">{isLoading ? '…' : inteiro(data?.lancamentosAutomaticos?.pendentes ?? 0)}</strong>
+              {' '}
+              {(data?.lancamentosAutomaticos?.pendentes ?? 0) === 1 ? 'lançamento automático pendente' : 'lançamentos automáticos pendentes'} de revisão
+            </span>
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold">
+            Revisar <ChevronRight className="h-4 w-4" />
+          </span>
+        </Link>
       </Aparecer>
 
       {/* filtros — os mesmos do dashboard de assistência */}

@@ -23,6 +23,7 @@ import { categoriaPadraoId } from '../comum/financeiro.js';
 import { format } from 'date-fns';
 import { carregarCfgCustos, custosVenda } from '../comum/custos-venda.js';
 import { cfgCustosOs, SELECT_CUSTO_OS } from '../comum/custos-os.js';
+import { resumo as resumoLancamentos } from '../lancamentos-automaticos/service.js';
 
 async function situacoesRealizadas(modulo: 'VENDA' | 'COMPRA' | 'OS') {
   const s = await prisma.situacao.findMany({ where: { modulo, final: true, cancelamento: false }, select: { id: true } });
@@ -100,7 +101,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
     const fim = endOfDay(hoje);
     const [sitVendaOk, sitVendaCanc, sitOsOk, sitOsCanc] = await Promise.all([situacoesRealizadas('VENDA'), situacoesCanceladas('VENDA'), situacoesRealizadas('OS'), situacoesCanceladas('OS')]);
 
-    const [vendasHoje, osAbertas, osConcluidasHoje, financeiro, sitOs, sitVendas, osAtrasadas, saldos, notasPendentes, notasRejeitadas, comissoesPendentes, ultimosMovimentos, notifErro, notifPendentes] =
+    const [vendasHoje, osAbertas, osConcluidasHoje, financeiro, sitOs, sitVendas, osAtrasadas, saldos, notasPendentes, notasRejeitadas, comissoesPendentes, ultimosMovimentos, notifErro, notifPendentes, lancamentosAutomaticos] =
       await Promise.all([
         prisma.venda.findMany({ where: { tipo: 'PEDIDO', data: { gte: ini, lte: fim }, situacaoId: { notIn: sitVendaCanc } }, select: { total: true } }),
         prisma.ordemServico.count({ where: { situacaoId: { notIn: [...sitOsOk, ...sitOsCanc] } } }),
@@ -116,6 +117,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
         prisma.movimentoFinanceiro.findMany({ take: 10, orderBy: [{ data: 'desc' }, { id: 'desc' }], include: { contaFinanceira: { select: { id: true, nome: true, cor: true } }, categoria: { select: { id: true, nome: true } } } }),
         prisma.notificacao.count({ where: { status: 'ERRO' } }),
         prisma.notificacao.count({ where: { status: 'PENDENTE' } }),
+        resumoLancamentos(),
       ]);
 
     // contagem por situação (OS e vendas abertas) — agregação em JS
@@ -163,6 +165,14 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       else if (pendRobo > 0) alertas.push({ tipo: 'aviso', mensagem: `Robô da Saúde: ${pendRobo} ponto${pendRobo > 1 ? 's' : ''} de atenção para resolver com poucos cliques`, link: '/configuracoes/saude' });
     }
     if ((comissoesPendentes._count as number) > 0) alertas.push({ tipo: 'info', mensagem: `${comissoesPendentes._count} comiss${(comissoesPendentes._count as number) > 1 ? 'ões' : 'ão'} pendente${(comissoesPendentes._count as number) > 1 ? 's' : ''} de aprovação`, link: '/comissoes?status=PENDENTE' });
+    if (lancamentosAutomaticos.pendentes > 0) {
+      const n = lancamentosAutomaticos.pendentes;
+      alertas.unshift({
+        tipo: 'aviso',
+        mensagem: `${n} lançamento${n > 1 ? 's' : ''} automático${n > 1 ? 's' : ''} de e-mail de banco pendente${n > 1 ? 's' : ''} de revisão`,
+        link: '/financeiro/lancamentos-automaticos',
+      });
+    }
 
     const resposta = {
       hoje: {
@@ -192,6 +202,7 @@ export default async function dashboardRoutes(app: FastifyInstance) {
       comissoes: { pendentes: comissoesPendentes._count as number, valorPendente: arredondar(comissoesPendentes._sum.valor || 0) },
       whatsapp: { status: wa.status, numero: wa.numero ?? null },
       notificacoes: { pendentes: notifPendentes, erros: notifErro },
+      lancamentosAutomaticos,
       ultimosMovimentos,
       alertas,
     };
