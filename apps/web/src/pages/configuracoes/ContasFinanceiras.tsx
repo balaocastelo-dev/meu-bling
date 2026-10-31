@@ -1,4 +1,5 @@
 import { CrudSimples } from '@/components/compartilhados/CrudSimples';
+import { OpenFinanceConta } from '@/components/financeiro/OpenFinanceConta';
 import { Badge, Checkbox, Input, MoneyInput, Select } from '@/components/ui';
 import { moeda, rotulo } from '@/lib/format';
 import type { ContaFinanceira } from '@/types';
@@ -14,13 +15,13 @@ export default function ContasFinanceiras() {
       rotuloNovo="Nova conta"
       vazio={{ nome: '', tipo: 'BANCO', banco: '', agencia: '', conta: '', saldoInicial: 0, taxaRecebimentoPct: 0, padrao: false, ativo: true, cor: '#2563eb' }}
       validar={(f) => (!f.nome?.trim() ? 'Informe o nome.' : null)}
-      antesDeSalvar={(f) => { const { saldoAtual: _s, saldoBanco: _b, saldoBancoEm: _e, openFinanceItemId: _i, openFinanceStatus: _st, ultimaSincronizacao: _u, ...resto } = f; return resto; }}
+      antesDeSalvar={(f) => { const { saldoAtual: _s, saldoBanco: _b, saldoBancoEm: _e, openFinanceItemId: _i, openFinanceAccountId: _a, openFinanceStatus: _st, ultimaSincronizacao: _u, ...resto } = f; return resto; }}
       colunas={[
         { titulo: 'Conta', render: (c) => <span className="inline-flex items-center gap-2 font-medium"><span className="h-3 w-3 rounded-full" style={{ backgroundColor: c.cor || '#2563eb' }} />{c.nome}{c.padrao && <Badge tom="azul">Padrão</Badge>}</span> },
         { titulo: 'Tipo', render: (c) => <span className="text-slate-500">{rotulo(c.tipo)}</span> },
         { titulo: 'Banco', render: (c) => <span className="text-slate-500">{[c.banco, c.agencia && `ag. ${c.agencia}`, c.conta && `cc. ${c.conta}`].filter(Boolean).join(' · ') || '—'}</span> },
         { titulo: 'Saldo atual', className: 'text-right num', render: (c) => <span className={c.saldoAtual < 0 ? 'text-red-600' : ''}>{moeda(c.saldoAtual)}</span> },
-        { titulo: 'Open Finance', render: (c) => (c.openFinanceItemId ? <Badge tom="verde">Vinculada</Badge> : <span className="text-xs text-slate-400">—</span>) },
+        { titulo: 'Open Finance', render: (c) => <OpenFinanceConta conta={c} compacto /> },
         { titulo: 'Situação', render: (c) => <Badge tom={c.ativo ? 'verde' : 'cinza'}>{c.ativo ? 'Ativa' : 'Inativa'}</Badge> },
       ]}
       formulario={(f, set) => (

@@ -184,6 +184,8 @@ async function main() {
   verifica((await comChave(chave, 'GET', '/auditoria')).status === 403, 'sem a área "sistema", auditoria fechada');
   verifica((await comChave(kt, 'GET', '/open-finance/status')).status === 200, 'Open Finance: status liberado no financeiro');
   verifica((await comChave(kt, 'POST', '/open-finance/vincular', { itemId: 'x' })).status === 403, 'Open Finance: vincular banco continua só na tela');
+  verifica((await comChave(kt, 'GET', '/open-finance/itens/item-teste/contas')).status === 403, 'Open Finance: listar contas do item continua só na tela');
+  verifica((await comChave(kt, 'POST', '/open-finance/connect-token', {})).status === 403, 'Open Finance: token do widget continua só na tela');
   verifica((await comChave(kt, 'GET', '/usuarios')).status === 403, 'mesmo com tudo liberado, usuários continuam fechados');
 
   const contas = await comChave(kt, 'GET', '/contas-financeiras?ativo=true');

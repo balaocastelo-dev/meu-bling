@@ -64,7 +64,7 @@ const BLOQUEADAS: { teste: RegExp; metodos?: string[] }[] = [
   { teste: /^\/situacoes(\/|$)/, metodos: ['POST', 'PUT', 'PATCH', 'DELETE'] },
   { teste: /^\/configuracoes(\/|$)/ },
   { teste: /^\/bling(\/|$)/ },
-  { teste: /^\/open-finance\/(connect-token|vincular|desvincular)/ },
+  { teste: /^\/open-finance\/(connect-token|vincular|desvincular|itens)/ },
   { teste: /^\/whatsapp\/(conectar|desconectar|eventos)/ },
   { teste: /^\/site\/catalogo/ },
   // regras da consignação e robô: só pela tela do ADMIN

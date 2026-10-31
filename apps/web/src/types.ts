@@ -202,6 +202,8 @@ export interface ContaFinanceira {
   ativo: boolean;
   cor?: string | null;
   openFinanceItemId?: string | null;
+  /** conta dentro da conexão Pluggy (não é segredo; serve para reconectar a mesma) */
+  openFinanceAccountId?: string | null;
   openFinanceStatus?: string | null;
   ultimaSincronizacao?: string | null;
 }
@@ -1240,6 +1242,7 @@ export interface OpenFinanceStatus {
   ativo: boolean;
   provedor?: string;
   configurado: boolean;
+  contasVinculadas?: { id: number; nome: string; openFinanceItemId?: string | null; openFinanceStatus?: string | null; ultimaSincronizacao?: string | null }[];
 }
 
 // ---------------------------------------------------------------------

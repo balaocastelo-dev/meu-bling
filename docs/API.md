@@ -143,8 +143,9 @@ Orçamento = venda com `tipo: "ORCAMENTO"` (mesma tabela). Numeração própria 
 
 ## Contas bancárias / Open Finance (Pluggy) / conciliação
 - `GET /open-finance/status` → `{ativo, provedor, configurado, conectores?}`
-- `POST /open-finance/connect-token` → `{accessToken}` para o Pluggy Connect widget (frontend abre o widget e devolve o `itemId`)
-- `POST /open-finance/vincular` `{itemId, contaFinanceiraId?}` → lista contas do item e cria/vincula ContaFinanceira(s) → `[{contaFinanceiraId, nome, saldo}]`
+- `POST /open-finance/connect-token` `{itemId?}` → `{accessToken, provedor}` para o Pluggy Connect widget. Sem `itemId`, conexão nova; com `itemId` de uma conta já vinculada, reconecta a mesma. A resposta nunca inclui o client secret.
+- `GET /open-finance/itens/:item/contas` → contas que o item enxerga no banco (`id, nome, tipo, subtipo, numero, saldo`), para escolher qual ligar a uma conta financeira. O parâmetro é texto (id da Pluggy), não número. Só na tela (fechado para chave de API).
+- `POST /open-finance/vincular` `{itemId, contaFinanceiraId?, accountId?}` → cria contas novas ou liga a conta financeira informada. Se `accountId` já estiver em outra conta, responde 409.
 - `POST /open-finance/sincronizar/:contaFinanceiraId` → busca saldo + transações (últimos 90 dias por padrão) → `{saldo, novasTransacoes}`
 - `POST /open-finance/sincronizar-todas`
 - `DELETE /open-finance/desvincular/:contaFinanceiraId`
