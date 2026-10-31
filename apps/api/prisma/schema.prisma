@@ -590,7 +590,8 @@ model ContaFinanceira {
   transacoes      TransacaoBancaria[]
 
   emailBancoRegras EmailBancoRegra[]
-  lancamentosAutomaticos LancamentoAutomatico[]
+  lancamentosAutomaticos LancamentoAutomatico[] @relation("LancamentoOrigem")
+  lancamentosAutomaticosDestino LancamentoAutomatico[] @relation("LancamentoDestino")
 }
 
 // ---------------------------------------------------------------------
@@ -1110,6 +1111,7 @@ model ContaReceber {
   consignacaoId Int?
   osParcela     OrdemServicoParcela?
   lancamentos   MovimentoFinanceiro[]
+  revisoesAutomaticas LancamentoAutomatico[]
 
   @@index([vencimento, situacao])
   @@index([origemTipo, origemId])
@@ -1157,6 +1159,7 @@ model ContaPagar {
   consignacaoId Int?
   comissoes     Comissao[]
   lancamentos   MovimentoFinanceiro[]
+  revisoesAutomaticas LancamentoAutomatico[]
 
   @@index([vencimento, situacao])
 }
@@ -1242,7 +1245,9 @@ model MovimentoFinanceiro {
   observacoes       String?
   criadoEm          DateTime             @default(now())
   /// preenchido quando este movimento nasceu de um lançamento automático aceito na revisão
-  lancamentoAutomatico LancamentoAutomatico?
+  lancamentoAutomatico LancamentoAutomatico? @relation("LancamentoMovimento")
+  /// perna de entrada, quando o lançamento automático é uma transferência
+  lancamentoAutomaticoEntrada LancamentoAutomatico? @relation("LancamentoMovimentoEntrada")
 
   @@index([contaFinanceiraId, data])
 }
@@ -2214,19 +2219,23 @@ model Anuncio {
 
 // ---------------------------------------------------------------------
 // LANÇAMENTOS AUTOMÁTICOS (bot lê e-mail de banco → fila de revisão)
-// Enquanto status = PENDENTE, não existe MovimentoFinanceiro e o saldo não muda.
-// Confio cria o movimento e atualiza o saldo. Contestar não mexe em dinheiro.
-// Não dá baixa em contas a pagar/receber em nenhum dos dois casos.
+// Pendente novo: não cria movimento e o saldo não muda.
+// Confio de um lançamento novo cria o movimento (ou a transferência). Contestar não mexe em dinheiro.
+// jaLancado: o dinheiro já entrou pelo caminho normal. Confio só confirma. Contestar pede estorno manual.
 // ---------------------------------------------------------------------
 
 model LancamentoAutomatico {
   id                Int                  @id @default(autoincrement())
-  /// ENTRADA | SAIDA
+  /// ENTRADA | SAIDA | TRANSFERENCIA
   tipo              String
   data              DateTime
   valor             Float
-  contaFinanceira   ContaFinanceira      @relation(fields: [contaFinanceiraId], references: [id])
-  contaFinanceiraId Int
+  /// origem, na transferência; conta do lançamento, na entrada/saída. Vazio só em título já aberto sem conta.
+  contaFinanceira   ContaFinanceira?     @relation("LancamentoOrigem", fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId Int?
+  /// destino, só em TRANSFERENCIA
+  contaDestino      ContaFinanceira?     @relation("LancamentoDestino", fields: [contaDestinoId], references: [id])
+  contaDestinoId    Int?
   /// quem pagou (ENTRADA) ou quem recebeu (SAIDA), como veio no e-mail
   contraparte       String
   /// nome normalizado para achar fornecedor/pagador novo e repetido
@@ -2243,8 +2252,22 @@ model LancamentoAutomatico {
   chaveApiId        Int?
   /// PENDENTE | CONFIADO | CONTESTADO
   status            String               @default("PENDENTE")
-  movimento         MovimentoFinanceiro? @relation(fields: [movimentoId], references: [id])
+  /// o valor já está no caixa/banco ou num título. Confio não lança de novo.
+  jaLancado         Boolean              @default(false)
+  /// saída da transferência, ou o único movimento quando o Confio lança entrada/saída
+  movimento         MovimentoFinanceiro? @relation("LancamentoMovimento", fields: [movimentoId], references: [id])
   movimentoId       Int?                 @unique
+  /// entrada da transferência
+  movimentoEntrada  MovimentoFinanceiro? @relation("LancamentoMovimentoEntrada", fields: [movimentoEntradaId], references: [id])
+  movimentoEntradaId Int?                @unique
+  contaPagar        ContaPagar?          @relation(fields: [contaPagarId], references: [id])
+  contaPagarId      Int?
+  contaReceber      ContaReceber?        @relation(fields: [contaReceberId], references: [id])
+  contaReceberId    Int?
+  /// conta a pagar que foi cancelada ao virar transferência (só referência, sem apagar de novo)
+  contaPagarCanceladaId Int?
+  /// contestou um já lançado: o saldo continua; alguém estorna na mão
+  requerEstornoManual Boolean            @default(false)
   confiadoPor       Usuario?             @relation("LancamentoConfiado", fields: [confiadoPorId], references: [id], onDelete: SetNull)
   confiadoPorId     Int?
   confiadoEm        DateTime?
@@ -2258,4 +2281,6 @@ model LancamentoAutomatico {
   @@index([status, data])
   @@index([contaFinanceiraId, data])
   @@index([contraparteChave])
+  @@index([contaPagarId])
+  @@index([contaReceberId])
 }

@@ -329,9 +329,12 @@ export async function ajustarSaldoConta(p: { contaFinanceiraId: number; saldoRea
   });
 }
 
-export async function transferirEntreContas(p: { origemId: number; destinoId: number; valor: number; data: Date; descricao?: string | null; caixinhaId?: number | null }) {
+export async function transferirEntreContas(
+  p: { origemId: number; destinoId: number; valor: number; data: Date; descricao?: string | null; caixinhaId?: number | null },
+  txExterno?: Tx,
+) {
   if (p.origemId === p.destinoId) throw new AppError('Conta de origem e destino devem ser diferentes.', 422, 'CONTAS_IGUAIS');
-  return prisma.$transaction(async (tx) => {
+  const exec = async (tx: Tx) => {
     const origem = await tx.contaFinanceira.findUnique({ where: { id: p.origemId } });
     const destino = await tx.contaFinanceira.findUnique({ where: { id: p.destinoId } });
     if (!origem || !destino) throw new NotFound('Conta financeira');
@@ -351,7 +354,8 @@ export async function transferirEntreContas(p: { origemId: number; destinoId: nu
       if (cx?.contaFinanceiraId === origem.id) await tx.movimentoFinanceiro.update({ where: { id: saida.id }, data: { caixinhaId: p.caixinhaId } });
     }
     return { saida, entrada };
-  });
+  };
+  return txExterno ? exec(txExterno) : prisma.$transaction(exec);
 }
 
 export async function excluirMovimento(id: number) {
