@@ -35,6 +35,12 @@ export const RECURSOS: Recurso[] = [
   { chave: 'consignacao', nome: 'Consignação', descricao: 'Equipamentos de clientes à venda na loja: contratos, fotos, desconto autorizado, diárias, pagamento ao consignante, retirada e painel.', rotas: [/^\/consignacoes(\/|$)/] },
   { chave: 'os', nome: 'Ordens de serviço', descricao: 'Assistência técnica: OS, kanban, peças, orçamento, situação, impressão.', rotas: [/^\/ordens-servico(\/|$)/] },
   { chave: 'financeiro', nome: 'Financeiro', descricao: 'Contas a receber e a pagar, empréstimos (Lumicred), baixas e estornos, caixa e bancos, extrato, transferências, conciliação bancária, Open Finance (sincronizar), categorias e contas financeiras.', rotas: [/^\/contas-receber(\/|$)/, /^\/contas-pagar(\/|$)/, /^\/financeiro(\/|$)/, /^\/bancos(\/|$)/, /^\/contas-financeiras(\/|$)/, /^\/categorias-financeiras(\/|$)/, /^\/open-finance\/(status|sincronizar)/] },
+  {
+    chave: 'lancamentos-automaticos',
+    nome: 'Lançamentos automáticos (revisão)',
+    descricao: 'O bot registra entradas e saídas lidas de e-mails de banco. Nascem pendentes de revisão: não alteram saldo e não dão baixa em contas. Quem aceita ou contesta é uma pessoa no painel.',
+    rotas: [/^\/lancamentos-automaticos$/],
+  },
   { chave: 'fiscal', nome: 'Notas fiscais', descricao: 'NF-e/NFC-e: listar, criar, transmitir, consultar, carta de correção, XML, DANFE, e-mail; cancelar e inutilizar exigem nível total.', rotas: [/^\/notas-fiscais(\/|$)/, /^\/fiscal(\/|$)/] },
   { chave: 'comissoes', nome: 'Comissões, metas e desafios', descricao: 'Comissões de vendedores e técnicos (aprovar, pagar, cancelar), metas do mês, desafios e painel do vendedor.', rotas: [/^\/comissoes(\/|$)/, /^\/metas(\/|$)/, /^\/desafios(\/|$)/, /^\/painel-vendedor(\/|$)/] },
   { chave: 'relatorios', nome: 'Relatórios e dashboards', descricao: 'Dashboards, últimos acontecimentos, DRE, vendas por período, produtos mais vendidos, contas, estoque, comissões.', rotas: [/^\/relatorios(\/|$)/, /^\/dashboard(\/|$)/], maximo: 'LEITURA' },
@@ -278,6 +284,32 @@ export const ENDPOINTS: Endpoint[] = [
   { metodo: 'POST', caminho: '/ordens-servico/{id}/notificar', recurso: 'os', resumo: 'Envia a OS/orçamento ao cliente por WhatsApp ou e-mail.', corpo: { canal: 'WHATSAPP', templateId: null, mensagem: null } },
   { metodo: 'GET', caminho: '/ordens-servico/{id}/nfe/verificar', recurso: 'os', resumo: 'Confere se a OS tem tudo para a NF-e das peças.' },
   { metodo: 'POST', caminho: '/ordens-servico/{id}/gerar-nfe', recurso: 'os', resumo: 'Cria a NF-e das peças da OS (pendente).', corpo: { modelo: 55 } },
+
+  // ------------------------------------------------ lançamentos automáticos (e-mail de banco, fila de revisão)
+  {
+    metodo: 'GET',
+    caminho: '/lancamentos-automaticos',
+    recurso: 'lancamentos-automaticos',
+    resumo: 'Lista lançamentos que o bot registrou a partir de e-mails de banco. Sem status, devolve todos. Pendente ainda não entrou no saldo e não quitou conta.',
+    filtros: ['status (PENDENTE|CONFIADO|CONTESTADO)', 'contaFinanceiraId', ...PERIODO, ...PAG],
+  },
+  {
+    metodo: 'POST',
+    caminho: '/lancamentos-automaticos',
+    recurso: 'lancamentos-automaticos',
+    resumo: 'Registra um lançamento lido de e-mail de banco. Nasce com status PENDENTE: não altera saldo, não cria movimento e não dá baixa em contas a pagar ou a receber. O mesmo emailOrigemId não duplica — devolve o lançamento que já existe (idempotente: true). Quem libera o saldo é uma pessoa no painel, no botão Confio. Confio também não quita título: a baixa continua em baixar_conta.',
+    corpo: {
+      tipo: 'SAIDA',
+      data: '2026-10-31',
+      valor: 1500.5,
+      contaFinanceiraId: 1,
+      contraparte: 'Distribuidora Exemplo Ltda',
+      categoriaId: 3,
+      emailOrigemId: 'id-do-email-no-provedor',
+      emailOrigemUrl: 'https://mail.google.com/mail/u/0/#inbox/id-do-email-no-provedor',
+      descricao: 'PIX enviado — aviso do banco',
+    },
+  },
 
   // ------------------------------------------------ financeiro
   { metodo: 'GET', caminho: '/financeiro/resumo', recurso: 'financeiro', resumo: 'Saldos das contas e o que há a receber/pagar hoje, na semana e atrasado.' },

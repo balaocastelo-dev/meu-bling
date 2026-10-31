@@ -139,6 +139,8 @@ model Usuario {
   mensagensChat     Mensagem[]
   chamadasIniciadas Chamada[]
   pushAssinaturas   PushAssinatura[]
+  lancamentosConfiados    LancamentoAutomatico[] @relation("LancamentoConfiado")
+  lancamentosContestados  LancamentoAutomatico[] @relation("LancamentoContestado")
 }
 
 /// Lembrete do "Meu Dashboard": do próprio usuário ou enviado pela gestão (gestor/gerente) para alguém da equipe.
@@ -550,6 +552,7 @@ model CategoriaFinanceira {
   compras       Compra[]
   ordens        OrdemServico[]
   transacoes    TransacaoBancaria[]
+  lancamentosAutomaticos LancamentoAutomatico[]
 }
 
 /// Contas financeiras: caixa, bancos, cartões
@@ -587,6 +590,7 @@ model ContaFinanceira {
   transacoes      TransacaoBancaria[]
 
   emailBancoRegras EmailBancoRegra[]
+  lancamentosAutomaticos LancamentoAutomatico[]
 }
 
 // ---------------------------------------------------------------------
@@ -1237,6 +1241,8 @@ model MovimentoFinanceiro {
   caixinhaId        Int?
   observacoes       String?
   criadoEm          DateTime             @default(now())
+  /// preenchido quando este movimento nasceu de um lançamento automático aceito na revisão
+  lancamentoAutomatico LancamentoAutomatico?
 
   @@index([contaFinanceiraId, data])
 }
@@ -1476,6 +1482,7 @@ model ChaveApi {
   atualizadoEm    DateTime  @updatedAt
 
   logs LogApi[]
+  lancamentosAutomaticos LancamentoAutomatico[]
 }
 
 /// Cada chamada feita com uma chave de API (guardado 30 dias).
@@ -2203,4 +2210,52 @@ model Anuncio {
   @@index([donoTipo, vendedorId])
   @@index([donoTipo, tecnicoId])
   @@index([naVitrine, ativo])
+}
+
+// ---------------------------------------------------------------------
+// LANÇAMENTOS AUTOMÁTICOS (bot lê e-mail de banco → fila de revisão)
+// Enquanto status = PENDENTE, não existe MovimentoFinanceiro e o saldo não muda.
+// Confio cria o movimento e atualiza o saldo. Contestar não mexe em dinheiro.
+// Não dá baixa em contas a pagar/receber em nenhum dos dois casos.
+// ---------------------------------------------------------------------
+
+model LancamentoAutomatico {
+  id                Int                  @id @default(autoincrement())
+  /// ENTRADA | SAIDA
+  tipo              String
+  data              DateTime
+  valor             Float
+  contaFinanceira   ContaFinanceira      @relation(fields: [contaFinanceiraId], references: [id])
+  contaFinanceiraId Int
+  /// quem pagou (ENTRADA) ou quem recebeu (SAIDA), como veio no e-mail
+  contraparte       String
+  /// nome normalizado para achar fornecedor/pagador novo e repetido
+  contraparteChave  String
+  categoria         CategoriaFinanceira? @relation(fields: [categoriaId], references: [id])
+  categoriaId       Int?
+  /// id estável do e-mail de origem — único, para o bot não lançar duas vezes
+  emailOrigemId     String               @unique
+  emailOrigemUrl    String?
+  descricao         String?
+  /// nome da chave de API no momento do lançamento
+  botNome           String
+  chaveApi          ChaveApi?            @relation(fields: [chaveApiId], references: [id], onDelete: SetNull)
+  chaveApiId        Int?
+  /// PENDENTE | CONFIADO | CONTESTADO
+  status            String               @default("PENDENTE")
+  movimento         MovimentoFinanceiro? @relation(fields: [movimentoId], references: [id])
+  movimentoId       Int?                 @unique
+  confiadoPor       Usuario?             @relation("LancamentoConfiado", fields: [confiadoPorId], references: [id], onDelete: SetNull)
+  confiadoPorId     Int?
+  confiadoEm        DateTime?
+  contestadoPor     Usuario?             @relation("LancamentoContestado", fields: [contestadoPorId], references: [id], onDelete: SetNull)
+  contestadoPorId   Int?
+  contestadoEm      DateTime?
+  observacaoContestacao String?
+  criadoEm          DateTime             @default(now())
+  atualizadoEm      DateTime             @updatedAt
+
+  @@index([status, data])
+  @@index([contaFinanceiraId, data])
+  @@index([contraparteChave])
 }
