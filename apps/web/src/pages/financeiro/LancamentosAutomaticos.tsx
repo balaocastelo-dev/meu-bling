@@ -36,10 +36,11 @@ type Status = 'PENDENTE' | 'CONFIADO' | 'CONTESTADO';
 
 interface Lancamento {
   id: number;
-  tipo: 'ENTRADA' | 'SAIDA';
+  tipo: 'ENTRADA' | 'SAIDA' | 'TRANSFERENCIA';
   data: string;
   valor: number;
-  contaFinanceira: { id: number; nome: string };
+  contaFinanceira: { id: number; nome: string } | null;
+  contaDestino: { id: number; nome: string } | null;
   contraparte: string;
   categoria: { id: number; nome: string } | null;
   emailOrigemId: string;
@@ -55,6 +56,12 @@ interface Lancamento {
   observacaoContestacao: string | null;
   valorAlto: boolean;
   contraparteNova: boolean;
+  jaLancado: boolean;
+  requerEstornoManual: boolean;
+  contaPagarId: number | null;
+  contaReceberId: number | null;
+  movimentoEntradaId: number | null;
+  contaPagarCanceladaId: number | null;
 }
 
 interface Resposta {
@@ -117,18 +124,18 @@ export default function LancamentosAutomaticos() {
   });
 
   const aceitar = useMutation({
-    mutationFn: (id: number) => api.post(`/lancamentos-automaticos/${id}/confiar`, {}),
-    onSuccess: () => {
-      toast.success('Lançamento aceito. O saldo da conta foi atualizado — nenhuma conta a pagar ou a receber foi baixada.');
+    mutationFn: (id: number) => api.post<Lancamento>(`/lancamentos-automaticos/${id}/confiar`, {}),
+    onSuccess: (l: Lancamento) => {
+      toast.success(l.jaLancado ? 'Confirmação gravada. O saldo não mudou de novo — este valor já estava no sistema.' : 'Lançamento aceito. O saldo da conta foi atualizado — nenhuma conta a pagar ou a receber foi baixada.');
       invalidar();
     },
     onError: (e) => toast.error(mensagemErro(e)),
   });
 
   const discordar = useMutation({
-    mutationFn: (p: { id: number; observacao: string }) => api.post(`/lancamentos-automaticos/${p.id}/contestar`, { observacao: p.observacao }),
-    onSuccess: () => {
-      toast.success('Contestação registrada. O saldo não foi alterado.');
+    mutationFn: (p: { id: number; observacao: string }) => api.post<Lancamento>(`/lancamentos-automaticos/${p.id}/contestar`, { observacao: p.observacao }),
+    onSuccess: (l: Lancamento) => {
+      toast.success(l.requerEstornoManual ? 'Contestação registrada. O saldo não mudou: o estorno é manual.' : 'Contestação registrada. O saldo não foi alterado.');
       setContestarAlvo(null);
       setObservacao('');
       invalidar();
@@ -152,7 +159,16 @@ export default function LancamentosAutomaticos() {
         </div>
       ),
     },
-    { chave: 'conta', titulo: 'Conta', render: (l) => l.contaFinanceira.nome },
+    {
+      chave: 'conta',
+      titulo: 'Conta',
+      render: (l) =>
+        l.tipo === 'TRANSFERENCIA' ? (
+          <span>{l.contaFinanceira?.nome ?? '—'} <span className="text-slate-400">→</span> {l.contaDestino?.nome ?? '—'}</span>
+        ) : (
+          l.contaFinanceira?.nome ?? '—'
+        ),
+    },
     {
       chave: 'contraparte',
       titulo: 'Quem pagou / recebeu',
@@ -161,7 +177,9 @@ export default function LancamentosAutomaticos() {
         <div className="min-w-0">
           <p className="font-medium text-slate-900">{l.contraparte}</p>
           <div className="mt-1 flex flex-wrap gap-1">
-            <Badge tom={l.tipo === 'ENTRADA' ? 'verde' : 'vermelho'}>{l.tipo === 'ENTRADA' ? 'Entrada' : 'Saída'}</Badge>
+            <Badge tom={l.tipo === 'ENTRADA' ? 'verde' : l.tipo === 'TRANSFERENCIA' ? 'azul' : 'vermelho'}>{l.tipo === 'ENTRADA' ? 'Entrada' : l.tipo === 'TRANSFERENCIA' ? 'Transferência' : 'Saída'}</Badge>
+            {l.jaLancado && <Badge tom="cinza">Já no sistema</Badge>}
+            {l.requerEstornoManual && <Badge tom="laranja">Estorno manual</Badge>}
             {l.contraparteNova && <Badge tom="roxo">Novo</Badge>}
           </div>
           {l.descricao && <p className="mt-1 max-w-xs truncate text-xs text-slate-500" title={l.descricao}>{l.descricao}</p>}
@@ -235,7 +253,7 @@ export default function LancamentosAutomaticos() {
       <PageHeader
         migalhas={[{ rotulo: 'Financeiro', para: '/financeiro/receber' }, { rotulo: 'Lançamentos automáticos – revisão' }]}
         titulo="Lançamentos automáticos – revisão"
-        descricao="O que um bot registrou a partir de e-mails de bancos. Pendente não altera saldo e não dá baixa. Confio lança o valor na conta; a baixa de um título continua manual."
+        descricao="O que um bot registrou a partir de e-mails de bancos. Pendente não altera saldo. Confio lança o valor, ou só confirma se já estava no sistema. Transferência mostra origem → destino."
         extra={
           <Badge tom={pendentes > 0 ? 'amarelo' : 'verde'}>
             {pendentes} pendente{pendentes === 1 ? '' : 's'}
@@ -297,9 +315,15 @@ export default function LancamentosAutomaticos() {
         titulo="Confiar neste lançamento?"
         textoConfirmar="Confio"
         descricao={
-          confiarAlvo ? (
+          confiarAlvo?.jaLancado ? (
+            <span>Este valor já está no sistema. Confio só grava a sua confirmação. O saldo não muda de novo.</span>
+          ) : confiarAlvo?.tipo === 'TRANSFERENCIA' ? (
             <span>
-              {confiarAlvo.tipo === 'ENTRADA' ? 'Entra' : 'Sai'} {moeda(confiarAlvo.valor)} em {confiarAlvo.contaFinanceira.nome}, de {confiarAlvo.contraparte}. O saldo muda agora. Nenhuma conta a pagar ou a receber é baixada.
+              Transfere {moeda(confiarAlvo.valor)} de {confiarAlvo.contaFinanceira?.nome ?? '—'} para {confiarAlvo.contaDestino?.nome ?? '—'}. As duas contas mudam juntas, sem categoria.
+            </span>
+          ) : confiarAlvo ? (
+            <span>
+              {confiarAlvo.tipo === 'ENTRADA' ? 'Entra' : 'Sai'} {moeda(confiarAlvo.valor)} em {confiarAlvo.contaFinanceira?.nome ?? '—'}, de {confiarAlvo.contraparte}. O saldo muda agora. Nenhuma conta a pagar ou a receber é baixada.
             </span>
           ) : null
         }
@@ -335,7 +359,7 @@ export default function LancamentosAutomaticos() {
           value={observacao}
           onChange={(e) => setObservacao(e.target.value)}
           placeholder="Por que este lançamento não deve entrar no caixa?"
-          ajuda="Obrigatória. Fica gravado quem contestou e a data."
+          ajuda={contestarAlvo?.jaLancado ? 'Obrigatória. O saldo não é desfeito aqui: fica marcado que precisa de estorno manual.' : 'Obrigatória. Fica gravado quem contestou e a data.'}
         />
       </Modal>
     </div>

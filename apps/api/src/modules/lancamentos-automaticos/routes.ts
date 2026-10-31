@@ -4,6 +4,9 @@
  * Bot (chave de API, escopo `lancamentos-automaticos`):
  *   POST /api/v1/lancamentos-automaticos     cria já como PENDENTE (GRAVACAO)
  *   GET  /api/v1/lancamentos-automaticos     lista por status (LEITURA)
+ *   GET  /api/v1/lancamentos-automaticos/contas-financeiras       contas ativas (LEITURA)
+ *   GET  /api/v1/lancamentos-automaticos/categorias-financeiras   categorias ativas (LEITURA)
+ *   POST /api/v1/lancamentos-automaticos/importar                 vincula os já lançados (GRAVACAO)
  *
  * Painel (só ADMIN, sessão de pessoa — a chave de API não revisa):
  *   GET  /api/v1/lancamentos-automaticos/resumo
@@ -18,7 +21,8 @@ import { z } from 'zod';
 import { auditar } from '../../lib/auditoria.js';
 import { AppError, Forbidden } from '../../lib/errors.js';
 import { dataSchema, paginacaoSchema, paginar, toDate } from '../../lib/util.js';
-import { confiar, contestar, criar, listar, resumo, salvarLimite } from './service.js';
+import { importarJaLancados, type ItemArquivo } from './importar.js';
+import { confiar, contestar, criar, listar, listarCategoriasParaBot, listarContasParaBot, resumo, salvarLimite } from './service.js';
 
 const filtroSchema = paginacaoSchema.extend({
   status: z.preprocess(
@@ -34,7 +38,7 @@ const filtroSchema = paginacaoSchema.extend({
 });
 
 const corpoSchema = z.object({
-  tipo: z.enum(['ENTRADA', 'SAIDA']),
+  tipo: z.enum(['ENTRADA', 'SAIDA', 'TRANSFERENCIA']),
   data: z.union([z.string(), z.date()]).transform((v, ctx) => {
     const d = toDate(v);
     if (!d) {
@@ -45,9 +49,10 @@ const corpoSchema = z.object({
   }),
   valor: z.number().positive('Valor deve ser maior que zero'),
   contaFinanceiraId: z.number().int().positive(),
+  contaDestinoId: z.number().int().positive().nullable().optional(),
   contraparte: z.string().trim().min(2, 'Informe quem pagou ou recebeu.').max(200),
   categoriaId: z.number().int().positive().nullable().optional(),
-  emailOrigemId: z.string().trim().min(1, 'Informe o ID do e-mail de origem.').max(200),
+  emailOrigemId: z.string().trim().min(1, 'Informe o ID do e-mail de origem.').max(500),
   emailOrigemUrl: z
     .string()
     .trim()
@@ -84,6 +89,43 @@ export default async function lancamentosAutomaticosRoutes(app: FastifyInstance)
     return { limiteValorAlto };
   });
 
+  app.get('/api/v1/lancamentos-automaticos/contas-financeiras', async () => listarContasParaBot());
+
+  app.get('/api/v1/lancamentos-automaticos/categorias-financeiras', async () => listarCategoriasParaBot());
+
+  app.post('/api/v1/lancamentos-automaticos/importar', async (req) => {
+    const b = z
+      .object({
+        lancamentos: z.array(z.object({
+          emailOrigemId: z.string(),
+          sistemaId: z.number().int().positive().nullable().optional(),
+          movimentoSaidaId: z.number().int().positive().nullable().optional(),
+          movimentoEntradaId: z.number().int().positive().nullable().optional(),
+          contaPagarCanceladaId: z.number().int().positive().nullable().optional(),
+          tipo: z.string(),
+          valor: z.number(),
+          data: z.string(),
+          contraparte: z.string(),
+          origemContaId: z.number().int().positive().nullable().optional(),
+          destinoContaId: z.number().int().positive().nullable().optional(),
+          contaFinanceiraId: z.number().int().positive().nullable().optional(),
+          categoriaId: z.number().int().positive().nullable().optional(),
+          emailOrigemUrl: z.string().nullable().optional(),
+          descricao: z.string().nullable().optional(),
+          situacao: z.string().optional(),
+          status: z.string().optional(),
+        }).passthrough()).max(500),
+      })
+      .passthrough()
+      .parse(req.body);
+    const r = await importarJaLancados(b.lancamentos as ItemArquivo[], {
+      botNome: req.chaveApi?.nome ?? `Painel: ${req.user?.nome ?? 'importação'}`,
+      chaveApiId: req.chaveApi?.id ?? null,
+    });
+    await auditar(req, 'LancamentoAutomatico', null, 'ACAO', { acao: 'importar', criados: r.criados, idempotentes: r.idempotentes, erros: r.erros.length });
+    return r;
+  });
+
   app.get('/api/v1/lancamentos-automaticos', async (req) => {
     const q = filtroSchema.parse(req.query);
     const p = paginar(q);
@@ -100,6 +142,7 @@ export default async function lancamentosAutomaticosRoutes(app: FastifyInstance)
       emailOrigemUrl: b.emailOrigemUrl || null,
       descricao: b.descricao || null,
       categoriaId: b.categoriaId ?? null,
+      contaDestinoId: b.contaDestinoId ?? null,
       botNome: req.chaveApi.nome,
       chaveApiId: req.chaveApi.id,
     });

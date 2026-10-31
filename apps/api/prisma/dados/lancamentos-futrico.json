@@ -1,0 +1,254 @@
+{
+  "_meta": {
+    "categoriasCriadas": [
+      {
+        "id": 26,
+        "nome": "Confraternização da equipe"
+      },
+      {
+        "id": 27,
+        "nome": "Transferência entre contas",
+        "grupoDre": "OUTRAS",
+        "nota": "fallback; transfers reais usam /financeiro/transferencia com categoriaId null"
+      }
+    ],
+    "contasCriadas": [
+      {
+        "id": 14,
+        "nome": "Castelo Distribuição"
+      },
+      {
+        "id": 15,
+        "nome": "Balão da Informática Morales"
+      }
+    ]
+  },
+  "lancamentos": [
+    {
+      "emailOrigemId": "1a18cd943eb17610",
+      "sistemaId": null,
+      "movimentoSaidaId": 6955,
+      "movimentoEntradaId": 6956,
+      "contaPagarCanceladaId": 3892,
+      "tipo": "TRANSFERENCIA",
+      "valor": 50,
+      "data": "2026-10-30",
+      "contraparte": "Balão da Informática Morales",
+      "origemContaId": 3,
+      "destinoContaId": 15,
+      "status": "transferencia",
+      "situacao": "TRANSFERIDO"
+    },
+    {
+      "emailOrigemId": "1a18d0f68506c2c4",
+      "sistemaId": 3893,
+      "tipo": "PAGAR",
+      "valor": 19.75,
+      "data": "2026-10-30",
+      "contraparte": "Uber",
+      "status": "registrado-normal",
+      "situacao": "PAGO",
+      "contaFinanceiraId": 3,
+      "categoriaId": 9
+    },
+    {
+      "emailOrigemId": "1a18d13315242f6c",
+      "sistemaId": 3894,
+      "tipo": "PAGAR",
+      "valor": 1200,
+      "data": "2026-10-30",
+      "contraparte": "Airbnb",
+      "status": "registrado-normal",
+      "situacao": "PAGO",
+      "contaFinanceiraId": 3,
+      "categoriaId": 26,
+      "categoria": "Confraternização da equipe"
+    },
+    {
+      "emailOrigemId": "1a18d4397ab6c111",
+      "sistemaId": null,
+      "movimentoSaidaId": 6957,
+      "movimentoEntradaId": 6958,
+      "contaPagarCanceladaId": 3895,
+      "tipo": "TRANSFERENCIA",
+      "valor": 500,
+      "data": "2026-10-30",
+      "contraparte": "Castelo Distribuição",
+      "origemContaId": 3,
+      "destinoContaId": 14,
+      "status": "transferencia",
+      "situacao": "TRANSFERIDO"
+    },
+    {
+      "emailOrigemId": "1a18e4bcab83dd4a",
+      "sistemaId": null,
+      "movimentoSaidaId": 6959,
+      "movimentoEntradaId": 6960,
+      "contaPagarCanceladaId": 3896,
+      "tipo": "TRANSFERENCIA",
+      "valor": 4000,
+      "data": "2026-10-30",
+      "contraparte": "Castelo Distribuição",
+      "origemContaId": 3,
+      "destinoContaId": 14,
+      "status": "transferencia",
+      "situacao": "TRANSFERIDO"
+    },
+    {
+      "emailOrigemId": "1a18e754469a52f1",
+      "sistemaId": 3897,
+      "tipo": "PAGAR",
+      "valor": 234.99,
+      "data": "2026-10-30",
+      "contraparte": "99Food",
+      "status": "registrado-normal",
+      "situacao": "PAGO",
+      "contaFinanceiraId": 3,
+      "categoriaId": 20
+    },
+    {
+      "emailOrigemId": "1a18e95654224f0f",
+      "sistemaId": 3898,
+      "tipo": "PAGAR",
+      "valor": 100,
+      "data": "2026-10-30",
+      "contraparte": "Amiel do Nascimento Dourado",
+      "status": "registrado-normal",
+      "situacao": "PAGO",
+      "contaFinanceiraId": 3,
+      "categoriaId": 20
+    },
+    {
+      "emailOrigemId": "1a18e999fce51ffc",
+      "sistemaId": 3899,
+      "tipo": "PAGAR",
+      "valor": 13.8,
+      "data": "2026-10-30",
+      "contraparte": "99",
+      "status": "registrado-normal",
+      "situacao": "PAGO",
+      "contaFinanceiraId": 3,
+      "categoriaId": 9
+    },
+    {
+      "emailOrigemId": "1a1900e902ae2c3d",
+      "sistemaId": 3900,
+      "tipo": "PAGAR",
+      "valor": 96.18,
+      "data": "2026-10-31",
+      "contraparte": "99Food",
+      "status": "registrado-normal",
+      "situacao": "PAGO",
+      "contaFinanceiraId": 3,
+      "categoriaId": 20
+    },
+    {
+      "emailOrigemId": "1a1905ecceae37ef",
+      "sistemaId": 3901,
+      "tipo": "PAGAR",
+      "valor": 1650,
+      "data": "2026-10-31",
+      "contraparte": "Nubank fatura",
+      "status": "registrado-normal",
+      "situacao": "PAGO",
+      "contaFinanceiraId": 13,
+      "categoriaId": 20
+    },
+    {
+      "emailOrigemId": "1a1905f9ce19c418",
+      "sistemaId": 3902,
+      "tipo": "PAGAR",
+      "valor": 1299.9,
+      "data": "2026-10-31",
+      "contraparte": "Google Play Ultra",
+      "status": "registrado-normal",
+      "situacao": "PAGO",
+      "contaFinanceiraId": 13,
+      "categoriaId": 13
+    },
+    {
+      "emailOrigemId": "AAkALgAAAAAAHYQDEapmEc2byACqAC-EWg0AiWRrmCF33kORlzFVvt0-sAAJkZOSFAAA",
+      "sistemaId": 3903,
+      "tipo": "PAGAR",
+      "valor": 259.81,
+      "data": "2026-10-30",
+      "contraparte": "Proxys/Bringit",
+      "status": "registrado-normal",
+      "situacao": "PAGO",
+      "contaFinanceiraId": 2,
+      "categoriaId": 7
+    },
+    {
+      "emailOrigemId": "1a18cd4471eb7c79",
+      "sistemaId": 3210,
+      "tipo": "RECEBER",
+      "valor": 29,
+      "data": "2026-10-30",
+      "contraparte": "Silvia Aparecida Longhi",
+      "status": "registrado-normal",
+      "situacao": "RECEBIDO",
+      "contaFinanceiraId": 3,
+      "categoriaId": 3
+    },
+    {
+      "emailOrigemId": "1a18dd060d028d8b",
+      "sistemaId": 3211,
+      "tipo": "RECEBER",
+      "valor": 1547,
+      "data": "2026-10-30",
+      "contraparte": "James William Alves",
+      "status": "registrado-normal",
+      "situacao": "RECEBIDO",
+      "contaFinanceiraId": 3,
+      "categoriaId": 3
+    },
+    {
+      "emailOrigemId": "1a18e10fd4f3cabe",
+      "sistemaId": 3212,
+      "tipo": "RECEBER",
+      "valor": 73,
+      "data": "2026-10-30",
+      "contraparte": "Andre da Costa Arroyo",
+      "status": "registrado-normal",
+      "situacao": "RECEBIDO",
+      "contaFinanceiraId": 3,
+      "categoriaId": 3
+    },
+    {
+      "emailOrigemId": "1a18d0c3b654c9b7",
+      "sistemaId": 3213,
+      "tipo": "RECEBER",
+      "valor": 235.83,
+      "data": "2026-10-30",
+      "contraparte": "SumUp repasse Castelo CNPJ 34.397.947",
+      "status": "registrado-normal",
+      "situacao": "RECEBIDO",
+      "contaFinanceiraId": 2,
+      "categoriaId": 1
+    },
+    {
+      "emailOrigemId": "1a18cfb8f69a2136",
+      "sistemaId": 3904,
+      "tipo": "PAGAR",
+      "valor": 856.54,
+      "data": "2026-10-30",
+      "contraparte": "SIMPLES NACIONAL (DAS 6/60)",
+      "status": "registrado-normal",
+      "situacao": "ABERTO",
+      "contaFinanceiraId": null,
+      "categoriaId": 6
+    },
+    {
+      "emailOrigemId": "cpfl-uc-585891603505",
+      "sistemaId": 3905,
+      "tipo": "PAGAR",
+      "valor": 1543.32,
+      "data": "2026-11-09",
+      "contraparte": "CPFL LOJA CAMBUI",
+      "status": "registrado-normal",
+      "situacao": "ABERTO",
+      "contaFinanceiraId": null,
+      "categoriaId": 11
+    }
+  ]
+}

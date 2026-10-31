@@ -4,6 +4,9 @@
  * O mesmo ID de e-mail não duplica. Escopo próprio: lancamentos-automaticos.
  *   npx tsx testes/lancamentos-automaticos.ts http://localhost:3333
  */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { BASE, SUF, encerrar, entrar, falhar, hoje, igual, secao, verifica } from './lib.js';
 
 async function comChave(chave: string, metodo: string, rota: string, body?: unknown) {
@@ -247,6 +250,79 @@ async function main() {
 
   const contaFim: any = await adm.get(`/contas-financeiras/${conta.id}`);
   verifica(igual(saldoDe(contaFim), saldo0 - 1500.5 + 25), 'o que ficou pendente ou contestado, inclusive o do MCP, não mexeu mais no saldo', saldoDe(contaFim));
+
+  secao('Transferência, listas de id e importação do que já foi lançado');
+  const destino: any = await adm.post('/contas-financeiras', { nome: `Destino revisão ${SUF}`, tipo: 'BANCO', saldoInicial: 100 }, 201);
+  const saldoDestino0 = saldoDe(destino);
+  const saldoOrigemAntes: any = await adm.get(`/contas-financeiras/${conta.id}`);
+  verifica((await comChave(bot.chave, 'POST', '/lancamentos-automaticos', { tipo: 'TRANSFERENCIA', data: hoje(), valor: 40, contaFinanceiraId: conta.id, contraparte: `Destino ${SUF}`, emailOrigemId: `mail-${SUF}-transf-sem` })).status === 422, 'transferência sem destino é recusada');
+  verifica((await comChave(bot.chave, 'POST', '/lancamentos-automaticos', { tipo: 'TRANSFERENCIA', data: hoje(), valor: 40, contaFinanceiraId: conta.id, contaDestinoId: destino.id, categoriaId: despesa.id, contraparte: `Destino ${SUF}`, emailOrigemId: `mail-${SUF}-transf-cat` })).status === 422, 'transferência não aceita categoria');
+  const transf = await comChave(bot.chave, 'POST', '/lancamentos-automaticos', {
+    tipo: 'TRANSFERENCIA', data: hoje(), valor: 40, contaFinanceiraId: conta.id, contaDestinoId: destino.id, contraparte: destino.nome, emailOrigemId: `mail-${SUF}-transf`,
+  });
+  verifica(transf.status === 201 && transf.json?.lancamento?.status === 'PENDENTE' && transf.json?.lancamento?.tipo === 'TRANSFERENCIA' && transf.json?.lancamento?.contaDestino?.id === destino.id, 'transferência nasce pendente com destino', transf.json?.lancamento);
+  const origemMeio: any = await adm.get(`/contas-financeiras/${conta.id}`);
+  const destinoMeio: any = await adm.get(`/contas-financeiras/${destino.id}`);
+  verifica(igual(saldoDe(origemMeio), saldoDe(saldoOrigemAntes)) && igual(saldoDe(destinoMeio), saldoDestino0), 'transferência pendente não mexe nas duas contas', { origem: saldoDe(origemMeio), destino: saldoDe(destinoMeio) });
+  const transfOk: any = await adm.post(`/lancamentos-automaticos/${transf.json.lancamento.id}/confiar`, {});
+  const origemFim: any = await adm.get(`/contas-financeiras/${conta.id}`);
+  const destinoFim: any = await adm.get(`/contas-financeiras/${destino.id}`);
+  verifica(igual(saldoDe(origemFim), saldoDe(saldoOrigemAntes) - 40) && igual(saldoDe(destinoFim), saldoDestino0 + 40), 'Confio transfere: sai da origem e entra no destino', { origem: saldoDe(origemFim), destino: saldoDe(destinoFim) });
+  const movSaida: any = await adm.get(`/financeiro/movimentos?contaFinanceiraId=${conta.id}&tipo=SAIDA&limite=20`);
+  const pernaSaida = movSaida?.data?.find((m: any) => m.id === transfOk.movimentoId);
+  const movEntrada: any = await adm.get(`/financeiro/movimentos?contaFinanceiraId=${destino.id}&tipo=ENTRADA&limite=20`);
+  const pernaEntrada = movEntrada?.data?.find((m: any) => m.id === transfOk.movimentoEntradaId);
+  verifica(pernaSaida && pernaSaida.categoriaId == null && pernaSaida.observacoes === 'TRANSFERENCIA' && pernaEntrada && pernaEntrada.categoriaId == null && pernaEntrada.observacoes === 'TRANSFERENCIA', 'as duas pernas são a transferência do sistema, sem categoria', { saida: pernaSaida, entrada: pernaEntrada });
+
+  const contasBot = await comChave(leitura.chave, 'GET', '/lancamentos-automaticos/contas-financeiras');
+  const catsBot = await comChave(leitura.chave, 'GET', '/lancamentos-automaticos/categorias-financeiras');
+  verifica(contasBot.status === 200 && Array.isArray(contasBot.json) && contasBot.json.some((c: any) => c.id === conta.id) && contasBot.json.every((c: any) => c.saldoAtual === undefined && c.ativo === undefined), 'leitura lista contas ativas sem saldo', contasBot.json?.[0]);
+  verifica(catsBot.status === 200 && catsBot.json.some((c: any) => c.id === despesa.id && c.tipo === 'DESPESA'), 'leitura lista categorias com o tipo', catsBot.json);
+  verifica((await comChave(soFinanceiro.chave, 'GET', '/lancamentos-automaticos/contas-financeiras')).status === 403, 'escopo financeiro não abre a lista deste recurso');
+  const catalogoListas = await mcp(leitura.chave, 'listar_endpoints', { recurso: 'lancamentos-automaticos' });
+  const listaEp: any[] = JSON.parse(catalogoListas.texto);
+  verifica(listaEp.some((e) => e.metodo === 'GET' && e.caminho === '/lancamentos-automaticos/contas-financeiras') && listaEp.some((e) => e.metodo === 'GET' && e.caminho === '/lancamentos-automaticos/categorias-financeiras'), 'listar_endpoints mostra as duas listas', listaEp.map((e) => e.caminho));
+  verifica((await comChave(leitura.chave, 'POST', '/lancamentos-automaticos/importar', { lancamentos: [] })).status === 403, 'leitura não importa');
+
+  const pago: any = await adm.post('/contas-pagar', { descricao: `Já pago ${SUF}`, valor: 33, vencimento: hoje(), contaFinanceiraId: conta.id }, 201);
+  await adm.post(`/contas-pagar/${pago.id}/baixar`, { valor: 33, data: hoje(), contaFinanceiraId: conta.id });
+  const recebido: any = await adm.post('/contas-receber', { descricao: `Já recebido ${SUF}`, valor: 17, vencimento: hoje(), contaFinanceiraId: destino.id }, 201);
+  await adm.post(`/contas-receber/${recebido.id}/baixar`, { valor: 17, data: hoje(), contaFinanceiraId: destino.id });
+  const aberto: any = await adm.post('/contas-pagar', { descricao: `Ainda aberto ${SUF}`, valor: 8, vencimento: hoje() }, 201);
+  const jaTransf: any = await adm.post('/financeiro/transferencia', { origemId: conta.id, destinoId: destino.id, valor: 5, data: hoje(), descricao: `Já feita ${SUF}` }, 201);
+  const saldoAntesImportO: any = await adm.get(`/contas-financeiras/${conta.id}`);
+  const saldoAntesImportD: any = await adm.get(`/contas-financeiras/${destino.id}`);
+  const pacote = {
+    lancamentos: [
+      { emailOrigemId: `imp-${SUF}-transf`, tipo: 'TRANSFERENCIA', valor: 5, data: hoje(), contraparte: destino.nome, origemContaId: conta.id, destinoContaId: destino.id, movimentoSaidaId: jaTransf.saida.id, movimentoEntradaId: jaTransf.entrada.id, situacao: 'TRANSFERIDO' },
+      { emailOrigemId: `imp-${SUF}-pagar`, tipo: 'PAGAR', valor: 33, data: hoje(), contraparte: `Fornecedor pago ${SUF}`, sistemaId: pago.id, situacao: 'PAGO', contaFinanceiraId: conta.id },
+      { emailOrigemId: `imp-${SUF}-receber`, tipo: 'RECEBER', valor: 17, data: hoje(), contraparte: `Cliente recebido ${SUF}`, sistemaId: recebido.id, situacao: 'RECEBIDO', contaFinanceiraId: destino.id },
+      { emailOrigemId: `imp-${SUF}-aberto`, tipo: 'PAGAR', valor: 8, data: hoje(), contraparte: `Título aberto ${SUF}`, sistemaId: aberto.id, situacao: 'ABERTO', contaFinanceiraId: null },
+    ],
+  };
+  const imp = await comChave(bot.chave, 'POST', '/lancamentos-automaticos/importar', pacote);
+  verifica(imp.status === 200 && imp.json?.criados === 4 && imp.json?.erros?.length === 0, 'importação vincula os quatro sem erro', imp.json);
+  const saldoDepoisImportO: any = await adm.get(`/contas-financeiras/${conta.id}`);
+  const saldoDepoisImportD: any = await adm.get(`/contas-financeiras/${destino.id}`);
+  verifica(igual(saldoDe(saldoDepoisImportO), saldoDe(saldoAntesImportO)) && igual(saldoDe(saldoDepoisImportD), saldoDe(saldoAntesImportD)), 'importar não altera saldo', { origem: saldoDe(saldoDepoisImportO), destino: saldoDe(saldoDepoisImportD) });
+  const deNovo = await comChave(bot.chave, 'POST', '/lancamentos-automaticos/importar', pacote);
+  verifica(deNovo.json?.criados === 0 && deNovo.json?.idempotentes === 4, 'repetir a importação não duplica', deNovo.json);
+  const filaImp: any = await adm.get(`/lancamentos-automaticos?status=PENDENTE&limite=50`);
+  const impTransf = filaImp.data.find((l: any) => l.emailOrigemId === `imp-${SUF}-transf`);
+  const impPago = filaImp.data.find((l: any) => l.emailOrigemId === `imp-${SUF}-pagar`);
+  verifica(impTransf?.jaLancado === true && impTransf?.contaDestino?.id === destino.id && impPago?.jaLancado === true && impPago?.contaPagarId === pago.id, 'a fila mostra origem → destino e o título já existente', impTransf);
+  const soConfirma: any = await adm.post(`/lancamentos-automaticos/${impTransf.id}/confiar`, {});
+  const saldoConfirma: any = await adm.get(`/contas-financeiras/${conta.id}`);
+  verifica(soConfirma.status === 'CONFIADO' && soConfirma.jaLancado === true && igual(saldoDe(saldoConfirma), saldoDe(saldoDepoisImportO)), 'Confio de já lançado só confirma', { saldo: saldoDe(saldoConfirma) });
+  const contestadoPago: any = await adm.post(`/lancamentos-automaticos/${impPago.id}/contestar`, { observacao: 'Este pagamento não era nosso.' });
+  const saldoContest: any = await adm.get(`/contas-financeiras/${conta.id}`);
+  const tituloAinda: any = await adm.get(`/contas-pagar/${pago.id}`);
+  verifica(contestadoPago.requerEstornoManual === true && contestadoPago.status === 'CONTESTADO' && igual(saldoDe(saldoContest), saldoDe(saldoDepoisImportO)) && tituloAinda.situacao === 'PAGO', 'Contestar já lançado pede estorno manual e não desfaz a baixa', contestadoPago);
+
+  const arquivo = JSON.parse(fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../prisma/dados/lancamentos-futrico.json'), 'utf8'));
+  verifica(arquivo.lancamentos.length === 18 && arquivo.lancamentos.filter((l: any) => l.tipo === 'TRANSFERENCIA').length === 3, 'o arquivo dos 18 está no repositório', arquivo.lancamentos.length);
+  const real = await comChave(bot.chave, 'POST', '/lancamentos-automaticos/importar', { lancamentos: arquivo.lancamentos });
+  verifica(real.status === 200 && real.json?.criados === 0 && real.json?.erros?.length === 18, 'neste banco de teste os ids do arquivo não existem: nada é gravado nem lançado', real.json);
 
   encerrar('Lançamentos automáticos');
 }
