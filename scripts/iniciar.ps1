@@ -38,6 +38,8 @@ if ($Dev) {
   Start-Job -ScriptBlock { Start-Sleep 4; Start-Process 'http://localhost:3333' } | Out-Null
   Push-Location (Join-Path $Raiz 'apps\api')
   $env:NODE_ENV = 'production'
+  node prisma/aplicar-migracoes.mjs
+  if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Host "Falha ao aplicar migrações do banco" -ForegroundColor Red; exit 1 }
   npx tsx src/server.ts
   Pop-Location
 }

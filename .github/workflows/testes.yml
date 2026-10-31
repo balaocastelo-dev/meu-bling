@@ -16,6 +16,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: node testes/migracao-telefone.mjs
+        working-directory: apps/api
       - run: npx playwright install --with-deps chromium
         working-directory: apps/api
       - run: npm test

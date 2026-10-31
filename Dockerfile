@@ -25,5 +25,6 @@ RUN mkdir -p /app/apps/api/data /app/apps/api/storage
 VOLUME ["/app/apps/api/data", "/app/apps/api/storage"]
 EXPOSE 3333
 WORKDIR /app/apps/api
-# cria/atualiza o banco e roda o seed base (idempotente) antes de subir
-CMD ["sh", "-c", "npx prisma db push --skip-generate && npx tsx prisma/seed.ts && npx tsx src/server.ts"]
+# Migrações (prisma migrate deploy) e o restante do schema, sem apagar dados.
+# O seed é idempotente: não sobrescreve usuário que já existe.
+CMD ["sh", "-c", "node prisma/aplicar-migracoes.mjs && npx tsx prisma/seed.ts && npx tsx src/server.ts"]
