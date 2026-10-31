@@ -38,6 +38,8 @@ export interface Usuario {
   vendedorId: number | null;
   tecnicoId: number | null;
   ativo?: boolean;
+  /** Celular (WhatsApp) — usado quando alguém chama a atenção no chat. */
+  telefone?: string | null;
   ultimoLogin?: string | null;
   criadoEm?: string;
 }

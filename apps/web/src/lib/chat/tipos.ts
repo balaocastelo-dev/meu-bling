@@ -98,6 +98,15 @@ export type EventoChat =
   | { tipo: 'conversa.saiu'; conversaId: number }
   | { tipo: 'chamada'; acao: 'convite' | 'entrou' | 'saiu' | 'recusou' | 'encerrada' | 'perdida'; chamada: Chamada; usuarioId?: number }
   | { tipo: 'rtc'; chamadaId: number; de: number; dados: SinalRtc }
+  | { tipo: 'atencao'; conversaId: number; de: { id: number; nome: string }; mensagemId: number }
   | { tipo: 'pong'; em: number };
+
+export type SituacaoWhatsappAtencao = 'enviado' | 'sem_telefone' | 'telefone_invalido' | 'aguardando' | 'desconectado' | 'erro';
+
+export interface RespostaAtencao {
+  ok: boolean;
+  mensagem: Mensagem;
+  destinatarios: { usuarioId: number; nome: string; whatsapp: SituacaoWhatsappAtencao }[];
+}
 
 export type SinalRtc = { sdp: RTCSessionDescriptionInit } | { ice: RTCIceCandidateInit | null } | { video: boolean } | { ola: true };

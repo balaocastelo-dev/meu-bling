@@ -1,7 +1,7 @@
 /** Balão de mensagem: texto (com links), áudio, imagem, arquivo, registro de chamada e mensagem do sistema. */
 import { useState } from 'react';
 import clsx from 'clsx';
-import { Check, CheckCheck, Clock, CornerUpLeft, MoreHorizontal, Phone, Trash2, AlertCircle } from 'lucide-react';
+import { Check, CheckCheck, Clock, CornerUpLeft, MoreHorizontal, Phone, Trash2, AlertCircle, Zap } from 'lucide-react';
 import type { Mensagem } from '@/lib/chat/tipos';
 import { horaMensagem, primeiroNome, resumoMensagem } from '@/lib/chat/formato';
 import { ArquivoChat, ImagemChat, PlayerAudio } from '@/components/chat/ArquivoProtegido';
@@ -51,9 +51,13 @@ export function Balao({
   const [menu, setMenu] = useState(false);
 
   if (m.tipo === 'SISTEMA') {
+    const atencao = /chamou sua atenção/.test(m.texto || '');
     return (
       <div className="my-1 flex justify-center px-2">
-        <span className="max-w-[90%] rounded-full bg-slate-100 px-3 py-1 text-center text-[11px] text-slate-500">{m.texto}</span>
+        <span className={clsx('inline-flex max-w-[90%] items-center gap-1.5 rounded-full px-3 py-1 text-center text-[11px]', atencao ? 'bg-amber-50 font-medium text-amber-800 ring-1 ring-amber-200' : 'bg-slate-100 text-slate-500')}>
+          {atencao && <Zap className="h-3 w-3 shrink-0" />}
+          {m.texto}
+        </span>
       </div>
     );
   }
