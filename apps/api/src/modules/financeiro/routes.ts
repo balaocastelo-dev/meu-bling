@@ -25,8 +25,9 @@ import {
   mapaOrigens,
 } from './service.js';
 import { chavePeriodo, listarPeriodos, resolverPeriodo, type Agrupar } from './periodos.js';
-import { OBS_FORA_DO_RESULTADO } from '../comum/financeiro.js';
+import { OBS_FORA_DO_RESULTADO, OBS_AJUSTE_SALDO, OBS_TRANSFERENCIA } from '../comum/financeiro.js';
 import { extratoConta } from './extrato.js';
+import { resolvedorDeOrigem, selectTituloReceber, selectTituloPagar, type OrigemLancamento } from './origem-lancamento.js';
 
 const SIT_FILTRO = ['ABERTO', 'RECEBIDO', 'PAGO', 'PARCIAL', 'CANCELADO', 'ATRASADO'] as const;
 
@@ -585,14 +586,32 @@ export default async function financeiroRoutes(app: FastifyInstance) {
         include: {
           contaFinanceira: { select: { id: true, nome: true, cor: true } },
           categoria: { select: { id: true, nome: true } },
-          contaReceber: { select: { id: true, descricao: true, contato: { select: { id: true, nome: true } } } },
-          contaPagar: { select: { id: true, descricao: true, contato: { select: { id: true, nome: true } } } },
+          caixinha: { select: { id: true, nome: true } },
+          contaReceber: { select: selectTituloReceber },
+          contaPagar: { select: selectTituloPagar },
         },
         orderBy: [{ data: 'desc' }, { id: 'desc' }],
         ...paginar(q),
       }),
     ]);
-    return respostaPaginada(data, total, q);
+    // de onde veio cada lançamento, para a tela poder levar o Thiago até a venda/compra/consignação
+    const deOnde = await resolvedorDeOrigem([
+      ...data.map((m) => m.contaReceber),
+      ...data.map((m) => m.contaPagar),
+    ].filter(Boolean) as Parameters<Awaited<ReturnType<typeof resolvedorDeOrigem>>>[0][]);
+    const comOrigem = data.map((m) => {
+      const titulo = m.contaReceber || m.contaPagar;
+      let origem: OrigemLancamento;
+      if (m.observacoes === OBS_AJUSTE_SALDO) origem = { natureza: 'AJUSTE', rotulo: 'Acerto de saldo (fora do DRE)', link: null };
+      else if (m.observacoes === OBS_TRANSFERENCIA)
+        origem = m.caixinha
+          ? { natureza: 'CAIXINHA', rotulo: `Caixinha "${m.caixinha.nome}"`, link: '/financeiro/caixinhas' }
+          : { natureza: 'TRANSFERENCIA', rotulo: 'Transferência entre contas', link: `/financeiro/bancos/${m.contaFinanceiraId}` };
+      else if (titulo) origem = deOnde(titulo, !!m.contaReceber);
+      else origem = { natureza: 'AVULSO', rotulo: m.categoria ? `Lançamento avulso · ${m.categoria.nome}` : 'Lançamento avulso', link: null };
+      return { ...m, origem };
+    });
+    return respostaPaginada(comOrigem, total, q);
   });
 
   app.post('/api/v1/financeiro/movimentos', { preHandler: fin }, async (req, reply) => {

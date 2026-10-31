@@ -7,9 +7,9 @@ import { prisma } from '../../lib/prisma.js';
 import { NotFound } from '../../lib/errors.js';
 import { arredondar } from '../../lib/util.js';
 import { OBS_AJUSTE_SALDO, OBS_TRANSFERENCIA } from '../comum/financeiro.js';
-import { mapaOrigens } from './service.js';
+import { resolvedorDeOrigem, selectTituloReceber, selectTituloPagar, type NaturezaLancamento } from './origem-lancamento.js';
 
-export type NaturezaLancamento = 'VENDA' | 'OS' | 'COMPRA' | 'RECEBIMENTO' | 'PAGAMENTO' | 'TRANSFERENCIA' | 'CAIXINHA' | 'AJUSTE' | 'AVULSO';
+export type { NaturezaLancamento };
 
 const LIMITE = 3000;
 
@@ -53,12 +53,14 @@ export async function extratoConta(contaId: number, p: { dataInicial?: Date | nu
     include: {
       categoria: { select: { nome: true } },
       caixinha: { select: { id: true, nome: true } },
-      contaReceber: { select: { id: true, descricao: true, origemTipo: true, origemId: true, contato: { select: { id: true, nome: true } } } },
-      contaPagar: { select: { id: true, descricao: true, origemTipo: true, origemId: true, contato: { select: { id: true, nome: true } } } },
+      contaReceber: { select: selectTituloReceber },
+      contaPagar: { select: selectTituloPagar },
     },
   });
   const outroLado = await contrapartes(movs);
-  const origem = await mapaOrigens([...movs.map((m) => m.contaReceber).filter(Boolean), ...movs.map((m) => m.contaPagar).filter(Boolean)] as { origemTipo: string; origemId: number | null }[]);
+  const deOnde = await resolvedorDeOrigem(
+    [...movs.map((m) => m.contaReceber), ...movs.map((m) => m.contaPagar)].filter(Boolean) as Parameters<Awaited<ReturnType<typeof resolvedorDeOrigem>>>[0][],
+  );
 
   let saldo = saldoAnterior;
   let entradas = 0;
@@ -83,25 +85,11 @@ export async function extratoConta(contaId: number, p: { dataInicial?: Date | nu
       link = `/financeiro/bancos/${outra?.id ?? ''}`.replace(/\/$/, '') || null;
       if (!outra) link = null;
     } else if (titulo) {
-      const o = origem(titulo);
       pessoa = titulo.contato?.nome ?? null;
-      if (o.tipo === 'VENDA' && o.id) {
-        natureza = 'VENDA';
-        contraparte = `Venda nº ${o.numero ?? o.id}${pessoa ? ` · ${pessoa}` : ''}`;
-        link = `/vendas/${o.id}`;
-      } else if (o.tipo === 'OS' && o.id) {
-        natureza = 'OS';
-        contraparte = `OS nº ${o.numero ?? o.id}${pessoa ? ` · ${pessoa}` : ''}`;
-        link = `/ordens-servico/${o.id}`;
-      } else if (o.tipo === 'COMPRA' && o.id) {
-        natureza = 'COMPRA';
-        contraparte = `Compra nº ${o.numero ?? o.id}${pessoa ? ` · ${pessoa}` : ''}`;
-        link = `/compras/${o.id}`;
-      } else {
-        natureza = m.contaReceber ? 'RECEBIMENTO' : 'PAGAMENTO';
-        contraparte = `${m.contaReceber ? 'Conta a receber' : 'Conta a pagar'}: ${titulo.descricao}${pessoa ? ` · ${pessoa}` : ''}`;
-        link = `${m.contaReceber ? "/financeiro/receber" : "/financeiro/pagar"}?pesquisa=${encodeURIComponent(titulo.descricao)}`;
-      }
+      const o = deOnde(titulo, !!m.contaReceber);
+      natureza = o.natureza;
+      contraparte = o.rotulo;
+      link = o.link;
     } else {
       contraparte = m.categoria ? `Lançamento avulso · ${m.categoria.nome}` : 'Lançamento avulso (sem categoria)';
     }
