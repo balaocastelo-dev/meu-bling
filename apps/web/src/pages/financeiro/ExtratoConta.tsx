@@ -2,13 +2,14 @@
  * EXTRATO DA CONTA (banco/caixa): de onde veio e para onde foi cada lançamento, com o saldo depois dele.
  * Abre ao clicar no card do banco em Financeiro → Bancos.
  */
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { TextoValores } from '@/components/compartilhados/TextoValores';
+import { ICONE_NATUREZA, ROTULO_NATUREZA, type NaturezaLancamento } from '@/components/compartilhados/natureza';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ExternalLink, PiggyBank, Scale, ShoppingBag, ShoppingCart, Trash2, Wrench } from 'lucide-react';
+import { ExternalLink, Trash2 } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { Badge, Button, Card, EmptyState, PageHeader, PeriodoFiltro, Skeleton } from '@/components/ui';
 import { data as fmtData, dataHora, moeda } from '@/lib/format';
@@ -21,7 +22,7 @@ interface Linha {
   tipo: 'ENTRADA' | 'SAIDA';
   valor: number;
   descricao: string;
-  natureza: 'VENDA' | 'OS' | 'COMPRA' | 'RECEBIMENTO' | 'PAGAMENTO' | 'TRANSFERENCIA' | 'CAIXINHA' | 'AJUSTE' | 'AVULSO';
+  natureza: NaturezaLancamento;
   contraparte: string;
   link: string | null;
   categoria: string | null;
@@ -40,29 +41,6 @@ interface Extrato {
   cortado: boolean;
   lancamentos: Linha[];
 }
-
-const ICONE: Record<Linha['natureza'], ReactNode> = {
-  VENDA: <ShoppingCart className="h-4 w-4" />,
-  OS: <Wrench className="h-4 w-4" />,
-  COMPRA: <ShoppingBag className="h-4 w-4" />,
-  RECEBIMENTO: <ArrowDownLeft className="h-4 w-4" />,
-  PAGAMENTO: <ArrowUpRight className="h-4 w-4" />,
-  TRANSFERENCIA: <ArrowLeftRight className="h-4 w-4" />,
-  CAIXINHA: <PiggyBank className="h-4 w-4" />,
-  AJUSTE: <Scale className="h-4 w-4" />,
-  AVULSO: <ArrowLeftRight className="h-4 w-4" />,
-};
-const ROTULO: Record<Linha['natureza'], string> = {
-  VENDA: 'Venda',
-  OS: 'Assistência',
-  COMPRA: 'Compra',
-  RECEBIMENTO: 'Recebimento',
-  PAGAMENTO: 'Pagamento',
-  TRANSFERENCIA: 'Transferência',
-  CAIXINHA: 'Caixinha',
-  AJUSTE: 'Acerto de saldo',
-  AVULSO: 'Avulso',
-};
 
 export default function ExtratoConta() {
   const { id } = useParams();
@@ -127,11 +105,11 @@ export default function ExtratoConta() {
                         <td data-rotulo="Data" className="whitespace-nowrap px-3 py-2 text-xs text-slate-600" title={`lançado em ${dataHora(l.criadoEm)}`}>{fmtData(l.data)}</td>
                         <td className="pilha-cheio px-3 py-2">
                           <div className="flex items-start gap-2">
-                            <span className={clsx('mt-0.5', l.tipo === 'ENTRADA' ? 'text-emerald-600' : 'text-red-500')}>{ICONE[l.natureza]}</span>
+                            <span className={clsx('mt-0.5', l.tipo === 'ENTRADA' ? 'text-emerald-600' : 'text-red-500')}>{ICONE_NATUREZA[l.natureza]}</span>
                             <div className="min-w-0">
                               <p className="text-slate-800"><TextoValores texto={l.descricao} /></p>
                               <div className="mt-0.5 flex flex-wrap gap-1">
-                                <Badge tom={l.natureza === 'AJUSTE' ? 'amarelo' : l.foraDoResultado ? 'cinza' : 'azul'}>{ROTULO[l.natureza]}</Badge>
+                                <Badge tom={l.natureza === 'AJUSTE' ? 'amarelo' : l.foraDoResultado ? 'cinza' : 'azul'}>{ROTULO_NATUREZA[l.natureza]}</Badge>
                                 {l.foraDoResultado && <span className="text-[10px] text-slate-400">fora do DRE</span>}
                               </div>
                               {l.observacoes && <p className="mt-0.5 text-[11px] text-slate-400">{l.observacoes}</p>}

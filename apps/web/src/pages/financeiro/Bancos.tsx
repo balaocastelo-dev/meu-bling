@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { ArrowRightLeft, Ban, Eye, EyeOff, Scale, CircleCheck, FileUp, Landmark, Link2, Plus, PlugZap, RefreshCw, Unlink, Wallet } from 'lucide-react';
+import { ArrowRightLeft, Ban, ExternalLink, Eye, EyeOff, Scale, CircleCheck, FileUp, Landmark, Link2, Plus, PlugZap, RefreshCw, Unlink, Wallet } from 'lucide-react';
+import { ICONE_NATUREZA, type NaturezaLancamento } from '@/components/compartilhados/natureza';
 import { api, mensagemErro } from '@/lib/api';
 import { abrirPluggyConnect } from '@/lib/pluggy';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -403,12 +404,13 @@ function Extrato({ contas }: { contas: ContaFinanceira[] }) {
       ) : (
         <div className="overflow-x-auto">
         <table className="tbl">
-          <thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th>Categoria</th><th>Tipo</th><th className="text-right">Valor</th><th /></tr></thead>
+          <thead><tr><th>Data</th><th>Descrição</th><th>De onde veio</th><th>Conta</th><th>Categoria</th><th>Tipo</th><th className="text-right">Valor</th><th /></tr></thead>
           <tbody>
             {resp.data.map((m) => (
               <tr key={m.id}>
                 <td className="text-xs text-slate-500">{data(m.data)}</td>
                 <td>{m.descricao}</td>
+                <td className="text-xs"><CelulaOrigem origem={m.origem} /></td>
                 <td className="text-slate-500">{m.contaFinanceira?.nome ?? '—'}</td>
                 <td className="text-xs text-slate-500">{m.categoria?.nome ?? '—'}</td>
                 <td><Badge tom={m.tipo === 'ENTRADA' ? 'verde' : m.tipo === 'SAIDA' ? 'vermelho' : 'neutro'}>{rotulo(m.tipo)}</Badge></td>
@@ -425,7 +427,31 @@ function Extrato({ contas }: { contas: ContaFinanceira[] }) {
   );
 }
 
-type MovimentoResumo = { id: number; data: string; tipo: string; valor: number; descricao: string; categoria?: { nome: string } | null; contaFinanceira?: { nome: string } | null; conciliado: boolean };
+type MovimentoResumo = {
+  id: number; data: string; tipo: string; valor: number; descricao: string;
+  categoria?: { nome: string } | null; contaFinanceira?: { nome: string } | null; conciliado: boolean;
+  /// de onde veio o dinheiro: a venda, a compra, a consignação… com o link para abrir
+  origem?: { natureza: NaturezaLancamento; rotulo: string; link: string | null } | null;
+};
+
+/** Célula "de onde veio": vira link quando dá para chegar na origem. */
+function CelulaOrigem({ origem }: { origem?: MovimentoResumo['origem'] }) {
+  if (!origem) return <span className="text-slate-400">—</span>;
+  const conteudo = (
+    <>
+      <span className="shrink-0">{ICONE_NATUREZA[origem.natureza]}</span>
+      <span className="truncate">{origem.rotulo}</span>
+    </>
+  );
+  return origem.link ? (
+    <Link to={origem.link} title={`Abrir: ${origem.rotulo}`} className="inline-flex max-w-[20rem] items-center gap-1.5 text-brand-700 hover:underline">
+      {conteudo}
+      <ExternalLink className="h-3 w-3 shrink-0" />
+    </Link>
+  ) : (
+    <span className="inline-flex max-w-[20rem] items-center gap-1.5 text-slate-500">{conteudo}</span>
+  );
+}
 
 /** Últimos lançamentos — atalho de conferência direto na aba Contas, sem precisar abrir o extrato */
 function UltimosLancamentos({ verSaldo, onVerExtrato }: { verSaldo: boolean; onVerExtrato: () => void }) {
@@ -448,14 +474,14 @@ function UltimosLancamentos({ verSaldo, onVerExtrato }: { verSaldo: boolean; onV
       ) : (
         <div className="overflow-x-auto">
           <table className="tbl">
-            <thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th>Categoria</th><th>Tipo</th><th className="text-right">Valor</th></tr></thead>
+            <thead><tr><th>Data</th><th>Descrição</th><th>De onde veio</th><th>Conta</th><th>Tipo</th><th className="text-right">Valor</th></tr></thead>
             <tbody>
               {resp.data.map((m) => (
                 <tr key={m.id}>
                   <td className="whitespace-nowrap text-xs text-slate-500">{data(m.data)}</td>
-                  <td className="max-w-[22rem] truncate" title={m.descricao}>{m.descricao}</td>
+                  <td className="max-w-[18rem] truncate" title={m.descricao}>{m.descricao}</td>
+                  <td className="text-xs"><CelulaOrigem origem={m.origem} /></td>
                   <td className="whitespace-nowrap text-slate-500">{m.contaFinanceira?.nome ?? '—'}</td>
-                  <td className="whitespace-nowrap text-xs text-slate-500">{m.categoria?.nome ?? '—'}</td>
                   <td><Badge tom={m.tipo === 'ENTRADA' ? 'verde' : m.tipo === 'SAIDA' ? 'vermelho' : 'neutro'}>{rotulo(m.tipo)}</Badge></td>
                   <td className={clsx('num whitespace-nowrap text-right font-medium', verSaldo ? (m.tipo === 'SAIDA' ? 'text-red-600' : 'text-emerald-700') : 'tracking-widest text-slate-400')}>
                     {verSaldo ? `${m.tipo === 'SAIDA' ? '-' : '+'}${moeda(m.valor)}` : 'R$ ••••••'}
