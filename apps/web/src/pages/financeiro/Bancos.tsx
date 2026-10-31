@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { ArrowRightLeft, Ban, ExternalLink, Eye, EyeOff, Scale, CircleCheck, FileUp, Landmark, Link2, Plus, PlugZap, RefreshCw, Unlink, Wallet } from 'lucide-react';
+import { ArrowRightLeft, Ban, ExternalLink, Eye, EyeOff, Scale, CircleCheck, FileUp, Landmark, Link2, Plus, PlugZap, RefreshCw, Wallet } from 'lucide-react';
 import { ICONE_NATUREZA, type NaturezaLancamento } from '@/components/compartilhados/natureza';
 import { api, mensagemErro } from '@/lib/api';
 import { abrirPluggyConnect } from '@/lib/pluggy';
+import { OpenFinanceConta } from '@/components/financeiro/OpenFinanceConta';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useCategoriasFinanceiras, useContasFinanceiras, opcoesDe } from '@/hooks/useListas';
@@ -68,18 +69,9 @@ export default function Bancos() {
   });
 
   const sincronizar = useMutation({
-    mutationFn: (id?: number) => (id ? api.post<{ saldo: number; novasTransacoes: number }>(`/open-finance/sincronizar/${id}`) : api.post<{ novasTransacoes?: number }>('/open-finance/sincronizar-todas')),
-    onSuccess: (r) => {
-      toast.success('Sincronização concluída.', { description: r && 'novasTransacoes' in r ? `${r.novasTransacoes ?? 0} novas transações` : undefined });
-      invalidar();
-    },
-    onError: (e) => toast.error(mensagemErro(e)),
-  });
-
-  const desvincular = useMutation({
-    mutationFn: (id: number) => api.del(`/open-finance/desvincular/${id}`),
+    mutationFn: () => api.post<{ novasTransacoes?: number }[] | { novasTransacoes?: number }>('/open-finance/sincronizar-todas'),
     onSuccess: () => {
-      toast.success('Conta desvinculada do Open Finance.');
+      toast.success('Sincronização de todas as contas concluída.');
       invalidar();
     },
     onError: (e) => toast.error(mensagemErro(e)),
@@ -142,7 +134,7 @@ export default function Bancos() {
             <Button variante="secundario" icone={<Plus className="h-4 w-4" />} onClick={() => setLancAberto(true)}>Lançamento avulso</Button>
             <Button variante="secundario" icone={<Scale className="h-4 w-4" />} onClick={() => setAjusteAberto(true)}>Ajustar saldo</Button>
             <Button variante="secundario" icone={<Scale className="h-4 w-4" />} onClick={() => setSaldosAberto(true)}>Acertar saldos iniciais</Button>
-            <Button variante="secundario" icone={<RefreshCw className={clsx('h-4 w-4', sincronizar.isPending && 'animate-spin')} />} onClick={() => sincronizar.mutate(undefined)} disabled={sincronizar.isPending || !of?.ativo}>Sincronizar todas</Button>
+            <Button variante="secundario" icone={<RefreshCw className={clsx('h-4 w-4', sincronizar.isPending && 'animate-spin')} />} onClick={() => sincronizar.mutate()} disabled={sincronizar.isPending || !of?.ativo}>Sincronizar todas</Button>
             <Button variante="primario" icone={<PlugZap className="h-4 w-4" />} carregando={conectar.isPending} onClick={() => conectar.mutate()} disabled={of ? !of.configurado : false} title={of && !of.configurado ? 'Configure o Open Finance em Configurações' : undefined}>
               Conectar banco (Open Finance)
             </Button>
@@ -160,6 +152,11 @@ export default function Bancos() {
 
       {aba === 'contas' && (
         <div className="space-y-4">
+          {of?.ativo && (
+            <p className="text-sm text-slate-500">
+              Em cada conta, <span className="font-medium text-slate-700">Conectar Open Finance</span> abre o banco, grava o vínculo nessa conta e sincroniza o extrato. O botão do topo cria contas novas a partir da conexão.
+            </p>
+          )}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {isLoading && Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40" />)}
             {!isLoading && !contas?.length && (
@@ -167,7 +164,7 @@ export default function Bancos() {
                 <EmptyState icone={<Landmark className="h-5 w-5" />} titulo="Nenhuma conta financeira" descricao="Cadastre o caixa e as contas bancárias em Configurações, ou conecte um banco via Open Finance." acao={<Link to="/configuracoes/contas-financeiras"><Button variante="primario">Cadastrar conta</Button></Link>} />
               </Card>
             )}
-            {contas?.map((c) => <CardConta key={c.id} conta={c} onSincronizar={() => sincronizar.mutate(c.id)} sincronizando={sincronizar.isPending} onDesvincular={() => { if (confirm('Desvincular esta conta do Open Finance?')) desvincular.mutate(c.id); }} />)}
+            {contas?.map((c) => <CardConta key={c.id} conta={c} />)}
           </div>
 
           <UltimosLancamentos verSaldo={verSaldo} onVerExtrato={() => pg.setFiltro('aba', 'extrato')} />
@@ -203,8 +200,7 @@ export default function Bancos() {
   );
 }
 
-function CardConta({ conta: c, onSincronizar, sincronizando, onDesvincular }: { conta: ContaFinanceira; onSincronizar: () => void; sincronizando: boolean; onDesvincular: () => void }) {
-  const vinculada = !!c.openFinanceItemId;
+function CardConta({ conta: c }: { conta: ContaFinanceira }) {
   const diferenca = typeof c.saldoBanco === 'number' ? c.saldoBanco - c.saldoAtual : null;
   const navegar = useNavigate();
   return (
@@ -227,7 +223,7 @@ function CardConta({ conta: c, onSincronizar, sincronizando, onDesvincular }: { 
           <p className="truncate font-semibold text-slate-900">{c.nome}</p>
           <p className="truncate text-xs text-slate-400">{[rotulo(c.tipo), c.banco, c.agencia && `ag. ${c.agencia}`, c.conta && `cc. ${c.conta}`].filter(Boolean).join(' · ')}</p>
         </div>
-        {vinculada ? <Badge tom={c.openFinanceStatus === 'UPDATED' || !c.openFinanceStatus ? 'verde' : 'amarelo'} ponto>Open Finance</Badge> : c.padrao ? <Badge>Padrão</Badge> : null}
+        {c.padrao ? <Badge>Padrão</Badge> : null}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3">
         <div>
@@ -256,13 +252,9 @@ function CardConta({ conta: c, onSincronizar, sincronizando, onDesvincular }: { 
         </p>
       )}
       <p className="mt-3 text-xs font-medium text-brand-700">Ver extrato →</p>
-      {vinculada && (
-        <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
-          <Button tamanho="xs" variante="secundario" icone={<RefreshCw className={clsx('h-3.5 w-3.5', sincronizando && 'animate-spin')} />} onClick={onSincronizar} disabled={sincronizando}>Sincronizar</Button>
-          <Button tamanho="xs" variante="fantasma" icone={<Unlink className="h-3.5 w-3.5" />} onClick={onDesvincular}>Desvincular</Button>
-          <span className="ml-auto text-[10px] text-slate-400">{c.ultimaSincronizacao ? `sync ${dataHora(c.ultimaSincronizacao)}` : ''}</span>
-        </div>
-      )}
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <OpenFinanceConta conta={c} />
+      </div>
     </div>
   );
 }

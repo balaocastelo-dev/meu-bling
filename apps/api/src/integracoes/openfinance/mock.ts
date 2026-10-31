@@ -29,8 +29,8 @@ function rng(seed: number) {
 export class ProvedorMock implements ProvedorOpenFinance {
   nome = 'mock';
 
-  async connectToken() {
-    return { accessToken: 'mock-connect-token-' + Date.now() };
+  async connectToken(_opcoes?: { itemId?: string }) {
+    return { accessToken: 'mock-connect-token' };
   }
 
   async contasDoItem(itemId: string) {

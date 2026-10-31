@@ -29,8 +29,12 @@ export interface TransacaoOpenFinance {
 
 export interface ProvedorOpenFinance {
   nome: string;
-  /** token para abrir o widget Pluggy Connect no frontend */
-  connectToken(): Promise<{ accessToken: string }>;
+  /**
+   * Token de curta duração para abrir o widget Pluggy Connect no frontend.
+   * Com `itemId`, a Pluggy abre a mesma conexão para reconectar (não cria outra).
+   * O client secret nunca sai deste método.
+   */
+  connectToken(opcoes?: { itemId?: string }): Promise<{ accessToken: string }>;
   contasDoItem(itemId: string): Promise<ContaOpenFinance[]>;
   saldo(accountId: string): Promise<{ saldo: number; em: Date; status?: string }>;
   transacoes(accountId: string, de: Date, ate: Date): Promise<TransacaoOpenFinance[]>;

@@ -14,8 +14,8 @@ export class ProvedorPluggy implements ProvedorOpenFinance {
     this.client = new PluggyClient({ clientId, clientSecret });
   }
 
-  async connectToken() {
-    const r = await this.client.createConnectToken(undefined, {
+  async connectToken(opcoes?: { itemId?: string }) {
+    const r = await this.client.createConnectToken(opcoes?.itemId, {
       webhookUrl: this.webhookUrl,
       clientUserId: 'meu-bling',
       avoidDuplicates: true,

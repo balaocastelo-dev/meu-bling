@@ -37,15 +37,47 @@ export default async function bancosRoutes(app: FastifyInstance) {
     return { ativo: st.ativo, provedor: st.provedor, configurado: st.configurado, clientId: st.clientId, contasVinculadas: contas, conectores };
   });
 
-  app.post('/api/v1/open-finance/connect-token', { preHandler: fin }, async () => {
+  app.post('/api/v1/open-finance/connect-token', { preHandler: fin }, async (req) => {
+    const b = z.object({ itemId: z.string().trim().min(1).max(80).optional() }).parse(req.body ?? {});
+    if (b.itemId) {
+      const dona = await prisma.contaFinanceira.findFirst({ where: { openFinanceItemId: b.itemId }, select: { id: true } });
+      if (!dona) throw new AppError('Esta conexão não está vinculada a nenhuma conta da loja. Use Conectar Open Finance.', 404, 'ITEM_DESCONHECIDO');
+    }
     limparCacheProvedor();
     const provedor = await obterProvedor();
     try {
-      const r = await provedor.connectToken();
+      const r = await provedor.connectToken(b.itemId ? { itemId: b.itemId } : undefined);
+      // só o token de curta duração do widget — o client secret fica no servidor
       return { accessToken: r.accessToken, provedor: provedor.nome };
     } catch (e: any) {
       throw new AppError('Não foi possível gerar o token do Pluggy: ' + (e?.message || e), 502, 'OPEN_FINANCE');
     }
+  });
+
+  /**
+   * Contas que a conexão enxerga no banco, para a loja escolher qual ligar à conta financeira.
+   * O parâmetro se chama `item` (não `itemId`): o gancho global rejeita qualquer :id da URL que não seja número,
+   * e o identificador da Pluggy é um texto.
+   */
+  app.get('/api/v1/open-finance/itens/:item/contas', { preHandler: fin }, async (req) => {
+    const itemId = z.string().trim().min(1).max(80).parse((req.params as { item?: string }).item);
+    const provedor = await obterProvedor();
+    let contas;
+    try {
+      contas = await provedor.contasDoItem(itemId);
+    } catch (e: any) {
+      throw new AppError('Falha ao consultar contas do banco: ' + (e?.message || e), 502, 'OPEN_FINANCE');
+    }
+    return contas.map((c) => ({
+      id: c.id,
+      nome: c.nome,
+      tipo: c.tipo,
+      subtipo: c.subtipo,
+      numero: c.numero,
+      saldo: arredondar(c.saldo),
+      banco: c.banco ?? null,
+      agencia: c.agencia ?? null,
+    }));
   });
 
   /** Lista as contas do item (conexão do widget) e cria/vincula ContaFinanceira(s). */
@@ -66,9 +98,21 @@ export default async function bancosRoutes(app: FastifyInstance) {
       const alvo = (b.accountId && contas.find((c) => c.id === b.accountId)) || contas[0];
       const cf = await prisma.contaFinanceira.findUnique({ where: { id: b.contaFinanceiraId } });
       if (!cf) throw new NotFound('Conta financeira');
+      const ocupada = await prisma.contaFinanceira.findFirst({ where: { openFinanceAccountId: alvo.id, NOT: { id: cf.id } }, select: { id: true, nome: true } });
+      if (ocupada) throw new AppError(`Esta conta do banco já está vinculada a "${ocupada.nome}". Desconecte lá antes de conectar aqui.`, 409, 'JA_VINCULADA');
       await prisma.contaFinanceira.update({
         where: { id: cf.id },
-        data: { openFinanceItemId: b.itemId, openFinanceAccountId: alvo.id, openFinanceStatus: 'VINCULADA', saldoBanco: arredondar(alvo.saldo), saldoBancoEm: new Date(), banco: cf.banco || alvo.banco || null, agencia: cf.agencia || alvo.agencia || null, conta: cf.conta || alvo.numero || null },
+        data: {
+          openFinanceItemId: b.itemId,
+          openFinanceAccountId: alvo.id,
+          openFinanceStatus: 'VINCULADA',
+          saldoBanco: arredondar(alvo.saldo),
+          saldoBancoEm: new Date(),
+          ultimaSincronizacao: cf.openFinanceAccountId === alvo.id ? cf.ultimaSincronizacao : null,
+          banco: cf.banco || alvo.banco || null,
+          agencia: cf.agencia || alvo.agencia || null,
+          conta: cf.conta || alvo.numero || null,
+        },
       });
       resultado.push({ contaFinanceiraId: cf.id, nome: cf.nome, saldo: arredondar(alvo.saldo), nova: false });
     } else {

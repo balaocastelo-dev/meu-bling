@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import clsx from 'clsx';
 import { ExternalLink, Trash2 } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
+import { OpenFinanceConta } from '@/components/financeiro/OpenFinanceConta';
+import { useContasFinanceiras } from '@/hooks/useListas';
 import { Badge, Button, Card, EmptyState, PageHeader, PeriodoFiltro, Skeleton } from '@/components/ui';
 import { data as fmtData, dataHora, moeda } from '@/lib/format';
 import { intervaloPeriodo } from '@/lib/periodo';
@@ -45,6 +47,8 @@ interface Extrato {
 export default function ExtratoConta() {
   const { id } = useParams();
   const qc = useQueryClient();
+  const { data: contas } = useContasFinanceiras();
+  const contaOf = contas?.find((c) => c.id === Number(id));
   const mes = intervaloPeriodo('mes');
   const [periodo, setPeriodo] = useState({ i: mes.dataInicial, f: mes.dataFinal });
   const { data: e, isLoading, error } = useQuery({
@@ -70,6 +74,11 @@ export default function ExtratoConta() {
       <div className="mb-3">
         <PeriodoFiltro inicial={periodo.i} final={periodo.f} onChange={(i, f) => setPeriodo({ i, f })} />
       </div>
+      {contaOf && (
+        <Card className="mb-4" titulo="Open Finance" descricao="Conecta esta conta ao banco, mostra se a ligação está saudável e traz o extrato.">
+          <OpenFinanceConta conta={contaOf} />
+        </Card>
+      )}
       {error && <p className="text-sm text-red-600">{mensagemErro(error)}</p>}
       {isLoading && <Skeleton className="h-60" />}
       {e && (

@@ -330,7 +330,7 @@ export default async function cadastrosRoutes(app: FastifyInstance) {
   });
   const selectConta = {
     id: true, nome: true, tipo: true, banco: true, agencia: true, conta: true, saldoInicial: true, saldoAtual: true, taxaRecebimentoPct: true,
-    saldoBanco: true, saldoBancoEm: true, padrao: true, ativo: true, cor: true, openFinanceStatus: true, openFinanceItemId: true, ultimaSincronizacao: true,
+    saldoBanco: true, saldoBancoEm: true, padrao: true, ativo: true, cor: true, openFinanceStatus: true, openFinanceItemId: true, openFinanceAccountId: true, ultimaSincronizacao: true,
   } as const;
   const unicaPadrao = async (id: number, padrao?: boolean) => {
     if (padrao) await prisma.contaFinanceira.updateMany({ where: { id: { not: id }, padrao: true }, data: { padrao: false } });
