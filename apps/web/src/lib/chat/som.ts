@@ -24,6 +24,21 @@ function nota(c: AudioContext, freq: number, inicio: number, dur: number, volume
   o.stop(inicio + dur + 0.02);
 }
 
+/** Nudge curto (chamar atenção): dois toques secos, ~0,4 s. */
+export function somAtencao() {
+  const c = contexto();
+  if (!c) return;
+  const t = c.currentTime;
+  nota(c, 523, t, 0.07, 0.1, 'square');
+  nota(c, 392, t + 0.09, 0.1, 0.09, 'square');
+  nota(c, 262, t + 0.2, 0.16, 0.07, 'triangle');
+  try {
+    navigator.vibrate?.([70, 40, 90]);
+  } catch {
+    /* sem vibração */
+  }
+}
+
 /** "Plim" curto de mensagem nova. */
 export function somMensagem() {
   const c = contexto();

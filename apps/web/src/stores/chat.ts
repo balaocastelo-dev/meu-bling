@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 import { useAuth } from '@/stores/auth';
-import type { Chamada, Colega, ConfigChat, Conversa, EstadoPresenca, EventoChat, Mensagem, TipoChamada } from '@/lib/chat/tipos';
+import type { Chamada, Colega, ConfigChat, Conversa, EstadoPresenca, EventoChat, Mensagem, RespostaAtencao, TipoChamada } from '@/lib/chat/tipos';
 
 export type Ligacao = 'desligado' | 'ligando' | 'websocket' | 'polling';
 
@@ -47,6 +47,7 @@ interface ChatState {
   enviarArquivo: (conversaId: number, arquivo: Blob, nome: string, opcoes?: { audio?: boolean; duracaoSeg?: number; respondeAId?: number | null }) => Promise<Mensagem>;
   marcarLida: (conversaId: number) => Promise<void>;
   apagarMensagem: (mensagemId: number) => Promise<void>;
+  chamarAtencao: (conversaId: number) => Promise<RespostaAtencao>;
   iniciarChamada: (conversaId: number, tipo: TipoChamada) => Promise<Chamada>;
   atenderChamada: (chamadaId: number) => Promise<Chamada>;
   recusarChamada: (chamadaId: number) => Promise<void>;
@@ -208,6 +209,12 @@ export const useChat = create<ChatState>()((set, get) => ({
 
   apagarMensagem: async (mensagemId) => {
     await api.del(`/chat/mensagens/${mensagemId}`);
+  },
+
+  chamarAtencao: async (conversaId) => {
+    const r = await api.post<RespostaAtencao>(`/chat/conversas/${conversaId}/atencao`, {});
+    get().aplicarEvento({ tipo: 'mensagem', conversaId, mensagem: r.mensagem });
+    return r;
   },
 
   iniciarChamada: async (conversaId, tipo) => {

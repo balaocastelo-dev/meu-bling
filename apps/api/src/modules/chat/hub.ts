@@ -20,6 +20,7 @@
  *   conversa.saiu { conversaId }                                                    você saiu ou foi removido
  *   chamada     { acao: convite|entrou|saiu|recusou|encerrada|perdida, chamada }    chamadas de voz e vídeo
  *   rtc         { chamadaId, de, dados }                                            sinalização WebRTC (oferta/resposta/ICE) entre dois navegadores
+ *   atencao     { conversaId, de: { id, nome }, mensagemId }                        "chamar atenção": a tela de quem recebe treme (~1 s)
  */
 import type { WebSocket } from 'ws';
 

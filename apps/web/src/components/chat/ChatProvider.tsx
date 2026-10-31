@@ -13,10 +13,19 @@ import { useAuth } from '@/stores/auth';
 import { useChat } from '@/stores/chat';
 import { desligarChat, ligarChat, ouvirChat } from '@/lib/chat/realtime';
 import { registrarServiceWorker, notificarNavegador } from '@/lib/chat/pwa';
-import { somMensagem } from '@/lib/chat/som';
+import { somAtencao, somMensagem } from '@/lib/chat/som';
 import { resumoMensagem } from '@/lib/chat/formato';
 import { ChamadaRecebida } from './ChamadaRecebida';
 import { JanelaChamada } from './JanelaChamada';
+
+/** Reinicia a animação de 1 s (tirar e recolocar a classe; o offset força o reflow). */
+function tremerTela() {
+  const el = document.body;
+  el.classList.remove('atencao-shake');
+  void el.offsetWidth;
+  el.classList.add('atencao-shake');
+  window.setTimeout(() => el.classList.remove('atencao-shake'), 1100);
+}
 
 export function ChatProvider() {
   const token = useAuth((s) => s.token);
@@ -38,6 +47,19 @@ export function ChatProvider() {
   useEffect(() => {
     if (!token) return;
     return ouvirChat((e) => {
+      if (e.tipo === 'atencao') {
+        if (e.de.id === usuarioId) return;
+        tremerTela();
+        somAtencao();
+        const st = useChat.getState();
+        const conversa = st.conversas.find((c) => c.id === e.conversaId);
+        toast(`${e.de.nome} chamou sua atenção`, {
+          description: conversa?.tipo === 'SALA' ? conversa.nome : 'A tela tremeu para você olhar o chat.',
+          duration: 6000,
+          action: { label: 'Abrir', onClick: () => navRef.current(`/chat/${e.conversaId}`) },
+        });
+        return;
+      }
       if (e.tipo !== 'mensagem') return;
       const m = e.mensagem;
       if (m.autorId === usuarioId || m.tipo === 'SISTEMA') return;

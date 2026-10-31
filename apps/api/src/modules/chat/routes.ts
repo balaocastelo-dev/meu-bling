@@ -20,6 +20,7 @@
  *   POST   /api/v1/chat/conversas/:id/arquivo        multipart: arquivo (imagem ou PDF)
  *   POST   /api/v1/chat/conversas/:id/lida           { ateId? }
  *   POST   /api/v1/chat/conversas/:id/digitando
+ *   POST   /api/v1/chat/conversas/:id/atencao        nudge (tela treme + WhatsApp), anti-spam 30 s / 5 min
  *   DELETE /api/v1/chat/mensagens/:id
  *   POST   /api/v1/chat/conversas/:id/chamadas       { tipo:'VOZ'|'VIDEO' }
  *   GET    /api/v1/chat/chamadas/ativas
@@ -38,6 +39,7 @@ import { idDe } from '../comum/zod.js';
 import type { UsuarioJwt } from '../../plugins/auth.js';
 import * as hub from './hub.js';
 import * as svc from './service.js';
+import { chamarAtencao } from './atencao.js';
 import { prepararPush } from './push.js';
 
 const AUTH_TIMEOUT_MS = 8000;
@@ -297,6 +299,11 @@ export default async function chatRoutes(app: FastifyInstance) {
   app.post('/api/v1/chat/conversas/:id/digitando', async (req) => {
     await svc.digitando(idDe(req), req.user);
     return { ok: true };
+  });
+
+  app.post('/api/v1/chat/conversas/:id/atencao', async (req, reply) => {
+    const r = await chamarAtencao(idDe(req), req.user);
+    return reply.code(201).send(r);
   });
 
   app.delete('/api/v1/chat/mensagens/:id', async (req) => {

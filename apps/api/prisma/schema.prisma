@@ -125,6 +125,8 @@ model Usuario {
   tecnico      Tecnico?  @relation(fields: [tecnicoId], references: [id])
   tecnicoId    Int?      @unique
   ultimoLogin  DateTime?
+  /// Celular (WhatsApp) para o "chamar atenção" do chat. DDI opcional; 10–11 dígitos ganham o 55.
+  telefone     String?
   criadoEm     DateTime  @default(now())
   atualizadoEm DateTime  @updatedAt
 

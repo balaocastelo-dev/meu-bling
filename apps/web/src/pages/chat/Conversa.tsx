@@ -2,11 +2,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { ArrowLeft, ChevronDown, Info, Loader2, Phone, Video } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Info, Loader2, Phone, Video, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/stores/auth';
 import { useChat } from '@/stores/chat';
-import { mensagemErro } from '@/lib/api';
+import { ApiError, mensagemErro } from '@/lib/api';
 import { mesmoDia, rotuloDia, primeiroNome } from '@/lib/chat/formato';
 import { navegadorSuportaChamada } from '@/lib/chat/webrtc';
 import type { Mensagem } from '@/lib/chat/tipos';
@@ -14,6 +14,16 @@ import { AvatarUsuario, ROTULO_PRESENCA } from '@/components/chat/AvatarUsuario'
 import { Balao } from './Balao';
 import { Compositor } from './Compositor';
 import { InfoConversa } from './InfoConversa';
+import type { SituacaoWhatsappAtencao } from '@/lib/chat/tipos';
+
+const ROTULO_WHATSAPP: Record<SituacaoWhatsappAtencao, string> = {
+  enviado: 'avisado no WhatsApp',
+  sem_telefone: 'sem celular no cadastro',
+  telefone_invalido: 'celular inválido no cadastro',
+  aguardando: 'WhatsApp adiado (já avisado há pouco)',
+  desconectado: 'WhatsApp da loja desconectado',
+  erro: 'WhatsApp não saiu',
+};
 
 export function Conversa({ conversaId }: { conversaId: number }) {
   const nav = useNavigate();
@@ -29,11 +39,14 @@ export function Conversa({ conversaId }: { conversaId: number }) {
   const marcarLida = useChat((s) => s.marcarLida);
   const apagarMensagem = useChat((s) => s.apagarMensagem);
   const iniciarChamada = useChat((s) => s.iniciarChamada);
+  const chamarAtencao = useChat((s) => s.chamarAtencao);
   const [carregando, setCarregando] = useState(!mensagens);
   const [erro, setErro] = useState<string | null>(null);
   const [maisAntigas, setMaisAntigas] = useState(false);
   const [respondendo, setRespondendo] = useState<Mensagem | null>(null);
   const [info, setInfo] = useState(false);
+  const [enviandoAtencao, setEnviandoAtencao] = useState(false);
+  const [atencaoAte, setAtencaoAte] = useState(0);
   const [noFim, setNoFim] = useState(true);
   const [, setTick] = useState(0);
   const listaRef = useRef<HTMLDivElement>(null);
@@ -84,12 +97,13 @@ export function Conversa({ conversaId }: { conversaId: number }) {
     if (noFim || mensagens?.[total - 1]?.autorId === eu?.id) fimRef.current?.scrollIntoView({ block: 'end' });
   }, [ultimaId, total, carregando]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // "digitando…" some sozinho
+  // "digitando…" some sozinho; o botão Atenção conta os 30 s de espera
   useEffect(() => {
-    if (!digitando?.length) return;
+    const esperando = atencaoAte > Date.now();
+    if (!digitando?.length && !esperando) return;
     const t = setInterval(() => setTick((x) => x + 1), 1000);
     return () => clearInterval(t);
-  }, [digitando]);
+  }, [digitando, atencaoAte]);
 
   const aoRolar = useCallback(async () => {
     const el = listaRef.current;
@@ -114,6 +128,26 @@ export function Conversa({ conversaId }: { conversaId: number }) {
   const agora = Date.now();
   const digitandoNomes = (digitando ?? []).filter((d) => d.ate > agora).map((d) => primeiroNome(d.nome));
   const podeFalar = !!conversa?.souParticipante;
+
+  const faltaAtencao = Math.max(0, Math.ceil((atencaoAte - agora) / 1000));
+  const chamar = async () => {
+    if (faltaAtencao > 0 || enviandoAtencao) return;
+    setEnviandoAtencao(true);
+    try {
+      const r = await chamarAtencao(conversaId);
+      setAtencaoAte(Date.now() + 30_000);
+      const resumo = r.destinatarios.map((d) => `${d.nome.split(' ')[0]}: ${ROTULO_WHATSAPP[d.whatsapp]}`).join(' · ');
+      toast.success('Atenção enviada', { description: resumo || 'A tela da outra pessoa vai tremer.' });
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'ATENCAO_RAPIDO') {
+        const seg = Number((e.detalhes as { esperaSeg?: number } | undefined)?.esperaSeg) || 30;
+        setAtencaoAte(Date.now() + seg * 1000);
+      }
+      toast.error(mensagemErro(e));
+    } finally {
+      setEnviandoAtencao(false);
+    }
+  };
 
   const ligar = async (tipo: 'VOZ' | 'VIDEO') => {
     if (!navegadorSuportaChamada()) return toast.error('Chamadas precisam de HTTPS e de um navegador com microfone (Chrome, Edge, Safari ou Firefox).');
@@ -165,6 +199,17 @@ export function Conversa({ conversaId }: { conversaId: number }) {
             </button>
             <button type="button" onClick={() => void ligar('VIDEO')} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-emerald-50 hover:text-emerald-700" aria-label="Chamada de vídeo" title="Chamada de vídeo">
               <Video className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => void chamar()}
+              disabled={enviandoAtencao || faltaAtencao > 0}
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-md px-2 text-slate-600 hover:bg-amber-50 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Chamar atenção"
+              title={faltaAtencao > 0 ? `Espere ${faltaAtencao}s para chamar de novo` : 'Chamar atenção — a tela da outra pessoa treme'}
+            >
+              <Zap className={clsx('h-5 w-5', enviandoAtencao && 'animate-pulse')} />
+              <span className="hidden text-xs font-semibold sm:inline">{faltaAtencao > 0 ? `${faltaAtencao}s` : 'Atenção'}</span>
             </button>
           </>
         )}

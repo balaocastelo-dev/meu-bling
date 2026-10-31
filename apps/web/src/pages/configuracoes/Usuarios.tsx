@@ -24,7 +24,7 @@ export default function Usuarios() {
       descricao="Acessos ao sistema. Vincule o usuário a um vendedor/técnico para filtrar suas vendas e OS."
       rota="/usuarios"
       rotuloNovo="Novo usuário"
-      vazio={{ nome: '', email: '', perfil: 'VENDEDOR', ativo: true, vendedorId: null, tecnicoId: null, senha: '' }}
+      vazio={{ nome: '', email: '', telefone: '', perfil: 'VENDEDOR', ativo: true, vendedorId: null, tecnicoId: null, senha: '' }}
       validar={(f) => (!f.nome?.trim() ? 'Informe o nome.' : !f.email?.trim() ? 'Informe o e-mail.' : !f.id && (f.senha ?? '').length < 8 ? 'Senha inicial com ao menos 8 caracteres.' : null)}
       antesDeSalvar={(f) => { const { ultimoLogin: _u, criadoEm: _c, ...resto } = f; if (!resto.senha) delete resto.senha; return resto; }}
       colunas={[
@@ -39,6 +39,7 @@ export default function Usuarios() {
         <>
           <Input label="Nome" obrigatorio value={f.nome ?? ''} onChange={(e) => set({ nome: e.target.value })} autoFocus />
           <Input label="E-mail" type="email" obrigatorio value={f.email ?? ''} onChange={(e) => set({ email: e.target.value })} />
+          <Input label="WhatsApp (celular)" value={f.telefone ?? ''} onChange={(e) => set({ telefone: e.target.value })} placeholder="(19) 99999-9999" ajuda="Usado quando alguém chama a sua atenção no chat. DDD + número; o 55 é colocado sozinho." />
           <Input label={f.id ? 'Nova senha (deixe em branco para manter)' : 'Senha inicial'} type="password" value={f.senha ?? ''} onChange={(e) => set({ senha: e.target.value })} autoComplete="new-password" />
           <Select label="Perfil" value={f.perfil ?? 'VENDEDOR'} onChange={(e) => set({ perfil: e.target.value as Perfil })} opcoes={PERFIS.map((p) => ({ valor: p, rotulo: rotulo(p) }))} />
           <p className="-mt-1 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">{DESCRICAO[(f.perfil ?? 'VENDEDOR') as Perfil]}</p>

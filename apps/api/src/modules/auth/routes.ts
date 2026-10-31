@@ -72,10 +72,18 @@ export default async function authRoutes(app: FastifyInstance) {
   // ---- Gestão de usuários (ADMIN)
   app.get('/api/v1/usuarios', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE') }, async () => {
     return prisma.usuario.findMany({
-      select: { id: true, nome: true, email: true, perfil: true, ativo: true, vendedorId: true, tecnicoId: true, ultimoLogin: true, criadoEm: true },
+      select: { id: true, nome: true, email: true, perfil: true, ativo: true, telefone: true, vendedorId: true, tecnicoId: true, ultimoLogin: true, criadoEm: true },
       orderBy: { nome: 'asc' },
     });
   });
+
+  /** Celular do usuário (WhatsApp do "chamar atenção"). Vazio vira null. */
+  function telefoneOuNull(v: string | null | undefined): string | null | undefined {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    const t = v.trim();
+    return t ? t.slice(0, 30) : null;
+  }
 
   const usuarioSchema = z.object({
     nome: z.string().min(2),
@@ -83,6 +91,7 @@ export default async function authRoutes(app: FastifyInstance) {
     senha: z.string().min(8, 'A senha deve ter pelo menos 8 caracteres').optional(),
     perfil: z.enum(PERFIS).default('VENDEDOR'),
     ativo: z.boolean().default(true),
+    telefone: z.string().trim().max(30, 'Telefone muito longo.').nullable().optional(),
     vendedorId: z.number().int().nullable().optional(),
     tecnicoId: z.number().int().nullable().optional(),
   });
@@ -90,10 +99,11 @@ export default async function authRoutes(app: FastifyInstance) {
   app.post('/api/v1/usuarios', { preHandler: app.exigirPerfil('ADMIN') }, async (req, reply) => {
     const body = usuarioSchema.parse(req.body);
     if (!body.senha) throw new AppError('Informe a senha inicial.');
+    const { senha, telefone, ...resto } = body;
     const u = await prisma.usuario
       .create({
-        data: { ...body, email: body.email.toLowerCase().trim(), senhaHash: await bcrypt.hash(body.senha, 10), senha: undefined } as any,
-        select: { id: true, nome: true, email: true, perfil: true, ativo: true },
+        data: { ...resto, email: resto.email.toLowerCase().trim(), senhaHash: await bcrypt.hash(senha, 10), telefone: telefoneOuNull(telefone) ?? null },
+        select: { id: true, nome: true, email: true, perfil: true, ativo: true, telefone: true },
       })
       .catch(erroUnico);
     await vendedorDoUsuario(u.id);
@@ -104,12 +114,13 @@ export default async function authRoutes(app: FastifyInstance) {
   app.put('/api/v1/usuarios/:id', { preHandler: app.exigirPerfil('ADMIN') }, async (req) => {
     const id = Number((req.params as any).id);
     const body = usuarioSchema.partial().parse(req.body);
-    const data: any = { ...body };
-    delete data.senha;
+    const { senha, telefone, ...resto } = body;
+    const data: any = { ...resto };
+    if (telefone !== undefined) data.telefone = telefoneOuNull(telefone);
     if (body.email) data.email = body.email.toLowerCase().trim();
-    if (body.senha) data.senhaHash = await bcrypt.hash(body.senha, 10);
+    if (senha) data.senhaHash = await bcrypt.hash(senha, 10);
     if (id === req.user.id && body.ativo === false) throw new AppError('Você não pode desativar o próprio usuário.');
-    const u = await prisma.usuario.update({ where: { id }, data, select: { id: true, nome: true, email: true, perfil: true, ativo: true } }).catch(erroUnico);
+    const u = await prisma.usuario.update({ where: { id }, data, select: { id: true, nome: true, email: true, perfil: true, ativo: true, telefone: true } }).catch(erroUnico);
     await vendedorDoUsuario(u.id);
     await auditar(req, 'Usuario', id, 'ALTERAR', body);
     return u;

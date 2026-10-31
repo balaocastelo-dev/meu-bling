@@ -7,6 +7,7 @@
  */
 import WebSocket from 'ws';
 import { BASE, aguardar, encerrar, entrar, espera, secao, SUF, verifica } from './lib.js';
+import { INTERVALO_ATENCAO_MS, INTERVALO_WHATSAPP_MS, limparLimitesAtencao, podeAtencao, podeWhatsapp, registrarAtencao, registrarWhatsapp } from '../src/modules/chat/atencao-limite.js';
 
 async function conectarWs(token: string) {
   const eventos: any[] = [];
@@ -197,6 +198,39 @@ async function main() {
   await V.post(`/chat/conversas/${d1.id}/digitando`, {});
   await aguardar(async () => wsT.eventos, () => wsT.tem('digitando', (e) => e.conversaId === d1.id && e.usuarioId === uV.id));
   verifica(wsT.tem('digitando', (e) => e.conversaId === d1.id), 'técnico vê "vendedor está digitando"');
+
+  secao('Chamar atenção: tela treme em tempo real, histórico e anti-spam');
+  await adm.put(`/usuarios/${uT.id}`, { telefone: '(19) 98888-7777', perfil: 'TECNICO', ativo: true, tecnicoId: tec.id });
+  const cadastro = (await adm.get('/usuarios')).find((u: any) => u.id === uT.id);
+  verifica(cadastro?.telefone === '(19) 98888-7777', 'cadastro do usuário guarda o celular (WhatsApp)', cadastro?.telefone);
+  const at = await V.post(`/chat/conversas/${d1.id}/atencao`, {}, 201);
+  verifica(at.mensagem?.tipo === 'SISTEMA' && at.mensagem.texto === `Vend Chat ${SUF} chamou sua atenção`, 'histórico ganha "Fulano chamou sua atenção"', at.mensagem?.texto);
+  verifica(at.destinatarios?.length === 1 && at.destinatarios[0].usuarioId === uT.id && at.destinatarios[0].whatsapp === 'desconectado', 'com celular e WhatsApp da loja desligado, o tremor sai e o WhatsApp é pulado', at.destinatarios);
+  await aguardar(async () => wsT.eventos, () => wsT.tem('atencao', (e) => e.conversaId === d1.id && e.de?.id === uV.id && e.mensagemId === at.mensagem.id));
+  verifica(wsT.tem('atencao', (e) => e.conversaId === d1.id && e.de?.nome === `Vend Chat ${SUF}`), 'técnico recebe o evento de tremer a tela pelo WebSocket');
+  verifica(!wsV.eventos.some((e) => e.tipo === 'atencao'), 'quem chamou não recebe o tremor');
+  const hist = await T.get(`/chat/conversas/${d1.id}/mensagens`);
+  verifica(hist.some((m: any) => m.id === at.mensagem.id && m.tipo === 'SISTEMA'), 'a mensagem de atenção fica no histórico dos dois');
+  await V.post(`/chat/conversas/${d1.id}/atencao`, {}, 429);
+  await G.post(`/chat/conversas/${d1.id}/atencao`, {}, 403);
+  const dG = await V.post('/chat/conversas', { tipo: 'DIRETA', usuarioId: uG.id }, [200, 201]);
+  const lpA0 = await G.get('/chat/eventos?desde=0&espera=10');
+  const esperaAt = G.get(`/chat/eventos?desde=${lpA0.seq}&espera=8000`);
+  await espera(200);
+  const atG = await V.post(`/chat/conversas/${dG.id}/atencao`, {}, 201);
+  verifica(atG.destinatarios?.[0]?.whatsapp === 'sem_telefone', 'sem celular no cadastro, a atenção acontece e o WhatsApp não é enviado', atG.destinatarios);
+  const lpAt = await esperaAt;
+  // o tremor e a mensagem de sistema saem juntos: o long polling acorda no primeiro e o seguinte fica na fila
+  const lpSeguinte = lpAt.eventos.some((e: any) => e.evento?.tipo === 'atencao') ? { eventos: [] as any[] } : await G.get(`/chat/eventos?desde=${lpAt.seq}&espera=2000`);
+  const eventosAt = [...lpAt.eventos, ...lpSeguinte.eventos];
+  verifica(eventosAt.some((e: any) => e.evento?.tipo === 'atencao' && e.evento.conversaId === dG.id && e.evento.de?.id === uV.id), 'long polling também entrega o chamar atenção', eventosAt.map((e: any) => e.evento?.tipo));
+  limparLimitesAtencao();
+  const t0 = 1_700_000_000_000;
+  registrarAtencao(1, 2, t0);
+  registrarWhatsapp(1, 2, t0);
+  verifica(!podeAtencao(1, 2, t0 + 29_000).ok && podeAtencao(1, 2, t0 + INTERVALO_ATENCAO_MS).ok, 'o tremor libera aos 30 segundos, por remetente → destinatário');
+  verifica(!podeWhatsapp(1, 2, t0 + INTERVALO_ATENCAO_MS).ok && podeWhatsapp(1, 2, t0 + INTERVALO_WHATSAPP_MS).ok, 'o WhatsApp continua bloqueado até 5 minutos');
+  verifica(podeAtencao(2, 1, t0).ok && podeWhatsapp(1, 3, t0).ok, 'outro sentido ou outro destinatário não entra no limite');
 
   secao('Presença ao desconectar');
   wsT.ws.close();

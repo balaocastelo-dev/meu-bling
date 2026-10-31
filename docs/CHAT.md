@@ -12,6 +12,18 @@ Conversa entre os usuários do MEU BLING, dentro do sistema e só com o navegado
 - **Avisos**: toast e som em qualquer tela; notificação do navegador com a aba em segundo plano; card "Mensagens da equipe" no Meu Dashboard de todo perfil; contador no ícone do topo.
 - **Aviso no celular com o sistema fechado** (Web Push): Informações da conversa → "Ligar neste aparelho". No iPhone, antes adicione o MEU BLING à tela de início (Compartilhar → Adicionar à Tela de Início). As chaves VAPID são criadas uma vez e ficam criptografadas em `Configuracao` (`chat.vapid`).
 - **ADMIN pode abrir e ler qualquer conversa** (aba "Todas" na caixa de entrada) — decisão do Thiago. Não escreve nas conversas de que não participa.
+- **Chamar atenção** (nudge, no estilo do MSN): botão **Atenção** (raio) no topo da conversa. A tela de quem recebe treme por cerca de 1 segundo, toca um som curto e o histórico ganha "Fulano chamou sua atenção". O mesmo tempo real do chat entrega o evento (`atencao` no WebSocket ou no long polling). Anti-spam: 1 tremor a cada 30 segundos por remetente → destinatário.
+
+## WhatsApp do "chamar atenção"
+
+O aviso no celular reutiliza o WhatsApp que a loja já tem — não há URL nem token novos.
+
+1. **Ligar o robô** em Configurações → WhatsApp (só ADMIN):
+   - **Evolution API** (padrão quando preenchida): endereço, instância e chave ficam nessa tela, criptografados. É o mesmo número do CRM, dos orçamentos e da cobrança.
+   - **Sessão própria (Baileys)**: com a Evolution desligada, gere o QR Code na mesma tela e escaneie com o WhatsApp da loja. A sessão fica em `storage/whatsapp`.
+2. **Celular de quem vai ser chamado**: Configurações → Usuários → campo **WhatsApp (celular)**. DDD + número basta (o 55 entra sozinho). Se o usuário não tiver o campo preenchido, o sistema tenta o telefone do vendedor ou do técnico vinculado.
+3. O texto sai assim: `Fulano está chamando sua atenção no sistema: <APP_URL><BASE_PATH>/chat/<id>`.
+4. WhatsApp no máximo **1 vez a cada 5 minutos** para o mesmo par. Sem celular, com número inválido ou com o WhatsApp da loja desconectado, a tela treme mesmo assim e o botão avisa o motivo (nada é inventado nem enviado).
 
 ## Como está feito
 - API: `apps/api/src/modules/chat/` — `routes.ts` (REST + WebSocket), `service.ts` (regras), `hub.ts` (conexões, presença, fila de eventos por usuário), `push.ts` (Web Push).
@@ -35,11 +47,11 @@ GET  /chat/config · GET /chat/ws (WebSocket) · GET /chat/eventos?desde=&espera
 GET  /chat/conversas[?todas=1] · POST /chat/conversas {tipo:'DIRETA',usuarioId} | {tipo:'SALA',nome,usuarioIds}
 GET  /chat/conversas/:id · PUT {nome} · POST /participantes {usuarioIds} · DELETE /participantes/:usuarioId · POST /silenciar {ate}
 GET  /chat/conversas/:id/mensagens?antesDe=&limite= · POST {texto,respondeAId?} · POST /audio (multipart) · POST /arquivo (multipart)
-POST /chat/conversas/:id/lida {ateId?} · POST /digitando · DELETE /chat/mensagens/:id
+POST /chat/conversas/:id/lida {ateId?} · POST /digitando · POST /atencao · DELETE /chat/mensagens/:id
 POST /chat/conversas/:id/chamadas {tipo} · GET /chat/chamadas/ativas · POST /chat/chamadas/:id/entrar|recusar|sair|rtc
 POST /chat/push/assinar {subscription} · POST /chat/push/cancelar {endpoint} · GET /chat/push/assinaturas
 ```
 As rotas do chat ficam fechadas para chaves de API externas (não estão no catálogo de recursos).
 
 ## Testes
-`apps/api/testes/chat.ts` (roda no `npm test`): direta, sala, áudio, lida, WebSocket/polling, chamadas, push, permissões, ADMIN lê tudo.
+`apps/api/testes/chat.ts` (roda no `npm test`): direta, sala, áudio, lida, WebSocket/polling, chamadas, push, permissões, ADMIN lê tudo, chamar atenção (evento, histórico, anti-spam de 30 s e de 5 min no WhatsApp).
