@@ -5,7 +5,7 @@
  * Não usa o banco de verdade. Cada caso é um arquivo temporário.
  */
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +41,15 @@ function aplicar(arquivo) {
   });
 }
 
+function dbPush(arquivo) {
+  return spawnSync('npx', ['--no-install', 'prisma', 'db', 'push', '--skip-generate'], {
+    cwd: API,
+    env: { ...process.env, DATABASE_URL: `file:${arquivo}`, PRISMA_HIDE_UPDATE_MESSAGE: '1' },
+    encoding: 'utf8',
+    timeout: 180000,
+  });
+}
+
 function usuario(db) {
   return db.prepare(`SELECT id, nome, email, senhaHash, telefone FROM Usuario ORDER BY id`).all();
 }
@@ -56,6 +65,7 @@ const sql = readFileSync(path.join(API, 'prisma/migrations/20261031140000_usuari
 const chamadas = [...script.matchAll(/prisma\(\[([\s\S]*?)\]\)/g)].map((m) => m[1]);
 
 verifica(chamadas.some((c) => c.includes("'migrate', 'deploy'")), 'o start chama prisma migrate deploy');
+verifica(script.includes('P3005') && script.includes('sem histórico de migrações'), 'P3005 não derruba o start: há baseline antes do deploy');
 verifica(chamadas.every((c) => !c.includes('accept-data-loss') && !c.includes('force-reset') && !c.includes("'reset'")), 'nenhuma chamada aceita perda de dados nem reset');
 verifica(!docker.includes('accept-data-loss') && !docker.includes('migrate reset') && !docker.includes('force-reset'), 'a imagem não reseta o banco');
 verifica(docker.includes('prisma/aplicar-migracoes.mjs'), 'a imagem aplica as migrações ao subir');
@@ -188,6 +198,57 @@ caso('coluna que não está no schema não é apagada', (arquivo) => {
   const tem = colunas(db2, 'LancamentoAutomatico').includes('legado');
   const row = tem ? db2.prepare(`SELECT legado, valor FROM LancamentoAutomatico WHERE emailOrigemId = 'e-legado'`).get() : null;
   verifica(tem && row?.legado === 'guardar' && row?.valor === 7, 'coluna fora do schema continua no arquivo', JSON.stringify({ status: r.status, row }));
+  db2.close();
+});
+
+caso('banco criado só com db push, coluna já existe, sem histórico: start sobe e não perde', (arquivo) => {
+  const push = dbPush(arquivo);
+  if (push.status !== 0) {
+    process.stdout.write(push.stdout || '');
+    process.stderr.write(push.stderr || '');
+  }
+  verifica(push.status === 0, 'db push criou o banco como na produção', push.status);
+  const db = abrir(arquivo);
+  const temHist = db.prepare(`SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = '_prisma_migrations'`).get();
+  verifica(!temHist, 'db push não cria _prisma_migrations');
+  verifica(colunas(db, 'Usuario').includes('telefone'), 'Usuario.telefone já existe');
+  db.prepare(`INSERT INTO Usuario (nome, email, senhaHash, perfil, ativo, telefone, criadoEm, atualizadoEm) VALUES (?, ?, ?, 'TECNICO', 1, ?, datetime('now'), datetime('now'))`).run('Marina', 'marina@balao.info', 'hash-marina', '(19) 98888-7777');
+  db.prepare(`INSERT INTO ContaFinanceira (nome) VALUES ('Caixa')`).run();
+  db.exec(`PRAGMA wal_checkpoint(TRUNCATE)`);
+  const antes = usuario(db);
+  const contas = db.prepare(`SELECT COUNT(*) AS n FROM ContaFinanceira`).get().n;
+  db.close();
+
+  const copia = `${arquivo}.p3005`;
+  copyFileSync(arquivo, copia);
+  for (const suf of ['-wal', '-shm']) {
+    if (existsSync(arquivo + suf)) copyFileSync(arquivo + suf, copia + suf);
+  }
+  const cru = spawnSync('npx', ['--no-install', 'prisma', 'migrate', 'deploy'], {
+    cwd: API,
+    env: { ...process.env, DATABASE_URL: `file:${copia}`, PRISMA_HIDE_UPDATE_MESSAGE: '1' },
+    encoding: 'utf8',
+    timeout: 120000,
+  });
+  verifica(cru.status !== 0 && `${cru.stdout}\n${cru.stderr}`.includes('P3005'), 'migrate deploy sem baseline falha com P3005', cru.status);
+
+  const r = aplicar(arquivo);
+  if (r.status !== 0) {
+    process.stdout.write(r.stdout || '');
+    process.stderr.write(r.stderr || '');
+  }
+  const out = r.stdout || '';
+  verifica(r.status === 0, 'start sobe sem erro', r.status);
+  verifica(out.includes('sem histórico de migrações'), 'detectou banco sem histórico');
+  const iBaseline = out.indexOf('resolve --applied');
+  const iDeploy = out.indexOf('npx prisma migrate deploy');
+  verifica(iBaseline >= 0 && iDeploy > iBaseline, 'baseline (resolve --applied) vem antes do migrate deploy');
+  const db2 = abrir(arquivo);
+  const depois = usuario(db2);
+  verifica(depois.length === 1 && depois[0].id === antes[0].id && depois[0].nome === 'Marina' && depois[0].email === 'marina@balao.info' && depois[0].senhaHash === 'hash-marina' && depois[0].telefone === '(19) 98888-7777', 'a Marina e o celular continuam', JSON.stringify(depois));
+  verifica(db2.prepare(`SELECT COUNT(*) AS n FROM ContaFinanceira`).get().n === contas, 'as outras linhas continuam', contas);
+  const hist = db2.prepare(`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL`).all().map((x) => x.migration_name);
+  verifica(hist.includes('20261031140000_usuario_telefone'), 'a migração do telefone entrou no baseline', hist.join(','));
   db2.close();
 });
 
