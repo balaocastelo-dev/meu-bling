@@ -113,6 +113,7 @@ async function main() {
     rodar('Lançamentos automáticos: bot registra e-mail de banco pendente, sem saldo até o Confio', NPX, ['tsx', 'testes/lancamentos-automaticos.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Open Finance por conta: token sem segredo, vínculo na conta existente, sincronizar e desconectar', NPX, ['tsx', 'testes/open-finance.ts', base]);
     rodar('API externa: varredura — toda rota aberta para chave está documentada', NPX, ['tsx', 'testes/api-cobertura.ts'], { env });
+    if (!RAPIDO) rodar('Campo de custo escondido: digitar o custo depois de clicar no olho grava o valor certo', NPX, ['tsx', 'testes/campo-custo.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     if (!RAPIDO) rodar('Telas no navegador (todas as páginas × perfis + celular)', NPX, ['tsx', 'testes/telas.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     if (!RAPIDO) rodar('Layout em celular, tablet e computador (nada vaza da tela ou do card)', NPX, ['tsx', 'testes/layout.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Robô da Saúde: corrige sozinho, sugere com 1 clique, ignora, só ADMIN', NPX, ['tsx', 'testes/robo-saude.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
