@@ -49,7 +49,7 @@ apps/api   Fastify + Prisma (SQLite) — API REST /api/v1 (contrato em docs/API.
   src/integracoes/bling     importador (OAuth + API v3 + CSV)
 apps/web   React + Vite + Tailwind — interface
 scripts/   instalar.ps1, iniciar.ps1, backup.ps1
-docs/      ANALISE-BLING.md (análise do Bling), API.md (contrato), DEV.md (guia do código), OPEN-FINANCE.md (Pluggy), CHAT.md (chat da equipe), ROADMAP.md
+docs/      ANALISE-BLING.md (análise do Bling), API.md (contrato), AUDITORIA.md (painel de auditoria: trilha antes/depois, reversão, agentes), CHAT.md (chat da equipe), DEV.md (guia do código), OPEN-FINANCE.md (Pluggy), ROADMAP.md
 ```
 
 ## Acesso pela internet e perfis

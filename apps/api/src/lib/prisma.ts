@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { comTrilha } from '../modules/auditoria/trilha.js';
 
 /**
  * Banco SQLite (arquivo): quem quer gravar espera o outro terminar em vez de
@@ -19,10 +20,17 @@ function urlDoBanco(): string | undefined {
 }
 
 const url = urlDoBanco();
-export const prisma = new PrismaClient({
+const base = new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   ...(url ? { datasources: { db: { url } } } : {}),
 });
+
+/**
+ * Cliente do sistema: toda gravação passa pela trilha de auditoria (modules/auditoria/trilha.ts),
+ * que guarda o antes e o depois de cada registro para o Painel de auditoria poder reverter.
+ * Pode ser desligada com TRILHA_AUDITORIA=off (só para diagnóstico).
+ */
+export const prisma = comTrilha(base);
 
 export type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 

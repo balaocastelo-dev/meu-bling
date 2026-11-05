@@ -94,19 +94,19 @@ if [ -f "$DADOS/data/meubling.db" ]; then
 fi
 
 msg "Conferindo a mudança de banco ANTES de derrubar o sistema"
-# O 'prisma db push' recusa colunas novas obrigatórias quando já existem linhas na tabela.
-# Descobrir isso com o container velho fora do ar deixa a loja parada — então testa-se antes,
-# num container temporário que usa uma CÓPIA do banco. Só troca o container se passar.
+# Aplica as migrações (prisma migrate deploy, inclusive Usuario.telefone) numa CÓPIA do banco.
+# Sem --accept-data-loss e sem migrate reset: se a mudança apagaria dados, o teste falha
+# e o sistema que está no ar continua. Só troca o container se a cópia passar.
 TEMP_DB="$(mktemp -d)"
 cp -a "$DADOS/data/." "$TEMP_DB/" 2>/dev/null || true
 if docker run --rm --env-file "$ENV_FILE" -v "$TEMP_DB:/app/apps/api/data" "$CONTAINER" \
-     sh -c 'npx prisma db push --skip-generate' >/tmp/meu-bling-db-push.log 2>&1; then
+     node prisma/aplicar-migracoes.mjs >/tmp/meu-bling-migracao.log 2>&1; then
   echo "o banco aceita a mudança"
   rm -rf "$TEMP_DB"
 else
   rm -rf "$TEMP_DB"
   echo
-  tail -25 /tmp/meu-bling-db-push.log
+  tail -25 /tmp/meu-bling-migracao.log
   echo
   erro "A mudança de banco não passou (detalhes acima). O sistema NÃO foi derrubado e continua no ar com a versão anterior.
    Resolva a pendência no banco (a cópia de segurança está em $DADOS/antes-do-deploy) e rode este instalador de novo."

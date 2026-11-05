@@ -82,8 +82,8 @@ New-Item -ItemType Directory -Force -Path (Join-Path $Raiz 'apps\api\storage') |
 # ---------------------------------------------------------------- 4. Banco
 Passo "Criando banco de dados e configuração inicial"
 Push-Location (Join-Path $Raiz 'apps\api')
-npx prisma db push --skip-generate
-if ($LASTEXITCODE -ne 0) { Pop-Location; throw "Falha ao criar o banco" }
+node prisma/aplicar-migracoes.mjs
+if ($LASTEXITCODE -ne 0) { Pop-Location; throw "Falha ao aplicar migrações" }
 npx prisma generate | Out-Null
 if ($Demo) { npx tsx prisma/seed.ts --demo } else { npx tsx prisma/seed.ts }
 if ($LASTEXITCODE -ne 0) { Pop-Location; throw "Falha no seed" }

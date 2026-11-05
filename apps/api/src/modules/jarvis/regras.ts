@@ -19,7 +19,7 @@ export type Sugestao = {
   impactoEstimado?: number | null;
   prioridade: number;
   dados?: any;
-  acao?: 'DESCONTO_LOTE' | 'COBRAR_WHATSAPP' | 'CRIAR_CAIXINHA' | 'ABRIR_TELA' | 'NENHUMA';
+  acao?: 'DESCONTO_LOTE' | 'COBRAR_WHATSAPP' | 'AVISAR_PRONTO' | 'CRIAR_CAIXINHA' | 'ABRIR_TELA' | 'NENHUMA';
   link?: string | null;
 };
 
@@ -742,11 +742,11 @@ async function osProntaParada(diasLimite = 3): Promise<Sugestao[]> {
         `Tem ${reais(total)} em ${alvos.length} ordem(ns) de serviço já concluída(s) e ainda na prateleira. ` +
         `A mais antiga é a nº ${maisVelha.numero} (${maisVelha.aparelho}, ${maisVelha.cliente}), parada há ${maisVelha.diasParada} dia(s). ` +
         `O serviço já foi feito e a peça já foi paga: esse dinheiro entra assim que o cliente buscar. ` +
-        `Avise um por um pelo WhatsApp que está pronto${semTelefone ? ` (${semTelefone} sem celular no cadastro)` : ''}.`,
+        `Posso avisar todos pelo WhatsApp que está pronto${semTelefone ? ` — ${semTelefone} ficam de fora por não ter celular no cadastro` : ''}.`,
       impactoEstimado: total,
       prioridade: total > 3_000 ? 1 : 2,
       dados: { total, quantidade: alvos.length, ordens: alvos.slice(0, 30) },
-      acao: 'ABRIR_TELA',
+      acao: 'AVISAR_PRONTO',
       link: '/ordens-servico',
     },
   ];

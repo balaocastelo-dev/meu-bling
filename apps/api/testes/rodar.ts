@@ -113,6 +113,7 @@ async function main() {
     rodar('Lançamentos automáticos: bot registra e-mail de banco pendente, sem saldo até o Confio', NPX, ['tsx', 'testes/lancamentos-automaticos.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Open Finance por conta: token sem segredo, vínculo na conta existente, sincronizar e desconectar', NPX, ['tsx', 'testes/open-finance.ts', base]);
     rodar('API externa: varredura — toda rota aberta para chave está documentada', NPX, ['tsx', 'testes/api-cobertura.ts'], { env });
+    if (!RAPIDO) rodar('Campo de custo escondido: digitar o custo depois de clicar no olho grava o valor certo', NPX, ['tsx', 'testes/campo-custo.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     if (!RAPIDO) rodar('Telas no navegador (todas as páginas × perfis + celular)', NPX, ['tsx', 'testes/telas.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     if (!RAPIDO) rodar('Layout em celular, tablet e computador (nada vaza da tela ou do card)', NPX, ['tsx', 'testes/layout.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Robô da Saúde: corrige sozinho, sugere com 1 clique, ignora, só ADMIN', NPX, ['tsx', 'testes/robo-saude.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
@@ -123,6 +124,7 @@ async function main() {
     rodar('Central de Anúncios: canais de API x kit, rascunho sem IA, nada publicado sem publicar', NPX, ['tsx', 'testes/jarvis-anuncios.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
     rodar('Mercado Livre: OAuth, callback público, secret escondido, publicar sem conta não mente', NPX, ['tsx', 'testes/jarvis-mercadolivre.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
     rodar('Chat da equipe: direta, sala privada, áudio, lida, WebSocket/polling, chamadas de voz e vídeo, push, ADMIN lê tudo, chamar atenção', NPX, ['tsx', 'testes/chat.ts', base]);
+    rodar('Painel de auditoria: senha do dia, trilha antes/depois (itens e cascata), ao vivo, funcionários, reversão e refazer, agentes', NPX, ['tsx', 'testes/auditoria.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Links: todo link do sistema leva a uma tela que existe', NPX, ['tsx', 'testes/links.ts', base]);
     rodar('Integridade dos dados depois dos testes (Saúde do sistema)', NPX, ['tsx', 'testes/integridade.ts', base]);
     // por último: manda lixo em todas as rotas (pode bagunçar os dados de teste)

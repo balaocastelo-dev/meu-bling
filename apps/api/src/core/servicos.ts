@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { comContexto } from '../modules/auditoria/contexto.js';
 
 /**
  * Serviços de segundo plano (workers) iniciados após o servidor subir.
@@ -16,7 +17,8 @@ export function registrarServico(nome: string, iniciar: Inicializador) {
 export async function iniciarServicos(app: FastifyInstance) {
   for (const s of servicos) {
     try {
-      await s.iniciar(app);
+      // tudo o que o serviço (e os timers que ele cria) gravar fica na trilha de auditoria com o nome dele
+      await comContexto({ origem: 'SERVICO', servico: s.nome }, () => Promise.resolve(s.iniciar(app)));
       app.log.info(`[serviço] ${s.nome} iniciado`);
     } catch (e) {
       app.log.error({ e }, `[serviço] falha ao iniciar ${s.nome}`);
