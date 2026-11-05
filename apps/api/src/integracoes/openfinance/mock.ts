@@ -26,6 +26,11 @@ function rng(seed: number) {
   };
 }
 
+/** Acha a conta fictícia mesmo quando o id veio prefixado com o item (`item:mock-cc-001`). */
+function contaBase(accountId: string) {
+  return CONTAS.find((c) => accountId === c.id || accountId.endsWith(`:${c.id}`)) ?? CONTAS[0];
+}
+
 export class ProvedorMock implements ProvedorOpenFinance {
   nome = 'mock';
 
@@ -34,17 +39,22 @@ export class ProvedorMock implements ProvedorOpenFinance {
   }
 
   async contasDoItem(itemId: string) {
-    return CONTAS.map((c) => ({ ...c, itemId: itemId || 'mock' }));
+    // Cada conexão (item) tem as próprias contas. No banco de verdade o id da conta
+    // muda de um item para outro; se o mock repetisse o mesmo id, a segunda conexão
+    // pareceria a mesma conta já vinculada.
+    const item = itemId || 'mock';
+    return CONTAS.map((c) => ({ ...c, id: `${item}:${c.id}`, itemId: item }));
   }
 
   async saldo(accountId: string) {
-    const c = CONTAS.find((c) => c.id === accountId) || CONTAS[0];
+    const c = contaBase(accountId);
     return { saldo: c.saldo, em: new Date(), status: 'UPDATED' };
   }
 
   async transacoes(accountId: string, de: Date, ate: Date): Promise<TransacaoOpenFinance[]> {
     const out: TransacaoOpenFinance[] = [];
-    const idx = Math.max(0, CONTAS.findIndex((c) => c.id === accountId));
+    const base = contaBase(accountId);
+    const idx = Math.max(0, CONTAS.findIndex((c) => c.id === base.id));
     const dias = Math.min(120, differenceInCalendarDays(startOfDay(ate), startOfDay(de)));
     for (let i = 0; i <= dias; i++) {
       const dia = addDays(startOfDay(de), i);
