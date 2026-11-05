@@ -1,10 +1,12 @@
 import type { FastifyRequest } from 'fastify';
 import { prisma } from './prisma.js';
+import { contextoAtual } from '../modules/auditoria/contexto.js';
+import { garantirCabecalho } from '../modules/auditoria/operacoes.js';
 
 export type AcaoAuditoria = 'CRIAR' | 'ALTERAR' | 'EXCLUIR' | 'SITUACAO' | 'LOGIN' | 'ACAO';
 
 /** Campos que nunca podem ir para o log em texto (senha, tokens, segredos, certificado). */
-const SENSIVEL = /senha|password|secret|segredo|token|csc|pfx|certificadoSenha|apiKey|chavePrivada/i;
+const SENSIVEL = /senha|password|secret|segredo|token|csc|pfx|certificadoSenha|apiKey|chavePrivada|hash/i;
 
 /** Copia os detalhes trocando o valor de campos sensíveis por "***". */
 export function mascarar(v: unknown, prof = 0): unknown {
@@ -29,6 +31,14 @@ export async function auditar(
   const viaApi = req?.chaveApi ? `${req.chaveApi.origem === 'MCP' ? 'Agente de IA (MCP)' : 'API'}: ${req.chaveApi.nome}` : null;
   if (viaApi) detalhes = detalhes && typeof detalhes === 'object' && !Array.isArray(detalhes) ? { ...(detalhes as object), viaApi } : { viaApi, ...(detalhes === undefined ? {} : { detalhes }) };
   try {
+    // liga a ação legível à operação do Painel de auditoria (a trilha com antes/depois)
+    const ctx = contextoAtual();
+    // login: o usuário ainda não está no token — a operação fica no nome de quem entrou
+    if (ctx && acao === 'LOGIN' && entidadeId && !ctx.usuario) {
+      const u = await prisma.usuario.findUnique({ where: { id: entidadeId }, select: { nome: true } }).catch(() => null);
+      ctx.usuario = { id: entidadeId, nome: u?.nome ?? 'Usuário' };
+    }
+    if (ctx) await garantirCabecalho(ctx, acao === 'LOGIN' || entidade === 'PainelAuditoria' || entidade === 'Usuario' ? 'acessos' : 'sistema');
     await prisma.auditoria.create({
       data: {
         usuarioId: req?.user?.id ?? null,
@@ -37,6 +47,7 @@ export async function auditar(
         acao,
         detalhes: detalhes === undefined ? null : JSON.stringify(mascarar(detalhes)).slice(0, 8000),
         ip: req?.ip ?? null,
+        operacaoId: ctx?.operacaoId ?? null,
       },
     });
   } catch (e) {

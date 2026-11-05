@@ -38,6 +38,8 @@ export default async function authRoutes(app: FastifyInstance) {
     const tecnicoId = await tecnicoDoUsuario(u.id);
     const payload = { id: u.id, nome: u.nome, email: u.email, perfil: u.perfil as any, vendedorId, tecnicoId };
     const token = app.jwt.sign(payload);
+    // o login fica no nome de quem entrou (auditoria legível e Painel de auditoria)
+    req.user = payload;
     await auditar(req, 'Usuario', u.id, 'LOGIN');
     // cookie usado apenas para servir arquivos (/uploads/*) em <img>/<a>; a API usa o Bearer
     reply.setCookie(COOKIE_SESSAO, token, { path: COOKIE_PATH, httpOnly: true, sameSite: 'lax', secure: env.isProd && env.APP_URL.startsWith('https'), maxAge: 12 * 3600 });
