@@ -513,8 +513,7 @@ function folhaLicencas(c: ContextoDoc, vers: () => Versiculo): string {
           <li>Funciona sem internet e abre/edita os formatos usados por escolas, empresas e órgãos públicos.</li>
           <li>Ativação original: sem programas de ativação, cracks ou geradores de chave.</li>
           <li>Instalação e ativação feitas pela loja, com o equipamento testado na entrega.</li>
-        </ul>
-        <div style="font-size:8.5px;color:#4b5563;margin-top:4px">A Microsoft encerrou o suporte do Office 2021 em 13/10/2026: ele segue funcionando, mas não recebe novas atualizações de segurança. Se preferir uma versão com suporte, consulte-nos.</div></div>
+        </ul></div>
       </div>
       <div class="bloco nao" style="flex:1"><h3>${ICONE_ALERTA} Os riscos de usar sistema ou Office sem licença</h3>
         <div class="duas" style="gap:4px 16px"><ul>
