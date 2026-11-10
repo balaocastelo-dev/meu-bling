@@ -788,6 +788,9 @@ model VendaItem {
   comissaoValor  Float    @default(0)
   /// nº de série / IMEI do aparelho vendido (sai no certificado de garantia)
   numeroSerie    String?
+  /// prazo de garantia confirmado pelo vendedor na hora de imprimir o certificado (3, 6 ou 12
+  /// meses). Vazio = vale a regra automática (12 meses novo / 3 meses seminovo).
+  garantiaMeses  Int?
   ordem          Int      @default(0)
 
   alocacoesCompra AlocacaoCompra[]

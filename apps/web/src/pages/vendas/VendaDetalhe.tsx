@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowRight, CheckCircle2, Clock, FileText, Link2, Pencil, Printer, Send, ShoppingCart, Undo2, Zap } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock, FileText, Link2, Pencil, Printer, Send, ShoppingCart, Trash2, Undo2, Zap } from 'lucide-react';
 import { abrirEmNovaAba, api, mensagemErro } from '@/lib/api';
 import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, Modal, PageHeader, Select, StatusChanger, Tabs, Textarea, tomPorStatus, ValorOculto } from '@/components/ui';
 import { VendaAcoes } from '@/components/compartilhados/VendaAcoes';
@@ -14,6 +14,7 @@ import { ImprimirVenda } from '@/components/compartilhados/ImprimirVenda';
 import { NotificacoesLista } from '@/components/compartilhados/NotificacoesLista';
 import { data, dataHora, moeda, numero, rotulo } from '@/lib/format';
 import type { Contato, Venda } from '@/types';
+import { useAuth } from '@/stores/auth';
 import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/ProdutoSite';
 import { FinalizarVendaModal } from '@/components/compartilhados/FinalizarVenda';
 import { PosVendaImpressao } from '@/components/compartilhados/PosVendaImpressao';
@@ -30,6 +31,9 @@ export default function VendaDetalhe() {
   const [converter, setConverter] = useState(false);
   const [finalizar, setFinalizar] = useState(false);
   const [nfe, setNfe] = useState<{ modelo: 55 | 65; info: string } | null>(null);
+  // apagar o registro do sistema: só ADMIN (vendas de teste, canceladas etc.)
+  const [excluir, setExcluir] = useState(false);
+  const ehAdmin = useAuth((s) => s.temPerfil('ADMIN'));
 
   const { data: venda, isLoading, error } = useQuery({ queryKey: ['venda', id], queryFn: () => api.get<Venda>(`/vendas/${id}`) });
 
@@ -65,6 +69,18 @@ export default function VendaDetalhe() {
       nav(`/vendas/${v.id}`);
     },
     onError: (e) => toast.error(mensagemErro(e)),
+  });
+
+  const excluirM = useMutation({
+    mutationFn: () => api.del<{ ok: boolean; compra?: { numero: number; desfeita: boolean } | null }>(`/vendas/${id}`),
+    onSuccess: (r) => {
+      toast.success(`${orcamento ? 'Orçamento' : 'Venda'} nº ${venda?.numero} apagado do sistema.`, {
+        description: r?.compra ? `A compra nº ${r.compra.numero} registrada por esta venda também foi desfeita.` : undefined,
+      });
+      qc.invalidateQueries({ queryKey: ['vendas'] });
+      nav(base);
+    },
+    onError: (e) => toast.error(mensagemErro(e), { duration: 10_000 }),
   });
 
   const copiarLink = async () => {
@@ -127,6 +143,16 @@ export default function VendaDetalhe() {
             <Button variante="secundario" icone={<Send className="h-4 w-4" />} onClick={() => setNotificar(true)}>
               Enviar ao cliente
             </Button>
+            {ehAdmin && (
+              <Button
+                variante="perigo"
+                icone={<Trash2 className="h-4 w-4" />}
+                onClick={() => setExcluir(true)}
+                title="Apagar este registro do sistema (só administrador)"
+              >
+                Excluir
+              </Button>
+            )}
             {!convertido && (
               <Link to={`${base}/${venda.id}/editar`}>
                 <Button variante={orcamento ? 'secundario' : 'primario'} icone={<Pencil className="h-4 w-4" />}>
@@ -447,6 +473,15 @@ export default function VendaDetalhe() {
           setNfe(null);
           nav(`/notas-fiscais/${notaId}`);
         }}
+      />
+
+      <ConfirmDialog
+        aberto={excluir}
+        onFechar={() => setExcluir(false)}
+        titulo={`Apagar ${orcamento ? 'o orçamento' : 'a venda'} nº ${venda.numero}?`}
+        descricao={`Some do sistema para sempre — não dá para desfazer. O que estiver lançado é estornado antes: o estoque volta e os lançamentos do caixa e das contas a receber são cancelados. Venda com dinheiro já recebido ou com NF-e autorizada não é apagada: o sistema avisa e não mexe em nada.`}
+        textoConfirmar={`Apagar ${orcamento ? 'orçamento' : 'venda'} nº ${venda.numero}`}
+        onConfirmar={() => excluirM.mutateAsync().then(() => undefined).catch(() => undefined)}
       />
 
       {!orcamento && <FinalizarVendaModal vendaId={venda.id} numero={venda.numero} aberto={finalizar} onFechar={() => setFinalizar(false)} />}

@@ -373,8 +373,38 @@ export default async function vendasRoutes(app: FastifyInstance) {
       await prisma.$transaction((tx) => acaoEstornarContas({ modulo: 'VENDA', entidadeId: id, tx, usuarioId: req.user.id, situacaoOrigemId: sit, situacaoDestinoId: sit }));
       v = (await prisma.venda.findUnique({ where: { id }, include: { nota: true } }))!;
     }
-    if (v.estoqueLancado || v.contasLancadas) throw new AppError('Venda com estoque/contas lançados não pode ser excluída. Estorne (ou cancele) antes.', 422, 'VENDA_LANCADA');
-    if (v.nota && v.nota.situacao === 'AUTORIZADA') throw new AppError('Venda com NF-e autorizada não pode ser excluída.', 422, 'NOTA_AUTORIZADA');
+    // NF-e autorizada existe na SEFAZ: apagar aqui deixaria a nota órfã e a loja sem o pedido
+    // que a originou. Primeiro se cancela a nota na SEFAZ; depois a venda pode ser excluída.
+    if (v.nota && v.nota.situacao === 'AUTORIZADA') {
+      throw new AppError(
+        `A venda nº ${v.numero} tem NF-e ${v.nota.numero ? `nº ${v.nota.numero} ` : ''}autorizada na SEFAZ e não pode ser apagada. Cancele a nota na SEFAZ primeiro — depois dá para excluir.`,
+        422,
+        'NOTA_AUTORIZADA',
+      );
+    }
+
+    // ADMIN pode limpar venda de teste/cancelada que já movimentou estoque ou financeiro: o
+    // sistema ESTORNA antes de apagar, para o estoque e o caixa não ficarem com o lançamento
+    // de uma venda que não existe mais. O estorno recusa sozinho (com o motivo) quando há
+    // dinheiro realmente recebido ou credor já pago — nesse caso nada é apagado.
+    if ((v.estoqueLancado || v.contasLancadas) && req.user.perfil === 'ADMIN') {
+      const sit = v.situacaoId;
+      const ctx = { modulo: 'VENDA' as const, entidadeId: id, usuarioId: req.user.id, situacaoOrigemId: sit, situacaoDestinoId: sit };
+      await prisma.$transaction(async (tx) => {
+        if (v!.contasLancadas) await acaoEstornarContas({ ...ctx, tx });
+        if (v!.estoqueLancado) await acaoEstornarEstoque({ ...ctx, tx });
+      });
+      v = (await prisma.venda.findUnique({ where: { id }, include: { nota: true } }))!;
+    }
+    if (v.estoqueLancado || v.contasLancadas) {
+      throw new AppError(
+        req.user.perfil === 'ADMIN'
+          ? 'Não consegui estornar o estoque/as contas desta venda, então ela não foi apagada. Estorne pela tela da venda e tente de novo.'
+          : 'Venda com estoque/contas lançados não pode ser excluída. Estorne (ou cancele) antes — ou peça ao administrador.',
+        422,
+        'VENDA_LANCADA',
+      );
+    }
     const compraDesfeita: CompraDesfeita | null = await prisma.$transaction(async (tx) => {
       await acaoLiberarReserva({ modulo: 'VENDA', entidadeId: id, tx, usuarioId: req.user.id, situacaoOrigemId: v.situacaoId, situacaoDestinoId: v.situacaoId });
       await tx.comissao.deleteMany({ where: { vendaId: id, status: { not: 'PAGA' } } });

@@ -1,12 +1,14 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle2, DollarSign, FileSignature, FileText, Package, Plus, ShoppingCart, Trophy } from 'lucide-react';
-import { api } from '@/lib/api';
+import { CheckCircle2, DollarSign, FileSignature, FileText, Package, Plus, ShoppingCart, Trash2, Trophy, X } from 'lucide-react';
+import { api, mensagemErro } from '@/lib/api';
 import { useAuth } from '@/stores/auth';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { OPCOES_PERIODO, periodoDe } from '@/lib/periodo';
-import { BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, StatusBadge, Table, type Coluna } from '@/components/ui';
+import { BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, ConfirmDialog, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, StatusBadge, Table, type Coluna } from '@/components/ui';
 import { VendaAcoes, rotaDe } from '@/components/compartilhados/VendaAcoes';
 import { data, inteiro, moeda, rotulo } from '@/lib/format';
 import type { Paginado, TipoVenda, VendaResumo } from '@/types';
@@ -76,6 +78,45 @@ function PainelResumo({ r, periodo, orcamento, carregando, soMinhas }: { r?: Res
 export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
   const nav = useNavigate();
   const pg = usePaginacao();
+  // limpeza em lote (vendas de teste, canceladas): só ADMIN
+  const ehAdmin = useAuth((s) => s.temPerfil('ADMIN'));
+  const [marcadas, setMarcadas] = useState<number[]>([]);
+  const [confirmarLote, setConfirmarLote] = useState(false);
+  const qc = useQueryClient();
+
+  /**
+   * Apaga uma a uma e conta o que deu certo. Cada venda é independente: se uma recusar
+   * (dinheiro recebido, NF-e autorizada), as outras seguem e o aviso diz quais ficaram —
+   * é melhor do que derrubar o lote inteiro por causa de um registro.
+   */
+  const excluirLote = useMutation({
+    mutationFn: async () => {
+      const falhas: { id: number; motivo: string }[] = [];
+      let apagadas = 0;
+      for (const id of marcadas) {
+        try {
+          await api.del(`/vendas/${id}`);
+          apagadas += 1;
+        } catch (e) {
+          falhas.push({ id, motivo: mensagemErro(e) });
+        }
+      }
+      return { apagadas, falhas };
+    },
+    onSuccess: ({ apagadas, falhas }) => {
+      if (apagadas) toast.success(`${apagadas} ${orcamento ? 'orçamento' : 'venda'}${apagadas > 1 ? 's' : ''} apagad${apagadas > 1 ? 'as' : 'a'} do sistema.`);
+      if (falhas.length) {
+        toast.warning(`${falhas.length} não foi${falhas.length > 1 ? 'ram' : ''} apagad${falhas.length > 1 ? 'as' : 'a'}.`, {
+          description: falhas.slice(0, 3).map((f) => f.motivo).join(' · '),
+          duration: 15_000,
+        });
+      }
+      setMarcadas(falhas.map((f) => f.id));
+      setConfirmarLote(false);
+      qc.invalidateQueries({ queryKey: ['vendas'] });
+    },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
   const orcamento = tipo === 'ORCAMENTO';
   const base = rotaDe(tipo);
   const { data: situacoes } = useSituacoes(orcamento ? 'ORCAMENTO' : 'VENDA');
@@ -93,6 +134,26 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
   });
 
   const colunas: Coluna<VendaResumo>[] = [
+    ...(ehAdmin
+      ? [
+          {
+            chave: 'marcar',
+            titulo: '',
+            largura: '36px',
+            noCartao: 'oculto' as const,
+            render: (v: VendaResumo) => (
+              <input
+                type="checkbox"
+                aria-label={`Marcar nº ${v.numero}`}
+                checked={marcadas.includes(v.id)}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => setMarcadas((m) => (e.target.checked ? [...m, v.id] : m.filter((x) => x !== v.id)))}
+                className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-rose-600"
+              />
+            ),
+          },
+        ]
+      : []),
     { chave: 'numero', titulo: 'Nº', largura: '80px', render: (v) => <span className="font-medium text-slate-900">{v.numero}</span> },
     { chave: 'data', titulo: 'Data', largura: '100px', render: (v) => <span className="text-slate-600">{data(v.data)}</span> },
     ...(orcamento
@@ -227,6 +288,22 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
         <div className="border-b border-slate-100 px-3 py-2">
           <ChipsSituacao situacoes={situacoes ?? []} valor={pg.getFiltro('situacoes')} onChange={(v) => pg.setFiltro('situacoes', v)} />
         </div>
+        {!!marcadas.length && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rose-100 bg-rose-50 px-3 py-2">
+            <span className="text-sm text-rose-900">
+              {marcadas.length} {orcamento ? 'orçamento' : 'venda'}
+              {marcadas.length > 1 ? 's' : ''} marcad{marcadas.length > 1 ? 'as' : 'a'}
+            </span>
+            <div className="flex gap-2">
+              <Button tamanho="sm" variante="secundario" icone={<X className="h-3.5 w-3.5" />} onClick={() => setMarcadas([])}>
+                Desmarcar
+              </Button>
+              <Button tamanho="sm" variante="perigo" icone={<Trash2 className="h-3.5 w-3.5" />} carregando={excluirLote.isPending} onClick={() => setConfirmarLote(true)}>
+                Apagar do sistema
+              </Button>
+            </div>
+          </div>
+        )}
         <Table
           colunas={colunasVisiveis}
           dados={resp?.data}
@@ -263,6 +340,14 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
               }
             />
           }
+        />
+        <ConfirmDialog
+          aberto={confirmarLote}
+          onFechar={() => setConfirmarLote(false)}
+          titulo={`Apagar ${marcadas.length} ${orcamento ? 'orçamento' : 'venda'}${marcadas.length > 1 ? 's' : ''}?`}
+          descricao="Somem do sistema para sempre — não dá para desfazer. O que estiver lançado é estornado antes (o estoque volta, caixa e contas a receber são cancelados). As que tiverem dinheiro já recebido ou NF-e autorizada não são apagadas: o sistema avisa quais ficaram e não mexe nelas."
+          textoConfirmar="Apagar do sistema"
+          onConfirmar={() => excluirLote.mutateAsync().then(() => undefined).catch(() => undefined)}
         />
         {resp && <Pagination pagina={resp.meta.pagina} totalPaginas={resp.meta.totalPaginas} total={resp.meta.total} limite={resp.meta.limite} onPagina={pg.setPagina} onLimite={pg.setLimite} />}
       </Card>

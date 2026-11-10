@@ -32,6 +32,7 @@ const CRIAR = '20261031120000_lancamentos_automaticos';
 const TRANSFERIR = '20261031140000_lancamentos_transferencia_importacao';
 const TELEFONE = '20261031140000_usuario_telefone';
 const JULIA = '20261110060000_julia_venda_assistencia';
+const GARANTIA = '20261110140000_garantia_escolhida';
 
 /** Colunas que a migração de transferência copia antes de trocar a tabela. */
 const COLUNAS_ANTIGAS = [
@@ -173,6 +174,7 @@ function lerEstado(DatabaseSync, arquivo) {
       // correções da Júlia (10/11/2026): só colunas novas. `vendeTambem` é a última
       // do arquivo, então, se ela já existe, a migração inteira já está no schema.
       julia: usuario && colunas(db, 'Usuario').includes('vendeTambem'),
+      garantia: colunas(db, 'VendaItem').includes('garantiaMeses'),
       formato: classificarLancamento(nomes),
       aplicadas,
       falhas,
@@ -197,6 +199,7 @@ function baseline(estado) {
   else if (estado.formato === 'antigo') marcar.push(CRIAR);
   if (estado.telefone) marcar.push(TELEFONE);
   if (estado.julia) marcar.push(JULIA);
+  if (estado.garantia) marcar.push(GARANTIA);
   if (estado.formato === 'inesperado') {
     console.log('[banco] LancamentoAutomatico não está no formato da migração. Não vou recriar a tabela.');
   } else if (estado.formato === 'antigo') {
