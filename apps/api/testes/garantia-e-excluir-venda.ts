@@ -14,7 +14,25 @@ async function main() {
   const adm = await entrar('admin@balao.info', 'admin123');
   adm.nome = 'ADMIN';
 
-  const cli = await adm.post('/contatos', { nome: `Cliente Garantia ${SUF}`, tipoPessoa: 'F', documento: '19100000000', celular: '19999991111' }, 201);
+  // cliente COMPLETO: sem e-mail e endereço a venda nem finaliza (regra de 28/10/2026),
+  // e é justamente a venda finalizada que lança estoque/contas — o caso que queremos apagar
+  const cli = await adm.post(
+    '/contatos',
+    {
+      nome: `Cliente Garantia ${SUF}`,
+      tipoPessoa: 'F',
+      documento: '19100000000',
+      celular: '19999991111',
+      email: `cliente.garantia.${SUF}@exemplo.com.br`,
+      cep: '13025000',
+      logradouro: 'Av. Anchieta',
+      numero: '789',
+      bairro: 'Cambuí',
+      municipio: 'Campinas',
+      uf: 'SP',
+    },
+    201,
+  );
   // "Notebook" no nome é o que faz o item ganhar certificado de garantia
   const note = await adm.post('/produtos', { nome: `Notebook Dell Inspiron ${SUF}`, preco: 3500, precoCusto: 2400, ncm: '84713012' }, 201);
 
