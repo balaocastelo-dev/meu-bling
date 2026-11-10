@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { FileText, Plus, Wifi, WifiOff } from 'lucide-react';
-import { api } from '@/lib/api';
+import { FileCode2, FileDown, FileText, Plus, Wifi, WifiOff } from 'lucide-react';
+import { abrirEmNovaAba, api, baixarArquivo } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
+import { useSelecao } from '@/hooks/useSelecao';
+import { BarraSelecao, emLote, type AcaoLote } from '@/components/compartilhados/BarraSelecao';
+import { relatorioDaSelecao } from '@/components/compartilhados/relatorioSelecao';
 import { Badge, BarraFiltros, BuscaFiltro, Button, Card, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, Table, tomPorStatus, type Coluna } from '@/components/ui';
 import { data, moeda, rotulo } from '@/lib/format';
 import type { NotaFiscalResumo, Paginado, StatusSefaz } from '@/types';
@@ -14,6 +17,50 @@ export default function NotasLista() {
   const params = { ...pg.filtros, pagina: pg.pagina, limite: pg.limite };
   const { data: resp, isLoading } = useQuery({ queryKey: ['notas-fiscais', params], queryFn: () => api.get<Paginado<NotaFiscalResumo>>('/notas-fiscais', params), placeholderData: (p) => p });
   const { data: sefaz } = useQuery({ queryKey: ['sefaz-status'], queryFn: () => api.get<StatusSefaz>('/fiscal/status-sefaz').catch(() => null), staleTime: 5 * 60 * 1000 });
+
+  const selecao = useSelecao();
+  const marcadas = () => (resp?.data ?? []).filter((n) => selecao.ids.includes(n.id));
+
+  /**
+   * Nota fiscal não se apaga: o documento existe na SEFAZ. As ações aqui são de
+   * conferência e de entrega ao contador — DANFE, XML e relatório do período.
+   */
+  const acoes: AcaoLote[] = [
+    {
+      rotulo: 'DANFE',
+      icone: <FileDown className="h-3.5 w-3.5" />,
+      maximo: 20,
+      executar: (ids) =>
+        emLote(ids, (id) => abrirEmNovaAba(`/notas-fiscais/${id}/danfe`), { feito: (n) => `${n} DANFE aberta${n > 1 ? 's' : ''}.`, falhou: (n) => `${n} não abriu.` }),
+    },
+    {
+      rotulo: 'Baixar XML',
+      icone: <FileCode2 className="h-3.5 w-3.5" />,
+      // é o pacote que vai para o contador todo mês
+      executar: (ids) =>
+        emLote(
+          ids,
+          (id) => {
+            const n = (resp?.data ?? []).find((x) => x.id === id);
+            return baixarArquivo(`/notas-fiscais/${id}/xml`, `NFe-${n?.chave ?? n?.numero ?? id}.xml`);
+          },
+          { feito: (n) => `${n} XML baixado${n > 1 ? 's' : ''}.`, falhou: (n) => `${n} não baixou (nota sem XML ainda).` },
+        ),
+    },
+    {
+      rotulo: 'Relatório',
+      icone: <FileText className="h-3.5 w-3.5" />,
+      executar: async () => {
+        const m = marcadas();
+        relatorioDaSelecao({
+          titulo: 'Notas fiscais selecionadas',
+          colunas: ['Número', 'Série', 'Modelo', 'Emissão', 'Destinatário', 'Situação', 'Valor'],
+          linhas: m.map((n) => [String(n.numero), String(n.serie), n.modelo === 65 ? 'NFC-e' : 'NF-e', data(n.dataEmissao), n.contato?.nome ?? '', rotulo(n.situacao), moeda(n.valorTotal)]),
+          totais: { Total: moeda(m.reduce((t, n) => t + n.valorTotal, 0)) },
+        });
+      },
+    },
+  ];
 
   const colunas: Coluna<NotaFiscalResumo>[] = [
     { chave: 'numero', titulo: 'Número', largura: '110px', render: (n) => <div><span className="font-medium text-slate-900">{n.numero}</span><span className="ml-1 text-xs text-slate-400">s{n.serie}</span><p className="text-[10px] text-slate-400">{n.modelo === 65 ? 'NFC-e' : 'NF-e'} · {n.tipo === 0 ? 'entrada' : 'saída'}</p></div> },
@@ -41,7 +88,9 @@ export default function NotasLista() {
           <SelectFiltro valor={pg.getFiltro('tipo')} onChange={(v) => pg.setFiltro('tipo', v)} placeholder="Entrada e saída" opcoes={[{ valor: 1, rotulo: 'Saída' }, { valor: 0, rotulo: 'Entrada' }]} />
           <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />
         </BarraFiltros>
+        <BarraSelecao selecao={selecao} acoes={acoes} nome="nota marcada" nomePlural="notas marcadas" />
         <Table
+          selecao={selecao}
           colunas={colunas}
           dados={resp?.data}
           carregando={isLoading}
