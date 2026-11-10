@@ -95,6 +95,7 @@ async function main() {
     rodar('Regras de vendas, painel, metas e desafios', NPX, ['tsx', 'testes/regras-vendas.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Baixa parcial de contas a pagar (pagar em partes, histórico, estorno de um pagamento)', NPX, ['tsx', 'testes/baixa-parcial.ts', base]);
     rodar('OS: custos internos (peça, logística, terceiros) fora da impressão + dashboard de assistência', NPX, ['tsx', 'testes/os-custos.ts', base]);
+    rodar('Garantia escolhida (3/6/12) no certificado + apagar venda pelo ADMIN', NPX, ['tsx', 'testes/garantia-e-excluir-venda.ts', base]);
     rodar('Correções da Júlia: endereço no cadastro, CNPJ, 3x no cartão em 1 linha, envio na hora, só técnico, fila sem custo, IE travada', NPX, ['tsx', 'testes/julia-venda-assistencia.ts', base]);
     rodar('Vendas: custo do produto e logística internos (fora do cliente) + ordem do contas a pagar', NPX, ['tsx', 'testes/venda-custos.ts', base]);
     rodar('Venda paga na hora entra no caixa + ajuste de saldo fora do DRE + DRE', NPX, ['tsx', 'testes/pago-na-hora.ts', base]);

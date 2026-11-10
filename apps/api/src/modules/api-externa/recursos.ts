@@ -240,6 +240,7 @@ export const ENDPOINTS: Endpoint[] = [
   { metodo: 'POST', caminho: '/vendas/{id}/situacao', recurso: 'vendas', resumo: 'Muda a situação (Fechada/NF emitida exigem a venda completa: 422 VENDA_INCOMPLETA). Fechada lança estoque, contas e comissão; Cancelada estorna. Erro 422 TRANSICAO_INVALIDA traz as permitidas.', corpo: SITUACAO },
   { metodo: 'GET', caminho: '/vendas/{id}/finalizacao', recurso: 'vendas', resumo: 'O que falta para finalizar a venda (cliente completo ou Consumidor final, produto, custo, forma de pagamento, vendedor).' },
   { metodo: 'POST', caminho: '/vendas/{id}/link-pagamento', recurso: 'vendas', resumo: 'Gera o link de pagamento do Mercado Pago para o pedido (padrão: total da venda).', corpo: { valor: 199.9 } },
+  { metodo: 'PUT', caminho: '/vendas/{id}/documentos/garantia', recurso: 'vendas', resumo: 'Grava o prazo de garantia (3, 6 ou 12 meses) confirmado pelo vendedor para cada aparelho com certificado.', corpo: { itens: [{ itemId: 1, meses: 12 }] } },
   { metodo: 'POST', caminho: '/vendas/{id}/cobranca-asaas', recurso: 'vendas', resumo: 'Gera a cobrança do pedido no Asaas (boleto, PIX ou cartão) e devolve o link para mandar ao cliente.', corpo: { forma: 'UNDEFINED', vencimento: null, parcelas: 1 } },
   { metodo: 'GET', caminho: '/vendas/{id}/cobranca-asaas', recurso: 'vendas', resumo: 'Relê no Asaas a situação da cobrança do pedido (aguardando, pago, vencido).' },
   { metodo: 'DELETE', caminho: '/vendas/{id}/cobranca-asaas', recurso: 'vendas', resumo: 'Cancela no Asaas a cobrança gerada para o pedido.' },

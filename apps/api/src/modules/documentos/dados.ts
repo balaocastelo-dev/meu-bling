@@ -10,6 +10,8 @@ import { ehSeminovo, garantiaDoItem, tipoCertificado, type Garantia, type TipoCe
 import { sortearVersiculo, type Versiculo } from './versiculos.js';
 
 export interface ItemDoc {
+  /** id do item da venda — a tela usa para gravar o prazo de garantia escolhido */
+  id: number;
   idx: number;
   descricao: string;
   codigo: string | null;
@@ -74,6 +76,7 @@ export async function carregarContexto(vendaId: number) {
     const tipo = servico ? null : tipoCertificado(i.descricao, categoria);
     const seminovo = !servico && ehSeminovo(i.descricao, categoria);
     return {
+      id: i.id,
       idx: idx + 1,
       descricao: i.descricao,
       codigo: i.codigo || i.produto?.codigo || null,
@@ -90,7 +93,8 @@ export async function carregarContexto(vendaId: number) {
       tipo,
       seminovo,
       servico,
-      garantia: garantiaDoItem(v.data, tipo, seminovo, servico ? 90 : p?.garantiaDias),
+      // o prazo escolhido pelo vendedor no aviso de impressão manda sobre a regra automática
+      garantia: garantiaDoItem(v.data, tipo, seminovo, servico ? 90 : p?.garantiaDias, (i as { garantiaMeses?: number | null }).garantiaMeses),
     };
   });
   const site = emp.site || 'www.balao.info';
