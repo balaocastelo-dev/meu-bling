@@ -18,6 +18,7 @@ import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/Prod
 import { FinalizarVendaModal } from '@/components/compartilhados/FinalizarVenda';
 import { PosVendaImpressao } from '@/components/compartilhados/PosVendaImpressao';
 import { LinkPagamento } from '@/components/compartilhados/LinkPagamento';
+import { CobrancaAsaas } from '@/components/compartilhados/CobrancaAsaas';
 
 /** Detalhe do pedido de venda com abas e ações */
 export default function VendaDetalhe() {
@@ -254,8 +255,9 @@ export default function VendaDetalhe() {
           </div>
           </>)}
           {orcamento && <p className="mt-3 text-xs text-slate-400">Orçamento não movimenta estoque nem financeiro. Ao converter, a venda criada segue o fluxo normal.</p>}
-          <div className="mt-3">
+          <div className="mt-3 space-y-3">
             <LinkPagamento venda={venda as any} />
+            {!orcamento && <CobrancaAsaas venda={venda as any} />}
           </div>
         </Card>
       </div>

@@ -37,6 +37,8 @@ export interface Usuario {
   perfil: Perfil;
   vendedorId: number | null;
   tecnicoId: number | null;
+  /** TÉCNICO que também vende (padrão). false = só técnico, sem cadastro de vendedor. */
+  vendeTambem?: boolean;
   ativo?: boolean;
   /** Celular (WhatsApp) — usado quando alguém chama a atenção no chat. */
   telefone?: string | null;
@@ -216,6 +218,30 @@ export interface ContaFinanceira {
 
 export type TipoContato = 'CLIENTE' | 'FORNECEDOR' | 'TRANSPORTADORA' | 'AMBOS';
 
+/** Resposta de GET /contatos/cnpj/:cnpj — cadastro público da Receita ("Importar do SEFAZ"). */
+export interface DadosCnpj {
+  documento: string;
+  nome: string;
+  fantasia: string;
+  ie: string;
+  /** false = a UF não publica a Inscrição Estadual; preencher à mão */
+  ieEncontrada: boolean;
+  email: string;
+  telefone: string;
+  cep: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  municipio: string;
+  uf: string;
+  codigoMunicipio: string;
+  situacaoCadastral: string;
+  /** BAIXADA / INAPTA / SUSPENSA na Receita */
+  irregular: boolean;
+  fonte: string;
+}
+
 export interface Contato {
   id: number;
   tipo: TipoContato;
@@ -385,6 +411,8 @@ export interface Parcela {
   formaPagamentoId: number | null;
   formaPagamento?: Ref | null;
   observacoes?: string | null;
+  /** cartão de crédito: em quantas vezes o CLIENTE parcelou no cartão dele (a loja recebe numa data só) */
+  parcelasCartao?: number | null;
   /** forma "Crédito bancário": quem paga o credor */
   creditoPagador?: 'CLIENTE' | 'LOJA' | null;
   contaReceber?: { id: number; situacao: string; valorRecebido: number } | null;
@@ -463,6 +491,11 @@ export interface Venda extends VendaResumo {
   origem: OrigemVenda;
   numeroPedidoLoja?: string | null;
   linkPagamentoUrl?: string | null;
+  /** cobrança gerada no Asaas a partir deste pedido */
+  asaasCobrancaId?: string | null;
+  asaasLinkUrl?: string | null;
+  asaasStatus?: string | null;
+  asaasEm?: string | null;
   linkPagamentoValor?: number | null;
   linkPagamentoEm?: string | null;
   descontoTipo: 'REAL' | 'PERCENTUAL';
@@ -1222,6 +1255,7 @@ export interface Empresa {
   openFinance?: { ativo: boolean; clientId?: string | null; temSecret: boolean };
   bling?: { temToken: boolean; expira?: string | null; clientId?: string | null; temSecret?: boolean };
   mercadoPago?: { temToken: boolean };
+  asaas?: { temChave: boolean; ambiente: string; cobrancaAuto: boolean };
   blingClientId?: string | null;
   temCscToken?: boolean;
 }

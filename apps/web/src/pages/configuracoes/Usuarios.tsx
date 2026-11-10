@@ -24,14 +24,22 @@ export default function Usuarios() {
       descricao="Acessos ao sistema. Vincule o usuário a um vendedor/técnico para filtrar suas vendas e OS."
       rota="/usuarios"
       rotuloNovo="Novo usuário"
-      vazio={{ nome: '', email: '', telefone: '', perfil: 'VENDEDOR', ativo: true, vendedorId: null, tecnicoId: null, senha: '' }}
+      vazio={{ nome: '', email: '', telefone: '', perfil: 'VENDEDOR', ativo: true, vendedorId: null, tecnicoId: null, vendeTambem: true, senha: '' }}
       validar={(f) => (!f.nome?.trim() ? 'Informe o nome.' : !f.email?.trim() ? 'Informe o e-mail.' : !f.id && (f.senha ?? '').length < 8 ? 'Senha inicial com ao menos 8 caracteres.' : null)}
       antesDeSalvar={(f) => { const { ultimoLogin: _u, criadoEm: _c, ...resto } = f; if (!resto.senha) delete resto.senha; return resto; }}
       colunas={[
         { titulo: 'Nome', render: (u) => <span className="font-medium">{u.nome}</span> },
         { titulo: 'E-mail', render: (u) => <span className="text-slate-500">{u.email}</span> },
         { titulo: 'Perfil', render: (u) => <Badge tom={u.perfil === 'ADMIN' ? 'vermelho' : u.perfil === 'GERENTE' ? 'roxo' : 'neutro'}>{rotulo(u.perfil)}</Badge> },
-        { titulo: 'Vínculo', render: (u) => <span className="text-xs text-slate-500">{u.vendedorId ? `Vendedor #${u.vendedorId}` : u.tecnicoId ? `Técnico #${u.tecnicoId}` : '—'}</span> },
+        {
+          titulo: 'Vínculo',
+          render: (u) => (
+            <span className="text-xs text-slate-500">
+              {[u.tecnicoId ? `Técnico #${u.tecnicoId}` : null, u.vendedorId ? `Vendedor #${u.vendedorId}` : null].filter(Boolean).join(' + ') || '—'}
+              {u.perfil === 'TECNICO' && !u.vendeTambem && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">só técnico</span>}
+            </span>
+          ),
+        },
         { titulo: 'Último login', render: (u) => <span className="text-xs text-slate-500">{u.ultimoLogin ? dataHora(u.ultimoLogin) : 'nunca'}</span> },
         { titulo: 'Situação', render: (u) => <Badge tom={u.ativo ? 'verde' : 'cinza'}>{u.ativo ? 'Ativo' : 'Inativo'}</Badge> },
       ]}
@@ -44,9 +52,19 @@ export default function Usuarios() {
           <Select label="Perfil" value={f.perfil ?? 'VENDEDOR'} onChange={(e) => set({ perfil: e.target.value as Perfil })} opcoes={PERFIS.map((p) => ({ valor: p, rotulo: rotulo(p) }))} />
           <p className="-mt-1 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">{DESCRICAO[(f.perfil ?? 'VENDEDOR') as Perfil]}</p>
           <div className="grid grid-cols-2 gap-3">
-            <Select label="Vendedor vinculado" value={f.vendedorId ?? ''} onChange={(e) => set({ vendedorId: e.target.value ? Number(e.target.value) : null })} opcoes={opcoesDe(vendedores)} placeholder="—" />
+            <Select label="Vendedor vinculado" value={f.vendedorId ?? ''} onChange={(e) => set({ vendedorId: e.target.value ? Number(e.target.value) : null })} opcoes={opcoesDe(vendedores)} placeholder="—" disabled={f.perfil === 'TECNICO' && f.vendeTambem === false} />
             <Select label="Técnico vinculado" value={f.tecnicoId ?? ''} onChange={(e) => set({ tecnicoId: e.target.value ? Number(e.target.value) : null })} opcoes={opcoesDe(tecnicos)} placeholder="—" />
           </div>
+          {/* Técnico que não vende: sem isto o login recriava o cadastro de vendedor dele,
+              então tirar alguém de vendedor não adiantava. */}
+          {f.perfil === 'TECNICO' && (
+            <Checkbox
+              label="Também vende"
+              descricao="Desmarcado, fica só como técnico: não ganha cadastro de vendedor, some do painel e do ranking de vendedores. As vendas antigas continuam no nome dele."
+              checked={f.vendeTambem ?? true}
+              onChange={(e) => set({ vendeTambem: e.target.checked, ...(e.target.checked ? {} : { vendedorId: null }) })}
+            />
+          )}
           <Checkbox label="Ativo" checked={f.ativo ?? true} onChange={(e) => set({ ativo: e.target.checked })} />
         </>
       )}

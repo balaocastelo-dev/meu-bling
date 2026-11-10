@@ -29,7 +29,7 @@ export interface OsParaCusto {
   custoLogistica?: number | null;
   custoMaoObraTerceiro?: number | null;
   itens?: { tipo: string; descricao?: string; custoUnitario: number; quantidade: number }[];
-  parcelas?: { valor: number; formaPagamento?: { tipo: string } | null; contaReceber?: { formaPagamento?: { tipo: string } | null } | null }[];
+  parcelas?: { valor: number; parcelasCartao?: number | null; formaPagamento?: { tipo: string } | null; contaReceber?: { formaPagamento?: { tipo: string } | null } | null }[];
 }
 
 export interface CustosOs {
@@ -88,13 +88,15 @@ export function custosOs(o: OsParaCusto, cfg: CfgCustos = cfgCustosAtual()): Cus
   let taxaCartao = 0;
   let taxaPct = 0;
   let nCartao = 0;
-  const parcelas = (o.parcelas || []).map((p) => ({ valor: p.valor, tipo: p.contaReceber?.formaPagamento?.tipo || p.formaPagamento?.tipo || null }));
+  const parcelas = (o.parcelas || []).map((p) => ({ valor: p.valor, vezes: p.parcelasCartao || 0, tipo: p.contaReceber?.formaPagamento?.tipo || p.formaPagamento?.tipo || null }));
   const credito = parcelas.filter((p) => p.tipo === 'CARTAO_CREDITO');
   const debito = parcelas.filter((p) => p.tipo === 'CARTAO_DEBITO');
   if (credito.length) {
-    const pc = taxaCartaoPct(credito.length, cfg);
+    // igual à venda: o número de vezes vem do que foi informado, não do número de linhas
+    const vezes = Math.max(...credito.map((p) => p.vezes), credito.length);
+    const pc = taxaCartaoPct(vezes, cfg);
     taxaCartao += credito.reduce((s, p) => s + p.valor, 0) * (pc / 100);
-    nCartao = credito.length;
+    nCartao = vezes;
     taxaPct = pc;
   }
   if (debito.length) {
@@ -136,5 +138,5 @@ export const SELECT_CUSTO_OS = {
   custoLogistica: true,
   custoMaoObraTerceiro: true,
   itens: { select: { tipo: true, descricao: true, custoUnitario: true, quantidade: true } },
-  parcelas: { select: { valor: true, formaPagamento: { select: { tipo: true } }, contaReceber: { select: { formaPagamento: { select: { tipo: true } } } } } },
+  parcelas: { select: { valor: true, parcelasCartao: true, formaPagamento: { select: { tipo: true } }, contaReceber: { select: { formaPagamento: { select: { tipo: true } } } } } },
 } as const;

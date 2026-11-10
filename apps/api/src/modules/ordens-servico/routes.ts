@@ -15,6 +15,7 @@ import { executarAcoes, mudarSituacao, registrarAcao, registrarModulo, situacaoI
 import { idDe, idsQuery, boolQuery } from '../comum/zod.js';
 import { intervalo } from '../comum/datas.js';
 import { enfileirarNotificacao, variaveisTemplate } from '../comum/notificar.js';
+import { enviarNotificacao } from '../notificacoes/service.js';
 import {
   acaoEstornarContas,
   acaoEstornarEstoque,
@@ -118,6 +119,8 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
         dataFinal: dataSchema,
         abertas: boolQuery,
         atrasadas: boolQuery,
+        /** só as OS com peça sem custo lançado — a fila de "preencher o custo das OS antigas" */
+        semCusto: boolQuery,
       })
       .parse(req.query);
     const where: any = { contatoId: q.contatoId, tecnicoId: q.tecnicoId, vendedorId: q.vendedorId, prioridade: q.prioridade, dataEntrada: intervalo(q.dataInicial, q.dataFinal) };
@@ -137,6 +140,18 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
       const or: any[] = vs.flatMap((v) => [{ contato: { nome: { contains: v } } }, { equipamento: { contains: v } }, { marca: { contains: v } }, { modelo: { contains: v } }, { numeroSerie: { contains: v } }, { defeitoRelatado: { contains: v } }]);
       if (Number.isInteger(n) && n > 0) or.push({ numero: n });
       where.OR = or;
+    }
+    // "Sem custo" precisa olhar item a item (peça sem custo), o que o banco não filtra
+    // direto: busca as candidatas (OS sem custo total informado) e filtra na memória.
+    if (q.semCusto) {
+      const candidatas = await prisma.ordemServico.findMany({
+        where: { ...where, custoPeca: { lte: 0 }, itens: { some: { tipo: 'PECA', custoUnitario: { lte: 0 } } } },
+        orderBy: [{ dataEntrada: 'desc' }, { numero: 'desc' }],
+        select: resumoSelect,
+      });
+      const comPendencia = candidatas.filter((o) => pecasSemCustoOs({ custoPeca: o.custoPeca, itens: o.itens.map((i) => ({ ...i, quantidade: 1 })) }).length > 0);
+      const inicio = (q.pagina - 1) * q.limite;
+      return respostaPaginada(comPendencia.slice(inicio, inicio + q.limite).map(resumoOs), comPendencia.length, q);
     }
     const [total, data] = await Promise.all([
       prisma.ordemServico.count({ where }),
@@ -481,8 +496,10 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
       garantiaDias: os.garantiaDias,
     });
     const n = await enfileirarNotificacao({ canal: body.canal, templateId: body.templateId, mensagem: body.mensagem, assunto: body.assunto, origemTipo: 'OS', origemId: os.id, contatoId: os.contatoId, contato: os.contato, vars });
-    await auditar(req, 'OrdemServico', id, 'ACAO', { acao: 'notificar', canal: body.canal, notificacaoId: n.id });
-    return reply.code(201).send(n);
+    // envia agora (ver vendas/routes.ts): a tela diz na hora se saiu ou por que não saiu
+    const envio = await enviarNotificacao({ ...n, tentativas: 0 }).catch(() => ({ status: 'PENDENTE' as const, erro: 'Falha inesperada no envio' }));
+    await auditar(req, 'OrdemServico', id, 'ACAO', { acao: 'notificar', canal: body.canal, notificacaoId: n.id, envio: envio.status });
+    return reply.code(201).send({ ...n, status: envio.status, erro: envio.erro });
   });
 
   // ---------------------------------------------------------------- NF-e das peças

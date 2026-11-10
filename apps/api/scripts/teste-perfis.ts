@@ -60,9 +60,16 @@ async function main() {
   await esperar(gerente, 'GET', '/relatorios/dre', [200], undefined, 'GERENTE');
   await esperar(gerente, 'GET', '/compras', [200], undefined, 'GERENTE');
   await esperar(gerente, 'GET', '/situacoes?modulo=VENDA', [200], undefined, 'GERENTE');
-  await esperar(gerente, 'PUT', '/empresa', [200], { telefone: '(19) 3000-0000', cnpj: '00000000000000' }, 'GERENTE');
+  // Campos fiscais (CNPJ, IE, regime): o pedido inteiro é RECUSADO, com o nome do campo.
+  // Antes eles eram descartados em silêncio e a tela dizia "salvo" — foi assim que a
+  // Inscrição Estadual "sumia" e a emissão de NF continuava reclamando que faltava.
+  await esperar(gerente, 'PUT', '/empresa', [403], { telefone: '(19) 3000-0000', cnpj: '00000000000000' }, 'GERENTE');
+  await esperar(gerente, 'PUT', '/empresa', [403], { ie: '999999999999' }, 'GERENTE');
   const emp: any = await (await fetch(API + '/empresa', { headers: { authorization: `Bearer ${admin}` } })).json();
   if (emp.cnpj === '00000000000000') { falhas++; console.log('  ✖ GERENTE conseguiu alterar o CNPJ'); } else ok++;
+  if (emp.ie === '999999999999') { falhas++; console.log('  ✖ GERENTE conseguiu alterar a Inscrição Estadual'); } else ok++;
+  // reenviar os mesmos valores (a tela manda o formulário inteiro) continua salvando o resto
+  await esperar(gerente, 'PUT', '/empresa', [200], { telefone: '(19) 3000-0000', cnpj: emp.cnpj, ie: emp.ie }, 'GERENTE');
 
   console.log('== VENDEDOR');
   await esperar(vendedor, 'GET', '/vendas', [200], undefined, 'VENDEDOR');

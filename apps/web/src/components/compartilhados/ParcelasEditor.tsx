@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { addDays, format } from 'date-fns';
-import { Plus, Trash2, Wand2 } from 'lucide-react';
+import { CreditCard, Plus, Trash2, Wand2 } from 'lucide-react';
 import clsx from 'clsx';
 import { Button, Input, MoneyInput, Select } from '@/components/ui';
 import { useFormasPagamento, opcoesDe } from '@/hooks/useListas';
@@ -16,9 +16,18 @@ interface Props {
   pagadorCredito?: boolean;
 }
 
+/** Cartão de crédito: o parcelamento é do CLIENTE com o banco dele, não nosso. */
+const CARTAO_CREDITO = 'CARTAO_CREDITO';
+
 /**
  * Editor de parcelas com gerador (nº, forma, 1º vencimento, intervalo).
  * Valida que a soma das parcelas = total.
+ *
+ * CARTÃO DE CRÉDITO é diferente de crediário: em 3x no cartão o cliente paga o
+ * banco DELE, e a loja recebe numa data só (hoje + prazo da maquininha). Então o
+ * gerador cria UMA linha com o número de vezes anotado — e não três contas a
+ * receber em 30/60/90, que era o que aparecia antes e não correspondia à realidade.
+ * O número de vezes continua valendo para a taxa da maquininha (1x..12x).
  */
 export function ParcelasEditor({ parcelas, onChange, total, disabled, pagadorCredito }: Props) {
   const { data: formas } = useFormasPagamento();
@@ -30,8 +39,29 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled, pagadorCre
   const soma = arred(parcelas.reduce((s, p) => s + (Number(p.valor) || 0), 0));
   const diferenca = arred(total - soma);
 
+  const formaEscolhida = formaId === '' ? null : formas?.find((f) => f.id === Number(formaId)) ?? null;
+  const noCartao = formaEscolhida?.tipo === CARTAO_CREDITO;
+  const maximo = noCartao ? Math.max(1, formaEscolhida?.maxParcelas || 12) : 48;
+
   const gerar = () => {
-    const n = Math.max(1, Math.min(48, qtd));
+    const n = Math.max(1, Math.min(maximo, qtd));
+
+    // Cartão de crédito: uma linha só. O cliente parcela no cartão dele; para nós o
+    // dinheiro entra numa data (hoje + prazo de recebimento da maquininha).
+    if (noCartao) {
+      onChange([
+        {
+          numero: 1,
+          dataVencimento: format(addDays(new Date(primeiro + 'T00:00:00'), formaEscolhida?.diasRecebimento || 0), 'yyyy-MM-dd'),
+          valor: arred(total),
+          formaPagamentoId: Number(formaId),
+          parcelasCartao: n,
+          observacoes: '',
+        },
+      ]);
+      return;
+    }
+
     const base = arred(total / n);
     const lista: Parcela[] = [];
     let acumulado = 0;
@@ -72,14 +102,25 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled, pagadorCre
   return (
     <div className="space-y-3">
       {!disabled && (
-        <div className="grid grid-cols-2 items-end gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 sm:flex sm:flex-wrap">
-          <Input label="Nº parcelas" type="number" min={1} max={48} value={qtd} onChange={(e) => setQtd(Number(e.target.value))} className="sm:w-24" />
-          <Select label="Forma" value={formaId} onChange={(e) => setFormaId(e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(formas)} placeholder="—" className="sm:w-44" />
-          <Input label="1º vencimento" type="date" value={primeiro} onChange={(e) => setPrimeiro(e.target.value)} className="col-span-2 sm:col-span-1 sm:w-40" />
-          <Input label="Intervalo (dias)" type="number" min={0} value={intervalo} onChange={(e) => setIntervalo(Number(e.target.value))} className="sm:w-32" />
-          <Button variante="secundario" className="col-span-2 sm:col-span-1" icone={<Wand2 className="h-4 w-4" />} onClick={gerar} disabled={total <= 0}>
-            Gerar parcelas
-          </Button>
+        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3">
+          <div className="grid grid-cols-2 items-end gap-2 sm:flex sm:flex-wrap">
+            <Select label="Forma" value={formaId} onChange={(e) => setFormaId(e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(formas)} placeholder="—" className="col-span-2 sm:col-span-1 sm:w-44" />
+            <Input label={noCartao ? 'Vezes no cartão' : 'Nº parcelas'} type="number" min={1} max={maximo} value={qtd} onChange={(e) => setQtd(Number(e.target.value))} className="sm:w-28" />
+            <Input label={noCartao ? 'Data da venda' : '1º vencimento'} type="date" value={primeiro} onChange={(e) => setPrimeiro(e.target.value)} className="col-span-2 sm:col-span-1 sm:w-40" />
+            {!noCartao && <Input label="Intervalo (dias)" type="number" min={0} value={intervalo} onChange={(e) => setIntervalo(Number(e.target.value))} className="sm:w-32" />}
+            <Button variante="secundario" className="col-span-2 sm:col-span-1" icone={<Wand2 className="h-4 w-4" />} onClick={gerar} disabled={total <= 0}>
+              {noCartao ? 'Lançar no cartão' : 'Gerar parcelas'}
+            </Button>
+          </div>
+          {noCartao && (
+            <p className="mt-2 flex items-start gap-1.5 text-[11px] text-slate-500">
+              <CreditCard className="mt-px h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <span>
+                O cliente paga as {qtd > 1 ? `${qtd} vezes` : 'parcelas'} no cartão dele. Para a loja entra <strong>de uma vez</strong>
+                {formaEscolhida?.diasRecebimento ? ` em ${formaEscolhida.diasRecebimento} dia(s)` : ' na data da venda'} — por isso sai uma linha só, e não 30/60/90.
+              </span>
+            </p>
+          )}
         </div>
       )}
 
@@ -91,6 +132,7 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled, pagadorCre
               <th className="w-40">Vencimento</th>
               <th className="w-36 text-right">Valor</th>
               <th>Forma de pagamento</th>
+              <th className="w-20">Vezes</th>
               <th>Observações</th>
               {!disabled && <th className="w-10" />}
             </tr>
@@ -98,7 +140,7 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled, pagadorCre
           <tbody>
             {parcelas.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-4 text-center text-xs text-slate-400">
+                <td colSpan={7} className="py-4 text-center text-xs text-slate-400">
                   Nenhuma parcela. Sem parcelas a API cria uma à vista automaticamente.
                 </td>
               </tr>
@@ -132,6 +174,22 @@ export function ParcelasEditor({ parcelas, onChange, total, disabled, pagadorCre
                       <option value="CLIENTE">Cliente paga o credor</option>
                       <option value="LOJA">Loja paga o credor</option>
                     </select>
+                  )}
+                </td>
+                <td data-rotulo="Vezes no cartão">
+                  {formas?.find((f) => f.id === p.formaPagamentoId)?.tipo === CARTAO_CREDITO ? (
+                    <input
+                      type="number"
+                      min={1}
+                      max={Math.max(1, formas.find((f) => f.id === p.formaPagamentoId)?.maxParcelas || 12)}
+                      disabled={disabled}
+                      value={p.parcelasCartao ?? 1}
+                      onChange={(e) => atualizar(i, { parcelasCartao: Math.max(1, Number(e.target.value) || 1) })}
+                      className="input-base h-8 py-0"
+                      title="Em quantas vezes o cliente parcelou no cartão dele (muda a taxa da maquininha)"
+                    />
+                  ) : (
+                    <span className="text-xs text-slate-300">—</span>
                   )}
                 </td>
                 <td data-rotulo="Observações">

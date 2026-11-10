@@ -2,10 +2,14 @@
  * Vínculo usuário → cadastro de vendedor / técnico.
  * Todo usuário com perfil VENDEDOR precisa de um cadastro de vendedor (é ele que aparece na venda,
  * na comissão, no painel e no ranking). O TÉCNICO também vende (decisão do Thiago, 29/10/2026), então
- * precisa dos dois cadastros: técnico (para as OS) e vendedor (para as vendas dele).
+ * por padrão precisa dos dois cadastros: técnico (para as OS) e vendedor (para as vendas dele).
  * Se faltar, este módulo cria/vincula sozinho:
  *   1) um cadastro ativo com o mesmo nome que ainda não esteja ligado a outro usuário, ou
  *   2) um cadastro novo com o nome do usuário.
+ *
+ * EXCEÇÃO — técnico que não vende: com `Usuario.vendeTambem = false` nada de vendedor é
+ * criado nem revinculado. Sem isso, tirar alguém de vendedor não adiantava: o login
+ * seguinte recriava o cadastro e ele voltava a aparecer como vendedor.
  */
 import { prisma } from '../../lib/prisma.js';
 
@@ -13,10 +17,15 @@ function normalizar(s: string) {
   return s.normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-/** Devolve o vendedorId do usuário (lido do banco), criando o vínculo se for VENDEDOR ou TÉCNICO sem cadastro. */
+/**
+ * Devolve o vendedorId do usuário (lido do banco), criando o vínculo se for VENDEDOR ou
+ * TÉCNICO sem cadastro. Técnico marcado como "não vende" nunca ganha cadastro de vendedor.
+ */
 export async function vendedorDoUsuario(usuarioId: number): Promise<number | null> {
-  const u = await prisma.usuario.findUnique({ where: { id: usuarioId }, select: { id: true, nome: true, perfil: true, vendedorId: true } });
+  const u = await prisma.usuario.findUnique({ where: { id: usuarioId }, select: { id: true, nome: true, perfil: true, vendedorId: true, vendeTambem: true } });
   if (!u) return null;
+  // só técnico: não cria nem recria vínculo de vendedor
+  if (u.perfil === 'TECNICO' && !u.vendeTambem) return u.vendedorId;
   if (u.vendedorId || (u.perfil !== 'VENDEDOR' && u.perfil !== 'TECNICO')) return u.vendedorId;
   const livres = await prisma.vendedor.findMany({ where: { usuario: { is: null } }, select: { id: true, nome: true, ativo: true } });
   const alvo = normalizar(u.nome);

@@ -15,8 +15,9 @@ import { encrypt } from '../../lib/crypto.js';
 import { auditar } from '../../lib/auditoria.js';
 import { somenteDigitos } from '../../lib/util.js';
 import { testarTokenMercadoPago } from '../../integracoes/mercadopago/link.js';
+import { testarChaveAsaas } from '../../integracoes/asaas/cobranca.js';
 
-const SEGREDOS = ['cscToken', 'smtpPass', 'openFinanceClientSecret', 'blingClientSecret', 'mercadoPagoAccessToken'] as const;
+const SEGREDOS = ['cscToken', 'smtpPass', 'openFinanceClientSecret', 'blingClientSecret', 'mercadoPagoAccessToken', 'asaasApiKey'] as const;
 
 const texto = z.string().trim().nullable().optional();
 
@@ -77,6 +78,10 @@ const empresaSchema = z.object({
   blingClientSecret: texto,
   // mercado pago (link de pagamento)
   mercadoPagoAccessToken: texto,
+  // asaas (boleto/PIX/cartão + cobrança automática da venda)
+  asaasApiKey: texto,
+  asaasAmbiente: z.enum(['producao', 'sandbox']).optional(),
+  asaasCobrancaAuto: z.boolean().optional(),
 });
 
 /** Monta a resposta pública da empresa (sem segredos). */
@@ -91,6 +96,7 @@ function serializarEmpresa(e: NonNullable<Awaited<ReturnType<typeof prisma.empre
     blingAccessToken,
     blingRefreshToken,
     mercadoPagoAccessToken,
+    asaasApiKey,
     ...publicos
   } = e;
   return {
@@ -119,6 +125,7 @@ function serializarEmpresa(e: NonNullable<Awaited<ReturnType<typeof prisma.empre
       temSecret: !!openFinanceClientSecret,
     },
     mercadoPago: { temToken: !!mercadoPagoAccessToken },
+    asaas: { temChave: !!asaasApiKey, ambiente: e.asaasAmbiente, cobrancaAuto: e.asaasCobrancaAuto },
     bling: {
       clientId: e.blingClientId,
       temSecret: !!blingClientSecret,
@@ -162,6 +169,9 @@ export default async function empresaRoutes(app: FastifyInstance) {
 
   // ---- Mercado Pago: testa o Access Token salvo
   app.post('/api/v1/empresa/mercado-pago/testar', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE') }, async () => testarTokenMercadoPago());
+
+  // ---- Asaas: testa a chave de API salva
+  app.post('/api/v1/empresa/asaas/testar', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE') }, async () => testarChaveAsaas());
 
   // ---- Logo (multipart)
   app.post('/api/v1/empresa/logo', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE') }, async (req) => {

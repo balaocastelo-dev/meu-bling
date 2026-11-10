@@ -108,6 +108,12 @@ model Empresa {
   blingTokenExpira       DateTime?
   /// Mercado Pago (link de pagamento): Access Token de produção — criptografado
   mercadoPagoAccessToken String?
+  /// Asaas (boleto/PIX/cartão): API Key — criptografada
+  asaasApiKey            String?
+  /// producao | sandbox
+  asaasAmbiente          String    @default("producao")
+  /// gera a cobrança no Asaas sozinho ao finalizar a venda
+  asaasCobrancaAuto      Boolean   @default(false)
 
   atualizadoEm DateTime @updatedAt
 }
@@ -124,6 +130,9 @@ model Usuario {
   vendedorId   Int?      @unique
   tecnico      Tecnico?  @relation(fields: [tecnicoId], references: [id])
   tecnicoId    Int?      @unique
+  /// TÉCNICO que também vende (padrão). Desmarcado = só técnico: não ganha cadastro de
+  /// vendedor automático no login nem painel do vendedor.
+  vendeTambem  Boolean   @default(true)
   ultimoLogin  DateTime?
   /// Celular (WhatsApp) para o "chamar atenção" do chat. DDI opcional; 10–11 dígitos ganham o 55.
   telefone     String?
@@ -706,6 +715,11 @@ model Venda {
   linkPagamentoId       String?
   linkPagamentoValor    Float?
   linkPagamentoEm       DateTime?
+  /// cobrança gerada no Asaas (boleto/PIX/cartão) a partir desta venda
+  asaasCobrancaId       String?
+  asaasLinkUrl          String?
+  asaasStatus           String?
+  asaasEm               DateTime?
   totalProdutos         Float                @default(0)
   /// REAL | PERCENTUAL
   descontoTipo          String               @default("REAL")
@@ -789,6 +803,10 @@ model VendaParcela {
   formaPagamento   FormaPagamento? @relation(fields: [formaPagamentoId], references: [id])
   formaPagamentoId Int?
   observacoes      String?
+  /// cartão de crédito: em quantas vezes o CLIENTE parcelou no cartão dele. A loja recebe
+  /// numa data só (hoje + prazo da maquininha), então isto não vira várias contas a receber —
+  /// serve para a taxa do cartão e para sair no documento ("3x de R$ 100,00").
+  parcelasCartao   Int?
   /// forma CREDITO_BANCARIO: quem paga o credor — CLIENTE (paga direto) ou LOJA (cliente paga a loja e a loja repassa)
   creditoPagador   String?
   contaReceber     ContaReceber?   @relation(fields: [contaReceberId], references: [id])
@@ -1006,6 +1024,8 @@ model OrdemServicoParcela {
   formaPagamento   FormaPagamento? @relation(fields: [formaPagamentoId], references: [id])
   formaPagamentoId Int?
   observacoes      String?
+  /// cartão de crédito: em quantas vezes o CLIENTE parcelou (ver VendaParcela.parcelasCartao)
+  parcelasCartao   Int?
   contaReceber     ContaReceber?   @relation(fields: [contaReceberId], references: [id])
   contaReceberId   Int?            @unique
 }

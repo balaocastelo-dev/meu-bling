@@ -152,6 +152,7 @@ function ListaOs({ tecnicoId }: { tecnicoId: string }) {
   const nav = useNavigate();
   const pg = usePaginacao();
   const { data: situacoes } = useSituacoes('OS');
+  const semCusto = pg.getFiltro('semCusto') === '1';
   const params = { ...pg.filtros, tecnicoId, pagina: pg.pagina, limite: pg.limite, visao: undefined };
   const { data: resp, isLoading } = useQuery({ queryKey: ['ordens-servico', params], queryFn: () => api.get<Paginado<OsResumo>>('/ordens-servico', params), placeholderData: (p) => p });
 
@@ -173,6 +174,19 @@ function ListaOs({ tecnicoId }: { tecnicoId: string }) {
       },
     },
     { chave: 'total', titulo: 'Total', direita: true, largura: '110px', render: (o) => <span className="font-medium">{moeda(o.total)}</span> },
+    {
+      chave: 'custo',
+      titulo: 'Custo',
+      largura: '90px',
+      render: (o) =>
+        o.pecasSemCusto ? (
+          <span className="whitespace-nowrap rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700" title={`${o.pecasSemCusto} peça(s) sem custo lançado`}>
+            falta {o.pecasSemCusto}
+          </span>
+        ) : (
+          <span className="text-[11px] text-emerald-600">ok</span>
+        ),
+    },
   ];
 
   return (
@@ -180,7 +194,25 @@ function ListaOs({ tecnicoId }: { tecnicoId: string }) {
       <BarraFiltros>
         <BuscaFiltro valor={pg.getFiltro('pesquisa')} onChange={(v) => pg.setFiltro('pesquisa', v)} placeholder="Nº, cliente, equipamento, série…" />
         <SelectFiltro valor={pg.getFiltro('prioridade')} onChange={(v) => pg.setFiltro('prioridade', v)} placeholder="Todas prioridades" opcoes={['BAIXA', 'NORMAL', 'ALTA', 'URGENTE'].map((p) => ({ valor: p, rotulo: rotulo(p) }))} />
+        {/* Fila de "preencher o custo das OS antigas": qualquer um da equipe pode puxar e ir
+            preenchendo. Antes essa lista só existia no painel do gestor. */}
+        <button
+          type="button"
+          onClick={() => pg.setFiltro('semCusto', semCusto ? '' : '1')}
+          className={clsx(
+            'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition',
+            semCusto ? 'border-amber-300 bg-amber-100 text-amber-800' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+          )}
+          title="Só as OS com peça sem custo lançado"
+        >
+          <TriangleAlert className="h-3.5 w-3.5" /> Sem custo
+        </button>
       </BarraFiltros>
+      {semCusto && (
+        <p className="border-b border-amber-100 bg-amber-50/70 px-3 py-2 text-xs text-amber-800">
+          Mostrando só as OS com peça sem custo. Abra cada uma e preencha a coluna <strong>Custo un.</strong> nas peças (ou o custo total) — é o que falta para o lucro da assistência e o DRE ficarem reais.
+        </p>
+      )}
       <div className="border-b border-slate-100 px-3 py-2">
         <ChipsSituacao situacoes={situacoes ?? []} valor={pg.getFiltro('situacoes')} onChange={(v) => pg.setFiltro('situacoes', v)} />
       </div>

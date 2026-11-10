@@ -171,6 +171,7 @@ export const CONFIG_ITENS: { rotulo: string; para: string; descricao: string; pe
   { rotulo: 'JARVIS', para: '/configuracoes/jarvis', descricao: 'Meta de caixa, chave da IA e regras de preço de usado', perfis: ['ADMIN'] },
   { rotulo: 'WhatsApp', para: '/configuracoes/whatsapp', descricao: 'O QR Code principal da loja — um número para o sistema inteiro', perfis: ['ADMIN'] },
   { rotulo: 'Mercado Pago', para: '/configuracoes/mercado-pago', descricao: 'Link de pagamento nos pedidos', perfis: ['ADMIN'] },
+  { rotulo: 'Asaas', para: '/configuracoes/asaas', descricao: 'Boleto, PIX e cobrança automática da venda', perfis: ['ADMIN'] },
   { rotulo: 'Open Finance', para: '/configuracoes/open-finance', descricao: 'Credenciais Pluggy', perfis: ['ADMIN'] },
   { rotulo: 'Robô de e-mail', para: '/configuracoes/robo-email', descricao: 'Lê os avisos dos bancos por e-mail e lança no financeiro', perfis: ['ADMIN'] },
   { rotulo: 'API e integrações', para: '/configuracoes/api', descricao: 'Chaves para outros sistemas e agentes de IA, webhooks, MCP', perfis: ['ADMIN'] },

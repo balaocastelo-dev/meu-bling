@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Plus, Save, Trash2, UserPlus, UserRound, X } from 'lucide-react';
+import { Maximize2, Minimize2, Plus, Save, Trash2, UserPlus, UserRound, X } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { useCategoriasFinanceiras, useDepositos, useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { useAuth } from '@/stores/auth';
@@ -11,6 +11,7 @@ import { buscarContatos, buscarProdutos } from '@/lib/buscas';
 import { Button, DateInput, FormSkeleton, Input, MoneyInput, PageHeader, SearchSelect, Secao, Select, Textarea, ValorOculto } from '@/components/ui';
 import { ParcelasEditor, parcelasValidas } from '@/components/compartilhados/ParcelasEditor';
 import { ContatoRapidoDrawer } from '@/components/compartilhados/ContatoRapidoDrawer';
+import { useApresentacao } from '@/stores/apresentacao';
 import { arred, dataIso, hoje, moeda, rotulo } from '@/lib/format';
 import type { Contato, Produto, TipoVenda, Venda, VendaItem, VendaPayload } from '@/types';
 
@@ -74,7 +75,7 @@ function deVenda(v: Venda): VendaPayload {
     quantidadeVolumes: v.quantidadeVolumes,
     pesoBruto: v.pesoBruto,
     itens: v.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct, custoUnitario: i.custoUnitario ?? 0, custoInformado: !!i.custoInformado, numeroSerie: i.numeroSerie ?? null, imagemUrl: i.produto?.imagemUrl ?? null, prontaEntrega: Boolean(i.produto?.prontaEntrega) })),
-    parcelas: v.parcelas.map((p) => ({ dataVencimento: dataIso(p.dataVencimento), valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes ?? '', creditoPagador: p.creditoPagador ?? null })),
+    parcelas: v.parcelas.map((p) => ({ dataVencimento: dataIso(p.dataVencimento), valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes ?? '', parcelasCartao: p.parcelasCartao ?? null, creditoPagador: p.creditoPagador ?? null })),
   };
 }
 
@@ -95,6 +96,9 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
   const base = orcamento ? '/orcamentos' : '/vendas';
   const nomeDoc = orcamento ? 'orçamento' : 'venda';
   const qc = useQueryClient();
+  // tela cheia para o cliente acompanhar o orçamento na segunda tela (sem menu, sem borda)
+  const apresentando = useApresentacao((s) => s.ativo);
+  const alternarApresentacao = useApresentacao((s) => s.alternar);
   const usuario = useAuth((s) => s.usuario);
 
   const { data: vendedores } = useVendedores();
@@ -243,6 +247,14 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
         }
         acoes={
           <>
+            <Button
+              variante="secundario"
+              icone={apresentando ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              onClick={alternarApresentacao}
+              title={apresentando ? 'Sair da tela cheia (Esc)' : 'Tela cheia para o cliente acompanhar na segunda tela — sem menu e sem bordas'}
+            >
+              {apresentando ? 'Sair da tela cheia' : 'Tela cheia'}
+            </Button>
             <Button variante="secundario" icone={<X className="h-4 w-4" />} onClick={() => nav(editando ? `${base}/${id}` : base)}>
               Cancelar
             </Button>

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Building2, Save, Upload } from 'lucide-react';
+import { Building2, Lock, Save, Upload } from 'lucide-react';
 import { api, mensagemErro, urlUpload } from '@/lib/api';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useAuth } from '@/stores/auth';
 import { Button, FormSkeleton, Input, PageHeader, Secao, Select } from '@/components/ui';
 import type { Empresa as TEmpresa } from '@/types';
 
@@ -15,6 +16,10 @@ export default function Empresa() {
   const { data: emp, isLoading } = useEmpresa();
   const [form, setForm] = useState<Form | null>(null);
   const logoRef = useRef<HTMLInputElement>(null);
+  // CNPJ, inscrições e regime vão na nota fiscal: só o ADMIN altera (ver plugins/politicas.ts).
+  // Antes o campo ficava editável e o valor era descartado no servidor, sem avisar ninguém.
+  const ehAdmin = useAuth((s) => s.temPerfil('ADMIN'));
+  const soAdmin = ehAdmin ? undefined : 'Só o administrador altera';
 
   useEffect(() => {
     if (emp && !form) {
@@ -64,14 +69,22 @@ export default function Empresa() {
             </div>
             <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
               <Input className="sm:col-span-2 xl:col-span-8" label="Razão social" obrigatorio value={form.razaoSocial} onChange={(e) => set('razaoSocial', e.target.value)} />
-              <Input className="xl:col-span-4" label="CNPJ" obrigatorio value={form.cnpj} onChange={(e) => set('cnpj', e.target.value)} />
+              <Input className="xl:col-span-4" label="CNPJ" obrigatorio value={form.cnpj} onChange={(e) => set('cnpj', e.target.value)} disabled={!ehAdmin} ajuda={soAdmin} />
               <Input className="xl:col-span-6" label="Nome fantasia" value={form.nomeFantasia ?? ''} onChange={(e) => set('nomeFantasia', e.target.value)} />
-              <Input className="xl:col-span-3" label="Inscrição estadual" value={form.ie ?? ''} onChange={(e) => set('ie', e.target.value)} />
-              <Input className="xl:col-span-3" label="Inscrição municipal" value={form.im ?? ''} onChange={(e) => set('im', e.target.value)} />
-              <Select className="xl:col-span-6" label="Regime tributário (CRT)" value={form.crt} onChange={(e) => set('crt', Number(e.target.value))} opcoes={[{ valor: 1, rotulo: '1 — Simples Nacional' }, { valor: 2, rotulo: '2 — Simples Nacional (excesso de sublimite)' }, { valor: 3, rotulo: '3 — Regime normal' }]} />
+              <Input className="xl:col-span-3" label="Inscrição estadual" value={form.ie ?? ''} onChange={(e) => set('ie', e.target.value)} disabled={!ehAdmin} ajuda={soAdmin} />
+              <Input className="xl:col-span-3" label="Inscrição municipal" value={form.im ?? ''} onChange={(e) => set('im', e.target.value)} disabled={!ehAdmin} ajuda={soAdmin} />
+              <Select className="xl:col-span-6" label="Regime tributário (CRT)" value={form.crt} onChange={(e) => set('crt', Number(e.target.value))} disabled={!ehAdmin} opcoes={[{ valor: 1, rotulo: '1 — Simples Nacional' }, { valor: 2, rotulo: '2 — Simples Nacional (excesso de sublimite)' }, { valor: 3, rotulo: '3 — Regime normal' }]} />
             </div>
           </div>
         </Secao>
+        {!ehAdmin && (
+          <p className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <span>
+              CNPJ, inscrições e regime tributário são campos da nota fiscal e só o administrador altera. Se algum estiver errado e a NF não sair por causa disso, peça ao Thiago — o resto desta tela você pode salvar normalmente.
+            </span>
+          </p>
+        )}
         <Secao titulo="Endereço">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
             <Input className="xl:col-span-2" label="CEP" value={form.cep ?? ''} onChange={(e) => set('cep', e.target.value)} />

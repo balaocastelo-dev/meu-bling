@@ -42,6 +42,8 @@ export const parcelaOsSchema = z.object({
   valor: z.coerce.number().min(0),
   formaPagamentoId: z.coerce.number().int().positive().nullable().optional(),
   observacoes: texto,
+  /** cartão de crédito: em quantas vezes o CLIENTE parcelou no cartão dele (1 linha só de recebimento) */
+  parcelasCartao: z.coerce.number().int().min(1).max(24).nullable().optional(),
 });
 
 export const osSchema = z.object({
@@ -234,15 +236,15 @@ export async function prepararOs(db: Db, body: OsInput) {
   const custoTotal = arredondar(itens.filter((i) => i.tipo === 'PECA').reduce((s, i) => s + i.custoUnitario * i.quantidade, 0));
   const dataEntrada = body.dataEntrada || hojeMeioDia();
 
-  let parcelas: { numero: number; dataVencimento: Date; valor: number; formaPagamentoId: number | null; observacoes: string | null }[] = [];
+  let parcelas: { numero: number; dataVencimento: Date; valor: number; formaPagamentoId: number | null; observacoes: string | null; parcelasCartao: number | null }[] = [];
   if (body.parcelas.length) {
-    parcelas = body.parcelas.map((p, i) => ({ numero: i + 1, dataVencimento: p.dataVencimento || body.dataPrevista || dataEntrada, valor: arredondar(p.valor), formaPagamentoId: p.formaPagamentoId ?? null, observacoes: p.observacoes ?? null }));
+    parcelas = body.parcelas.map((p, i) => ({ numero: i + 1, dataVencimento: p.dataVencimento || body.dataPrevista || dataEntrada, valor: arredondar(p.valor), formaPagamentoId: p.formaPagamentoId ?? null, observacoes: p.observacoes ?? null, parcelasCartao: p.parcelasCartao ?? null }));
     const soma = arredondar(parcelas.reduce((s, p) => s + p.valor, 0));
     const diff = arredondar(total - soma);
     if (Math.abs(diff) > 0.05) throw new AppError(`A soma das parcelas (${soma.toFixed(2)}) difere do total da OS (${total.toFixed(2)}).`, 422, 'PARCELAS', { soma, total });
     if (diff !== 0) parcelas[parcelas.length - 1].valor = arredondar(parcelas[parcelas.length - 1].valor + diff);
   } else if (total > 0) {
-    parcelas = [{ numero: 1, dataVencimento: body.dataPrevista || dataEntrada, valor: total, formaPagamentoId: null, observacoes: null }];
+    parcelas = [{ numero: 1, dataVencimento: body.dataPrevista || dataEntrada, valor: total, formaPagamentoId: null, observacoes: null, parcelasCartao: null }];
   }
   return { contato, itens, totalServicos, totalPecas, total, custoTotal, dataEntrada, parcelas };
 }

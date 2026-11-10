@@ -2,7 +2,8 @@ import fp from 'fastify-plugin';
 import jwt from '@fastify/jwt';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { env } from '../lib/env.js';
-import { Forbidden } from '../lib/errors.js';
+import { AppError, Forbidden } from '../lib/errors.js';
+import { prisma } from '../lib/prisma.js';
 import { permitido, CAMPOS_EMPRESA_ADMIN } from './politicas.js';
 import { chaveDaUrl, chaveDoCabecalho, conferirChave, registrarChamada } from '../modules/api-externa/chaves.js';
 import { chavePode } from '../modules/api-externa/recursos.js';
@@ -137,11 +138,50 @@ export default fp(async function authPlugin(app: FastifyInstance) {
     });
   });
 
-  // GERENTE pode editar dados básicos da empresa, mas não campos fiscais/segredos (somente ADMIN)
+  // GERENTE pode editar dados básicos da empresa, mas não campos fiscais/segredos (somente ADMIN).
+  //
+  // Antes estes campos eram apagados em silêncio: quem não era ADMIN digitava a Inscrição
+  // Estadual, a tela dizia "salvo" e o valor não entrava — e a emissão de NF seguia
+  // reclamando que faltava a IE, sem ninguém entender por quê. Agora o pedido é recusado
+  // com o nome dos campos e de quem pode alterá-los.
+  const ROTULO_CAMPO: Record<string, string> = {
+    ie: 'Inscrição Estadual',
+    im: 'Inscrição Municipal',
+    cnpj: 'CNPJ',
+    crt: 'Regime tributário',
+    ambienteFiscal: 'Ambiente fiscal',
+    provedorFiscal: 'Provedor fiscal',
+    cscId: 'ID do CSC',
+    cscToken: 'CSC',
+    serieNfe: 'Série da NF-e',
+    proximoNumeroNfe: 'Próximo número da NF-e',
+    serieNfce: 'Série da NFC-e',
+    proximoNumeroNfce: 'Próximo número da NFC-e',
+  };
+
   app.addHook('preHandler', async (req) => {
     const url = req.url.split('?')[0];
-    if (req.method === 'PUT' && url === '/api/v1/empresa' && req.user && req.user.perfil !== 'ADMIN' && req.body && typeof req.body === 'object') {
-      for (const campo of CAMPOS_EMPRESA_ADMIN) delete (req.body as any)[campo];
+    if (req.method !== 'PUT' || url !== '/api/v1/empresa' || !req.user || req.user.perfil === 'ADMIN' || !req.body || typeof req.body !== 'object') return;
+    const corpo = req.body as Record<string, unknown>;
+    if (!CAMPOS_EMPRESA_ADMIN.some((c) => c in corpo)) return; // nada de fiscal no corpo: segue direto
+    const atual = await prisma.empresa.findUnique({ where: { id: 1 } }).catch(() => null);
+    const bloqueados: string[] = [];
+    for (const campo of CAMPOS_EMPRESA_ADMIN) {
+      if (!(campo in corpo)) continue;
+      const enviado = corpo[campo];
+      const antigo = (atual as Record<string, unknown> | null)?.[campo];
+      // reenviar o mesmo valor (a tela manda o formulário inteiro) não é tentativa de mudar
+      const igual = enviado === antigo || (enviado ?? '') === (antigo ?? '') || String(enviado ?? '') === String(antigo ?? '');
+      if (igual) delete corpo[campo];
+      else bloqueados.push(ROTULO_CAMPO[campo] || campo);
+    }
+    if (bloqueados.length) {
+      throw new AppError(
+        `${bloqueados.length === 1 ? 'O campo' : 'Os campos'} ${bloqueados.join(', ')} ${bloqueados.length === 1 ? 'só pode ser alterado' : 'só podem ser alterados'} pelo administrador (Thiago). Peça para ele — nada foi salvo.`,
+        403,
+        'CAMPO_SO_ADMIN',
+        { campos: bloqueados },
+      );
     }
   });
 });

@@ -18,6 +18,8 @@ import { executarAcoes, mudarSituacao, registrarAcao, registrarModulo, situacaoI
 import { idDe } from '../comum/zod.js';
 import { intervalo, hojeMeioDia } from '../comum/datas.js';
 import { enfileirarNotificacao, variaveisTemplate } from '../comum/notificar.js';
+import { enviarNotificacao } from '../notificacoes/service.js';
+import { atualizarCobrancaDaVenda, cancelarCobrancaDaVenda, cobrancaAutomatica, gerarCobrancaDaVenda } from '../../integracoes/asaas/cobranca.js';
 import {
   acaoEstornarContas,
   acaoEstornarEstoque,
@@ -477,7 +479,11 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const recebimentos = body.recebimentos?.length
       ? await aplicarRecebimentosFinalizacao(id, body.recebimentos)
       : await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, id, req.user.id, { mesmoComContasLancadas: true }));
-    return { situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor }, acoesExecutadas: r.acoes, alterado: r.alterado, compra, recebimentos };
+    // cobrança no Asaas sozinha, quando ligado em Configurações → Asaas. Nunca derruba a
+    // venda: se o Asaas falhar, a venda segue finalizada e o vendedor gera a cobrança à mão.
+    const cobrancaAsaas = await cobrancaAutomatica(id).catch(() => null);
+    if (cobrancaAsaas) await auditar(req, 'Venda', id, 'ACAO', { acao: 'cobranca-asaas-automatica', cobrancaId: cobrancaAsaas.id });
+    return { situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor }, acoesExecutadas: r.acoes, alterado: r.alterado, compra, recebimentos, cobrancaAsaas };
   });
 
   /** Contato "Consumidor Final" (cria se não existir) — botão da tela de venda. */
@@ -551,8 +557,12 @@ export default async function vendasRoutes(app: FastifyInstance) {
       const enviado = await prisma.situacao.findFirst({ where: { modulo: 'ORCAMENTO', nome: 'Enviado', ativo: true } });
       if (enviado) await mudarSituacao({ modulo: 'ORCAMENTO', entidadeId: id, situacaoDestinoId: enviado.id, usuarioId: req.user.id, forcar: true, observacao: `Enviado por ${body.canal === 'EMAIL' ? 'e-mail' : 'WhatsApp'}` }).catch(() => undefined);
     }
-    await auditar(req, v.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', id, 'ACAO', { acao: 'notificar', canal: body.canal, notificacaoId: n.id, anexo: !!anexoPath });
-    return reply.code(201).send(n);
+    // Envia AGORA e devolve o resultado. Antes a mensagem só entrava na fila e quem
+    // clicava ficava sem saber se saiu — com o WhatsApp fora do ar ela podia sair horas
+    // depois. Agora a tela diz na hora: enviado, ou o motivo de não ter saído.
+    const r = await enviarNotificacao({ ...n, tentativas: 0 }).catch(() => ({ status: 'PENDENTE' as const, erro: 'Falha inesperada no envio' }));
+    await auditar(req, v.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', id, 'ACAO', { acao: 'notificar', canal: body.canal, notificacaoId: n.id, anexo: !!anexoPath, envio: r.status });
+    return reply.code(201).send({ ...n, status: r.status, erro: r.erro });
   });
 
   // ---------------------------------------------------------------- imprimir
@@ -606,6 +616,32 @@ export default async function vendasRoutes(app: FastifyInstance) {
     await prisma.venda.update({ where: { id }, data: { linkPagamentoUrl: link.url, linkPagamentoId: link.id, linkPagamentoValor: link.valor, linkPagamentoEm: new Date() } });
     await auditar(req, 'Venda', id, 'ACAO', { acao: 'link-pagamento', valor: link.valor });
     return { url: link.url, valor: link.valor };
+  });
+
+  // ------------------------------------------------------- cobrança no Asaas (boleto / PIX / cartão)
+  /** Gera a cobrança no Asaas a partir do pedido e devolve o link para mandar ao cliente. */
+  app.post('/api/v1/vendas/:id/cobranca-asaas', async (req) => {
+    const id = idDe(req);
+    const body = z
+      .object({
+        forma: z.enum(['BOLETO', 'PIX', 'CREDIT_CARD', 'UNDEFINED']).optional(),
+        vencimento: dataSchema.optional(),
+        parcelas: z.coerce.number().int().min(1).max(21).optional(),
+      })
+      .parse(req.body ?? {});
+    const c = await gerarCobrancaDaVenda(id, { forma: body.forma, vencimento: body.vencimento ?? undefined, parcelas: body.parcelas });
+    await auditar(req, 'Venda', id, 'ACAO', { acao: 'cobranca-asaas', cobrancaId: c.id, valor: c.valor });
+    return c;
+  });
+
+  /** Relê o status da cobrança no Asaas (pago, vencido, aguardando). */
+  app.get('/api/v1/vendas/:id/cobranca-asaas', async (req) => atualizarCobrancaDaVenda(idDe(req)));
+
+  app.delete('/api/v1/vendas/:id/cobranca-asaas', async (req) => {
+    const id = idDe(req);
+    const r = await cancelarCobrancaDaVenda(id);
+    await auditar(req, 'Venda', id, 'ACAO', { acao: 'cobranca-asaas-cancelada' });
+    return r;
   });
 
   app.post('/api/v1/vendas/:id/transferir-vendedor', async (req) => {
@@ -683,7 +719,7 @@ function mesclarComAtual(atual: Awaited<ReturnType<typeof carregarVenda>>, body:
     quantidadeVolumes: atual.quantidadeVolumes,
     pesoBruto: atual.pesoBruto,
     itens: atual.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct, custoUnitario: i.custoInformado ? i.custoUnitario : null })),
-    parcelas: atual.parcelas.map((p) => ({ dataVencimento: p.dataVencimento, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes, creditoPagador: p.creditoPagador })),
+    parcelas: atual.parcelas.map((p) => ({ dataVencimento: p.dataVencimento, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes, parcelasCartao: p.parcelasCartao, creditoPagador: p.creditoPagador })),
   };
   const { situacaoId: _s, tipo: _t, ...resto } = body;
   for (const [k, v] of Object.entries(resto)) if (v !== undefined) base[k] = v;

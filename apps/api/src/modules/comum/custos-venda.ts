@@ -66,7 +66,7 @@ export interface VendaParaCusto {
   custoTotal?: number | null;
   custoLogistica?: number | null;
   itens?: { custoUnitario: number; quantidade: number }[];
-  parcelas?: { valor: number; formaPagamento?: { tipo: string } | null }[];
+  parcelas?: { valor: number; parcelasCartao?: number | null; formaPagamento?: { tipo: string } | null }[];
 }
 
 export interface CustosVenda {
@@ -109,9 +109,13 @@ export function custosVenda(v: VendaParaCusto, cfg: CfgCustos): CustosVenda {
     const credito = parcelas.filter((p) => p.formaPagamento?.tipo === 'CARTAO_CREDITO');
     const debito = parcelas.filter((p) => p.formaPagamento?.tipo === 'CARTAO_DEBITO');
     if (credito.length) {
-      const pc = taxaCartaoPct(credito.length, cfg);
+      // Em quantas vezes o cliente parcelou no cartão dele. Antes isto era deduzido do número
+      // de linhas de parcela — o que obrigava a lançar 3 contas a receber em 30/60/90 só para a
+      // taxa sair certa. Agora a venda guarda o número de vezes e o recebimento fica numa linha só.
+      const vezes = Math.max(...credito.map((p) => p.parcelasCartao || 0), credito.length);
+      const pc = taxaCartaoPct(vezes, cfg);
       taxaCartao += credito.reduce((s, p) => s + p.valor, 0) * (pc / 100);
-      nCartao = credito.length;
+      nCartao = vezes;
       taxaPct = pc;
     }
     if (debito.length) {
@@ -150,7 +154,7 @@ export const SELECT_CUSTO_VENDA = {
   custoTotal: true,
   custoLogistica: true,
   itens: { select: { custoUnitario: true, quantidade: true } },
-  parcelas: { select: { valor: true, formaPagamento: { select: { tipo: true } } } },
+  parcelas: { select: { valor: true, parcelasCartao: true, formaPagamento: { select: { tipo: true } } } },
 } as const;
 
 export { TIPOS_CARTAO };
