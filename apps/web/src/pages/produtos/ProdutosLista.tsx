@@ -1,10 +1,19 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { Globe, Package, Plus } from 'lucide-react';
+import { FileText, Globe, Package, Pencil, Plus, Tag } from 'lucide-react';
 import { api } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
+import { useSelecao } from '@/hooks/useSelecao';
+import { useAuth } from '@/stores/auth';
 import { useCategoriasProduto } from '@/hooks/useListas';
+import { BarraSelecao, type AcaoLote } from '@/components/compartilhados/BarraSelecao';
+import { relatorioDaSelecao } from '@/components/compartilhados/relatorioSelecao';
+import { EtiquetaModal } from '@/components/compartilhados/EtiquetaModal';
+import { EditarEmLote } from '@/components/compartilhados/EditarEmLote';
+import { ReajustePrecoModal } from '@/components/compartilhados/ReajustePreco';
+import type { Etiqueta } from '@/components/compartilhados/etiquetas';
 import { Badge, BarraFiltros, BuscaFiltro, Button, Card, EmptyState, PageHeader, Pagination, SelectFiltro, Table, type Coluna, ValorOculto } from '@/components/ui';
 import { moeda, numero } from '@/lib/format';
 import type { Paginado, Produto } from '@/types';
@@ -18,6 +27,66 @@ export default function ProdutosLista() {
   const { data: categorias } = useCategoriasProduto();
   const params = { ...pg.filtros, ativo: pg.getFiltro('ativo') || 'true', pagina: pg.pagina, limite: pg.limite };
   const { data: resp, isLoading } = useQuery({ queryKey: ['produtos', params], queryFn: () => api.get<Paginado<Produto>>('/produtos', params), placeholderData: (p) => p });
+
+  const qc = useQueryClient();
+  const selecao = useSelecao();
+  const ehGestao = useAuth((s) => s.temPerfil('ADMIN', 'GERENTE'));
+  const [etiquetas, setEtiquetas] = useState<Etiqueta[] | null>(null);
+  const [editar, setEditar] = useState(false);
+  const [reajuste, setReajuste] = useState(false);
+  const marcados = () => (resp?.data ?? []).filter((x) => selecao.ids.includes(x.id));
+
+  const acoes: AcaoLote[] = [
+    {
+      rotulo: 'Etiquetas',
+      icone: <Tag className="h-3.5 w-3.5" />,
+      executar: async () => {
+        setEtiquetas(
+          marcados().map((x) => ({
+            titulo: x.nome,
+            linhas: [[x.marca, x.categoria?.nome].filter(Boolean).join(' · ')].filter(Boolean) as string[],
+            destaque: moeda(x.preco),
+            // o leitor da loja lê o código de barras do fabricante quando houver; senão, o SKU
+            codigo: x.gtin || x.codigo || String(x.id),
+          })),
+        );
+        return selecao.ids; // o diálogo ainda vai perguntar formato e cópias
+      },
+    },
+    {
+      rotulo: 'Relatório',
+      icone: <FileText className="h-3.5 w-3.5" />,
+      executar: async () => {
+        const m = marcados();
+        relatorioDaSelecao({
+          titulo: 'Produtos selecionados',
+          colunas: ['Código', 'Produto', 'Marca', 'Categoria', 'Estoque', 'Preço'],
+          linhas: m.map((x) => [x.codigo ?? '', x.nome, x.marca ?? '', x.categoria?.nome ?? '', numero(x.estoqueTotal ?? 0), moeda(x.preco)]),
+          totais: { 'Preço somado': moeda(m.reduce((t, x) => t + x.preco, 0)) },
+        });
+      },
+    },
+    ...(ehGestao
+      ? [
+          {
+            rotulo: 'Reajustar preço',
+            icone: <Tag className="h-3.5 w-3.5" />,
+            executar: async () => {
+              setReajuste(true);
+              return selecao.ids;
+            },
+          },
+          {
+            rotulo: 'Editar em lote',
+            icone: <Pencil className="h-3.5 w-3.5" />,
+            executar: async () => {
+              setEditar(true);
+              return selecao.ids;
+            },
+          },
+        ]
+      : []),
+  ];
 
   const colunas: Coluna<Produto>[] = [
     { chave: 'codigo', titulo: 'Código', largura: '110px', render: (p) => <span className="font-mono text-xs text-slate-500">{p.codigo || '—'}</span> },
@@ -100,8 +169,44 @@ export default function ProdutosLista() {
           <SelectFiltro valor={pg.getFiltro('origem')} onChange={(v) => pg.setFiltro('origem', v)} placeholder="Site e outros" opcoes={[{ valor: 'site', rotulo: 'Do site' }, { valor: 'fora', rotulo: 'Fora do site' }]} />
           <SelectFiltro valor={pg.getFiltro('ativo') || 'true'} onChange={(v) => pg.setFiltro('ativo', v)} placeholder="Todos" opcoes={[{ valor: 'true', rotulo: 'Ativos' }, { valor: 'false', rotulo: 'Inativos' }]} />
         </BarraFiltros>
-        <Table colunas={colunas} dados={resp?.data} carregando={isLoading} chave={(p) => p.id} onClickLinha={(p) => nav(`/produtos/${p.id}`)} vazio={<EmptyState icone={<Package className="h-5 w-5" />} titulo="Nenhum produto encontrado" acao={<Link to="/produtos/novo"><Button variante="primario">Cadastrar produto</Button></Link>} />} />
+        <BarraSelecao selecao={selecao} acoes={acoes} nome="produto marcado" nomePlural="produtos marcados" />
+        <Table selecao={selecao} colunas={colunas} dados={resp?.data} carregando={isLoading} chave={(p) => p.id} onClickLinha={(p) => nav(`/produtos/${p.id}`)} vazio={<EmptyState icone={<Package className="h-5 w-5" />} titulo="Nenhum produto encontrado" acao={<Link to="/produtos/novo"><Button variante="primario">Cadastrar produto</Button></Link>} />} />
         {resp && <Pagination pagina={resp.meta.pagina} totalPaginas={resp.meta.totalPaginas} total={resp.meta.total} limite={resp.meta.limite} onPagina={pg.setPagina} onLimite={pg.setLimite} />}
+
+        <EtiquetaModal
+          aberto={!!etiquetas}
+          onFechar={() => {
+            setEtiquetas(null);
+            selecao.limpar();
+          }}
+          etiquetas={etiquetas ?? []}
+          titulo="Etiquetas de produto"
+        />
+        <EditarEmLote
+          aberto={editar}
+          onFechar={() => setEditar(false)}
+          ids={selecao.ids}
+          nome="produto"
+          nomePlural="produtos"
+          campos={[
+            { chave: 'categoriaId', rotulo: 'Categoria', opcoes: (categorias ?? []).map((c) => ({ valor: c.id, rotulo: c.nome })), aplicar: (id, v) => api.put(`/produtos/${id}`, { categoriaId: Number(v) }) },
+            { chave: 'ativo', rotulo: 'Situação', opcoes: [{ valor: 'true', rotulo: 'Ativo' }, { valor: 'false', rotulo: 'Inativo' }], aplicar: (id, v) => api.put(`/produtos/${id}`, { ativo: v === 'true' }), aviso: 'Produto inativo some da venda e do site, mas continua no histórico.' },
+            { chave: 'prontaEntrega', rotulo: 'Pronta entrega', opcoes: [{ valor: 'true', rotulo: 'Sim' }, { valor: 'false', rotulo: 'Não' }], aplicar: (id, v) => api.put(`/produtos/${id}`, { prontaEntrega: v === 'true' }) },
+          ]}
+          aoTerminar={(falhas) => {
+            selecao.definir(falhas);
+            qc.invalidateQueries({ queryKey: ['produtos'] });
+          }}
+        />
+        <ReajustePrecoModal
+          aberto={reajuste}
+          onFechar={() => setReajuste(false)}
+          produtos={marcados()}
+          aoTerminar={(falhas) => {
+            selecao.definir(falhas);
+            qc.invalidateQueries({ queryKey: ['produtos'] });
+          }}
+        />
       </Card>
     </div>
   );

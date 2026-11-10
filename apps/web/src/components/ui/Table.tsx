@@ -45,13 +45,51 @@ interface TableProps<T> {
   celular?: 'cartoes' | 'tabela';
   /** cartão próprio no celular (no lugar do cartão automático com rótulo + valor de cada coluna) */
   cartao?: (linha: T, indice: number) => ReactNode;
+  /**
+   * Seleção de várias linhas (useSelecao). Acende uma coluna de caixinhas à esquerda,
+   * a caixinha "marcar a página toda" no cabeçalho e o Shift+clique para marcar faixa.
+   * No celular a caixinha aparece à esquerda do cartão.
+   */
+  selecao?: SelecaoTabela;
+}
+
+export interface SelecaoTabela {
+  tem: (id: number) => boolean;
+  alternar: (id: number, marcado: boolean) => void;
+  alternarPagina: (idsDaPagina: number[], marcado: boolean) => void;
+  intervalo: (idsDaPagina: number[], id: number) => void;
 }
 
 /** colunas de valor curto (código, data, depósito, número…) que nunca se partem em duas linhas */
 const CURTAS = /^(codigo|sku|data|dataHora|vencimento|emissao|deposito|numero|nf|periodo|criadoEm|ultimoLogin|cpfCnpj|telefone|qtd|quantidade)$/;
 
 /** Tabela densa com cabeçalho fixo, skeleton, estado vazio e ordenação opcional */
-export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazio, ordenacao, onOrdenar, linhasSkeleton = 6, className, rodape, destacar, compacta, celular = 'cartoes', cartao }: TableProps<T>) {
+export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazio, ordenacao, onOrdenar, linhasSkeleton = 6, className, rodape, destacar, compacta, celular = 'cartoes', cartao, selecao }: TableProps<T>) {
+  // ids desta página, na ordem da tela: base do "marcar tudo" e do Shift+clique
+  const idsPagina = selecao ? (dados ?? []).map((l) => Number(chave(l))) : [];
+  const marcadosNaPagina = selecao ? idsPagina.filter((id) => selecao.tem(id)).length : 0;
+  const paginaToda = !!idsPagina.length && marcadosNaPagina === idsPagina.length;
+
+  /** Caixinha de uma linha. O clique não abre o registro (para na propagação). */
+  const Caixinha = ({ id }: { id: number }) =>
+    selecao ? (
+      <input
+        type="checkbox"
+        aria-label="Marcar este registro"
+        checked={selecao.tem(id)}
+        onClick={(e) => {
+          e.stopPropagation();
+          // Shift+clique marca do último clicado até aqui
+          if ((e as unknown as { shiftKey: boolean }).shiftKey) {
+            e.preventDefault();
+            selecao.intervalo(idsPagina, id);
+          }
+        }}
+        onChange={(e) => selecao.alternar(id, e.target.checked)}
+        className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-brand-600"
+      />
+    ) : null;
+
   const alternar = (c: Coluna<T>) => {
     if (!c.ordenavel || !onOrdenar) return;
     if (ordenacao?.campo === c.chave) {
@@ -98,6 +136,11 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
                 >
                   {cartao ? (
                     <div className="flex items-start gap-2">
+                      {selecao && (
+                        <span className="pt-0.5">
+                          <Caixinha id={Number(chave(linha))} />
+                        </span>
+                      )}
                       <div className="min-w-0 flex-1">{cartao(linha, i)}</div>
                       {colAcoes.length > 0 && (
                         <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -108,7 +151,13 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
                       )}
                     </div>
                   ) : (
-                  <>
+                  <div className={selecao ? 'flex items-start gap-2' : undefined}>
+                  {selecao && (
+                    <span className="pt-0.5">
+                      <Caixinha id={Number(chave(linha))} />
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
                   {/* ícones de ação centralizados na linha do título (não caídos abaixo dela) */}
                   <div className="flex items-center gap-2">
                     {colTitulo && <div className="min-w-0 flex-1 break-words text-sm font-medium text-slate-900">{colTitulo.render(linha, i)}</div>}
@@ -135,7 +184,8 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
                       })}
                     </dl>
                   )}
-                  </>
+                  </div>
+                  </div>
                   )}
                 </li>
               ))}
@@ -154,6 +204,19 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
       <table className={clsx('tbl', compacta && '[&_td]:py-1.5')}>
         <thead>
           <tr>
+            {selecao && (
+              <th style={{ width: '36px' }} className="pr-0">
+                <input
+                  type="checkbox"
+                  aria-label="Marcar todos desta página"
+                  checked={paginaToda}
+                  ref={(el) => { if (el) el.indeterminate = !paginaToda && marcadosNaPagina > 0; }}
+                  onChange={(e) => selecao.alternarPagina(idsPagina, e.target.checked)}
+                  className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-brand-600"
+                  disabled={!idsPagina.length}
+                />
+              </th>
+            )}
             {colunas.map((c) => (
               <th
                 key={c.chave}
@@ -178,6 +241,7 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
           {carregando && !dados?.length
             ? Array.from({ length: linhasSkeleton }).map((_, i) => (
                 <tr key={`sk-${i}`}>
+                  {selecao && <td className="pr-0" />}
                   {colunas.map((c) => (
                     <td key={c.chave} className={clsx(c.ocultarMobile && 'hidden xl:table-cell')}>
                       <Skeleton className="h-4 w-full max-w-[160px]" />
@@ -188,7 +252,7 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
             : null}
           {!carregando && dados && dados.length === 0 && (
             <tr>
-              <td colSpan={colunas.length} className="py-10">
+              <td colSpan={colunas.length + (selecao ? 1 : 0)} className="py-10">
                 {vazio ?? <EmptyState titulo="Nenhum registro encontrado" />}
               </td>
             </tr>
@@ -200,6 +264,11 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
               className={clsx('v18-linha', onClickLinha && 'clicavel', destacar?.(linha) && 'bg-brand-50/60')}
               onClick={() => onClickLinha?.(linha)}
             >
+              {selecao && (
+                <td className="pr-0">
+                  <Caixinha id={Number(chave(linha))} />
+                </td>
+              )}
               {colunas.map((c) => (
                 <td key={c.chave} className={clsx(c.direita && 'text-right num', CURTAS.test(c.chave) && 'nowrap', c.ocultarMobile && 'hidden xl:table-cell', c.className)}>
                   {c.render(linha, i)}

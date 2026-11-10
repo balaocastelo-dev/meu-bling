@@ -3,9 +3,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { Clock, Kanban, List, Plus, TriangleAlert, Wrench } from 'lucide-react';
-import { api, ApiError, mensagemErro } from '@/lib/api';
+import { Clock, FileText, Kanban, List, Pencil, Plus, Printer, Tag, TriangleAlert, Wrench } from 'lucide-react';
+import { abrirEmNovaAba, api, ApiError, mensagemErro } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
+import { useSelecao } from '@/hooks/useSelecao';
+import { useAuth } from '@/stores/auth';
+import { BarraSelecao, emLote, type AcaoLote } from '@/components/compartilhados/BarraSelecao';
+import { relatorioDaSelecao } from '@/components/compartilhados/relatorioSelecao';
+import { EtiquetaModal } from '@/components/compartilhados/EtiquetaModal';
+import { EditarEmLote } from '@/components/compartilhados/EditarEmLote';
+import type { Etiqueta } from '@/components/compartilhados/etiquetas';
 import { useSituacoes, useTecnicos, opcoesDe } from '@/hooks/useListas';
 import { Badge, BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, Modal, PageHeader, Pagination, PeriodoFiltro, Segmentado, SelectFiltro, Skeleton, StatusBadge, Table, type Coluna } from '@/components/ui';
 import { LembretesParaVoce } from '@/components/compartilhados/Lembretes';
@@ -151,10 +158,71 @@ function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; da
 function ListaOs({ tecnicoId }: { tecnicoId: string }) {
   const nav = useNavigate();
   const pg = usePaginacao();
+  const qc = useQueryClient();
+  const selecao = useSelecao();
+  const ehGestao = useAuth((s) => s.temPerfil('ADMIN', 'GERENTE'));
+  const [etiquetas, setEtiquetas] = useState<Etiqueta[] | null>(null);
+  const [editar, setEditar] = useState(false);
   const { data: situacoes } = useSituacoes('OS');
+  const { data: tecnicos } = useTecnicos();
   const semCusto = pg.getFiltro('semCusto') === '1';
   const params = { ...pg.filtros, tecnicoId, pagina: pg.pagina, limite: pg.limite, visao: undefined };
   const { data: resp, isLoading } = useQuery({ queryKey: ['ordens-servico', params], queryFn: () => api.get<Paginado<OsResumo>>('/ordens-servico', params), placeholderData: (p) => p });
+
+  const marcadas = () => (resp?.data ?? []).filter((o) => selecao.ids.includes(o.id));
+
+  const acoes: AcaoLote[] = [
+    {
+      rotulo: 'Imprimir OS',
+      icone: <Printer className="h-3.5 w-3.5" />,
+      maximo: 20,
+      executar: (ids) =>
+        emLote(ids, (id) => abrirEmNovaAba(`/ordens-servico/${id}/imprimir`, { via: 'cliente' }), {
+          feito: (n) => `${n} OS aberta${n > 1 ? 's' : ''} para impressão.`,
+          falhou: (n) => `${n} não abriu.`,
+        }),
+    },
+    {
+      rotulo: 'Etiquetas',
+      icone: <Tag className="h-3.5 w-3.5" />,
+      executar: async () => {
+        setEtiquetas(
+          marcadas().map((o) => ({
+            titulo: `OS ${o.numero} — ${o.contato?.nome ?? ''}`,
+            linhas: [[o.equipamento, o.marca, o.modelo].filter(Boolean).join(' '), o.defeitoRelatado ? `Defeito: ${o.defeitoRelatado}` : '', `Entrada: ${data(o.dataEntrada)}${o.tecnico?.nome ? ` · ${o.tecnico.nome}` : ''}`].filter(Boolean) as string[],
+            codigo: `OS${o.numero}`,
+          })),
+        );
+        // a seleção fica: o diálogo ainda vai perguntar formato e cópias
+        return selecao.ids;
+      },
+    },
+    {
+      rotulo: 'Relatório',
+      icone: <FileText className="h-3.5 w-3.5" />,
+      executar: async () => {
+        const m = marcadas();
+        relatorioDaSelecao({
+          titulo: 'Ordens de serviço selecionadas',
+          colunas: ['Nº', 'Entrada', 'Cliente', 'Equipamento', 'Técnico', 'Situação', 'Total'],
+          linhas: m.map((o) => [String(o.numero), data(o.dataEntrada), o.contato?.nome ?? '', [o.equipamento, o.marca].filter(Boolean).join(' '), o.tecnico?.nome ?? '', o.situacao?.nome ?? '', moeda(o.total)]),
+          totais: { Total: moeda(m.reduce((t, o) => t + o.total, 0)) },
+        });
+      },
+    },
+    ...(ehGestao
+      ? [
+          {
+            rotulo: 'Editar em lote',
+            icone: <Pencil className="h-3.5 w-3.5" />,
+            executar: async () => {
+              setEditar(true);
+              return selecao.ids;
+            },
+          },
+        ]
+      : []),
+  ];
 
   const colunas: Coluna<OsResumo>[] = [
     { chave: 'numero', titulo: 'Nº', largura: '70px', render: (o) => <span className="font-medium text-slate-900">{o.numero}</span> },
@@ -216,7 +284,9 @@ function ListaOs({ tecnicoId }: { tecnicoId: string }) {
       <div className="border-b border-slate-100 px-3 py-2">
         <ChipsSituacao situacoes={situacoes ?? []} valor={pg.getFiltro('situacoes')} onChange={(v) => pg.setFiltro('situacoes', v)} />
       </div>
+      <BarraSelecao selecao={selecao} acoes={acoes} nome="OS marcada" nomePlural="OS marcadas" />
       <Table
+        selecao={selecao}
         colunas={colunas}
         dados={resp?.data}
         carregando={isLoading}
@@ -238,6 +308,32 @@ function ListaOs({ tecnicoId }: { tecnicoId: string }) {
           </div>
         )} vazio={<EmptyState icone={<Wrench className="h-5 w-5" />} titulo="Nenhuma OS encontrada" acao={<Link to="/ordens-servico/nova"><Button variante="primario">Nova OS</Button></Link>} />} />
       {resp && <Pagination pagina={resp.meta.pagina} totalPaginas={resp.meta.totalPaginas} total={resp.meta.total} limite={resp.meta.limite} onPagina={pg.setPagina} onLimite={pg.setLimite} />}
+
+      <EtiquetaModal
+        aberto={!!etiquetas}
+        onFechar={() => {
+          setEtiquetas(null);
+          selecao.limpar();
+        }}
+        etiquetas={etiquetas ?? []}
+        titulo="Etiquetas das ordens de serviço"
+        permiteCopias={false}
+      />
+      <EditarEmLote
+        aberto={editar}
+        onFechar={() => setEditar(false)}
+        ids={selecao.ids}
+        nome="OS"
+        nomePlural="OS"
+        campos={[
+          { chave: 'situacaoId', rotulo: 'Situação', opcoes: (situacoes ?? []).map((x) => ({ valor: x.id, rotulo: x.nome })), aplicar: (id, valor) => api.post(`/ordens-servico/${id}/situacao`, { situacaoId: Number(valor), forcar: true }) },
+          { chave: 'tecnicoId', rotulo: 'Técnico responsável', opcoes: opcoesDe(tecnicos), aplicar: (id, valor) => api.put(`/ordens-servico/${id}`, { tecnicoId: Number(valor) }) },
+        ]}
+        aoTerminar={(falhas) => {
+          selecao.definir(falhas);
+          qc.invalidateQueries({ queryKey: ['ordens-servico'] });
+        }}
+      />
     </Card>
   );
 }
