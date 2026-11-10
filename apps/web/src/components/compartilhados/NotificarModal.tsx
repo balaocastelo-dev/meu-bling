@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Mail, MessageCircle, Paperclip } from 'lucide-react';
+import { Mail, MessageCircle, Paperclip, PlugZap } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
+import { useWhatsappStatus } from '@/hooks/useEmpresa';
 import { Button, Checkbox, Modal, Segmentado, Select, Textarea } from '@/components/ui';
 import type { CanalNotificacao, TemplateNotificacao } from '@/types';
 
@@ -60,14 +61,29 @@ export function NotificarModal({ aberto, onFechar, caminho, eventoTemplate, even
 
   const enviar = useMutation({
     mutationFn: () =>
-      api.post(`${caminho}/notificar`, {
+      api.post<{ status?: string; erro?: string | null }>(`${caminho}/notificar`, {
         canal,
         templateId: templateId === '' ? undefined : Number(templateId),
         mensagem: templateId === '' ? mensagem : undefined,
         anexarPdf: permiteAnexo ? anexarPdf : undefined,
       }),
-    onSuccess: () => {
-      toast.success(canal === 'EMAIL' ? 'E-mail na fila de envio.' : 'WhatsApp na fila de envio.', { description: 'Acompanhe em Comunicação → Notificações.' });
+    // A API tenta enviar na hora e devolve o resultado. Antes a tela sempre dizia
+    // "na fila" mesmo quando a mensagem não ia sair — e com o WhatsApp fora do ar
+    // ela acabava saindo horas depois, sem ninguém saber.
+    onSuccess: (r) => {
+      const nome = canal === 'EMAIL' ? 'E-mail' : 'WhatsApp';
+      if (r?.status === 'ENVIADA') {
+        toast.success(`${nome} enviado ao cliente.`);
+      } else if (r?.erro?.includes('WhatsApp desconectado')) {
+        toast.warning('O WhatsApp está desconectado — a mensagem não saiu.', {
+          description: 'Leia o QR Code em Comunicação → WhatsApp. A mensagem sai assim que conectar.',
+          duration: 8000,
+        });
+      } else if (r?.status === 'ERRO') {
+        toast.error(`Não foi possível enviar o ${nome.toLowerCase()}.`, { description: r.erro || undefined, duration: 8000 });
+      } else {
+        toast.warning(`${nome} ainda não saiu.`, { description: r?.erro || 'Acompanhe em Comunicação → Notificações.', duration: 8000 });
+      }
       qc.invalidateQueries({ queryKey: ['notificacoes'] });
       onEnviado?.();
       onFechar();
@@ -76,6 +92,9 @@ export function NotificarModal({ aberto, onFechar, caminho, eventoTemplate, even
   });
 
   const semDestino = canal === 'WHATSAPP' ? !destinatarios?.celular : !destinatarios?.email;
+  // avisa ANTES de escrever: sem isso a mensagem só ficava na fila e saía horas depois
+  const { data: whats } = useWhatsappStatus(false);
+  const whatsappFora = canal === 'WHATSAPP' && !!whats && whats.status !== 'CONECTADO';
 
   return (
     <Modal
@@ -108,6 +127,14 @@ export function NotificarModal({ aberto, onFechar, caminho, eventoTemplate, even
           </p>
         )}
         {semDestino && destinatarios && <p className="rounded bg-amber-50 px-3 py-2 text-xs text-amber-700">O cliente não tem {canal === 'WHATSAPP' ? 'celular' : 'e-mail'} cadastrado. Edite o cadastro do cliente para poder enviar.</p>}
+        {whatsappFora && (
+          <p className="flex items-start gap-2 rounded bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            <PlugZap className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              O WhatsApp está desconectado — a mensagem não vai sair agora. Leia o QR Code em <strong>Comunicação → WhatsApp</strong> e envie de novo.
+            </span>
+          </p>
+        )}
         <Select label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value ? Number(e.target.value) : '')} placeholder="Mensagem livre (digite abaixo)" opcoes={lista.map((t) => ({ valor: t.id, rotulo: t.nome }))} />
         {templateId === '' && <Textarea label="Mensagem" rows={5} value={mensagem} onChange={(e) => setMensagem(e.target.value)} placeholder="Olá {{cliente.primeiroNome}}, ..." ajuda="Você pode usar variáveis como {{cliente.nome}}, {{numero}}, {{total}}, {{validade}}, {{link}}." />}
         {permiteAnexo && (

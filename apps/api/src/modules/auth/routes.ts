@@ -74,7 +74,7 @@ export default async function authRoutes(app: FastifyInstance) {
   // ---- Gestão de usuários (ADMIN)
   app.get('/api/v1/usuarios', { preHandler: app.exigirPerfil('ADMIN', 'GERENTE') }, async () => {
     return prisma.usuario.findMany({
-      select: { id: true, nome: true, email: true, perfil: true, ativo: true, telefone: true, vendedorId: true, tecnicoId: true, ultimoLogin: true, criadoEm: true },
+      select: { id: true, nome: true, email: true, perfil: true, ativo: true, telefone: true, vendedorId: true, tecnicoId: true, vendeTambem: true, ultimoLogin: true, criadoEm: true },
       orderBy: { nome: 'asc' },
     });
   });
@@ -96,7 +96,40 @@ export default async function authRoutes(app: FastifyInstance) {
     telefone: z.string().trim().max(30, 'Telefone muito longo.').nullable().optional(),
     vendedorId: z.number().int().nullable().optional(),
     tecnicoId: z.number().int().nullable().optional(),
+    /** TÉCNICO que também vende (padrão). Desmarcado = só técnico. */
+    vendeTambem: z.boolean().optional(),
   });
+
+  /**
+   * Edição (PUT): só muda o que foi enviado.
+   *
+   * `usuarioSchema.partial()` NÃO basta: os campos com `.default()` continuam
+   * devolvendo o padrão quando a chave não vem, então salvar qualquer detalhe de
+   * um usuário rebaixava o perfil dele para VENDEDOR e reativava quem estava
+   * desativado. Foi por isso que o técnico voltava a aparecer como vendedor.
+   * Aqui `perfil` e `ativo` viram opcionais de verdade, sem padrão.
+   */
+  const usuarioEdicaoSchema = usuarioSchema.partial().extend({
+    perfil: z.enum(PERFIS).optional(),
+    ativo: z.boolean().optional(),
+  });
+
+  const selecaoUsuario = { id: true, nome: true, email: true, perfil: true, ativo: true, telefone: true, vendedorId: true, tecnicoId: true, vendeTambem: true } as const;
+
+  /**
+   * "Só técnico": desliga o vínculo de vendedor e desativa o cadastro de vendedor dele,
+   * preservando o histórico (as vendas antigas continuam no nome dele). Sem isso o
+   * cadastro voltava sozinho no login seguinte.
+   */
+  async function aplicarSoTecnico(usuarioId: number) {
+    const u = await prisma.usuario.findUnique({ where: { id: usuarioId }, select: { perfil: true, vendeTambem: true, vendedorId: true } });
+    if (!u || u.vendeTambem || u.perfil !== 'TECNICO' || !u.vendedorId) return;
+    const vendedorId = u.vendedorId;
+    await prisma.usuario.update({ where: { id: usuarioId }, data: { vendedorId: null } });
+    // só desativa se o cadastro não for de mais ninguém
+    const aindaUsado = await prisma.usuario.count({ where: { vendedorId } });
+    if (!aindaUsado) await prisma.vendedor.update({ where: { id: vendedorId }, data: { ativo: false } }).catch(() => undefined);
+  }
 
   app.post('/api/v1/usuarios', { preHandler: app.exigirPerfil('ADMIN') }, async (req, reply) => {
     const body = usuarioSchema.parse(req.body);
@@ -105,27 +138,29 @@ export default async function authRoutes(app: FastifyInstance) {
     const u = await prisma.usuario
       .create({
         data: { ...resto, email: resto.email.toLowerCase().trim(), senhaHash: await bcrypt.hash(senha, 10), telefone: telefoneOuNull(telefone) ?? null },
-        select: { id: true, nome: true, email: true, perfil: true, ativo: true, telefone: true },
+        select: selecaoUsuario,
       })
       .catch(erroUnico);
     await vendedorDoUsuario(u.id);
+    await aplicarSoTecnico(u.id);
     await auditar(req, 'Usuario', u.id, 'CRIAR', { email: u.email });
     return reply.code(201).send(u);
   });
 
   app.put('/api/v1/usuarios/:id', { preHandler: app.exigirPerfil('ADMIN') }, async (req) => {
     const id = Number((req.params as any).id);
-    const body = usuarioSchema.partial().parse(req.body);
+    const body = usuarioEdicaoSchema.parse(req.body);
     const { senha, telefone, ...resto } = body;
     const data: any = { ...resto };
     if (telefone !== undefined) data.telefone = telefoneOuNull(telefone);
     if (body.email) data.email = body.email.toLowerCase().trim();
     if (senha) data.senhaHash = await bcrypt.hash(senha, 10);
     if (id === req.user.id && body.ativo === false) throw new AppError('Você não pode desativar o próprio usuário.');
-    const u = await prisma.usuario.update({ where: { id }, data, select: { id: true, nome: true, email: true, perfil: true, ativo: true, telefone: true } }).catch(erroUnico);
-    await vendedorDoUsuario(u.id);
+    await prisma.usuario.update({ where: { id }, data, select: { id: true } }).catch(erroUnico);
+    await vendedorDoUsuario(id);
+    await aplicarSoTecnico(id);
     await auditar(req, 'Usuario', id, 'ALTERAR', body);
-    return u;
+    return prisma.usuario.findUnique({ where: { id }, select: selecaoUsuario });
   });
 
   app.delete('/api/v1/usuarios/:id', { preHandler: app.exigirPerfil('ADMIN') }, async (req) => {

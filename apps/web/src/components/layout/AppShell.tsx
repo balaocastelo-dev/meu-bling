@@ -6,6 +6,7 @@ import { Topbar } from './Topbar';
 import { CommandPalette } from './CommandPalette';
 import { ChatProvider } from '@/components/chat/ChatProvider';
 import { useAuth } from '@/stores/auth';
+import { useApresentacao } from '@/stores/apresentacao';
 
 /** Casca da aplicação autenticada: sidebar + topbar + conteúdo */
 export function AppShell() {
@@ -13,6 +14,9 @@ export function AppShell() {
   const loc = useLocation();
   const [menuAberto, setMenuAberto] = useState(false);
   const [buscaAberta, setBuscaAberta] = useState(false);
+  // modo apresentação (segunda tela do cliente): sem menu, sem barra, sem margem
+  const apresentando = useApresentacao((s) => s.ativo);
+  const sairApresentacao = useApresentacao((s) => s.sair);
 
   // Atalho global Ctrl/Cmd+K
   useEffect(() => {
@@ -30,6 +34,22 @@ export function AppShell() {
   useEffect(() => {
     setMenuAberto(false);
   }, [loc.pathname, loc.search]);
+
+  // Apresentação: Esc sai, e sair da tela cheia pelo navegador (F11/Esc) também desliga o modo
+  useEffect(() => {
+    if (!apresentando) return;
+    const tecla = (e: KeyboardEvent) => e.key === 'Escape' && sairApresentacao();
+    const aoSairDaTelaCheia = () => !document.fullscreenElement && sairApresentacao();
+    document.addEventListener('keydown', tecla);
+    document.addEventListener('fullscreenchange', aoSairDaTelaCheia);
+    return () => {
+      document.removeEventListener('keydown', tecla);
+      document.removeEventListener('fullscreenchange', aoSairDaTelaCheia);
+    };
+  }, [apresentando, sairApresentacao]);
+
+  // sai do modo ao trocar de tela: a apresentação é do orçamento, não do sistema inteiro
+  useEffect(() => sairApresentacao, [loc.pathname, sairApresentacao]);
 
   // Gaveta aberta (celular/tablet): Esc fecha, a página de trás não rola e,
   // se a tela crescer até o layout de computador (menu fixo), a gaveta fecha sozinha
@@ -54,13 +74,13 @@ export function AppShell() {
   return (
     <MotionConfig reducedMotion="user">
     <div className="min-h-full">
-      <Sidebar aberta={menuAberto} onFechar={() => setMenuAberto(false)} />
-      <div className="flex min-h-dvh min-w-0 flex-col xl:pl-64">
-        <Topbar menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} onAbrirBusca={() => setBuscaAberta(true)} />
+      {!apresentando && <Sidebar aberta={menuAberto} onFechar={() => setMenuAberto(false)} />}
+      <div className={apresentando ? 'flex min-h-dvh min-w-0 flex-col' : 'flex min-h-dvh min-w-0 flex-col xl:pl-64'}>
+        {!apresentando && <Topbar menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} onAbrirBusca={() => setBuscaAberta(true)} />}
         {/* conteudo-seguro: margens laterais/inferior com env(safe-area-inset-*) (ver index.css) */}
-        <main className="conteudo-seguro min-w-0 flex-1 pt-3 sm:pt-4 md:pt-6">
+        <main className={apresentando ? 'min-w-0 flex-1 px-4 pt-3' : 'conteudo-seguro min-w-0 flex-1 pt-3 sm:pt-4 md:pt-6'}>
           {/* v18-pagina: blocos da tela entram em cascata (efeito V18, ver index.css) */}
-          <div className="v18-pagina mx-auto min-w-0 max-w-[1400px]" key={loc.pathname}>
+          <div className={apresentando ? 'v18-pagina min-w-0' : 'v18-pagina mx-auto min-w-0 max-w-[1400px]'} key={loc.pathname}>
             <Outlet />
           </div>
         </main>

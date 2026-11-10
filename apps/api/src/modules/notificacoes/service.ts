@@ -446,12 +446,99 @@ export function registrarListeners() {
 // ---------------------------------------------------------------------
 // Worker da fila
 // ---------------------------------------------------------------------
+/** Depois disso uma notificação presa em ENVIANDO é considerada órfã (API reiniciou no meio do
+ *  envio). A referência é `agendadaPara`, que o envio reescreve ao começar. */
+const MINUTOS_TRAVADA = 5;
+/** Mensagem ao cliente que não saiu em X horas não deve mais sair sozinha: vira ERRO para alguém decidir. */
+const HORAS_VALIDADE = 6;
+
+/** Erros que não adianta repetir: já nascem ERRO em vez de tentar 3 vezes. */
+function erroDefinitivo(msg: string): boolean {
+  return /SEM_WHATSAPP|não possui WhatsApp|inválid/i.test(msg);
+}
+
+/**
+ * Envia UMA notificação agora e devolve como ela ficou.
+ * É o mesmo caminho usado pelo worker — a diferença é que aqui o resultado
+ * volta para quem clicou, em vez de sumir na fila.
+ */
+export async function enviarNotificacao(n: {
+  id: number;
+  canal: string;
+  destinatario: string;
+  corpo: string;
+  assunto: string | null;
+  anexoPath: string | null;
+  origemTipo: string | null;
+  origemId: number | null;
+  tentativas: number;
+}): Promise<{ status: 'ENVIADA' | 'PENDENTE' | 'ERRO'; erro: string | null }> {
+  try {
+    if (n.canal === 'WHATSAPP') {
+      const st = await statusWhatsApp();
+      if (st.status !== 'CONECTADO') {
+        // não conta tentativa: fica pendente até conectar
+        const erro = 'WhatsApp desconectado';
+        await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'PENDENTE', erro } });
+        return { status: 'PENDENTE', erro };
+      }
+      // agendadaPara marca o instante em que o envio começou: é por ele que destravarFila()
+      // percebe uma notificação presa (a API caiu no meio do envio).
+      await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIANDO', agendadaPara: new Date() } });
+      const r = await enviarTexto(n.destinatario, n.corpo);
+      if (n.anexoPath && fs.existsSync(n.anexoPath)) await enviarDocumento(n.destinatario, n.anexoPath, path.basename(n.anexoPath));
+      await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIADA', enviadaEm: new Date(), erro: null, externalId: r.id } });
+      return { status: 'ENVIADA', erro: null };
+    }
+    if (!(await smtpConfigurado())) {
+      const erro = 'SMTP não configurado';
+      await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'PENDENTE', erro } });
+      return { status: 'PENDENTE', erro };
+    }
+    await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIANDO', agendadaPara: new Date() } });
+    const anexos = await anexosDaNotificacao(n);
+    const r = await enviarEmail({ para: n.destinatario, assunto: n.assunto || 'Mensagem', html: n.corpo, anexos });
+    await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIADA', enviadaEm: new Date(), erro: null, externalId: r.messageId } });
+    return { status: 'ENVIADA', erro: null };
+  } catch (e: any) {
+    const tentativas = n.tentativas + 1;
+    const erro = String(e?.message || e).slice(0, 500);
+    const desiste = tentativas >= 3 || erroDefinitivo(erro);
+    await prisma.notificacao.update({
+      where: { id: n.id },
+      data: desiste ? { status: 'ERRO', tentativas, erro } : { status: 'PENDENTE', tentativas, erro, agendadaPara: addMinutes(new Date(), 2 * tentativas) },
+    });
+    return { status: desiste ? 'ERRO' : 'PENDENTE', erro };
+  }
+}
+
+/**
+ * Devolve à fila o que ficou preso em ENVIANDO (a API caiu/reiniciou no meio) e
+ * encerra como ERRO o que está pendente há horas — mensagem velha não pode sair
+ * de surpresa para o cliente muito tempo depois de quem clicou ter desistido.
+ */
+export async function destravarFila() {
+  const agora = Date.now();
+  const [travadas, vencidas] = await Promise.all([
+    prisma.notificacao.updateMany({
+      where: { status: 'ENVIANDO', agendadaPara: { lt: new Date(agora - MINUTOS_TRAVADA * 60_000) } },
+      data: { status: 'PENDENTE', agendadaPara: new Date(), erro: 'Envio interrompido (sistema reiniciou) — recolocada na fila' },
+    }),
+    prisma.notificacao.updateMany({
+      where: { status: 'PENDENTE', criadoEm: { lt: new Date(agora - HORAS_VALIDADE * 3_600_000) } },
+      data: { status: 'ERRO', erro: `Não saiu em ${HORAS_VALIDADE}h (WhatsApp/SMTP fora do ar). Reenvie quando estiver conectado.` },
+    }),
+  ]);
+  return { destravadas: travadas.count, expiradas: vencidas.count };
+}
+
 let processando = false;
 export async function processarFila(limite = 10) {
   if (processando) return { processadas: 0 };
   processando = true;
   let processadas = 0;
   try {
+    await destravarFila().catch(() => undefined);
     const pendentes = await prisma.notificacao.findMany({
       where: { status: 'PENDENTE', agendadaPara: { lte: new Date() } },
       orderBy: { agendadaPara: 'asc' },
@@ -459,36 +546,7 @@ export async function processarFila(limite = 10) {
     });
     for (const n of pendentes) {
       processadas += 1;
-      try {
-        if (n.canal === 'WHATSAPP') {
-          if ((await statusWhatsApp()).status !== 'CONECTADO') {
-            // não conta tentativa: fica pendente até conectar
-            await prisma.notificacao.update({ where: { id: n.id }, data: { erro: 'WhatsApp desconectado' } });
-            continue;
-          }
-          await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIANDO' } });
-          const r = await enviarTexto(n.destinatario, n.corpo);
-          // anexo (PDF do orçamento/pedido): vai como documento logo depois do texto
-          if (n.anexoPath && fs.existsSync(n.anexoPath)) await enviarDocumento(n.destinatario, n.anexoPath, path.basename(n.anexoPath));
-          await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIADA', enviadaEm: new Date(), erro: null, externalId: r.id } });
-        } else {
-          if (!(await smtpConfigurado())) {
-            await prisma.notificacao.update({ where: { id: n.id }, data: { erro: 'SMTP não configurado' } });
-            continue;
-          }
-          await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIANDO' } });
-          const anexos = await anexosDaNotificacao(n);
-          const r = await enviarEmail({ para: n.destinatario, assunto: n.assunto || 'Mensagem', html: n.corpo, anexos });
-          await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIADA', enviadaEm: new Date(), erro: null, externalId: r.messageId } });
-        }
-      } catch (e: any) {
-        const tentativas = n.tentativas + 1;
-        const erro = String(e?.message || e).slice(0, 500);
-        await prisma.notificacao.update({
-          where: { id: n.id },
-          data: tentativas >= 3 ? { status: 'ERRO', tentativas, erro } : { status: 'PENDENTE', tentativas, erro, agendadaPara: addMinutes(new Date(), 2 * tentativas) },
-        });
-      }
+      await enviarNotificacao(n);
     }
   } finally {
     processando = false;
@@ -514,8 +572,11 @@ async function anexosDaNotificacao(n: { anexoPath: string | null; origemTipo: st
 export async function enviarAgora(id: number) {
   const n = await prisma.notificacao.findUnique({ where: { id } });
   if (!n) throw new NotFound('Notificação');
+  // envia ESTA notificação direto, sem passar pela fila: quem clicou em "Reenviar" está
+  // decidindo mandar uma mensagem antiga de novo, e a fila a descartaria pela regra das
+  // HORAS_VALIDADE (ela foi criada há muito tempo).
   await prisma.notificacao.update({ where: { id }, data: { status: 'PENDENTE', tentativas: 0, erro: null, agendadaPara: new Date() } });
-  await processarFila(50);
+  await enviarNotificacao({ ...n, tentativas: 0 });
   return prisma.notificacao.findUnique({ where: { id } });
 }
 

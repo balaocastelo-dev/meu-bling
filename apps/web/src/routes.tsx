@@ -83,6 +83,7 @@ const ConfigDepositos = lazy(() => import('@/pages/configuracoes/Depositos'));
 const ConfigContasFinanceiras = lazy(() => import('@/pages/configuracoes/ContasFinanceiras'));
 const ConfigSmtp = lazy(() => import('@/pages/configuracoes/Smtp'));
 const ConfigMercadoPago = lazy(() => import('@/pages/configuracoes/MercadoPago'));
+const ConfigAsaas = lazy(() => import('@/pages/configuracoes/Asaas'));
 const ConfigOpenFinance = lazy(() => import('@/pages/configuracoes/OpenFinance'));
 const ConfigRoboEmail = lazy(() => import('@/pages/configuracoes/RoboEmail'));
 const ConfigBling = lazy(() => import('@/pages/configuracoes/Bling'));
@@ -220,6 +221,7 @@ export const router = createBrowserRouter(
       { path: 'configuracoes/contas-financeiras', element: GESTAO(<ConfigContasFinanceiras />) },
       { path: 'configuracoes/smtp', element: ADMIN(<ConfigSmtp />) },
       { path: 'configuracoes/mercado-pago', element: ADMIN(<ConfigMercadoPago />) },
+      { path: 'configuracoes/asaas', element: ADMIN(<ConfigAsaas />) },
       { path: 'configuracoes/open-finance', element: ADMIN(<ConfigOpenFinance />) },
       { path: 'configuracoes/robo-email', element: ADMIN(<ConfigRoboEmail />) },
       { path: 'configuracoes/bling', element: ADMIN(<ConfigBling />) },

@@ -195,7 +195,7 @@ export function calcularTotais(itens: ItemCalculado[], v: { descontoTipo: string
 export async function montarParcelas(db: Db, parcelas: ParcelaInput[], total: number, dataBase: Date) {
   if (!parcelas.length) {
     const fp = await db.formaPagamento.findFirst({ where: { ativo: true }, orderBy: { id: 'asc' } });
-    return [{ numero: 1, dataVencimento: dataBase, valor: total, formaPagamentoId: fp?.id ?? null, observacoes: null as string | null, creditoPagador: null as string | null }];
+    return [{ numero: 1, dataVencimento: dataBase, valor: total, formaPagamentoId: fp?.id ?? null, observacoes: null as string | null, parcelasCartao: null as number | null, creditoPagador: null as string | null }];
   }
   const lista = parcelas.map((p, i) => ({
     numero: i + 1,
@@ -203,6 +203,7 @@ export async function montarParcelas(db: Db, parcelas: ParcelaInput[], total: nu
     valor: arredondar(p.valor),
     formaPagamentoId: p.formaPagamentoId ?? null,
     observacoes: p.observacoes ?? null,
+    parcelasCartao: p.parcelasCartao ?? null,
     creditoPagador: p.creditoPagador ?? null,
   }));
   const soma = arredondar(lista.reduce((s, p) => s + p.valor, 0));

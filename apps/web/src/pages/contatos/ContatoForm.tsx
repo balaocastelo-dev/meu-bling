@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Save, Search, X } from 'lucide-react';
+import { Download, Save, Search, X } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { useVendedores, opcoesDe } from '@/hooks/useListas';
 import { Button, Checkbox, FormSkeleton, Input, MoneyInput, PageHeader, Secao, Select, Textarea } from '@/components/ui';
 import { somenteDigitos } from '@/lib/format';
-import type { Contato, TipoContato } from '@/types';
+import type { Contato, DadosCnpj, TipoContato } from '@/types';
 
 type Form = Omit<Contato, 'id' | 'resumo' | 'vendedor' | 'criadoEm'>;
 
@@ -52,6 +52,7 @@ export default function ContatoForm() {
   const { data: vendedores } = useVendedores();
   const [form, setForm] = useState<Form>(() => vazio((sp.get('tipo') as TipoContato) || 'CLIENTE'));
   const [buscandoCep, setBuscandoCep] = useState(false);
+  const [buscandoCnpj, setBuscandoCnpj] = useState(false);
 
   const { data: contato, isLoading } = useQuery({ queryKey: ['contato', id], queryFn: () => api.get<Contato>(`/contatos/${id}`), enabled: editando });
   useEffect(() => {
@@ -86,6 +87,45 @@ export default function ContatoForm() {
       toast.error(mensagemErro(e, 'CEP não encontrado.'));
     } finally {
       setBuscandoCep(false);
+    }
+  };
+
+  /**
+   * "Importar do SEFAZ" (como no Bling): com o CNPJ digitado, puxa razão social, fantasia,
+   * endereço completo e contato do cadastro público da Receita e preenche o formulário.
+   */
+  const importarCnpj = async () => {
+    const d = somenteDigitos(form.documento ?? '');
+    if (d.length !== 14) return toast.error('Digite o CNPJ completo (14 dígitos) para importar.');
+    setBuscandoCnpj(true);
+    try {
+      const r = await api.get<DadosCnpj>(`/contatos/cnpj/${d}`);
+      setForm((f) => ({
+        ...f,
+        tipoPessoa: 'J',
+        nome: r.nome || f.nome,
+        fantasia: r.fantasia || f.fantasia,
+        documento: r.documento,
+        ie: r.ie || f.ie,
+        email: r.email || f.email,
+        telefone: r.telefone || f.telefone,
+        cep: r.cep || f.cep,
+        logradouro: r.logradouro || f.logradouro,
+        numero: r.numero || f.numero,
+        complemento: r.complemento || f.complemento,
+        bairro: r.bairro || f.bairro,
+        municipio: r.municipio || f.municipio,
+        uf: r.uf || f.uf,
+        codigoMunicipio: r.codigoMunicipio || f.codigoMunicipio,
+        indicadorIe: r.ie ? 1 : f.indicadorIe,
+      }));
+      ultimoCep.current = somenteDigitos(r.cep);
+      if (r.irregular) toast.warning(`Atenção: na Receita esta empresa está ${r.situacaoCadastral}.`, { description: 'Confira antes de emitir nota para ela.' });
+      else toast.success(`Preenchido pela ${r.fonte}.`, { description: r.ieEncontrada ? undefined : 'A Inscrição Estadual não é publicada pela Receita — preencha à mão se precisar.' });
+    } catch (e) {
+      toast.error(mensagemErro(e, 'Não encontrei esse CNPJ.'));
+    } finally {
+      setBuscandoCnpj(false);
     }
   };
 
@@ -130,7 +170,21 @@ export default function ContatoForm() {
             <Select className="xl:col-span-2" label="Pessoa" value={form.tipoPessoa} onChange={(e) => set('tipoPessoa', e.target.value as Form['tipoPessoa'])} opcoes={[{ valor: 'F', rotulo: 'Física' }, { valor: 'J', rotulo: 'Jurídica' }, { valor: 'E', rotulo: 'Estrangeiro' }]} />
             <Input className="sm:col-span-2 xl:col-span-7" label={ehJuridica ? 'Razão social' : 'Nome completo'} obrigatorio value={form.nome} onChange={(e) => set('nome', e.target.value)} autoFocus />
             <Input className="xl:col-span-4" label={ehJuridica ? 'Nome fantasia' : 'Apelido'} value={form.fantasia ?? ''} onChange={(e) => set('fantasia', e.target.value)} />
-            <Input className="xl:col-span-3" label={ehJuridica ? 'CNPJ' : 'CPF'} value={form.documento ?? ''} onChange={(e) => set('documento', e.target.value)} inputMode="numeric" />
+            <Input
+              className="xl:col-span-3"
+              label={ehJuridica ? 'CNPJ' : 'CPF'}
+              value={form.documento ?? ''}
+              onChange={(e) => set('documento', e.target.value)}
+              inputMode="numeric"
+              onKeyDown={(e) => ehJuridica && e.key === 'Enter' && (e.preventDefault(), importarCnpj())}
+              sufixo={
+                ehJuridica ? (
+                  <button type="button" onClick={importarCnpj} className="pointer-events-auto text-brand-600 hover:text-brand-700 disabled:text-slate-300" title="Importar os dados da Receita pelo CNPJ" disabled={somenteDigitos(form.documento ?? '').length !== 14}>
+                    {buscandoCnpj ? '…' : <Download className="h-4 w-4" />}
+                  </button>
+                ) : undefined
+              }
+            />
             {ehJuridica ? (
               <>
                 <Input className="xl:col-span-3" label="Inscrição estadual" value={form.ie ?? ''} onChange={(e) => set('ie', e.target.value)} disabled={form.ieIsento} />

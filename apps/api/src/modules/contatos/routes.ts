@@ -9,6 +9,7 @@ import { AppError, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
 import { paginacaoSchema, paginar, respostaPaginada, somenteDigitos } from '../../lib/util.js';
 import { boolQuery, idDe } from '../comum/zod.js';
+import { consultarCnpj } from './cnpj.js';
 
 const TIPOS = ['CLIENTE', 'FORNECEDOR', 'TRANSPORTADORA', 'AMBOS'] as const;
 
@@ -90,6 +91,9 @@ export default async function contatosRoutes(app: FastifyInstance) {
       clearTimeout(timer);
     }
   });
+
+  // ---- CNPJ na Receita (o "Importar do SEFAZ" do Bling) — antes de /:id
+  app.get('/api/v1/contatos/cnpj/:cnpj', async (req) => consultarCnpj((req.params as any).cnpj));
 
   // ---- Listagem
   app.get('/api/v1/contatos', async (req) => {
