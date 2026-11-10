@@ -513,7 +513,10 @@ function folhaLicencas(c: ContextoDoc, vers: () => Versiculo): string {
           <li>Funciona sem internet e abre/edita os formatos usados por escolas, empresas e órgãos públicos.</li>
           <li>Ativação original: sem programas de ativação, cracks ou geradores de chave.</li>
           <li>Instalação e ativação feitas pela loja, com o equipamento testado na entrega.</li>
-        </ul></div>
+        </ul>
+        <!-- Versão positiva do aviso (escolha do Thiago, 10/11/2026): diz a verdade sobre a
+             licença perpétua sem a palavra "encerrou", e abre porta para oferecer o Microsoft 365. -->
+        <div style="font-size:8.5px;color:#4b5563;margin-top:4px">Licença perpétua: o ${esc(o.office)} continua funcionando normalmente, sem mensalidade. Precisa da versão mais nova, com atualizações contínuas? Fale com a gente.</div></div>
       </div>
       <div class="bloco nao" style="flex:1"><h3>${ICONE_ALERTA} Os riscos de usar sistema ou Office sem licença</h3>
         <div class="duas" style="gap:4px 16px"><ul>
