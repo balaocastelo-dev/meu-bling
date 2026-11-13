@@ -715,8 +715,8 @@ model Venda {
   linkPagamentoId       String?
   linkPagamentoValor    Float?
   linkPagamentoEm       DateTime?
-  /// 0 = nenhuma parcela sem juros (juros do cliente, padrão). 2 ou 3 = até Nx sem juros; as demais seguem com juros do cliente.
-  /// O Mercado Pago não aplica isso por link (é da conta). O número fica anotado na venda.
+  /// Coluna sem uso. Os juros do link do Mercado Pago são sempre do cliente (até 12x).
+  /// Fica no banco, padrão 0, para não apagar a coluna com uma migração.
   linkPagamentoSemJuros Int                  @default(0)
   /// cobrança gerada no Asaas (boleto/PIX/cartão) a partir desta venda
   asaasCobrancaId       String?
