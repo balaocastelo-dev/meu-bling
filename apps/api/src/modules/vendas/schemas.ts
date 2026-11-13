@@ -67,12 +67,14 @@ export const vendaSchema = z.object({
   fretePorConta: z.coerce.number().int().default(9),
   quantidadeVolumes: z.coerce.number().int().min(0).default(0),
   pesoBruto: z.coerce.number().min(0).default(0),
+  /** link do Mercado Pago: 0 nenhuma sem juros (padrão), 2 ou 3 = até Nx sem juros */
+  linkPagamentoSemJuros: z.coerce.number().int().refine((n) => n === 0 || n === 2 || n === 3, 'Escolha nenhum, até 2x ou até 3x sem juros.').default(0),
   itens: z.array(itemSchema).min(1, 'Informe ao menos um item'),
   parcelas: z.array(parcelaSchema).default([]),
 });
 
 /** Campos que podem ser editados mesmo com estoque/contas lançados. */
-export const CAMPOS_LIVRES = ['observacoes', 'observacoesInternas', 'transportadoraId', 'fretePorConta', 'quantidadeVolumes', 'pesoBruto', 'numeroPedidoLoja', 'dataPrevista', 'dataSaida', 'validade', 'custoLogistica'] as const;
+export const CAMPOS_LIVRES = ['observacoes', 'observacoesInternas', 'transportadoraId', 'fretePorConta', 'quantidadeVolumes', 'pesoBruto', 'numeroPedidoLoja', 'dataPrevista', 'dataSaida', 'validade', 'custoLogistica', 'linkPagamentoSemJuros'] as const;
 
 export const listaQuery = paginacaoSchema.extend({
   /** PEDIDO (padrão) | ORCAMENTO | TODOS */

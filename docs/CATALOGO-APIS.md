@@ -71,7 +71,7 @@ Catorze serviços. A coluna "Onde está a credencial" importa: quase tudo fica *
 |---|---|---|---|---|
 | **SEFAZ (NF-e 4.00)** | Emitir, cancelar, inutilizar e consultar NF-e e NFC-e | Certificado digital **A1** (TLS mútuo), SOAP 1.2 | Empresa → certificado `.pfx` + senha, criptografados | `integracoes/fiscal/sefaz.ts` |
 | **Bling API v3** | Importar o histórico (pedidos, orçamentos, produtos) do sistema antigo | OAuth 2.0 (authorization code + refresh) | Token criptografado na Empresa | `integracoes/bling/cliente.ts` |
-| **Mercado Pago** | Link de pagamento do pedido (Checkout Pro, cartão até 12× e PIX) | `Bearer <Access Token>` de produção | Empresa → Mercado Pago, criptografado (ou `MERCADOPAGO_ACCESS_TOKEN`) | `integracoes/mercadopago/link.ts` |
+| **Mercado Pago** | Link de pagamento do pedido (Checkout Pro, cartão até 12× e PIX). Parcelas sem juros por link não existem na API: a conta é que define quem paga os juros | `Bearer <Access Token>` de produção | Empresa → Mercado Pago, criptografado (ou `MERCADOPAGO_ACCESS_TOKEN`) | `integracoes/mercadopago/link.ts` |
 | **Mercado Livre** | Publicar anúncio a partir do produto; botão "Anunciar" | OAuth 2.0, retorno em `/jarvis/ml/callback` | Token criptografado no banco | `modules/jarvis/mercadolivre.ts` |
 | **Pluggy (Open Finance)** | Puxar extrato dos bancos para conciliar | `clientId` + `clientSecret` → token; webhook em `/webhooks/pluggy` | Empresa → Open Finance, criptografado | `integracoes/openfinance/pluggy.ts` |
 | **Anthropic** | Cérebro do JARVIS: sugestões, chat, montagem de anúncio | `x-api-key`, versão `2023-06-01` | Criptografada no banco; modelo padrão `claude-fable-5-1` | `modules/jarvis/ia.ts` |
@@ -262,7 +262,7 @@ Legenda das colunas:
 | `POST` | `/vendas/:id/gerar-nfe` | Cria a NF-e (55) ou NFC-e (65) da venda, pendente (transmita em /notas-fiscais/{id}/transmitir). | todos | `vendas` · GRAVACAO |
 | `POST` | `/vendas/:id/gerar-parcelas` | Calcula parcelas para a venda (não grava; mande depois no PUT). | todos | `vendas` · GRAVACAO |
 | `GET` | `/vendas/:id/imprimir` | HTML do pedido para impressão. | todos | `vendas` · LEITURA |
-| `POST` | `/vendas/:id/link-pagamento` | Gera o link de pagamento do Mercado Pago para o pedido (padrão: total da venda). | todos | `vendas` · GRAVACAO |
+| `POST` | `/vendas/:id/link-pagamento` | Gera o link de pagamento do Mercado Pago para o pedido (padrão: total da venda, até 12x, juros do cliente). Corpo opcional: `parcelasSemJuros` 0, 2 ou 3. | todos | `vendas` · GRAVACAO |
 | `GET` | `/vendas/:id/nfe/verificar` | Confere se a venda tem tudo para emitir NF-e (diz o que falta). | todos | `vendas` · LEITURA |
 | `POST` | `/vendas/:id/notificar` | Envia o pedido/orçamento ao cliente por WhatsApp ou e-mail, com PDF. | todos | `vendas` · GRAVACAO |
 | `GET` | `/vendas/:id/pdf` | PDF A4 do pedido/orçamento.<br>Filtros: `download` | todos | `vendas` · LEITURA |

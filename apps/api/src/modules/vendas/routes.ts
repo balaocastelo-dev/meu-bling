@@ -4,7 +4,7 @@
  * nunca movimenta estoque/financeiro nem emite nota; "converter" gera a venda vinculada.
  */
 import type { FastifyInstance } from 'fastify';
-import { criarLinkPagamento } from '../../integracoes/mercadopago/link.js';
+import { criarLinkPagamento, ehParcelasSemJuros } from '../../integracoes/mercadopago/link.js';
 import { z } from 'zod';
 import { previaCarneVenda } from '../carnes/service.js';
 import { prisma } from '../../lib/prisma.js';
@@ -358,6 +358,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
           fretePorConta: body.fretePorConta,
           quantidadeVolumes: body.quantidadeVolumes,
           pesoBruto: body.pesoBruto,
+          linkPagamentoSemJuros: body.linkPagamentoSemJuros,
           itens: { create: itens },
           parcelas: { create: parcelas },
         },
@@ -669,17 +670,40 @@ export default async function vendasRoutes(app: FastifyInstance) {
 
   // ---------------------------------------------------------------- transferir para outro vendedor
   // ---------------------------------------------------------------- link de pagamento (Mercado Pago)
-  /** O vendedor gera o link do Mercado Pago dentro do pedido (padrão: total da venda). */
+  /** O vendedor gera o link do Mercado Pago dentro do pedido (padrão: total da venda, juros do cliente). */
   app.post('/api/v1/vendas/:id/link-pagamento', async (req) => {
     const id = idDe(req);
-    const body = z.object({ valor: z.coerce.number().positive().nullish() }).parse(req.body ?? {});
+    const body = z
+      .object({
+        valor: z.coerce.number().positive().nullish(),
+        /** 0, 2 ou 3. Omitido = o que já está anotado na venda (0 se ninguém escolheu). */
+        parcelasSemJuros: z.coerce.number().int().nullish(),
+        /** só os testes mandam true, e só vale com MERCADOPAGO_MOCK — não gera cobrança */
+        simulacao: z.boolean().optional(),
+      })
+      .parse(req.body ?? {});
+    if (body.parcelasSemJuros != null && !ehParcelasSemJuros(body.parcelasSemJuros)) {
+      throw new AppError('Escolha "Nenhum (juros do cliente)", "Até 2x sem juros" ou "Até 3x sem juros".', 422, 'PARCELAS_SEM_JUROS');
+    }
     const v = await prisma.venda.findUnique({ where: { id }, include: { contato: { select: { nome: true, email: true } } } });
     if (!v) throw new NotFound('Venda');
+    const parcelasSemJuros = body.parcelasSemJuros ?? v.linkPagamentoSemJuros ?? 0;
     const valor = body.valor ?? v.total;
-    const link = await criarLinkPagamento({ referencia: `venda-${v.id}`, titulo: `${v.tipo === 'ORCAMENTO' ? 'Orçamento' : 'Pedido'} nº ${v.numero} — Balão da Informática`, valor, email: v.contato?.email, nome: v.contato?.nome });
-    await prisma.venda.update({ where: { id }, data: { linkPagamentoUrl: link.url, linkPagamentoId: link.id, linkPagamentoValor: link.valor, linkPagamentoEm: new Date() } });
-    await auditar(req, 'Venda', id, 'ACAO', { acao: 'link-pagamento', valor: link.valor });
-    return { url: link.url, valor: link.valor };
+    const link = await criarLinkPagamento({
+      referencia: `venda-${v.id}`,
+      titulo: `${v.tipo === 'ORCAMENTO' ? 'Orçamento' : 'Pedido'} nº ${v.numero} — Balão da Informática`,
+      valor,
+      email: v.contato?.email,
+      nome: v.contato?.nome,
+      parcelasSemJuros,
+      simulacao: body.simulacao === true,
+    });
+    await prisma.venda.update({
+      where: { id },
+      data: { linkPagamentoUrl: link.url, linkPagamentoId: link.id, linkPagamentoValor: link.valor, linkPagamentoEm: new Date(), linkPagamentoSemJuros: link.parcelasSemJuros },
+    });
+    await auditar(req, 'Venda', id, 'ACAO', { acao: 'link-pagamento', valor: link.valor, parcelasSemJuros: link.parcelasSemJuros });
+    return { url: link.url, valor: link.valor, parcelasSemJuros: link.parcelasSemJuros, resumo: link.resumo, aviso: link.aviso, ...(link.preferencia ? { preferencia: link.preferencia } : {}) };
   });
 
   // ------------------------------------------------------- cobrança no Asaas (boleto / PIX / cartão)
@@ -782,6 +806,7 @@ function mesclarComAtual(atual: Awaited<ReturnType<typeof carregarVenda>>, body:
     fretePorConta: atual.fretePorConta,
     quantidadeVolumes: atual.quantidadeVolumes,
     pesoBruto: atual.pesoBruto,
+    linkPagamentoSemJuros: atual.linkPagamentoSemJuros,
     itens: atual.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct, custoUnitario: i.custoInformado ? i.custoUnitario : null })),
     parcelas: atual.parcelas.map((p) => ({ dataVencimento: p.dataVencimento, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes, parcelasCartao: p.parcelasCartao, creditoPagador: p.creditoPagador })),
   };

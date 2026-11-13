@@ -828,6 +828,7 @@ export async function criarVenda(body: VendaInput, usuarioId: number | null, obs
         fretePorConta: body.fretePorConta,
         quantidadeVolumes: body.quantidadeVolumes,
         pesoBruto: body.pesoBruto,
+        linkPagamentoSemJuros: body.linkPagamentoSemJuros ?? 0,
         itens: { create: itens },
         parcelas: { create: parcelas },
       },

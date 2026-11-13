@@ -10,6 +10,7 @@ import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/Prod
 import { buscarContatos, buscarProdutos } from '@/lib/buscas';
 import { Button, DateInput, FormSkeleton, Input, MoneyInput, PageHeader, SearchSelect, Secao, Select, Textarea, ValorOculto } from '@/components/ui';
 import { ParcelasEditor, parcelasValidas } from '@/components/compartilhados/ParcelasEditor';
+import { EscolhaParcelasSemJuros, normalizarSemJuros } from '@/components/compartilhados/ParcelasSemJuros';
 import { ContatoRapidoDrawer } from '@/components/compartilhados/ContatoRapidoDrawer';
 import { useApresentacao } from '@/stores/apresentacao';
 import { arred, dataIso, hoje, moeda, rotulo } from '@/lib/format';
@@ -47,6 +48,7 @@ function vazio(vendedorId: number | null, tipo: TipoVenda): VendaPayload {
     fretePorConta: 9,
     quantidadeVolumes: 0,
     pesoBruto: 0,
+    linkPagamentoSemJuros: 0,
     itens: [],
     parcelas: [],
   };
@@ -74,6 +76,7 @@ function deVenda(v: Venda): VendaPayload {
     fretePorConta: v.fretePorConta,
     quantidadeVolumes: v.quantidadeVolumes,
     pesoBruto: v.pesoBruto,
+    linkPagamentoSemJuros: normalizarSemJuros(v.linkPagamentoSemJuros),
     itens: v.itens.map((i) => ({ produtoId: i.produtoId, codigo: i.codigo, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.valorUnitario, desconto: i.desconto, comissaoPct: i.comissaoPct, custoUnitario: i.custoUnitario ?? 0, custoInformado: !!i.custoInformado, numeroSerie: i.numeroSerie ?? null, imagemUrl: i.produto?.imagemUrl ?? null, prontaEntrega: Boolean(i.produto?.prontaEntrega) })),
     parcelas: v.parcelas.map((p) => ({ dataVencimento: dataIso(p.dataVencimento), valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes ?? '', parcelasCartao: p.parcelasCartao ?? null, creditoPagador: p.creditoPagador ?? null })),
   };
@@ -530,6 +533,11 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
         >
           {erros.parcelas && <p className="mb-2 text-xs text-red-600">{erros.parcelas}</p>}
           <ParcelasEditor parcelas={form.parcelas} onChange={(p) => set('parcelas', p)} total={totais.total} disabled={bloqueado} pagadorCredito />
+          {!orcamento && (
+            <div className="mt-4">
+              <EscolhaParcelasSemJuros valor={form.linkPagamentoSemJuros} onChange={(v) => set('linkPagamentoSemJuros', v)} />
+            </div>
+          )}
         </Secao>
       </div>
 

@@ -1,5 +1,5 @@
 /** Link de pagamento do Mercado Pago dentro do pedido: o vendedor gera, copia ou manda pelo WhatsApp. */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -8,20 +8,26 @@ import { api, mensagemErro } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { MoneyInput } from '@/components/ui';
 import { dataHora, moeda } from '@/lib/format';
+import { EscolhaParcelasSemJuros, normalizarSemJuros, rotuloSemJuros, type ParcelasSemJurosValor } from '@/components/compartilhados/ParcelasSemJuros';
 
-export function LinkPagamento({ venda }: { venda: { id: number; numero: number; total: number; linkPagamentoUrl?: string | null; linkPagamentoValor?: number | null; linkPagamentoEm?: string | null; contato?: { celular?: string | null; nome?: string | null } | null } }) {
+export function LinkPagamento({ venda }: { venda: { id: number; numero: number; total: number; linkPagamentoUrl?: string | null; linkPagamentoValor?: number | null; linkPagamentoEm?: string | null; linkPagamentoSemJuros?: number | null; contato?: { celular?: string | null; nome?: string | null } | null } }) {
   const qc = useQueryClient();
   const [valor, setValor] = useState(venda.total);
+  const [semJuros, setSemJuros] = useState<ParcelasSemJurosValor>(normalizarSemJuros(venda.linkPagamentoSemJuros));
   const [erroConfig, setErroConfig] = useState(false);
+  useEffect(() => {
+    setSemJuros(normalizarSemJuros(venda.linkPagamentoSemJuros));
+  }, [venda.linkPagamentoSemJuros]);
   const gerar = useMutation({
-    mutationFn: () => api.post<{ url: string; valor: number }>(`/vendas/${venda.id}/link-pagamento`, { valor }),
+    mutationFn: () => api.post<{ url: string; valor: number; resumo?: string; aviso?: string | null }>(`/vendas/${venda.id}/link-pagamento`, { valor, parcelasSemJuros: semJuros }),
     onSuccess: async (r) => {
       setErroConfig(false);
+      const resumo = r.resumo || rotuloSemJuros(semJuros);
       try {
         await navigator.clipboard.writeText(r.url);
-        toast.success(`Link de ${moeda(r.valor)} gerado e copiado.`);
+        toast.success(`Link de ${moeda(r.valor)} gerado e copiado.`, { description: resumo });
       } catch {
-        toast.success(`Link de ${moeda(r.valor)} gerado.`);
+        toast.success(`Link de ${moeda(r.valor)} gerado.`, { description: resumo });
       }
       qc.invalidateQueries({ queryKey: ['venda', String(venda.id)] });
     },
@@ -33,6 +39,7 @@ export function LinkPagamento({ venda }: { venda: { id: number; numero: number; 
   const url = venda.linkPagamentoUrl;
   const fone = (venda.contato?.celular || '').replace(/\D/g, '');
   const msg = encodeURIComponent(`Olá${venda.contato?.nome ? ` ${venda.contato.nome.split(' ')[0]}` : ''}! Segue o link para pagamento do pedido nº ${venda.numero} da Balão da Informática (${moeda(venda.linkPagamentoValor ?? venda.total)}): ${url}`);
+  const usado = normalizarSemJuros(venda.linkPagamentoSemJuros);
   return (
     <div className="space-y-2 rounded-md border border-sky-200 bg-sky-50/60 p-3">
       <p className="flex items-center gap-2 text-sm font-medium text-sky-900">
@@ -45,7 +52,7 @@ export function LinkPagamento({ venda }: { venda: { id: number; numero: number; 
             <Button tamanho="sm" variante="secundario" icone={<Copy className="h-3.5 w-3.5" />} onClick={() => navigator.clipboard.writeText(url).then(() => toast.success('Link copiado.'))}>Copiar</Button>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span>{moeda(venda.linkPagamentoValor ?? 0)}{venda.linkPagamentoEm ? ` · gerado em ${dataHora(venda.linkPagamentoEm)}` : ''}</span>
+            <span>{moeda(venda.linkPagamentoValor ?? 0)} · {rotuloSemJuros(usado)}{venda.linkPagamentoEm ? ` · gerado em ${dataHora(venda.linkPagamentoEm)}` : ''}</span>
             {fone && (
               <a className="inline-flex items-center gap-1 font-medium text-emerald-700 hover:underline" href={`https://wa.me/${fone.length <= 11 ? `55${fone}` : fone}?text=${msg}`} target="_blank" rel="noreferrer">
                 <MessageCircle className="h-3.5 w-3.5" /> Mandar no WhatsApp
@@ -56,6 +63,7 @@ export function LinkPagamento({ venda }: { venda: { id: number; numero: number; 
       ) : (
         <p className="text-xs text-slate-600">O cliente paga no cartão (até 12x) ou PIX pelo Mercado Pago.</p>
       )}
+      <EscolhaParcelasSemJuros valor={semJuros} onChange={setSemJuros} embutido />
       <div className="flex flex-wrap items-end gap-2">
         <MoneyInput label="Valor do link" value={valor} onChange={setValor} className="w-40" />
         <Button tamanho="sm" variante={url ? 'secundario' : 'primario'} icone={url ? <RefreshCw className="h-3.5 w-3.5" /> : <CreditCard className="h-3.5 w-3.5" />} disabled={!(valor > 0)} carregando={gerar.isPending} onClick={() => gerar.mutate()}>
