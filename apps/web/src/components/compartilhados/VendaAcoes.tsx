@@ -24,7 +24,7 @@ import {
   Trash2,
   UserRoundCog,
 } from 'lucide-react';
-import { abrirEmNovaAba, api, mensagemErro } from '@/lib/api';
+import { abrirEmNovaAba, api, ApiError, mensagemErro } from '@/lib/api';
 import { moeda } from '@/lib/format';
 import { useAuth } from '@/stores/auth';
 import { useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
@@ -126,7 +126,17 @@ export function VendaAcoes({ venda, contexto = 'lista' }: Props) {
       setConverter(false);
       nav(`/vendas/${v.id}`);
     },
-    onError: erro,
+    onError: (e) => {
+      if (e instanceof ApiError && e.code === 'JA_CONVERTIDO') {
+        const vendaId = (e.detalhes as { vendaId?: number } | undefined)?.vendaId;
+        toast.success('Este orçamento já tinha virado venda.');
+        invalidar();
+        setConverter(false);
+        if (vendaId) nav(`/vendas/${vendaId}`);
+        return;
+      }
+      erro(e);
+    },
   });
 
   const imprimir = async () => {

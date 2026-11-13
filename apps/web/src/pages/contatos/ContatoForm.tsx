@@ -136,6 +136,8 @@ export default function ContatoForm() {
     },
     onSuccess: (c) => {
       toast.success(editando ? 'Contato atualizado.' : 'Contato cadastrado.');
+      const aviso = (c as Contato & { avisoDocumento?: string | null }).avisoDocumento;
+      if (aviso) toast.warning(aviso, { duration: 8000 });
       qc.invalidateQueries({ queryKey: ['contatos'] });
       qc.invalidateQueries({ queryKey: ['contato', String(c.id)] });
       nav(`/contatos/${c.id}`);
@@ -176,6 +178,7 @@ export default function ContatoForm() {
               value={form.documento ?? ''}
               onChange={(e) => set('documento', e.target.value)}
               inputMode="numeric"
+              ajuda="Pode digitar com pontos e traço. Se o dígito não bater, o cadastro salva e avisamos."
               onKeyDown={(e) => ehJuridica && e.key === 'Enter' && (e.preventDefault(), importarCnpj())}
               sufixo={
                 ehJuridica ? (

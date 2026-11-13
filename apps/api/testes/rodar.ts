@@ -128,6 +128,7 @@ async function main() {
     rodar('Chat da equipe: direta, sala privada, áudio, lida, WebSocket/polling, chamadas de voz e vídeo, push, ADMIN lê tudo, chamar atenção', NPX, ['tsx', 'testes/chat.ts', base]);
     rodar('Painel de auditoria: senha do dia, trilha antes/depois (itens e cascata), ao vivo, funcionários, reversão e refazer, agentes', NPX, ['tsx', 'testes/auditoria.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Links: todo link do sistema leva a uma tela que existe', NPX, ['tsx', 'testes/links.ts', base]);
+    rodar('Orçamento vira venda ao mudar a etapa; kanban cria coluna e pula etapa; cliente e perfil', NPX, ['tsx', 'testes/thiago-orcamento-os-perfil.ts', base]);
     rodar('Integridade dos dados depois dos testes (Saúde do sistema)', NPX, ['tsx', 'testes/integridade.ts', base]);
     // por último: manda lixo em todas as rotas (pode bagunçar os dados de teste)
     rodar('Robustez: todas as rotas da API com dados errados e sem login (nunca 500)', NPX, ['tsx', 'testes/robustez.ts'], { env });

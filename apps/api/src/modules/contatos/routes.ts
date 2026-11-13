@@ -10,6 +10,7 @@ import { auditar } from '../../lib/auditoria.js';
 import { paginacaoSchema, paginar, respostaPaginada, somenteDigitos } from '../../lib/util.js';
 import { boolQuery, idDe } from '../comum/zod.js';
 import { consultarCnpj } from './cnpj.js';
+import { cnpjValido, cpfValido } from '../comum/nfe-checagem.js';
 
 const TIPOS = ['CLIENTE', 'FORNECEDOR', 'TRANSPORTADORA', 'AMBOS'] as const;
 
@@ -57,11 +58,33 @@ function normalizar<T extends Partial<z.infer<typeof contatoSchema>>>(b: T): T {
   return r as T;
 }
 
-function validarDocumento(doc: string | null | undefined, tipoPessoa: string | undefined) {
-  if (!doc) return;
-  if (tipoPessoa === 'F' && doc.length !== 11) throw new AppError('CPF deve ter 11 dígitos.', 422, 'DOCUMENTO');
-  if (tipoPessoa === 'J' && doc.length !== 14) throw new AppError('CNPJ deve ter 14 dígitos.', 422, 'DOCUMENTO');
+/**
+ * CPF/CNPJ tolerante: tira ponto, traço e barra; 11 dígitos vira pessoa física e 14 jurídica,
+ * mesmo que o formulário tenha marcado o outro tipo. Dígito verificador errado ou tamanho
+ * diferente não bloqueia o resto do cadastro — devolve um aviso para a tela mostrar.
+ */
+function interpretarDocumento(doc: string | null | undefined, tipoPessoa: string | undefined): { documento: string | null; tipoPessoa?: 'F' | 'J'; aviso: string | null } {
+  if (doc == null) return { documento: null, aviso: null };
+  const d = somenteDigitos(doc);
+  if (!d) return { documento: null, aviso: null };
+  if (tipoPessoa === 'E') return { documento: d, aviso: null };
+  if (d.length === 11) {
+    return { documento: d, tipoPessoa: 'F', aviso: cpfValido(d) ? null : 'O CPF não confere o dígito verificador. O cadastro foi salvo assim mesmo — confira os números quando puder.' };
+  }
+  if (d.length === 14) {
+    return { documento: d, tipoPessoa: 'J', aviso: cnpjValido(d) ? null : 'O CNPJ não confere o dígito verificador. O cadastro foi salvo assim mesmo — confira os números quando puder.' };
+  }
+  return { documento: d, aviso: `O documento tem ${d.length} dígitos (CPF tem 11, CNPJ tem 14). Foi salvo para você corrigir depois.` };
 }
+
+/** Edição: campos com default do Zod não podem voltar ao padrão quando a chave não vem no corpo. */
+const contatoEdicaoSchema = contatoSchema.partial().extend({
+  tipo: z.enum(TIPOS).optional(),
+  tipoPessoa: z.enum(['F', 'J', 'E']).optional(),
+  ieIsento: z.boolean().optional(),
+  limiteCredito: z.coerce.number().min(0).optional(),
+  ativo: z.boolean().optional(),
+});
 
 export default async function contatosRoutes(app: FastifyInstance) {
   // ---- ViaCEP (antes de /:id)
@@ -270,14 +293,16 @@ export default async function contatosRoutes(app: FastifyInstance) {
   // ---- Criar
   app.post('/api/v1/contatos', async (req, reply) => {
     const body = normalizar(contatoSchema.parse(req.body));
-    validarDocumento(body.documento, body.tipoPessoa);
+    const doc = interpretarDocumento(body.documento, body.tipoPessoa);
+    body.documento = doc.documento;
+    if (doc.tipoPessoa) body.tipoPessoa = doc.tipoPessoa;
     if (body.documento) {
       const dup = await prisma.contato.findFirst({ where: { documento: body.documento }, select: { id: true, nome: true } });
       if (dup) throw new AppError(`Já existe um contato com este documento: ${dup.nome} (id ${dup.id}).`, 409, 'DOCUMENTO_DUPLICADO', { contatoId: dup.id });
     }
     const c = await prisma.contato.create({ data: body as any });
     await auditar(req, 'Contato', c.id, 'CRIAR', { nome: c.nome, documento: c.documento });
-    return reply.code(201).send(c);
+    return reply.code(201).send({ ...c, avisoDocumento: doc.aviso });
   });
 
   // ---- Atualizar
@@ -285,15 +310,21 @@ export default async function contatosRoutes(app: FastifyInstance) {
     const id = idDe(req);
     const atual = await prisma.contato.findUnique({ where: { id } });
     if (!atual) throw new NotFound('Contato');
-    const body = normalizar(contatoSchema.partial().parse(req.body));
-    validarDocumento(body.documento, body.tipoPessoa ?? atual.tipoPessoa);
+    const body = normalizar(contatoEdicaoSchema.parse(req.body));
+    let avisoDocumento: string | null = null;
+    if (body.documento !== undefined) {
+      const doc = interpretarDocumento(body.documento, body.tipoPessoa ?? atual.tipoPessoa);
+      body.documento = doc.documento;
+      if (doc.tipoPessoa) body.tipoPessoa = doc.tipoPessoa;
+      avisoDocumento = doc.aviso;
+    }
     if (body.documento && body.documento !== atual.documento) {
       const dup = await prisma.contato.findFirst({ where: { documento: body.documento, id: { not: id } }, select: { id: true, nome: true } });
       if (dup) throw new AppError(`Já existe um contato com este documento: ${dup.nome} (id ${dup.id}).`, 409, 'DOCUMENTO_DUPLICADO', { contatoId: dup.id });
     }
     const c = await prisma.contato.update({ where: { id }, data: body as any });
     await auditar(req, 'Contato', id, 'ALTERAR', body);
-    return c;
+    return { ...c, avisoDocumento };
   });
 
   // ---- Excluir (soft se tiver movimento)

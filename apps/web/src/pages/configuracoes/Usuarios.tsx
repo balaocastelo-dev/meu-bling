@@ -11,7 +11,7 @@ const DESCRICAO: Record<Perfil, string> = {
   GERENTE: 'Acesso administrativo: vendas, compras, OS, estoque, financeiro, fiscal, relatórios, cadastros e WhatsApp. Não altera usuários, certificado, SMTP, Open Finance, Bling e situações.',
   FINANCEIRO: 'Financeiro, bancos, compras, comissões, relatórios e notas fiscais; leitura do restante.',
   VENDEDOR: 'Vendas, clientes, ordens de serviço, consulta de produtos/estoque, NF-e da venda e mensagens ao cliente. Meu Dashboard sem lucro.',
-  TECNICO: 'Ordens de serviço e também vendas (o técnico vende: ganha cadastro de técnico e de vendedor sozinho), clientes, consulta de produtos/estoque. Não emite NF. Meu Dashboard sem lucro.',
+  TECNICO: 'Ordens de serviço e, com “Também vende” marcado, as vendas dele também. Ganha cadastro de técnico e de vendedor sozinho. Não emite NF. Meu Dashboard sem lucro.',
 };
 
 /** Usuários e perfis de acesso */
@@ -21,7 +21,7 @@ export default function Usuarios() {
   return (
     <CrudSimples<UsuarioForm>
       titulo="Usuários"
-      descricao="Acessos ao sistema. Vincule o usuário a um vendedor/técnico para filtrar suas vendas e OS."
+      descricao="Acessos ao sistema. Para acompanhar as OS e continuar vendendo, use o perfil Técnico com “Também vende” marcado. Depois de salvar, a pessoa precisa sair e entrar de novo."
       rota="/usuarios"
       rotuloNovo="Novo usuário"
       vazio={{ nome: '', email: '', telefone: '', perfil: 'VENDEDOR', ativo: true, vendedorId: null, tecnicoId: null, vendeTambem: true, senha: '' }}

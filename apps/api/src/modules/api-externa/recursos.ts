@@ -237,7 +237,7 @@ export const ENDPOINTS: Endpoint[] = [
   },
   { metodo: 'PUT', caminho: '/vendas/{id}', recurso: 'vendas', resumo: 'Altera pedido (bloqueado depois de lançar estoque/contas, exceto observações e transporte).', corpo: { observacoes: 'Entregar à tarde' } },
   { metodo: 'DELETE', caminho: '/vendas/{id}', recurso: 'vendas', resumo: 'Exclui pedido (só sem estoque/contas lançados e sem NF autorizada).' },
-  { metodo: 'POST', caminho: '/vendas/{id}/situacao', recurso: 'vendas', resumo: 'Muda a situação (Fechada/NF emitida exigem a venda completa: 422 VENDA_INCOMPLETA). Fechada lança estoque, contas e comissão; Cancelada estorna. Erro 422 TRANSICAO_INVALIDA traz as permitidas.', corpo: SITUACAO },
+  { metodo: 'POST', caminho: '/vendas/{id}/situacao', recurso: 'vendas', resumo: 'Muda a situação. Em orçamento, ir para "Convertido em venda" cria o pedido com os mesmos itens, cliente e valores e vincula os dois. Fechada/NF emitida exigem a venda completa (422 VENDA_INCOMPLETA). Fechada lança estoque, contas e comissão; Cancelada estorna.', corpo: SITUACAO },
   { metodo: 'GET', caminho: '/vendas/{id}/finalizacao', recurso: 'vendas', resumo: 'O que falta para finalizar a venda (cliente completo ou Consumidor final, produto, custo, forma de pagamento, vendedor).' },
   { metodo: 'POST', caminho: '/vendas/{id}/link-pagamento', recurso: 'vendas', resumo: 'Gera o link de pagamento do Mercado Pago para o pedido (padrão: total da venda).', corpo: { valor: 199.9 } },
   { metodo: 'PUT', caminho: '/vendas/{id}/documentos/garantia', recurso: 'vendas', resumo: 'Grava o prazo de garantia (3, 6 ou 12 meses) confirmado pelo vendedor para cada aparelho com certificado.', corpo: { itens: [{ itemId: 1, meses: 12 }] } },
@@ -280,6 +280,9 @@ export const ENDPOINTS: Endpoint[] = [
   // ------------------------------------------------ ordens de serviço
   { metodo: 'GET', caminho: '/ordens-servico', recurso: 'os', resumo: 'Lista ordens de serviço (com "atrasada").', filtros: ['pesquisa', 'situacaoId', 'situacoes', 'contatoId', 'tecnicoId', 'vendedorId', 'prioridade (BAIXA|NORMAL|ALTA|URGENTE)', ...PERIODO, ...PAG] },
   { metodo: 'GET', caminho: '/ordens-servico/kanban', recurso: 'os', resumo: 'OS agrupadas por situação (quadro). Com período: todas as OS que entraram nele.', filtros: ['tecnicoId', 'diasFinalizadas (padrão 7)', 'dataInicial', 'dataFinal'] },
+  { metodo: 'POST', caminho: '/ordens-servico/colunas', recurso: 'os', resumo: 'Cria uma etapa (coluna) do kanban da assistência, com o nome escolhido.', corpo: { nome: 'Aguardando peça do fornecedor', cor: '#f97316' } },
+  { metodo: 'PUT', caminho: '/ordens-servico/colunas/{id}', recurso: 'os', resumo: 'Renomeia ou troca a cor de uma etapa do kanban.', corpo: { nome: 'Pronto para retirada' } },
+  { metodo: 'DELETE', caminho: '/ordens-servico/colunas/{id}', recurso: 'os', resumo: 'Remove uma etapa vazia que não seja a inicial.' },
   { metodo: 'GET', caminho: '/ordens-servico/{id}', recurso: 'os', resumo: 'OS completa: equipamento, defeito, diagnóstico, peças e serviços, parcelas, anexos, histórico.' },
   {
     metodo: 'POST', caminho: '/ordens-servico', recurso: 'os', resumo: 'Abre OS.',
@@ -287,7 +290,7 @@ export const ENDPOINTS: Endpoint[] = [
   },
   { metodo: 'PUT', caminho: '/ordens-servico/{id}', recurso: 'os', resumo: 'Altera OS (diagnóstico, serviço executado, itens, datas…). Mande só o que muda.', corpo: { diagnostico: 'Fonte queimada', servicoExecutado: 'Troca da fonte' } },
   { metodo: 'DELETE', caminho: '/ordens-servico/{id}', recurso: 'os', resumo: 'Exclui OS (sem lançamentos).' },
-  { metodo: 'POST', caminho: '/ordens-servico/{id}/situacao', recurso: 'os', resumo: 'Muda a situação da OS (avisa o cliente se configurado).', corpo: SITUACAO },
+  { metodo: 'POST', caminho: '/ordens-servico/{id}/situacao', recurso: 'os', resumo: 'Move a OS para qualquer etapa, sem passar pelas intermediárias. O histórico da troca é gravado. Fechar com peça sem custo pede confirmação (422 OS_CUSTO_PENDENTE; reenvie com confirmarCusto).', corpo: SITUACAO },
   { metodo: 'POST', caminho: '/ordens-servico/{id}/acoes', recurso: 'os', resumo: 'Ações avulsas: lancarEstoque, estornarEstoque, lancarContas, estornarContas, reservarEstoque, liberarReserva, gerarNfe.', corpo: ACOES('lancarEstoque,lancarContas') },
   { metodo: 'POST', caminho: '/ordens-servico/{id}/aprovar-orcamento', recurso: 'os', resumo: 'Marca o orçamento da OS como aprovado.', corpo: { aprovadoPor: 'Cliente', observacao: '' } },
   { metodo: 'POST', caminho: '/ordens-servico/{id}/anexos', recurso: 'os', resumo: 'Anexa arquivo/foto (multipart/form-data, campo "arquivo").' },

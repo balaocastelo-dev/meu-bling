@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { prisma, type Tx } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { arredondar, competenciaDe, dataSchema } from '../../lib/util.js';
-import { historico, situacoesPermitidas, type ContextoAcao } from '../../core/situacoes.js';
+import { historico, type ContextoAcao } from '../../core/situacoes.js';
 import { linkPublico, tokenPublico } from '../publico/token.js';
 import { depositoPadraoId, liberarReservas, movimentarEstoque, movimentaEstoque, reservarItens } from '../comum/estoque.js';
 import { cancelarComissoes, cancelarContasReceber, categoriaPadraoId, recriarComissoes, type ComissaoNova } from '../comum/financeiro.js';
@@ -166,7 +166,8 @@ export async function carregarOs(db: Db, id: number) {
 
 export async function osCompleta(id: number) {
   const os = await carregarOs(prisma, id);
-  const [hist, permitidas, cfg] = await Promise.all([historico('OS', id), situacoesPermitidas('OS', os.situacaoId), cfgCustosOs()]);
+  // qualquer etapa ativa é destino: a OS não precisa percorrer a fila (Entrada → Orçamento → …)
+  const [hist, todas, cfg] = await Promise.all([historico('OS', id), prisma.situacao.findMany({ where: { modulo: 'OS', ativo: true, id: { not: os.situacaoId } }, orderBy: { ordem: 'asc' } }), cfgCustosOs()]);
   return {
     ...os,
     fechamento: fechamentoOs(os, cfg),
@@ -175,7 +176,7 @@ export async function osCompleta(id: number) {
     anexos: os.anexos.map((a) => ({ ...a, url: `/uploads/anexos/os-${os.id}/${a.caminho}` })),
     atrasada: calcularAtrasada(os),
     historico: hist,
-    situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })),
+    situacoesPermitidas: todas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })),
     tokenPublico: tokenPublico('os', id),
     linkPublico: linkPublico('os', id),
   };

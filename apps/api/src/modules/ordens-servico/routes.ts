@@ -96,12 +96,67 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
     });
     const pesoPrioridade: Record<string, number> = { URGENTE: 0, ALTA: 1, NORMAL: 2, BAIXA: 3 };
     return situacoes.map((s) => ({
-      situacao: { id: s.id, nome: s.nome, cor: s.cor, ordem: s.ordem, final: s.final, cancelamento: s.cancelamento },
+      situacao: { id: s.id, nome: s.nome, cor: s.cor, ordem: s.ordem, final: s.final, cancelamento: s.cancelamento, inicial: s.inicial, sistema: s.sistema },
       ordens: ordens
         .filter((o) => o.situacao.id === s.id)
         .sort((a, b) => (pesoPrioridade[a.prioridade] ?? 9) - (pesoPrioridade[b.prioridade] ?? 9) || (a.dataPrevista?.getTime() ?? Infinity) - (b.dataPrevista?.getTime() ?? Infinity))
         .map(resumoOs),
     }));
+  });
+
+  // ---------------------------------------------------------------- etapas do kanban (colunas)
+  const corEtapa = z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'A cor deve ser no formato #rrggbb');
+  const CORES_ETAPA = ['#3b82f6', '#8b5cf6', '#f59e0b', '#06b6d4', '#0ea5e9', '#f97316', '#22c55e', '#84cc16', '#ec4899', '#14b8a6'];
+
+  function resumoEtapa(s: { id: number; nome: string; cor: string; ordem: number; final: boolean; cancelamento: boolean; inicial: boolean; sistema: boolean; ativo: boolean }) {
+    return { id: s.id, nome: s.nome, cor: s.cor, ordem: s.ordem, final: s.final, cancelamento: s.cancelamento, inicial: s.inicial, sistema: s.sistema, ativo: s.ativo };
+  }
+
+  app.post('/api/v1/ordens-servico/colunas', async (req, reply) => {
+    const body = z.object({ nome: z.string().trim().min(1, 'Informe o nome da etapa.').max(60), cor: corEtapa.optional() }).parse(req.body);
+    const existe = await prisma.situacao.findUnique({ where: { modulo_nome: { modulo: 'OS', nome: body.nome } } });
+    if (existe?.ativo) throw new AppError(`Já existe a etapa "${body.nome}".`, 422, 'ETAPA_DUPLICADA');
+    if (existe && !existe.ativo) {
+      const s = await prisma.situacao.update({ where: { id: existe.id }, data: { ativo: true, ...(body.cor ? { cor: body.cor } : {}) } });
+      await auditar(req, 'Situacao', s.id, 'ALTERAR', { reativada: true, nome: s.nome, modulo: 'OS' });
+      return reply.code(201).send(resumoEtapa(s));
+    }
+    const max = await prisma.situacao.aggregate({ where: { modulo: 'OS' }, _max: { ordem: true } });
+    const ordem = (max._max.ordem ?? -1) + 1;
+    const s = await prisma.situacao.create({
+      data: { modulo: 'OS', nome: body.nome, cor: body.cor ?? CORES_ETAPA[ordem % CORES_ETAPA.length]!, ordem, acoes: '[]', ativo: true, sistema: false },
+    });
+    await auditar(req, 'Situacao', s.id, 'CRIAR', { nome: s.nome, modulo: 'OS' });
+    return reply.code(201).send(resumoEtapa(s));
+  });
+
+  app.put('/api/v1/ordens-servico/colunas/:id', async (req) => {
+    const id = idDe(req);
+    const body = z.object({ nome: z.string().trim().min(1, 'Informe o nome da etapa.').max(60).optional(), cor: corEtapa.optional() }).parse(req.body);
+    const s = await prisma.situacao.findUnique({ where: { id } });
+    if (!s || s.modulo !== 'OS') throw new NotFound('Etapa');
+    if (!body.nome && !body.cor) throw new AppError('Informe o nome ou a cor.', 422, 'ETAPA');
+    if (body.nome && body.nome !== s.nome) {
+      const outra = await prisma.situacao.findUnique({ where: { modulo_nome: { modulo: 'OS', nome: body.nome } } });
+      if (outra && outra.id !== id) throw new AppError(`Já existe a etapa "${body.nome}".`, 422, 'ETAPA_DUPLICADA');
+    }
+    const atualizada = await prisma.situacao.update({ where: { id }, data: { ...(body.nome ? { nome: body.nome } : {}), ...(body.cor ? { cor: body.cor } : {}) } });
+    await auditar(req, 'Situacao', id, 'ALTERAR', { de: s.nome, para: atualizada.nome, modulo: 'OS' });
+    return resumoEtapa(atualizada);
+  });
+
+  app.delete('/api/v1/ordens-servico/colunas/:id', async (req) => {
+    const id = idDe(req);
+    const s = await prisma.situacao.findUnique({ where: { id } });
+    if (!s || s.modulo !== 'OS') throw new NotFound('Etapa');
+    if (s.inicial) throw new AppError(`"${s.nome}" é a etapa em que a OS nova entra. Escolha outra etapa inicial antes de remover.`, 422, 'ETAPA_INICIAL');
+    const ativas = await prisma.situacao.count({ where: { modulo: 'OS', ativo: true } });
+    if (ativas <= 1) throw new AppError('O quadro precisa de pelo menos uma etapa.', 422, 'ETAPA_UNICA');
+    const emUso = await prisma.ordemServico.count({ where: { situacaoId: id } });
+    if (emUso > 0) throw new AppError(`A etapa "${s.nome}" tem ${emUso} OS. Mova as ordens antes de remover.`, 422, 'ETAPA_EM_USO');
+    await prisma.situacao.delete({ where: { id } });
+    await auditar(req, 'Situacao', id, 'EXCLUIR', { nome: s.nome, modulo: 'OS' });
+    return { ok: true };
   });
 
   // ---------------------------------------------------------------- listagem
@@ -373,7 +428,8 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
     const body = z
       .object({ situacaoId: z.coerce.number().int().positive(), observacao: z.string().trim().nullable().optional(), forcar: z.boolean().optional(), confirmarCusto: z.boolean().optional() })
       .parse(req.body);
-    if (body.forcar && req.user.perfil !== 'ADMIN' && req.user.perfil !== 'GERENTE') throw new AppError('Somente ADMIN/GERENTE pode forçar transições.', 403, 'SEM_PERMISSAO');
+    // No quadro da assistência a OS vai de qualquer etapa para qualquer outra. O histórico continua sendo gravado.
+    // `forcar` do cliente deixa de ser uma permissão especial: o pulo de etapa é o comportamento normal.
     // LEMBRETE NO FECHAMENTO: ao concluir/entregar a OS com peça sem custo, a tela pergunta antes
     // ("Preencher agora" ou "Fechar assim mesmo"). Não trava: com confirmarCusto a OS fecha e o Robô da Saúde
     // continua lembrando o técnico até o custo entrar (DRE e dashboards precisam do custo real).
@@ -388,7 +444,9 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
         }
       }
     }
-    const r = await mudarSituacao({ modulo: 'OS', entidadeId: id, situacaoDestinoId: body.situacaoId, usuarioId: req.user.id, observacao: body.observacao, forcar: body.forcar });
+    const destinoLivre = await prisma.situacao.findFirst({ where: { id: body.situacaoId, modulo: 'OS', ativo: true }, select: { id: true } });
+    if (!destinoLivre) throw new AppError('Etapa inválida para ordens de serviço.', 422, 'SITUACAO');
+    const r = await mudarSituacao({ modulo: 'OS', entidadeId: id, situacaoDestinoId: body.situacaoId, usuarioId: req.user.id, observacao: body.observacao, forcar: true });
     await auditar(req, 'OrdemServico', id, 'SITUACAO', { para: r.situacao.nome, acoes: r.acoes });
     if (r.alterado && r.situacao.nome === NOME_AGUARDANDO_APROVACAO) {
       const os = await prisma.ordemServico.findUnique({ where: { id }, select: { orcar: true } });

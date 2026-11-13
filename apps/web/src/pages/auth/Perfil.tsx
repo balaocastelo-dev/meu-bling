@@ -4,10 +4,14 @@ import { api, mensagemErro } from '@/lib/api';
 import { useAuth } from '@/stores/auth';
 import { Button, Card, Definicoes, Input, PageHeader } from '@/components/ui';
 import { rotulo } from '@/lib/format';
+import type { LoginResposta } from '@/types';
 
 /** Minha conta: dados do usuário e troca de senha */
 export default function Perfil() {
   const usuario = useAuth((s) => s.usuario);
+  const login = useAuth((s) => s.login);
+  const podeTrocar = usuario?.perfil === 'VENDEDOR' || usuario?.perfil === 'TECNICO';
+  const [trocando, setTrocando] = useState(false);
   const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmar, setConfirmar] = useState('');
@@ -31,12 +35,41 @@ export default function Perfil() {
     }
   };
 
+  const outro = usuario?.perfil === 'TECNICO' ? 'VENDEDOR' : 'TECNICO';
+  const trocarPerfil = async () => {
+    setTrocando(true);
+    try {
+      const r = await api.post<LoginResposta & { alterado?: boolean }>('/auth/trocar-perfil', { perfil: outro });
+      login(r.token, r.usuario);
+      toast.success(outro === 'TECNICO' ? 'Agora você acompanha as OS como técnico e continua vendendo.' : 'Perfil voltou para vendedor.');
+    } catch (err) {
+      toast.error(mensagemErro(err));
+    } finally {
+      setTrocando(false);
+    }
+  };
+
   return (
     <div className="max-w-2xl">
       <PageHeader titulo="Minha conta" descricao="Seus dados de acesso." />
       <div className="space-y-4">
         <Card titulo="Dados">
           <Definicoes itens={[{ rotulo: 'Nome', valor: usuario?.nome }, { rotulo: 'E-mail', valor: usuario?.email }, { rotulo: 'Perfil', valor: rotulo(usuario?.perfil) }]} colunas={3} />
+          {podeTrocar && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
+              <p className="max-w-xl text-sm text-slate-600">
+                {usuario?.perfil === 'VENDEDOR'
+                  ? 'Para acompanhar as ordens de serviço e os serviços da assistência, mude para técnico. As suas vendas continuam no seu nome.'
+                  : 'Você está como técnico e também vende. Se quiser voltar a ver só o painel de vendedor, dá para trocar de novo.'}
+              </p>
+              <Button variante="primario" carregando={trocando} onClick={trocarPerfil}>
+                {usuario?.perfil === 'VENDEDOR' ? 'Acompanhar as OS como técnico' : 'Voltar para vendedor'}
+              </Button>
+            </div>
+          )}
+          {usuario?.perfil === 'ADMIN' && (
+            <p className="mt-4 text-sm text-slate-500">Para mudar o perfil de outra pessoa: Configurações → Usuários, abra o usuário, escolha Técnico e deixe “Também vende” marcado. A pessoa sai e entra de novo.</p>
+          )}
         </Card>
         <Card titulo="Alterar senha">
           <form onSubmit={salvar} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

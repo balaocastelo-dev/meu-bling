@@ -18,6 +18,7 @@ import { estornarCarneVenda, lancarCarneVenda, TIPO_CARNE } from '../carnes/serv
 import { estornarCreditoBancarioVenda, formaCreditoBancario, lancarCreditoBancarioVenda, OBS_PAGO_COM_CREDITO, TIPO_CREDITO_BANCARIO } from '../emprestimos/credito.js';
 import { carregarCfgCustos, custosVenda, type CfgCustos, type VendaParaCusto } from '../comum/custos-venda.js';
 import { comissoesDeAnuncio } from '../anuncios/comissao.js';
+import { vendedorDoUsuario } from '../comum/vendedores.js';
 import { anunciosDaOrigem } from '../anuncios/origem.js';
 import { baixarContaPagar, baixarContaReceber, saldoContaPagar, saldoContaReceber } from '../financeiro/service.js';
 import type { ItemInput, ParcelaInput, TipoVenda, VendaInput } from './schemas.js';
@@ -263,7 +264,7 @@ export function exigirPedido(v: { tipo: string }, acao: string) {
 export async function copiarVenda(
   tx: Tx,
   orig: Awaited<ReturnType<typeof carregarVenda>>,
-  opts: { tipo: TipoVenda; situacaoId?: number | null; usuarioId: number | null; observacoesInternas: string; orcamentoId?: number | null; validade?: Date | null; historicoObs: string },
+  opts: { tipo: TipoVenda; situacaoId?: number | null; usuarioId: number | null; observacoesInternas: string; orcamentoId?: number | null; validade?: Date | null; historicoObs: string; vendedorId?: number | null },
 ) {
   const modulo = moduloDe(opts.tipo);
   const situacao = opts.situacaoId
@@ -273,9 +274,11 @@ export async function copiarVenda(
   const numero = await proximoNumero(sequenciaDe(opts.tipo), tx);
   const hoje = hojeMeioDia();
   const produtos = await tx.produto.findMany({ where: { id: { in: orig.itens.map((i) => i.produtoId).filter((x): x is number => !!x) } } });
+  const idsProduto = new Set(produtos.map((p) => p.id));
   const custo = new Map(produtos.map((p) => [p.id, p.precoCusto]));
   const itens = orig.itens.map((i) => ({
-    produtoId: i.produtoId,
+    // produto apagado não pode derrubar a conversão: o item segue como avulso
+    produtoId: i.produtoId && idsProduto.has(i.produtoId) ? i.produtoId : null,
     codigo: i.codigo,
     descricao: i.descricao,
     unidade: i.unidade,
@@ -284,18 +287,22 @@ export async function copiarVenda(
     desconto: i.desconto,
     total: i.total,
     // custo digitado pelo vendedor acompanha a cópia; o do cadastro é atualizado
-    custoUnitario: !i.custoInformado && i.produtoId ? custo.get(i.produtoId) ?? i.custoUnitario : i.custoUnitario,
+    custoUnitario: !i.custoInformado && i.produtoId && idsProduto.has(i.produtoId) ? custo.get(i.produtoId) ?? i.custoUnitario : i.custoUnitario,
     custoInformado: i.custoInformado,
     comissaoPct: i.comissaoPct,
     comissaoValor: i.comissaoValor,
+    numeroSerie: i.numeroSerie,
+    garantiaMeses: i.garantiaMeses,
     ordem: i.ordem,
   }));
   const custoTotal = arredondar(itens.reduce((s, i) => s + i.custoUnitario * i.quantidade, 0));
   const primeira = orig.parcelas[0]?.dataVencimento ? new Date(orig.parcelas[0].dataVencimento) : new Date(orig.data);
+  const formaIds = orig.parcelas.map((p) => p.formaPagamentoId).filter((x): x is number => !!x);
+  const formasOk = new Set(formaIds.length ? (await tx.formaPagamento.findMany({ where: { id: { in: formaIds } }, select: { id: true } })).map((f) => f.id) : []);
   const parcelas = orig.parcelas.map((p) => {
     const venc = new Date(hoje);
     venc.setDate(venc.getDate() + Math.max(0, Math.round((new Date(p.dataVencimento).getTime() - primeira.getTime()) / 86400000)));
-    return { numero: p.numero, dataVencimento: venc, valor: p.valor, formaPagamentoId: p.formaPagamentoId, observacoes: p.observacoes };
+    return { numero: p.numero, dataVencimento: venc, valor: p.valor, formaPagamentoId: p.formaPagamentoId && formasOk.has(p.formaPagamentoId) ? p.formaPagamentoId : null, observacoes: p.observacoes };
   });
   const v = await tx.venda.create({
     data: {
@@ -304,7 +311,7 @@ export async function copiarVenda(
       data: hoje,
       validade: opts.validade ?? null,
       contatoId: orig.contatoId,
-      vendedorId: orig.vendedorId,
+      vendedorId: opts.vendedorId ?? orig.vendedorId,
       situacaoId: situacao.id,
       depositoId: orig.depositoId,
       categoriaFinanceiraId: orig.categoriaFinanceiraId,
@@ -360,6 +367,17 @@ export async function aprovarOrcamento(id: number, p: { aprovadoPor?: string | n
   return { jaAprovado: false, convertido: false, vendaGerada: null, situacao };
 }
 
+/** Situação de orçamento que significa "virou pedido" (o nome do seed é "Convertido em venda"). */
+export function situacaoConverteOrcamento(s: { nome?: string | null; cancelamento?: boolean | null } | null | undefined) {
+  if (!s?.nome || s.cancelamento) return false;
+  return /convert/i.test(s.nome);
+}
+
+/** Pedido já gerado por este orçamento (não depende do lado inverso da relação). */
+export async function vendaGeradaDoOrcamento(id: number) {
+  return prisma.venda.findFirst({ where: { orcamentoId: id, tipo: 'PEDIDO' }, select: { id: true, numero: true } });
+}
+
 /**
  * Converte o orçamento em pedido de venda: cria a venda (tipo PEDIDO) com os mesmos itens/parcelas,
  * vincula (venda.orcamentoId) e move o orçamento para "Convertido em venda". Só uma vez por orçamento.
@@ -367,13 +385,17 @@ export async function aprovarOrcamento(id: number, p: { aprovadoPor?: string | n
 export async function converterOrcamento(id: number, p: { usuarioId: number | null; situacaoId?: number | null }) {
   const orig = await carregarVenda(prisma, id);
   if (orig.tipo !== 'ORCAMENTO') throw new AppError('Este registro não é um orçamento.', 422, 'NAO_ORCAMENTO');
-  if (orig.vendaGerada) throw new AppError(`Este orçamento já virou a venda nº ${orig.vendaGerada.numero}.`, 422, 'JA_CONVERTIDO', { vendaId: orig.vendaGerada.id });
+  const jaGerada = orig.vendaGerada ?? (await vendaGeradaDoOrcamento(id));
+  if (jaGerada) throw new AppError(`Este orçamento já virou a venda nº ${jaGerada.numero}.`, 422, 'JA_CONVERTIDO', { vendaId: jaGerada.id });
   if (orig.situacao.cancelamento) throw new AppError(`Orçamento ${orig.situacao.nome.toLowerCase()}: reabra-o antes de converter.`, 422, 'ORCAMENTO_FECHADO');
+  // sem vendedor, a venda some da lista de quem converteu (vendedor/técnico só veem as próprias)
+  const vendedorId = orig.vendedorId ?? (p.usuarioId ? await vendedorDoUsuario(p.usuarioId) : null);
   const { venda, situacao } = await prisma.$transaction(async (tx) => {
     const r = await copiarVenda(tx, orig, {
       tipo: 'PEDIDO',
       situacaoId: p.situacaoId,
       usuarioId: p.usuarioId,
+      vendedorId,
       observacoesInternas: [orig.observacoesInternas, `Gerada do orçamento nº ${orig.numero}`].filter(Boolean).join('\n'),
       orcamentoId: orig.id,
       historicoObs: `Venda gerada do orçamento nº ${orig.numero}`,

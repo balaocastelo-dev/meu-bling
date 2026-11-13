@@ -31,6 +31,8 @@ import {
   aprovarOrcamento,
   carregarVenda,
   converterOrcamento,
+  situacaoConverteOrcamento,
+  vendaGeradaDoOrcamento,
   copiarVenda,
   criarVenda,
   exigirPedido,
@@ -143,6 +145,19 @@ async function resumoLista(where: any, filtrouSituacao: boolean, usuario: { perf
     canceladasForaDoTotal: canceladas,
     destaque,
   };
+}
+
+/** Ações da situação inicial da venda gerada (ex.: reservar estoque). Erro aqui não desfaz a venda. */
+async function rodarAcoesIniciais(vendaId: number, acoesJson: string | null | undefined, usuarioId: number | null) {
+  const acoes = (JSON.parse(acoesJson || '[]') as Acao[]).filter((a) => a !== 'notificarCliente');
+  if (!acoes.length) return [] as Acao[];
+  try {
+    await executarAcoes('VENDA', vendaId, acoes, usuarioId);
+    return acoes;
+  } catch (e) {
+    console.error('[converter] venda criada, mas a ação inicial falhou', e);
+    return [] as Acao[];
+  }
 }
 
 export default async function vendasRoutes(app: FastifyInstance) {
@@ -432,8 +447,28 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const id = idDe(req);
     const body = situacaoBody.parse(req.body);
     if (body.forcar && req.user.perfil !== 'ADMIN' && req.user.perfil !== 'GERENTE') throw new AppError('Somente ADMIN/GERENTE pode forçar transições.', 403, 'SEM_PERMISSAO');
-    const atual = await prisma.venda.findUnique({ where: { id }, select: { tipo: true } });
+    const atual = await prisma.venda.findUnique({ where: { id }, select: { tipo: true, situacao: { select: { cancelamento: true } } } });
     if (!atual) throw new NotFound('Venda');
+    // "Convertido em venda" no seletor de situação TEM que criar o pedido. Antes só trocava o rótulo
+    // e o orçamento ficava marcado sem venda nenhuma.
+    if (atual.tipo === 'ORCAMENTO') {
+      const destino = await prisma.situacao.findUnique({ where: { id: body.situacaoId } });
+      if (destino?.modulo === 'ORCAMENTO' && situacaoConverteOrcamento(destino)) {
+        const existente = await vendaGeradaDoOrcamento(id);
+        if (!existente && !atual.situacao.cancelamento) {
+          const { venda, situacao } = await converterOrcamento(id, { usuarioId: req.user.id });
+          const acoesIniciais = await rodarAcoesIniciais(venda.id, situacao.acoes, req.user.id);
+          await auditar(req, 'Orcamento', id, 'ACAO', { acao: 'converter', vendaId: venda.id, numeroVenda: venda.numero, pelaSituacao: destino.nome });
+          eventos.emitir('venda.criada', { vendaId: venda.id, usuarioId: req.user.id });
+          const orc = await prisma.venda.findUnique({ where: { id }, select: { situacao: { select: { id: true, nome: true, cor: true } } } });
+          return { situacao: orc?.situacao ?? { id: destino.id, nome: destino.nome, cor: destino.cor }, acoesExecutadas: acoesIniciais, alterado: true, venda: { id: venda.id, numero: venda.numero } };
+        }
+        if (existente) {
+          const r = await mudarSituacao({ modulo: 'ORCAMENTO', entidadeId: id, situacaoDestinoId: body.situacaoId, usuarioId: req.user.id, observacao: body.observacao, forcar: true });
+          return { situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor }, acoesExecutadas: r.acoes, alterado: r.alterado, venda: existente, compra: null };
+        }
+      }
+    }
     let forcar = body.forcar;
     if (atual.tipo !== 'ORCAMENTO') {
       const destino = await prisma.situacao.findUnique({ where: { id: body.situacaoId } });
@@ -625,9 +660,8 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const id = idDe(req);
     const body = converterBody.parse(req.body || {});
     const { venda, situacao } = await converterOrcamento(id, { usuarioId: req.user.id, situacaoId: body.situacaoId });
-    // ações da situação inicial da venda gerada (ex.: "Em aberto" reserva estoque)
-    const acoesIniciais = (JSON.parse(situacao.acoes || '[]') as Acao[]).filter((a) => a !== 'notificarCliente');
-    if (acoesIniciais.length) await executarAcoes('VENDA', venda.id, acoesIniciais, req.user.id);
+    // a venda já está gravada: falha ao reservar estoque não pode fazer a tela achar que não virou venda
+    await rodarAcoesIniciais(venda.id, situacao.acoes, req.user.id);
     await auditar(req, 'Orcamento', id, 'ACAO', { acao: 'converter', vendaId: venda.id, numeroVenda: venda.numero });
     eventos.emitir('venda.criada', { vendaId: venda.id, usuarioId: req.user.id });
     return reply.code(201).send(comFechamento(req, await vendaCompleta(venda.id)));

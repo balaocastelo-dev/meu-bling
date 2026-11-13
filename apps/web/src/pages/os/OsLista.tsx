@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { Clock, FileText, Kanban, List, Pencil, Plus, Printer, Tag, TriangleAlert, Wrench } from 'lucide-react';
+import { Clock, FileText, Kanban, List, Pencil, Plus, Printer, Tag, Trash2, TriangleAlert, Wrench } from 'lucide-react';
 import { abrirEmNovaAba, api, ApiError, mensagemErro } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useSelecao } from '@/hooks/useSelecao';
@@ -14,22 +14,25 @@ import { EtiquetaModal } from '@/components/compartilhados/EtiquetaModal';
 import { EditarEmLote } from '@/components/compartilhados/EditarEmLote';
 import type { Etiqueta } from '@/components/compartilhados/etiquetas';
 import { useSituacoes, useTecnicos, opcoesDe } from '@/hooks/useListas';
-import { Badge, BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, Modal, PageHeader, Pagination, PeriodoFiltro, Segmentado, SelectFiltro, Skeleton, StatusBadge, Table, type Coluna } from '@/components/ui';
+import { Badge, BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, ConfirmDialog, EmptyState, Input, Modal, PageHeader, Pagination, PeriodoFiltro, Segmentado, SelectFiltro, Skeleton, StatusBadge, Table, type Coluna } from '@/components/ui';
 import { LembretesParaVoce } from '@/components/compartilhados/Lembretes';
 import { data, diasAtraso, moeda, rotulo, truncar } from '@/lib/format';
 import type { KanbanColuna, OsResumo, Paginado, PendenciaCusto, SituacaoRef } from '@/types';
 
 const PRIORIDADE_TOM: Record<string, 'neutro' | 'azul' | 'amarelo' | 'vermelho'> = { BAIXA: 'neutro', NORMAL: 'azul', ALTA: 'amarelo', URGENTE: 'vermelho' };
 
+type Etapa = KanbanColuna['situacao'] & { inicial?: boolean; sistema?: boolean };
+
 /** Card de OS no kanban */
-function CardOs({ os, onDragStart }: { os: OsResumo; onDragStart: (e: React.DragEvent) => void }) {
+function CardOs({ os, etapas, etapaAtual, onMover, onDragStart }: { os: OsResumo; etapas: Etapa[]; etapaAtual: number; onMover: (osId: number, situacaoId: number) => void; onDragStart: (e: React.DragEvent) => void }) {
+  const nav = useNavigate();
   const atrasada = os.atrasada ?? (os.dataPrevista ? diasAtraso(os.dataPrevista) > 0 : false);
   return (
-    <Link
-      to={`/ordens-servico/${os.id}`}
+    <div
       draggable
       onDragStart={onDragStart}
-      className={clsx('block cursor-grab rounded-md border bg-white p-2.5 text-sm shadow-xs transition hover:shadow active:cursor-grabbing', atrasada ? 'border-red-200' : 'border-slate-200')}
+      onClick={() => nav(`/ordens-servico/${os.id}`)}
+      className={clsx('block min-w-0 cursor-grab overflow-hidden rounded-md border bg-white p-2.5 text-sm shadow-xs transition hover:shadow active:cursor-grabbing', atrasada ? 'border-red-200' : 'border-slate-200')}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-semibold text-slate-900">OS {os.numero}</span>
@@ -52,17 +55,69 @@ function CardOs({ os, onDragStart }: { os: OsResumo; onDragStart: (e: React.Drag
           {!!os.pecasSemCusto && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700" title="Peça sem custo: preencha o custo na OS">💲 custo?</span>}
         </div>
       )}
-    </Link>
+      <label className="mt-2 block" onClick={(e) => e.stopPropagation()}>
+        <span className="sr-only">Etapa da OS {os.numero}</span>
+        <select
+          className="w-full min-w-0 max-w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[11px] text-slate-700"
+          value={etapaAtual}
+          onChange={(e) => {
+            const id = Number(e.target.value);
+            if (id && id !== etapaAtual) onMover(os.id, id);
+          }}
+        >
+          {etapas.map((e) => (
+            <option key={e.id} value={e.id}>{e.nome}</option>
+          ))}
+        </select>
+      </label>
+    </div>
   );
 }
 
 /** Kanban de OS com drag & drop HTML5 */
 function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; dataInicial: string; dataFinal: string }) {
   const qc = useQueryClient();
-  const { data: colunas, isLoading, error } = useQuery({ queryKey: ['os-kanban', tecnicoId, dataInicial, dataFinal], queryFn: () => api.get<KanbanColuna[]>('/ordens-servico/kanban', { tecnicoId, dataInicial, dataFinal }), refetchInterval: 60_000 });
+  const { data: colunas, isLoading, error } = useQuery({ queryKey: ['os-kanban', tecnicoId, dataInicial, dataFinal], queryFn: () => api.get<(KanbanColuna & { situacao: Etapa })[]>('/ordens-servico/kanban', { tecnicoId, dataInicial, dataFinal }), refetchInterval: 60_000 });
   const [sobre, setSobre] = useState<number | null>(null);
+  const [novaEtapa, setNovaEtapa] = useState('');
+  const [criarAberto, setCriarAberto] = useState(false);
+  const [renomear, setRenomear] = useState<{ id: number; nome: string } | null>(null);
+  const [remover, setRemover] = useState<Etapa | null>(null);
   // lembrete no fechamento (arrastou para "Concluída/Entregue" com peça sem custo)
   const [custoPendente, setCustoPendente] = useState<{ osId: number; situacaoId: number; numero?: number; lista: PendenciaCusto[] } | null>(null);
+
+  const invalidarQuadro = () => {
+    qc.invalidateQueries({ queryKey: ['os-kanban'] });
+    qc.invalidateQueries({ queryKey: ['situacoes'] });
+  };
+  const criarEtapa = useMutation({
+    mutationFn: (nome: string) => api.post<Etapa>('/ordens-servico/colunas', { nome }),
+    onSuccess: (e) => {
+      toast.success(`Etapa "${e.nome}" criada.`);
+      setCriarAberto(false);
+      setNovaEtapa('');
+      invalidarQuadro();
+    },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
+  const renomearEtapa = useMutation({
+    mutationFn: (p: { id: number; nome: string }) => api.put<Etapa>(`/ordens-servico/colunas/${p.id}`, { nome: p.nome }),
+    onSuccess: (e) => {
+      toast.success(`Etapa renomeada para "${e.nome}".`);
+      setRenomear(null);
+      invalidarQuadro();
+    },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
+  const removerEtapa = useMutation({
+    mutationFn: (id: number) => api.del(`/ordens-servico/colunas/${id}`),
+    onSuccess: () => {
+      toast.success('Etapa removida.');
+      setRemover(null);
+      invalidarQuadro();
+    },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
 
   const mover = useMutation({
     mutationFn: (p: { osId: number; situacaoId: number; forcar?: boolean; confirmarCusto?: boolean }) => api.post<{ situacao: SituacaoRef }>(`/ordens-servico/${p.osId}/situacao`, { situacaoId: p.situacaoId, forcar: p.forcar, confirmarCusto: p.confirmarCusto }),
@@ -110,7 +165,8 @@ function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; da
         </div>
       )}
     </Modal>
-    <div className="-mx-3 flex snap-x gap-3 overflow-x-auto px-3 pb-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6">
+    <div className="min-w-0 max-w-full">
+    <div className="-mx-3 flex max-w-full snap-x gap-3 overflow-x-auto px-3 pb-3 contain-paint sm:-mx-4 sm:px-4 md:-mx-6 md:px-6">
       {colunas.map((col) => (
         <div
           key={col.situacao.id}
@@ -126,12 +182,18 @@ function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; da
             const origem = Number(e.dataTransfer.getData('text/situacao-id'));
             if (osId && origem !== col.situacao.id) mover.mutate({ osId, situacaoId: col.situacao.id });
           }}
-          className={clsx('flex w-[82vw] max-w-72 shrink-0 snap-start flex-col rounded-lg border bg-slate-100/70 transition sm:w-72', sobre === col.situacao.id ? 'border-brand-400 bg-brand-50/60' : 'border-slate-200')}
+          className={clsx('flex w-[82vw] max-w-72 shrink-0 snap-start flex-col overflow-hidden rounded-lg border bg-slate-100/70 transition sm:w-72', sobre === col.situacao.id ? 'border-brand-400 bg-brand-50/60' : 'border-slate-200')}
         >
-          <div className="flex items-center gap-2 px-3 py-2.5">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: col.situacao.cor }} />
-            <span className="text-sm font-semibold text-slate-800">{col.situacao.nome}</span>
-            <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-500">{col.ordens.length}</span>
+          <div className="flex items-center gap-1.5 px-3 py-2.5">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: col.situacao.cor }} />
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{col.situacao.nome}</span>
+            <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-500">{col.ordens.length}</span>
+            <button type="button" className="rounded p-1 text-slate-400 hover:bg-white hover:text-slate-700" title="Renomear etapa" aria-label={`Renomear ${col.situacao.nome}`} onClick={() => setRenomear({ id: col.situacao.id, nome: col.situacao.nome })}>
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" className="rounded p-1 text-slate-400 hover:bg-white hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30" title={col.ordens.length ? 'Mova as OS antes de remover' : col.situacao.inicial ? 'Etapa inicial, não pode remover' : 'Remover etapa vazia'} aria-label={`Remover ${col.situacao.nome}`} disabled={col.ordens.length > 0 || !!col.situacao.inicial} onClick={() => setRemover(col.situacao)}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
           </div>
           <div className="flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2" style={{ maxHeight: 'calc(100dvh - 260px)' }}>
             {col.ordens.length === 0 && <p className="py-6 text-center text-xs text-slate-400">Arraste uma OS para cá</p>}
@@ -139,6 +201,9 @@ function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; da
               <CardOs
                 key={os.id}
                 os={os}
+                etapas={colunas.map((c) => c.situacao)}
+                etapaAtual={col.situacao.id}
+                onMover={(osId, situacaoId) => mover.mutate({ osId, situacaoId })}
                 onDragStart={(e) => {
                   e.dataTransfer.setData('text/os-id', String(os.id));
                   e.dataTransfer.setData('text/situacao-id', String(col.situacao.id));
@@ -149,7 +214,37 @@ function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; da
           </div>
         </div>
       ))}
+      <button type="button" onClick={() => { setNovaEtapa(''); setCriarAberto(true); }} className="flex w-[82vw] max-w-72 shrink-0 snap-start flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white/60 px-3 py-8 text-sm font-medium text-slate-500 transition hover:border-brand-400 hover:text-brand-700 sm:w-72">
+        <Plus className="h-5 w-5" />
+        Nova etapa
+      </button>
     </div>
+    </div>
+    <Modal
+      aberto={criarAberto}
+      onFechar={() => setCriarAberto(false)}
+      titulo="Nova etapa do quadro"
+      descricao="A coluna fica salva e aparece para todo mundo."
+      rodape={<><Button variante="secundario" onClick={() => setCriarAberto(false)}>Cancelar</Button><Button variante="primario" carregando={criarEtapa.isPending} onClick={() => novaEtapa.trim() && criarEtapa.mutate(novaEtapa.trim())}>Criar etapa</Button></>}
+    >
+      <Input label="Nome da etapa" value={novaEtapa} onChange={(e) => setNovaEtapa(e.target.value)} autoFocus placeholder="Ex.: Aguardando peça do fornecedor" onKeyDown={(e) => e.key === 'Enter' && novaEtapa.trim() && criarEtapa.mutate(novaEtapa.trim())} />
+    </Modal>
+    <Modal
+      aberto={!!renomear}
+      onFechar={() => setRenomear(null)}
+      titulo="Renomear etapa"
+      rodape={<><Button variante="secundario" onClick={() => setRenomear(null)}>Cancelar</Button><Button variante="primario" carregando={renomearEtapa.isPending} onClick={() => renomear && renomear.nome.trim() && renomearEtapa.mutate({ id: renomear.id, nome: renomear.nome.trim() })}>Salvar</Button></>}
+    >
+      {renomear && <Input label="Nome" value={renomear.nome} onChange={(e) => setRenomear({ ...renomear, nome: e.target.value })} autoFocus />}
+    </Modal>
+    <ConfirmDialog
+      aberto={!!remover}
+      onFechar={() => setRemover(null)}
+      titulo={remover ? `Remover a etapa "${remover.nome}"?` : ''}
+      descricao="Só dá para remover etapa vazia. As OS que já passaram por ela continuam no histórico."
+      textoConfirmar="Remover"
+      onConfirmar={async () => { if (remover) await removerEtapa.mutateAsync(remover.id).catch(() => undefined); }}
+    />
     </>
   );
 }
@@ -351,7 +446,7 @@ export default function OsLista() {
     <div>
       <PageHeader
         titulo="Ordens de serviço"
-        descricao="Assistência técnica — arraste os cards entre as colunas para mudar a situação."
+        descricao="Assistência técnica — arraste o card para qualquer etapa, ou escolha a etapa no próprio card. Dá para criar e renomear colunas."
         acoes={
           <>
             <SelectFiltro valor={tecnicoId} onChange={(v) => pg.setFiltro('tecnicoId', v)} opcoes={opcoesDe(tecnicos)} placeholder="Todos os técnicos" />

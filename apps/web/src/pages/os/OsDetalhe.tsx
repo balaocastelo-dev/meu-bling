@@ -7,6 +7,7 @@ import { AlertTriangle, BadgeCheck, ExternalLink, FileText, Image as ImageIcon, 
 import { abrirEmNovaAba, api, mensagemErro, urlUpload, BASE_PATH } from '@/lib/api';
 import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, PageHeader, StatusBadge, StatusChanger, Tabs, tomPorStatus, ValorOculto } from '@/components/ui';
 import { HistoricoSituacoes } from '@/components/compartilhados/HistoricoSituacoes';
+import { EditarCliente } from '@/components/compartilhados/EditarCliente';
 import { NotificarModal } from '@/components/compartilhados/NotificarModal';
 import { EmitirNfModal } from '@/components/compartilhados/EmitirNfModal';
 import { NotificacoesLista } from '@/components/compartilhados/NotificacoesLista';
@@ -29,6 +30,7 @@ export default function OsDetalhe() {
   const [aba, setAba] = useState('equipamento');
   const [notificar, setNotificar] = useState(false);
   const [excluir, setExcluir] = useState(false);
+  const [editarCliente, setEditarCliente] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: os, isLoading, error } = useQuery({ queryKey: ['os', id], queryFn: () => api.get<OrdemServico>(`/ordens-servico/${id}`) });
@@ -174,7 +176,7 @@ export default function OsDetalhe() {
           <Definicoes
             colunas={4}
             itens={[
-              { rotulo: 'Cliente', valor: <Link to={`/contatos/${os.contatoId}`} className="font-medium text-brand-600 hover:underline">{contato?.nome}</Link> },
+              { rotulo: 'Cliente', valor: <span className="inline-flex flex-wrap items-center gap-2"><Link to={`/contatos/${os.contatoId}`} className="font-medium text-brand-600 hover:underline">{contato?.nome}</Link><button type="button" className="text-xs font-medium text-brand-600 hover:underline" onClick={() => setEditarCliente(true)}>Corrigir cadastro</button></span> },
               { rotulo: 'Contato', valor: contato?.celular || contato?.telefone || contato?.email || '—' },
               { rotulo: 'Técnico', valor: os.tecnico?.nome },
               { rotulo: 'Atendente', valor: os.vendedor?.nome },
@@ -402,6 +404,7 @@ export default function OsDetalhe() {
       )}
 
       <NotificarModal aberto={notificar} onFechar={() => setNotificar(false)} caminho={`/ordens-servico/${os.id}`} eventoTemplate="OS_SITUACAO" eventosExtras={["OS_CRIADA", "ORCAMENTO_OS"]} destinatarios={{ email: contato?.email, celular: contato?.celular }} />
+      <EditarCliente contatoId={os.contatoId} aberto={editarCliente} onFechar={() => setEditarCliente(false)} />
       <ConfirmDialog aberto={excluir} onFechar={() => setExcluir(false)} titulo="Excluir OS?" descricao={`A OS nº ${os.numero} será removida.`} textoConfirmar="Excluir" onConfirmar={async () => { try { await api.del(`/ordens-servico/${id}`); toast.success('OS excluída.'); invalidar(); nav('/ordens-servico'); } catch (e) { toast.error(mensagemErro(e)); } }} />
       <EmitirNfModal
         aberto={nfeAberto}
