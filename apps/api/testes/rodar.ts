@@ -101,7 +101,7 @@ async function main() {
     rodar('Correções da Júlia: endereço no cadastro, CNPJ, 3x no cartão em 1 linha, envio na hora, só técnico, fila sem custo, IE travada', NPX, ['tsx', 'testes/julia-venda-assistencia.ts', base]);
     rodar('Vendas: custo do produto e logística internos (fora do cliente) + ordem do contas a pagar', NPX, ['tsx', 'testes/venda-custos.ts', base]);
     rodar('Venda paga na hora entra no caixa + ajuste de saldo fora do DRE + DRE', NPX, ['tsx', 'testes/pago-na-hora.ts', base]);
-    rodar('Link do Mercado Pago: parcelas sem juros (0, 2 ou 3) sem limitar 12x e sem cobrança real', NPX, ['tsx', 'testes/link-sem-juros.ts', base]);
+    rodar('Link do Mercado Pago: até 12x, juros do cliente, sem cobrança real', NPX, ['tsx', 'testes/link-pagamento.ts', base], { env: { DATABASE_URL: env.DATABASE_URL } });
     rodar('Venda cancelada/excluída desfaz a compra registrada ao finalizar (dinheiro volta ao banco)', NPX, ['tsx', 'testes/venda-cancelada-compra.ts', base]);
     rodar('Empréstimos (Lumicred): repasse, cliente paga direto, capital de giro, cancelar; DRE só com juros', NPX, ['tsx', 'testes/emprestimos.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Crédito bancário como forma de pagamento: venda (cliente ou loja paga) e compra geram o empréstimo', NPX, ['tsx', 'testes/credito-bancario.ts', base], { env: { TZ: 'America/Sao_Paulo' } });

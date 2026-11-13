@@ -491,8 +491,6 @@ export interface Venda extends VendaResumo {
   origem: OrigemVenda;
   numeroPedidoLoja?: string | null;
   linkPagamentoUrl?: string | null;
-  /** 0 = juros do cliente. 2 ou 3 = até Nx sem juros anotado no link do Mercado Pago */
-  linkPagamentoSemJuros?: number | null;
   /** cobrança gerada no Asaas a partir deste pedido */
   asaasCobrancaId?: string | null;
   asaasLinkUrl?: string | null;
@@ -567,8 +565,6 @@ export interface VendaPayload {
   fretePorConta: number;
   quantidadeVolumes: number;
   pesoBruto: number;
-  /** 0, 2 ou 3 — parcelas sem juros no link do Mercado Pago */
-  linkPagamentoSemJuros: 0 | 2 | 3;
   itens: VendaItem[];
   parcelas: Parcela[];
 }
