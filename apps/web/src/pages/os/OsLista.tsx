@@ -32,7 +32,7 @@ function CardOs({ os, etapas, etapaAtual, onMover, onDragStart }: { os: OsResumo
       draggable
       onDragStart={onDragStart}
       onClick={() => nav(`/ordens-servico/${os.id}`)}
-      className={clsx('block cursor-grab rounded-md border bg-white p-2.5 text-sm shadow-xs transition hover:shadow active:cursor-grabbing', atrasada ? 'border-red-200' : 'border-slate-200')}
+      className={clsx('block min-w-0 cursor-grab overflow-hidden rounded-md border bg-white p-2.5 text-sm shadow-xs transition hover:shadow active:cursor-grabbing', atrasada ? 'border-red-200' : 'border-slate-200')}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-semibold text-slate-900">OS {os.numero}</span>
@@ -58,7 +58,7 @@ function CardOs({ os, etapas, etapaAtual, onMover, onDragStart }: { os: OsResumo
       <label className="mt-2 block" onClick={(e) => e.stopPropagation()}>
         <span className="sr-only">Etapa da OS {os.numero}</span>
         <select
-          className="w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[11px] text-slate-700"
+          className="w-full min-w-0 max-w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-1 text-[11px] text-slate-700"
           value={etapaAtual}
           onChange={(e) => {
             const id = Number(e.target.value);
@@ -165,7 +165,8 @@ function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; da
         </div>
       )}
     </Modal>
-    <div className="-mx-3 flex snap-x gap-3 overflow-x-auto px-3 pb-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6">
+    <div className="min-w-0 max-w-full">
+    <div className="-mx-3 flex max-w-full snap-x gap-3 overflow-x-auto px-3 pb-3 contain-paint sm:-mx-4 sm:px-4 md:-mx-6 md:px-6">
       {colunas.map((col) => (
         <div
           key={col.situacao.id}
@@ -181,7 +182,7 @@ function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; da
             const origem = Number(e.dataTransfer.getData('text/situacao-id'));
             if (osId && origem !== col.situacao.id) mover.mutate({ osId, situacaoId: col.situacao.id });
           }}
-          className={clsx('flex w-[82vw] max-w-72 shrink-0 snap-start flex-col rounded-lg border bg-slate-100/70 transition sm:w-72', sobre === col.situacao.id ? 'border-brand-400 bg-brand-50/60' : 'border-slate-200')}
+          className={clsx('flex w-[82vw] max-w-72 shrink-0 snap-start flex-col overflow-hidden rounded-lg border bg-slate-100/70 transition sm:w-72', sobre === col.situacao.id ? 'border-brand-400 bg-brand-50/60' : 'border-slate-200')}
         >
           <div className="flex items-center gap-1.5 px-3 py-2.5">
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: col.situacao.cor }} />
@@ -217,6 +218,7 @@ function KanbanOs({ tecnicoId, dataInicial, dataFinal }: { tecnicoId: string; da
         <Plus className="h-5 w-5" />
         Nova etapa
       </button>
+    </div>
     </div>
     <Modal
       aberto={criarAberto}
