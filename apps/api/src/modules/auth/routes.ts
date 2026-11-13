@@ -63,6 +63,35 @@ export default async function authRoutes(app: FastifyInstance) {
     return u;
   });
 
+  /**
+   * O próprio vendedor ou técnico troca entre os dois perfis (sem virar administrador).
+   * Técnico continua vendendo (`vendeTambem`). Devolve um token novo para a sessão valer na hora.
+   */
+  app.post('/api/v1/auth/trocar-perfil', async (req, reply) => {
+    const body = z.object({ perfil: z.enum(['VENDEDOR', 'TECNICO']) }).parse(req.body);
+    const atual = await prisma.usuario.findUnique({ where: { id: req.user.id } });
+    if (!atual || !atual.ativo) throw new NotFound('Usuário');
+    if (atual.perfil !== 'VENDEDOR' && atual.perfil !== 'TECNICO') {
+      throw new AppError('Só vendedor e técnico trocam o próprio perfil por aqui. Os demais perfis são alterados em Configurações → Usuários, por um administrador.', 403, 'SEM_PERMISSAO');
+    }
+    if (atual.perfil !== body.perfil) {
+      await prisma.usuario.update({
+        where: { id: atual.id },
+        data: { perfil: body.perfil, ...(body.perfil === 'TECNICO' ? { vendeTambem: true } : {}) },
+      });
+    }
+    const vendedorId = await vendedorDoUsuario(atual.id);
+    const tecnicoId = await tecnicoDoUsuario(atual.id);
+    const u = await prisma.usuario.findUnique({ where: { id: atual.id }, select: { id: true, nome: true, email: true, perfil: true } });
+    if (!u) throw new NotFound('Usuário');
+    const payload = { id: u.id, nome: u.nome, email: u.email, perfil: u.perfil as any, vendedorId, tecnicoId };
+    const token = app.jwt.sign(payload);
+    req.user = payload;
+    await auditar(req, 'Usuario', u.id, 'ALTERAR', { perfil: u.perfil, proprio: true });
+    reply.setCookie(COOKIE_SESSAO, token, { path: COOKIE_PATH, httpOnly: true, sameSite: 'lax', secure: env.isProd && env.APP_URL.startsWith('https'), maxAge: 12 * 3600 });
+    return { token, usuario: payload, alterado: atual.perfil !== body.perfil };
+  });
+
   app.put('/api/v1/auth/senha', async (req) => {
     const body = z.object({ senhaAtual: z.string(), novaSenha: z.string().min(8, 'A nova senha deve ter pelo menos 8 caracteres') }).parse(req.body);
     const u = await prisma.usuario.findUnique({ where: { id: req.user.id } });
@@ -142,6 +171,7 @@ export default async function authRoutes(app: FastifyInstance) {
       })
       .catch(erroUnico);
     await vendedorDoUsuario(u.id);
+    await tecnicoDoUsuario(u.id);
     await aplicarSoTecnico(u.id);
     await auditar(req, 'Usuario', u.id, 'CRIAR', { email: u.email });
     return reply.code(201).send(u);
@@ -158,6 +188,7 @@ export default async function authRoutes(app: FastifyInstance) {
     if (id === req.user.id && body.ativo === false) throw new AppError('Você não pode desativar o próprio usuário.');
     await prisma.usuario.update({ where: { id }, data, select: { id: true } }).catch(erroUnico);
     await vendedorDoUsuario(id);
+    await tecnicoDoUsuario(id);
     await aplicarSoTecnico(id);
     await auditar(req, 'Usuario', id, 'ALTERAR', body);
     return prisma.usuario.findUnique({ where: { id }, select: selecaoUsuario });

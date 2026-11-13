@@ -55,12 +55,16 @@ export function StatusChanger({ modulo, caminho, situacaoAtual, situacoesPermiti
   }, []);
 
   const mutacao = useMutation({
-    mutationFn: (p: { situacaoId: number; observacao?: string; forcar?: boolean; confirmarCusto?: boolean }) => api.post<{ situacao: SituacaoRef; acoesExecutadas: string[] }>(`${caminho}/situacao`, p),
+    mutationFn: (p: { situacaoId: number; observacao?: string; forcar?: boolean; confirmarCusto?: boolean }) => api.post<{ situacao: SituacaoRef; acoesExecutadas: string[]; venda?: { id: number; numero: number } }>(`${caminho}/situacao`, p),
     onSuccess: (r, vars) => {
       const nova = r?.situacao ?? todas?.find((s) => s.id === vars.situacaoId) ?? confirmar?.destino;
-      toast.success(`Situação alterada para "${nova?.nome ?? ''}"`, {
-        description: r?.acoesExecutadas?.length ? `Ações: ${r.acoesExecutadas.join(', ')}` : undefined,
-      });
+      if (r?.venda) {
+        toast.success(`Venda nº ${r.venda.numero} criada`, { description: 'O orçamento ficou ligado a esse pedido.' });
+      } else {
+        toast.success(`Situação alterada para "${nova?.nome ?? ''}"`, {
+          description: r?.acoesExecutadas?.length ? `Ações: ${r.acoesExecutadas.join(', ')}` : undefined,
+        });
+      }
       invalidar?.forEach((k) => qc.invalidateQueries({ queryKey: k }));
       if (nova) onAlterado?.(nova);
       setConfirmar(null);
