@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Bell, CircleDollarSign, Mail, MapPin, MessageCircle, Pencil, Phone, Plus, ShoppingCart, Trash2, Wallet, Wrench } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { Badge, Button, Card, ConfirmDialog, Definicoes, EmptyState, FormSkeleton, PageHeader, Skeleton, StatCard, StatusBadge, Tabs, tomPorStatus } from '@/components/ui';
+import { AvisoCadastroIncompleto } from '@/components/compartilhados/AvisoCadastroIncompleto';
 import { data, dataHora, documento, inteiro, moeda, rotulo, telefone } from '@/lib/format';
 import type { Contato, HistoricoContato } from '@/types';
 
@@ -59,6 +60,7 @@ export default function ContatoDetalhe() {
           <>
             <Badge tom="neutro">{rotulo(c.tipo)}</Badge>
             {!c.ativo && <Badge tom="cinza">Inativo</Badge>}
+            <AvisoCadastroIncompleto contato={c} />
           </>
         }
         descricao={[c.fantasia, documento(c.documento)].filter(Boolean).join(' · ')}

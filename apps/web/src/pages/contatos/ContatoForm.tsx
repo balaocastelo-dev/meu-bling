@@ -158,6 +158,7 @@ export default function ContatoForm() {
       <PageHeader
         migalhas={[{ rotulo: 'Contatos', para: '/contatos' }, { rotulo: editando ? contato?.nome ?? '' : 'Novo contato' }]}
         titulo={editando ? `Editar ${contato?.nome ?? ''}` : 'Novo contato'}
+        descricao="Só o nome é obrigatório. CPF, telefone, e-mail e endereço são opcionais — a nota fiscal pede esses dados na hora de emitir."
         acoes={
           <>
             <Button variante="secundario" icone={<X className="h-4 w-4" />} onClick={() => nav(editando ? `/contatos/${id}` : '/contatos')}>Cancelar</Button>

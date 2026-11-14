@@ -134,7 +134,7 @@ export function ContatoRapidoDrawer({ aberto, onFechar, onCriado, tipo = 'CLIENT
       aberto={aberto}
       onFechar={onFechar}
       titulo={tipo === 'FORNECEDOR' ? 'Novo fornecedor' : 'Novo cliente'}
-      descricao="Nome, contato e endereço — já dá para emitir nota sem abrir outra tela."
+      descricao="Só o nome é obrigatório. CPF, telefone, e-mail e endereço podem ficar para depois — a nota pede esses dados na hora de emitir."
       largura="max-w-lg"
       rodape={
         <>

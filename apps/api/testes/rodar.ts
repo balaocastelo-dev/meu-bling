@@ -95,6 +95,7 @@ async function main() {
     rodar('Perfis de acesso', NPX, ['tsx', 'scripts/teste-perfis.ts', base]);
     rodar('Vendas por vendedor: cada vendedor/técnico só vê as próprias vendas, sem total da loja; gerente e ADMIN veem todas', NPX, ['tsx', 'testes/vendas-por-vendedor.ts', base]);
     rodar('Regras de vendas, painel, metas e desafios', NPX, ['tsx', 'testes/regras-vendas.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
+    rodar('Fechar venda com cliente só no nome, sem cliente, e nota fiscal só na emissão', NPX, ['tsx', 'testes/venda-cliente-opcional.ts', base], { env: { TZ: 'America/Sao_Paulo', SITE_CHAVE_INTEGRACAO: env.SITE_CHAVE_INTEGRACAO } });
     rodar('Baixa parcial de contas a pagar (pagar em partes, histórico, estorno de um pagamento)', NPX, ['tsx', 'testes/baixa-parcial.ts', base]);
     rodar('Edição de conta a pagar: aberto, parcial (sobe, desce, desce demais) e pago', NPX, ['tsx', 'testes/editar-conta-pagar.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Contas a pagar do Bling: sincroniza pelo detalhe (JSON fixo, sem API real e sem banco de produção)', NPX, ['tsx', 'testes/sincronizar-contas-pagar.ts'], { env: { TZ: 'America/Sao_Paulo', TRILHA_AUDITORIA: 'off' } });

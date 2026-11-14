@@ -305,6 +305,16 @@ async function contatoParaVenda(c: ClienteDoPdv): Promise<number> {
 
 async function acharOuCriarContato(c: ClienteDoPdv): Promise<number> {
   const doc = somenteDigitos(c.documento);
+  // cliente já escolhido no balcão, mesmo sem CPF: reaproveita o cadastro e só completa o que veio
+  if (!doc && c.sistemaId) {
+    const porId = await prisma.contato.findUnique({ where: { id: c.sistemaId } });
+    if (porId) {
+      const d = dadosDoContato({ ...c, nome: c.nome || porId.nome });
+      for (const k of Object.keys(d)) if ((d[k] === null || d[k] === '') && k !== 'codigoMunicipio') delete d[k];
+      if (Object.keys(d).length) await prisma.contato.update({ where: { id: porId.id }, data: d });
+      return porId.id;
+    }
+  }
   if (doc) {
     const existente = (c.sistemaId ? await prisma.contato.findUnique({ where: { id: c.sistemaId } }) : null) ?? (await contatoPorDocumento(doc));
     if (existente && somenteDigitos(existente.documento) === doc) {
@@ -326,6 +336,12 @@ async function acharOuCriarContato(c: ClienteDoPdv): Promise<number> {
     if (achado) return achado.id;
     const novo = await prisma.contato.create({ data: { ...(dadosDoContato(c) as any), tipo: 'CLIENTE' } });
     return novo.id;
+  }
+  // só o nome (sem CPF, telefone ou endereço): grava o cliente assim mesmo. A nota cobra o resto na emissão.
+  const nome = (c.nome || '').trim();
+  const nomeSimples = nome.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  if (nome && nomeSimples !== 'consumidor final' && nomeSimples !== 'cliente final') {
+    return (await prisma.contato.create({ data: { ...(dadosDoContato(c) as any), tipo: 'CLIENTE', nome } })).id;
   }
   return consumidorFinal();
 }

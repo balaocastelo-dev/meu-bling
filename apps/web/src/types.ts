@@ -277,6 +277,9 @@ export interface Contato {
     emAberto: number;
     ultimaCompra: string | null;
   };
+  /** falta CPF, telefone, e-mail ou endereço — não impede vender */
+  cadastroIncompleto?: boolean;
+  faltasCadastro?: string[];
 }
 
 export interface HistoricoContato {
@@ -522,6 +525,9 @@ export interface Venda extends VendaResumo {
   situacoesPermitidas: SituacaoRef[];
   /** o que falta para finalizar a venda (vazio = pode finalizar) */
   finalizacao?: { podeFinalizar: boolean; pendencias: PendenciaFinalizacao[] };
+  /** falta CPF, telefone, e-mail ou endereço — não impede fechar a venda */
+  cadastroIncompleto?: boolean;
+  faltasCadastro?: string[];
   contato: Contato | Ref;
   linkPublico?: string;
   tokenPublico?: string;

@@ -20,6 +20,7 @@ import { FinalizarVendaModal } from '@/components/compartilhados/FinalizarVenda'
 import { PosVendaImpressao } from '@/components/compartilhados/PosVendaImpressao';
 import { LinkPagamento } from '@/components/compartilhados/LinkPagamento';
 import { CobrancaAsaas } from '@/components/compartilhados/CobrancaAsaas';
+import { AvisoCadastroIncompleto } from '@/components/compartilhados/AvisoCadastroIncompleto';
 
 /** Detalhe do pedido de venda com abas e ações */
 export default function VendaDetalhe() {
@@ -212,7 +213,7 @@ export default function VendaDetalhe() {
           <Definicoes
             colunas={4}
             itens={[
-              { rotulo: 'Cliente', valor: <Link to={`/contatos/${venda.contatoId}`} className="font-medium text-brand-600 hover:underline">{contato?.nome}</Link> },
+              { rotulo: 'Cliente', valor: <span className="inline-flex flex-wrap items-center gap-2"><Link to={`/contatos/${venda.contatoId}`} className="font-medium text-brand-600 hover:underline">{contato?.nome}</Link><AvisoCadastroIncompleto contato={contato} /></span> },
               { rotulo: 'Vendedor', valor: venda.vendedor?.nome },
               { rotulo: 'Origem', valor: rotulo(venda.origem) },
               { rotulo: 'Depósito', valor: venda.deposito?.nome },
