@@ -3,13 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { CheckCheck, CircleDollarSign, Clock, History, Plus, TriangleAlert, Undo2, Wallet } from 'lucide-react';
+import { CheckCheck, CircleDollarSign, Clock, ExternalLink, History, Pencil, Plus, TriangleAlert, Undo2, Wallet } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useCategoriasFinanceiras, useContasFinanceiras, useFormasPagamento, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { buscarContatos } from '@/lib/buscas';
 import { Badge, BarraFiltros, BuscaFiltro, Button, Card, Checkbox, DateInput, EmptyState, Input, Modal, MoneyInput, PageHeader, Pagination, PeriodoFiltro, SearchSelect, Select, SelectFiltro, StatCard, Table, Textarea, tomPorStatus, type Coluna } from '@/components/ui';
-import { data, diasAtraso, hoje, moeda, rotulo } from '@/lib/format';
+import { arred, data, dataIso, diasAtraso, hoje, moeda, rotulo } from '@/lib/format';
 import type { ContaPagar, ContaReceber, ContasResposta } from '@/types';
 
 type Conta = ContaReceber | ContaPagar;
@@ -42,6 +42,8 @@ function linkOrigem(c: Conta): string | null {
       return `/notas-fiscais/${o.id}`;
     case 'COMISSAO':
       return `/comissoes`;
+    case 'EMPRESTIMO':
+      return o.id ? `/financeiro/emprestimos?id=${o.id}` : '/financeiro/emprestimos';
     case 'PAGAMENTO_TECNICO':
       return `/dashboard/assistencia`;
     case 'CARNE':
@@ -49,6 +51,20 @@ function linkOrigem(c: Conta): string | null {
     default:
       return null;
   }
+}
+
+/** Compra, comissão e empréstimo: valor e vencimento se editam no documento de origem. */
+function avisoOrigem(c: Conta): { texto: string; para: string; rotuloLink: string } | null {
+  const tipo = c.origem?.tipo || c.origemTipo;
+  const para = linkOrigem(c);
+  if (tipo === 'COMPRA') return { texto: 'O valor e o vencimento desta conta se editam na compra.', para: para ?? '/compras', rotuloLink: 'Abrir a compra' };
+  if (tipo === 'COMISSAO') return { texto: 'O valor e o vencimento desta conta se editam na comissão.', para: para ?? '/comissoes', rotuloLink: 'Abrir comissões' };
+  if (tipo === 'EMPRESTIMO') return { texto: 'O valor e o vencimento desta conta se editam no empréstimo.', para: para ?? '/financeiro/emprestimos', rotuloLink: 'Abrir o empréstimo' };
+  return null;
+}
+
+function ehContaPagar(c: Conta): c is ContaPagar {
+  return 'valorPago' in c;
 }
 
 /** Página genérica de contas a receber/pagar */
@@ -66,6 +82,10 @@ export function ContasPage({ tipo }: Props) {
   const [baixa, setBaixa] = useState<Conta[] | null>(null);
   const [detalhe, setDetalhe] = useState<number | null>(null);
   const [novo, setNovo] = useState(false);
+  const [editar, setEditar] = useState<ContaPagar | null>(null);
+  const abrirEdicao = (c: Conta) => {
+    if (!ehReceber && c.situacao !== 'CANCELADO' && ehContaPagar(c)) setEditar(c);
+  };
 
   const params = { ...pg.filtros, pagina: pg.pagina, limite: pg.limite };
   const { data: resp, isLoading } = useQuery({ queryKey: [base, params], queryFn: () => api.get<ContasResposta<Conta>>(base, params), placeholderData: (p) => p });
@@ -156,9 +176,12 @@ export function ContasPage({ tipo }: Props) {
     {
       chave: 'acoes',
       titulo: '',
-      largura: '150px',
+      largura: '220px',
       render: (c) => (
-        <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-wrap justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          {!ehReceber && c.situacao !== 'CANCELADO' && (
+            <Button tamanho="xs" variante="secundario" icone={<Pencil className="h-3.5 w-3.5" />} title="Editar conta" onClick={() => abrirEdicao(c)}>Editar</Button>
+          )}
           {(c.situacao === 'ABERTO' || c.situacao === 'PARCIAL') && (
             <>
               <Button tamanho="xs" variante="sucesso" title={c.situacao === 'PARCIAL' ? 'Pagar o restante ou mais uma parte' : 'Pagar total ou parcial'} onClick={() => setBaixa([c])}>{ehReceber ? 'Receber' : 'Pagar'}</Button>
@@ -258,8 +281,9 @@ export function ContasPage({ tipo }: Props) {
       </Card>
 
       <BaixaModal tipo={tipo} contas={baixa} onFechar={() => setBaixa(null)} onConcluido={() => { invalidar(); qc.invalidateQueries({ queryKey: [base, 'detalhe'] }); }} contasFin={contasFin ?? []} formas={formas ?? []} />
-      <DetalheContaModal tipo={tipo} id={detalhe} onFechar={() => setDetalhe(null)} onPagar={(c) => { setDetalhe(null); setBaixa([c]); }} onAlterado={invalidar} />
+      <DetalheContaModal tipo={tipo} id={detalhe} onFechar={() => setDetalhe(null)} onPagar={(c) => { setDetalhe(null); setBaixa([c]); }} onEditar={!ehReceber ? (c) => { setDetalhe(null); abrirEdicao(c); } : undefined} onAlterado={invalidar} />
       <NovaContaModal tipo={tipo} aberto={novo} onFechar={() => setNovo(false)} onConcluido={invalidar} categorias={categorias ?? []} formas={formas ?? []} contasFin={contasFin ?? []} />
+      {editar && <EditarContaModal conta={editar} onFechar={() => setEditar(null)} onConcluido={invalidar} categorias={categorias ?? []} formas={formas ?? []} contasFin={contasFin ?? []} />}
     </div>
   );
 }
@@ -377,7 +401,7 @@ function BaixaModal({ tipo, contas, onFechar, onConcluido, contasFin, formas }: 
 }
 
 /** Detalhe da conta com histórico de pagamentos/recebimentos (baixas parciais) */
-function DetalheContaModal({ tipo, id, onFechar, onPagar, onAlterado }: { tipo: 'receber' | 'pagar'; id: number | null; onFechar: () => void; onPagar: (c: Conta) => void; onAlterado: () => void }) {
+function DetalheContaModal({ tipo, id, onFechar, onPagar, onEditar, onAlterado }: { tipo: 'receber' | 'pagar'; id: number | null; onFechar: () => void; onPagar: (c: Conta) => void; onEditar?: (c: Conta) => void; onAlterado: () => void }) {
   const ehReceber = tipo === 'receber';
   const base = ehReceber ? '/contas-receber' : '/contas-pagar';
   const qc = useQueryClient();
@@ -408,6 +432,7 @@ function DetalheContaModal({ tipo, id, onFechar, onPagar, onAlterado }: { tipo: 
       rodape={
         <>
           <Button variante="secundario" onClick={onFechar}>Fechar</Button>
+          {onEditar && c && c.situacao !== 'CANCELADO' && <Button variante="secundario" icone={<Pencil className="h-4 w-4" />} onClick={() => onEditar(c)}>Editar</Button>}
           {aberta && c && <Button variante="sucesso" onClick={() => onPagar(c)}>{c.situacao === 'PARCIAL' ? (ehReceber ? 'Receber restante / parte' : 'Pagar restante / parte') : ehReceber ? 'Receber' : 'Pagar'}</Button>}
         </>
       }
@@ -505,6 +530,107 @@ function NovaContaModal({ tipo, aberto, onFechar, onConcluido, categorias, forma
         <Select label="Forma" value={form.formaPagamentoId} onChange={(e) => set('formaPagamentoId', e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(formas)} placeholder="—" />
         <Select label="Conta financeira" value={form.contaFinanceiraId} onChange={(e) => set('contaFinanceiraId', e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(contasFin)} placeholder="—" />
         {!ehReceber && <div className="col-span-2"><Checkbox label="Despesa recorrente (mensal)" checked={form.recorrente} onChange={(e) => set('recorrente', e.target.checked)} /></div>}
+        <Textarea className="col-span-2" label="Observações" rows={2} value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} />
+      </div>
+    </Modal>
+  );
+}
+
+/** Edição de conta a pagar. O que pode mudar depende da situação e da origem. */
+function EditarContaModal({ conta, onFechar, onConcluido, categorias, formas, contasFin }: { conta: ContaPagar; onFechar: () => void; onConcluido: () => void; categorias: { id: number; nome: string; tipo: string }[]; formas: { id: number; nome: string }[]; contasFin: { id: number; nome: string }[] }) {
+  const pago = conta.situacao === 'PAGO';
+  const parcial = conta.situacao === 'PARCIAL';
+  const origem = avisoOrigem(conta);
+  const travaValor = pago || !!origem;
+  const travaDemais = pago;
+  const piso = arred(conta.valorPago - (conta.juros || 0) + (conta.desconto || 0));
+  const [form, setForm] = useState({
+    descricao: conta.descricao,
+    contatoId: conta.contatoId ?? null,
+    vencimento: dataIso(conta.vencimento),
+    valor: conta.valor,
+    categoriaId: (conta.categoriaId ?? '') as number | '',
+    formaPagamentoId: (conta.formaPagamentoId ?? '') as number | '',
+    contaFinanceiraId: (conta.contaFinanceiraId ?? '') as number | '',
+    competencia: conta.competencia || dataIso(conta.vencimento).slice(0, 7),
+    observacoes: conta.observacoes ?? '',
+    recorrente: conta.recorrente,
+  });
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const saldoPrevisto = arred(form.valor + (conta.juros || 0) - conta.valorPago - (conta.desconto || 0));
+  const abaixo = parcial && !travaValor && arred(form.valor) < piso;
+
+  const m = useMutation({
+    mutationFn: () => {
+      const corpo: Record<string, unknown> = {
+        descricao: form.descricao.trim(),
+        contatoId: form.contatoId,
+        categoriaId: form.categoriaId || null,
+        observacoes: form.observacoes.trim() || null,
+      };
+      if (!travaDemais) {
+        corpo.competencia = form.competencia || null;
+        corpo.formaPagamentoId = form.formaPagamentoId || null;
+        corpo.contaFinanceiraId = form.contaFinanceiraId || null;
+        corpo.recorrente = form.recorrente;
+      }
+      if (!travaValor) {
+        corpo.valor = form.valor;
+        corpo.vencimento = form.vencimento;
+      }
+      return api.put(`/contas-pagar/${conta.id}`, corpo);
+    },
+    onSuccess: () => {
+      toast.success('Conta atualizada.');
+      onConcluido();
+      onFechar();
+    },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
+
+  const motivoValor = origem ? 'Este valor se edita no documento de origem.' : pago ? 'Bloqueado até estornar a baixa.' : undefined;
+
+  return (
+    <Modal
+      aberto
+      onFechar={onFechar}
+      titulo="Editar conta a pagar"
+      descricao={conta.descricao}
+      rodape={
+        <>
+          <Button variante="secundario" onClick={onFechar}>Cancelar</Button>
+          <Button variante="primario" carregando={m.isPending} disabled={!form.descricao.trim() || (!travaValor && (form.valor <= 0 || !form.vencimento || abaixo))} onClick={() => m.mutate()}>Salvar</Button>
+        </>
+      }
+    >
+      <div className="mb-3 space-y-2">
+        {origem && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <p>{origem.texto}</p>
+            <Link to={origem.para} className="mt-1 inline-flex items-center gap-1 font-medium text-brand-700 hover:underline" onClick={onFechar}>
+              {origem.rotuloLink} <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
+        )}
+        {pago && (
+          <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">Conta paga: dá para corrigir descrição, observação, fornecedor e categoria. Valor e vencimento ficam bloqueados até estornar a baixa.</p>
+        )}
+        {parcial && !origem && (
+          <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Principal já pago: <b>{moeda(piso)}</b> (pago {moeda(conta.valorPago)}{conta.juros ? `, juros ${moeda(conta.juros)}` : ''}{conta.desconto ? `, desconto ${moeda(conta.desconto)}` : ''}). O valor pode subir, ou descer até {moeda(piso)}. Se o saldo zerar, a conta fica paga. Abaixo disso, estorne a baixa excedente. A conta financeira daqui é a padrão dos próximos pagamentos — os que já saíram ficam onde saíram.
+          </p>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Input className="col-span-2" label="Descrição" obrigatorio value={form.descricao} onChange={(e) => set('descricao', e.target.value)} autoFocus />
+        <SearchSelect className="col-span-2" label="Fornecedor" valor={form.contatoId} rotuloAtual={conta.contato?.nome} onChange={(v) => set('contatoId', v)} buscar={(t) => buscarContatos(t, 'FORNECEDOR')} />
+        <MoneyInput label="Valor" obrigatorio value={form.valor} onChange={(v) => set('valor', v)} disabled={travaValor} title={motivoValor} erro={abaixo ? `Fica abaixo do principal já pago (${moeda(piso)}). Estorne a baixa excedente.` : undefined} ajuda={!travaValor && !abaixo ? (parcial && saldoPrevisto <= 0.009 ? 'O saldo zera e a conta fica paga.' : `Saldo em aberto: ${moeda(Math.max(0, saldoPrevisto))}`) : motivoValor} />
+        <DateInput label="Vencimento" value={form.vencimento} onChange={(v) => set('vencimento', v)} disabled={travaValor} title={motivoValor} ajuda={motivoValor} />
+        <Select label="Categoria" value={form.categoriaId} onChange={(e) => set('categoriaId', e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(categorias.filter((c) => c.tipo === 'DESPESA'))} placeholder="—" ajuda={parcial ? 'Não altera a categoria dos pagamentos já lançados.' : undefined} />
+        <Input label="Competência" type="month" value={form.competencia} onChange={(e) => set('competencia', e.target.value)} disabled={travaDemais} title={pago ? 'Bloqueado em conta paga.' : undefined} />
+        <Select label="Forma" value={form.formaPagamentoId} onChange={(e) => set('formaPagamentoId', e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(formas)} placeholder="—" disabled={travaDemais} />
+        <Select label="Conta financeira padrão" value={form.contaFinanceiraId} onChange={(e) => set('contaFinanceiraId', e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(contasFin)} placeholder="—" disabled={travaDemais} ajuda={parcial ? 'Os pagamentos antigos continuam na conta de onde saíram.' : undefined} />
+        <div className="col-span-2"><Checkbox label="Despesa recorrente (mensal)" checked={form.recorrente} onChange={(e) => set('recorrente', e.target.checked)} disabled={travaDemais} /></div>
         <Textarea className="col-span-2" label="Observações" rows={2} value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} />
       </div>
     </Modal>

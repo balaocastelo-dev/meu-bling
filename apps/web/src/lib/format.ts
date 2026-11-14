@@ -192,6 +192,7 @@ export const ROTULOS: Record<string, string> = {
   IMPORTACAO: 'Importação',
   MANUAL: 'Manual',
   COMISSAO: 'Comissão',
+  EMPRESTIMO: 'Empréstimo',
   IMPOSTO: 'Imposto',
   CONTA: 'Conta',
   CLIENTE: 'Cliente',
