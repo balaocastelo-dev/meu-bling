@@ -66,6 +66,7 @@ export function ContasPage({ tipo }: Props) {
   const [baixa, setBaixa] = useState<Conta[] | null>(null);
   const [detalhe, setDetalhe] = useState<number | null>(null);
   const [novo, setNovo] = useState(false);
+  const [informar, setInformar] = useState<Conta | null>(null);
 
   const params = { ...pg.filtros, pagina: pg.pagina, limite: pg.limite };
   const { data: resp, isLoading } = useQuery({ queryKey: [base, params], queryFn: () => api.get<ContasResposta<Conta>>(base, params), placeholderData: (p) => p });
@@ -152,14 +153,29 @@ export function ContasPage({ tipo }: Props) {
     },
     { chave: 'valor', titulo: 'Valor', direita: true, largura: '110px', render: (c) => <span className="font-medium">{moeda(c.valor)}</span> },
     { chave: 'pago', titulo: ehReceber ? 'Recebido' : 'Pago', direita: true, largura: '110px', ocultarMobile: true, render: (c) => <span className="text-slate-500">{moeda(valorPago(c))}</span> },
-    { chave: 'saldo', titulo: 'Saldo', direita: true, largura: '110px', render: (c) => (c.situacao === 'CANCELADO' ? <span className="text-slate-300">—</span> : <span className={clsx(saldoDe(c) > 0 ? 'text-slate-800' : 'text-emerald-700')}>{moeda(saldoDe(c))}</span>) },
+    {
+      chave: 'saldo',
+      titulo: 'Saldo',
+      direita: true,
+      largura: '110px',
+      render: (c) =>
+        c.situacao === 'CANCELADO' ? (
+          <span className="text-slate-300">—</span>
+        ) : c.saldoNaoInformado ? (
+          <span className="text-amber-700" title="O Bling não informou quanto ainda falta. Não mostramos um saldo inventado.">a informar</span>
+        ) : (
+          <span className={clsx(saldoDe(c) > 0 ? 'text-slate-800' : 'text-emerald-700')}>{moeda(saldoDe(c))}</span>
+        ),
+    },
     {
       chave: 'acoes',
       titulo: '',
-      largura: '150px',
+      largura: '180px',
       render: (c) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          {(c.situacao === 'ABERTO' || c.situacao === 'PARCIAL') && (
+          {c.saldoNaoInformado ? (
+            <Button tamanho="xs" variante="primario" title="Dizer quanto ainda falta pagar. O Bling não enviou o saldo." onClick={() => setInformar(c)}>Informar falta</Button>
+          ) : (c.situacao === 'ABERTO' || c.situacao === 'PARCIAL') && (
             <>
               <Button tamanho="xs" variante="sucesso" title={c.situacao === 'PARCIAL' ? 'Pagar o restante ou mais uma parte' : 'Pagar total ou parcial'} onClick={() => setBaixa([c])}>{ehReceber ? 'Receber' : 'Pagar'}</Button>
               <Button tamanho="xs" variante="fantasma" title="Cancelar conta" onClick={() => { if (confirm('Cancelar esta conta?')) cancelar.mutate(c.id); }}>✕</Button>
@@ -168,7 +184,9 @@ export function ContasPage({ tipo }: Props) {
           {(c.situacao === 'RECEBIDO' || c.situacao === 'PAGO' || c.situacao === 'PARCIAL') && valorPago(c) > 0 && (
             <>
               <Button tamanho="xs" variante="fantasma" icone={<History className="h-3.5 w-3.5" />} title={ehReceber ? 'Histórico de recebimentos' : 'Histórico de pagamentos'} onClick={() => setDetalhe(c.id)} />
-              <Button tamanho="xs" variante="fantasma" icone={<Undo2 className="h-3.5 w-3.5" />} title="Estornar todas as baixas" onClick={() => { if (confirm(c.situacao === 'PARCIAL' ? 'Estornar TODOS os pagamentos desta conta? (para estornar só um, abra o histórico)' : 'Estornar a baixa desta conta?')) estornar.mutate(c.id); }} />
+              {!c.saldoNaoInformado && (
+                <Button tamanho="xs" variante="fantasma" icone={<Undo2 className="h-3.5 w-3.5" />} title="Estornar todas as baixas" onClick={() => { if (confirm(c.situacao === 'PARCIAL' ? 'Estornar TODOS os pagamentos desta conta? (para estornar só um, abra o histórico)' : 'Estornar a baixa desta conta?')) estornar.mutate(c.id); }} />
+              )}
             </>
           )}
         </div>
@@ -247,7 +265,8 @@ export function ContasPage({ tipo }: Props) {
                     <Badge tom={tomPorStatus(st)}>{rotulo(st)}</Badge>
                     <span className={clsx('whitespace-nowrap', atr && 'font-medium text-red-600')}>vence {data(c.vencimento)}{atr ? ` · ${diasAtraso(c.vencimento)} dias` : ''}</span>
                     {c.formaPagamento?.nome && <span className="whitespace-nowrap">{c.formaPagamento.nome}</span>}
-                    {c.situacao !== 'CANCELADO' && valorPago(c) > 0 && saldoDe(c) > 0 && <span className="whitespace-nowrap">pago {moeda(valorPago(c))} · falta {moeda(saldoDe(c))}</span>}
+                    {c.saldoNaoInformado && <span className="whitespace-nowrap text-amber-700">saldo a informar</span>}
+                    {!c.saldoNaoInformado && c.situacao !== 'CANCELADO' && valorPago(c) > 0 && saldoDe(c) > 0 && <span className="whitespace-nowrap">pago {moeda(valorPago(c))} · falta {moeda(saldoDe(c))}</span>}
                   </div>
                 </div>
               </div>
@@ -258,7 +277,8 @@ export function ContasPage({ tipo }: Props) {
       </Card>
 
       <BaixaModal tipo={tipo} contas={baixa} onFechar={() => setBaixa(null)} onConcluido={() => { invalidar(); qc.invalidateQueries({ queryKey: [base, 'detalhe'] }); }} contasFin={contasFin ?? []} formas={formas ?? []} />
-      <DetalheContaModal tipo={tipo} id={detalhe} onFechar={() => setDetalhe(null)} onPagar={(c) => { setDetalhe(null); setBaixa([c]); }} onAlterado={invalidar} />
+      <DetalheContaModal tipo={tipo} id={detalhe} onFechar={() => setDetalhe(null)} onPagar={(c) => { setDetalhe(null); setBaixa([c]); }} onInformar={(c) => setInformar(c)} onAlterado={invalidar} />
+      {!ehReceber && <InformarRestanteModal conta={informar} onFechar={() => setInformar(null)} onConcluido={() => { invalidar(); qc.invalidateQueries({ queryKey: [base, 'detalhe'] }); }} />}
       <NovaContaModal tipo={tipo} aberto={novo} onFechar={() => setNovo(false)} onConcluido={invalidar} categorias={categorias ?? []} formas={formas ?? []} contasFin={contasFin ?? []} />
     </div>
   );
@@ -376,8 +396,48 @@ function BaixaModal({ tipo, contas, onFechar, onConcluido, contasFin, formas }: 
   );
 }
 
+/** Conta importada do Bling sem saldo: a loja diz quanto ainda falta. Não inventamos o número. */
+function InformarRestanteModal({ conta, onFechar, onConcluido }: { conta: Conta | null; onFechar: () => void; onConcluido: () => void }) {
+  const [restante, setRestante] = useState(0);
+  useEffect(() => {
+    if (conta) setRestante(0);
+  }, [conta]);
+
+  const m = useMutation({
+    mutationFn: () => api.post(`/contas-pagar/${conta!.id}/informar-restante`, { restante }),
+    onSuccess: () => {
+      toast.success(restante > 0.009 ? 'Saldo gravado. Os próximos pagamentos usam o que falta.' : 'Conta conferida: nada em aberto.');
+      onConcluido();
+      onFechar();
+    },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
+
+  if (!conta) return null;
+  const acima = restante > conta.valor + 0.009;
+  return (
+    <Modal
+      aberto
+      onFechar={onFechar}
+      titulo="Quanto ainda falta pagar?"
+      descricao={`${conta.descricao} · valor ${moeda(conta.valor)}. O Bling marcou como ${rotulo(conta.situacao)} e não mandou o saldo. Não há pagamento no caixa.`}
+      rodape={
+        <>
+          <Button variante="secundario" onClick={onFechar}>Cancelar</Button>
+          <Button variante="primario" carregando={m.isPending} disabled={acima} onClick={() => m.mutate()}>Gravar</Button>
+        </>
+      }
+    >
+      <p className="mb-3 text-sm text-slate-600">
+        Informe quanto ainda falta. Gravamos o que já foi pago como o valor da conta menos esse número e liberamos as baixas seguintes. Se não falta nada, deixe zero.
+      </p>
+      <MoneyInput label="Ainda falta pagar" value={restante} onChange={setRestante} autoFocus ajuda={acima ? `Não pode passar de ${moeda(conta.valor)}.` : `O que já foi pago fica ${moeda(Math.max(0, Math.round((conta.valor - restante) * 100) / 100))}.`} />
+    </Modal>
+  );
+}
+
 /** Detalhe da conta com histórico de pagamentos/recebimentos (baixas parciais) */
-function DetalheContaModal({ tipo, id, onFechar, onPagar, onAlterado }: { tipo: 'receber' | 'pagar'; id: number | null; onFechar: () => void; onPagar: (c: Conta) => void; onAlterado: () => void }) {
+function DetalheContaModal({ tipo, id, onFechar, onPagar, onInformar, onAlterado }: { tipo: 'receber' | 'pagar'; id: number | null; onFechar: () => void; onPagar: (c: Conta) => void; onInformar: (c: Conta) => void; onAlterado: () => void }) {
   const ehReceber = tipo === 'receber';
   const base = ehReceber ? '/contas-receber' : '/contas-pagar';
   const qc = useQueryClient();
@@ -386,7 +446,7 @@ function DetalheContaModal({ tipo, id, onFechar, onPagar, onAlterado }: { tipo: 
   const estornarUm = useMutation({
     mutationFn: (movId: number) => api.post(`${base}/${id}/pagamentos/${movId}/estornar`),
     onSuccess: () => {
-      toast.success('Pagamento estornado. O valor voltou para o saldo em aberto.');
+      toast.success(ehReceber ? 'Recebimento estornado. O valor voltou para o saldo em aberto.' : 'Pagamento estornado. O valor voltou para o saldo em aberto.');
       qc.invalidateQueries({ queryKey: [base, 'detalhe', id] });
       onAlterado();
     },
@@ -408,7 +468,8 @@ function DetalheContaModal({ tipo, id, onFechar, onPagar, onAlterado }: { tipo: 
       rodape={
         <>
           <Button variante="secundario" onClick={onFechar}>Fechar</Button>
-          {aberta && c && <Button variante="sucesso" onClick={() => onPagar(c)}>{c.situacao === 'PARCIAL' ? (ehReceber ? 'Receber restante / parte' : 'Pagar restante / parte') : ehReceber ? 'Receber' : 'Pagar'}</Button>}
+          {c && c.saldoNaoInformado && <Button variante="primario" onClick={() => onInformar(c)}>Informar quanto falta</Button>}
+          {!c?.saldoNaoInformado && aberta && c && <Button variante="sucesso" onClick={() => onPagar(c)}>{c.situacao === 'PARCIAL' ? (ehReceber ? 'Receber restante / parte' : 'Pagar restante / parte') : ehReceber ? 'Receber' : 'Pagar'}</Button>}
         </>
       }
     >
@@ -420,9 +481,9 @@ function DetalheContaModal({ tipo, id, onFechar, onPagar, onAlterado }: { tipo: 
             <Resumo rotulo="Valor da conta" valor={moeda(c.valor)} />
             <Resumo rotulo={ehReceber ? 'Recebido' : 'Pago'} valor={moeda(pago)} tom="verde" />
             <Resumo rotulo="Juros / desconto" valor={`${moeda(c.juros)} / ${moeda(c.desconto)}`} />
-            <Resumo rotulo="Falta" valor={moeda(saldoDe(c))} tom={saldoDe(c) > 0 ? 'ambar' : 'verde'} />
+            <Resumo rotulo="Falta" valor={c.saldoNaoInformado ? 'a informar' : moeda(saldoDe(c))} tom={c.saldoNaoInformado || saldoDe(c) > 0 ? 'ambar' : 'verde'} />
           </div>
-          <div className="flex items-center gap-2"><Badge tom={tomPorStatus(c.atrasada ? 'ATRASADO' : c.situacao)}>{rotulo(c.atrasada ? 'ATRASADO' : c.situacao)}</Badge>{c.situacao === 'PARCIAL' && <span className="text-xs text-slate-500">{ehReceber ? 'Recebida' : 'Paga'} em parte — o restante continua em aberto.</span>}</div>
+          <div className="flex items-center gap-2"><Badge tom={tomPorStatus(c.atrasada ? 'ATRASADO' : c.situacao)}>{rotulo(c.atrasada ? 'ATRASADO' : c.situacao)}</Badge>{c.saldoNaoInformado && <span className="text-xs text-amber-700">Veio do Bling sem saldo. Informe quanto ainda falta — não inventamos esse valor.</span>}{!c.saldoNaoInformado && c.situacao === 'PARCIAL' && <span className="text-xs text-slate-500">{ehReceber ? 'Recebida' : 'Paga'} em parte — o restante continua em aberto.</span>}</div>
 
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{ehReceber ? 'Recebimentos' : 'Pagamentos'} ({pagos.length})</p>
@@ -436,12 +497,10 @@ function DetalheContaModal({ tipo, id, onFechar, onPagar, onAlterado }: { tipo: 
                       <p className="font-medium text-slate-900">{moeda(m.valor)} <span className="font-normal text-slate-500">em {data(m.data)}</span></p>
                       <p className="truncate text-xs text-slate-500">{[m.contaFinanceira?.nome, m.juros ? `juros ${moeda(m.juros)}` : null, m.desconto ? `desconto ${moeda(m.desconto)}` : null, m.conciliado ? 'conciliado' : null, m.observacoes].filter(Boolean).join(' · ')}</p>
                     </div>
-                    {!ehReceber && (
-                      <Button tamanho="xs" variante="fantasma" icone={<Undo2 className="h-3.5 w-3.5" />} carregando={estornarUm.isPending && estornarUm.variables === m.id} title="Estornar só este pagamento"
-                        onClick={() => { if (confirm(`Estornar este pagamento de ${moeda(m.valor)} (${data(m.data)})? O valor volta para o saldo em aberto.`)) estornarUm.mutate(m.id); }}>
-                        Estornar
-                      </Button>
-                    )}
+                    <Button tamanho="xs" variante="fantasma" icone={<Undo2 className="h-3.5 w-3.5" />} carregando={estornarUm.isPending && estornarUm.variables === m.id} title={ehReceber ? 'Estornar só este recebimento' : 'Estornar só este pagamento'}
+                      onClick={() => { if (confirm(`Estornar este ${ehReceber ? 'recebimento' : 'pagamento'} de ${moeda(m.valor)} (${data(m.data)})? O valor volta para o saldo em aberto.`)) estornarUm.mutate(m.id); }}>
+                      Estornar
+                    </Button>
                   </li>
                 ))}
                 {semMovimento > 0.009 && (

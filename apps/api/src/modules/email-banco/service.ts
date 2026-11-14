@@ -14,9 +14,9 @@
 import { subDays } from 'date-fns';
 import { prisma } from '../../lib/prisma.js';
 import { decrypt } from '../../lib/crypto.js';
-import { arredondar } from '../../lib/util.js';
 import { lerCaixa, type MensagemEmail } from '../../integracoes/email/leitor.js';
 import { gravarTransacoes, sugerirConciliacao, conciliar } from '../bancos/service.js';
+import { saldoContaReceber } from '../financeiro/service.js';
 import { aplicarParser, normalizarRemetente, type NomeParser, type EventoBancario } from './parsers.js';
 
 export interface ResultadoRodada {
@@ -67,10 +67,7 @@ export async function tentarBaixa(transacaoId: number, evento: EventoBancario): 
         where: { origemTipo: 'VENDA', origemId: venda.id, situacao: { in: ['ABERTO', 'PARCIAL'] } },
       });
       const alvo = Math.abs(evento.valor);
-      const casadas = contas.filter((c) => {
-        const resto = arredondar(c.valor - c.valorRecebido - c.desconto);
-        return Math.abs(resto - alvo) < 0.01;
-      });
+      const casadas = contas.filter((c) => Math.abs(saldoContaReceber(c) - alvo) < 0.01);
       if (casadas.length === 1) {
         await conciliar(transacaoId, { tipo: 'RECEBER', id: casadas[0].id });
         return true;
