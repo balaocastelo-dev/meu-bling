@@ -18,8 +18,9 @@ async function entrarNoSistema(page: Page) {
   await page.goto(`${RAIZ}/login`, { waitUntil: 'networkidle' });
   await page.fill('input[type=email]', 'admin@balao.info');
   await page.fill('input[type=password]', 'admin123');
-  await page.click('button[type=submit]');
-  await page.waitForURL((u) => !u.pathname.includes('login'), { timeout: 20000 });
+  // o login é navegação da própria tela (sem recarregar a página): não espera o "load" do documento
+  await page.click('button[type=submit]', { noWaitAfter: true });
+  await page.waitForURL((u) => !u.pathname.includes('login'), { timeout: 30000 });
 }
 
 /** Abre um orçamento novo com uma linha livre e devolve o campo de custo e o botão do olho. */

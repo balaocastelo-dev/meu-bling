@@ -236,9 +236,9 @@ export function ContasPage({ tipo }: Props) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     {l ? (
-                      <Link to={l} className="min-w-0 break-words text-sm font-medium text-slate-900 hover:text-brand-600">{c.descricao}</Link>
+                      <Link to={l} className="min-w-0 flex-1 text-sm font-medium text-slate-900 hover:text-brand-600 [overflow-wrap:normal] [word-break:normal]">{c.descricao}</Link>
                     ) : (
-                      <p className="min-w-0 break-words text-sm font-medium text-slate-900">{c.descricao}</p>
+                      <p className="min-w-0 flex-1 text-sm font-medium text-slate-900 [overflow-wrap:normal] [word-break:normal]">{c.descricao}</p>
                     )}
                     <span className="num shrink-0 text-sm font-semibold text-slate-900">{moeda(c.valor)}</span>
                   </div>
