@@ -105,9 +105,14 @@ async function main() {
     const ln = (d: any, c: string) => d.linhas.find((l: any) => l.codigo === c)?.valor || 0;
     const soma = (k: string) => fechadas.reduce((s: number, x: any) => s + (x.fechamento?.[k] || 0), 0);
     verifica(igual(ln(dre1, '4') - ln(dre0, '4'), soma('custoProdutos')), 'DRE: CMV sobe pelo custo dos produtos das vendas', { delta: ln(dre1, '4') - ln(dre0, '4'), esperado: soma('custoProdutos') });
-    verifica(igual(ln(dre1, '6') - ln(dre0, '6'), soma('taxaCartao') + soma('frete')), 'DRE: despesas operacionais sobem pela taxa do cartão + frete das vendas', { delta: ln(dre1, '6') - ln(dre0, '6'), esperado: soma('taxaCartao') + soma('frete') });
+    // taxa já lançada no caixa entra no lugar da faixa 1x–12x; frete padrão de R$ 10 continua só no DRE
+    const taxaNoDre = (x: any) => (x.caixa?.lancado?.taxa ? x.caixa.taxa : x.fechamento?.taxaCartao) || 0;
+    const freteNoDre = (x: any) => (x.caixa?.lancado?.frete ? x.caixa.frete : x.fechamento?.frete) || 0;
+    const oper = fechadas.reduce((s: number, x: any) => s + taxaNoDre(x) + freteNoDre(x), 0);
+    const lucro = fechadas.reduce((s: number, x: any) => s + x.total - (x.fechamento?.custoProdutos || 0) - (x.fechamento?.imposto || 0) - taxaNoDre(x) - freteNoDre(x), 0);
+    verifica(igual(ln(dre1, '6') - ln(dre0, '6'), oper), 'DRE: despesas operacionais sobem pela taxa lançada + frete das vendas', { delta: ln(dre1, '6') - ln(dre0, '6'), esperado: oper });
     verifica(igual(ln(dre1, '2') - ln(dre0, '2'), soma('imposto')), 'DRE: deduções sobem pelo imposto das vendas', { delta: ln(dre1, '2') - ln(dre0, '2'), esperado: soma('imposto') });
-    verifica(igual(ln(dre1, '11') - ln(dre0, '11'), soma('lucro')), 'DRE: resultado líquido sobe exatamente o lucro das vendas', { delta: ln(dre1, '11') - ln(dre0, '11'), esperado: soma('lucro') });
+    verifica(igual(ln(dre1, '11') - ln(dre0, '11'), lucro), 'DRE: resultado líquido sobe o lucro com a taxa que saiu do caixa', { delta: ln(dre1, '11') - ln(dre0, '11'), esperado: lucro });
   } else falhar('nenhuma venda de teste ficou Fechada para conferir o DRE');
 
   secao('Dashboards usam a logística no lucro');

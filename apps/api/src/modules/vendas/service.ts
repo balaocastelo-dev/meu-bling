@@ -21,6 +21,7 @@ import { comissoesDeAnuncio } from '../anuncios/comissao.js';
 import { vendedorDoUsuario } from '../comum/vendedores.js';
 import { anunciosDaOrigem } from '../anuncios/origem.js';
 import { baixarContaPagar, baixarContaReceber, saldoContaPagar, saldoContaReceber } from '../financeiro/service.js';
+import { estornarSaidasDaVenda, resumoCaixaDaVenda, sincronizarSaidasDaVenda } from './saidas.js';
 import type { ItemInput, ParcelaInput, TipoVenda, VendaInput } from './schemas.js';
 
 type Db = Tx | typeof prisma;
@@ -79,7 +80,8 @@ export async function vendaCompleta(id: number) {
     if (fechada && fechada.id !== v.situacaoId && !permitidas.some((s) => s.id === fechada.id)) permitidas = [...permitidas, fechada].sort((a, b) => a.ordem - b.ordem);
   }
   const pendencias = modulo === 'VENDA' ? pendenciasFinalizacao(v as any) : [];
-  return { ...v, fechamento: fechamentoVenda(v, await carregarCfgCustos()), historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), finalizacao: { podeFinalizar: !pendencias.length, pendencias }, tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
+  const caixa = v.tipo === 'PEDIDO' ? await resumoCaixaDaVenda(prisma, id) : null;
+  return { ...v, fechamento: fechamentoVenda(v, await carregarCfgCustos()), caixa, historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), finalizacao: { podeFinalizar: !pendencias.length, pendencias }, tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
 }
 
 /**
@@ -565,6 +567,8 @@ export async function acaoLancarContas(ctx: ContextoAcao) {
   await lancarCreditoBancarioVenda(tx, id);
   // parcelas na forma "Carnê" viram o carnê próprio (PIX no Cora) com juros pelo risco do cliente
   await lancarCarneVenda(tx, id);
+  // custo real, frete informado e previsão de DAS. A taxa entra depois, quando o dinheiro é recebido.
+  await sincronizarSaidasDaVenda(tx, id);
 }
 
 export async function acaoEstornarContas(ctx: ContextoAcao) {
@@ -574,6 +578,8 @@ export async function acaoEstornarContas(ctx: ContextoAcao) {
   if (!venda.contasLancadas) return;
   // recebimentos automáticos ("pago na hora") são desfeitos junto; baixas manuais continuam bloqueando
   await desfazerRecebimentoPagoNaHora(tx, id);
+  // custo, frete, taxa e a parte desta venda na previsão de DAS
+  await estornarSaidasDaVenda(tx, id);
   // crédito bancário: cancela a operação (bloqueia se o credor já foi pago)
   await estornarCreditoBancarioVenda(tx, id);
   await estornarCarneVenda(tx, id);
@@ -643,18 +649,18 @@ export async function receberVendaPagaNaHora(tx: Tx, vendaId: number, usuarioId:
     await baixarComTaxa(tx, { contaReceberId: cr.id, saldo, data: venda.data, contaFinanceiraId: contaId, formaPagamentoId: p.formaPagamentoId });
     baixadas++;
   }
+  // com o banco do recebimento já definido, a taxa vira saída e o custo vai para a conta certa
+  await sincronizarSaidasDaVenda(tx, vendaId);
   return baixadas;
 }
 
 /**
- * Baixa o recebimento na conta escolhida descontando a taxa da conta (ex.: Mercado Pago 5%):
- * entra no banco o valor − taxa; a taxa fica como desconto do título.
+ * Baixa o recebimento pelo valor cheio. A taxa da máquina não é mais desconto do título:
+ * sai em seguida como movimento de SAÍDA (TAXA_VENDA), para não ser contada duas vezes.
  */
 async function baixarComTaxa(tx: Tx, p: { contaReceberId: number; saldo: number; data: Date; contaFinanceiraId: number; formaPagamentoId: number | null }) {
-  const conta = await tx.contaFinanceira.findUnique({ where: { id: p.contaFinanceiraId }, select: { taxaRecebimentoPct: true } });
-  const taxa = arredondar(p.saldo * ((conta?.taxaRecebimentoPct || 0) / 100));
   await baixarContaReceber(
-    { id: p.contaReceberId, valor: arredondar(p.saldo - taxa), desconto: taxa, data: p.data, contaFinanceiraId: p.contaFinanceiraId, formaPagamentoId: p.formaPagamentoId, observacoes: OBS_PAGO_NA_HORA },
+    { id: p.contaReceberId, valor: arredondar(p.saldo), desconto: 0, data: p.data, contaFinanceiraId: p.contaFinanceiraId, formaPagamentoId: p.formaPagamentoId, observacoes: OBS_PAGO_NA_HORA },
     tx,
   );
 }
@@ -1320,6 +1326,7 @@ export async function aplicarRecebimentosFinalizacao(vendaId: number, lista: Rec
     // parcelas que ficaram com "Crédito bancário" viram empréstimo (ou mudam de quem paga)
     await lancarCreditoBancarioVenda(tx, vendaId);
     await lancarCarneVenda(tx, vendaId);
+    await sincronizarSaidasDaVenda(tx, vendaId);
     return alterados;
   });
 }

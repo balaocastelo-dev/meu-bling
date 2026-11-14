@@ -12,6 +12,12 @@
  *   Venda sem forma de pagamento (histórico do Bling) = cartão em 1x.
  * - Frete: custoLogistica da venda; se zerado, freteVendaPadrao.
  * Os percentuais ficam em Configurações > Empresa.
+ *
+ * Isto é o custo ANALÍTICO (lucro, DRE, dashboards). Não é o que sai do caixa.
+ * A estimativa de 40–70% e o frete padrão de R$ 10 não geram movimento. O caixa usa só
+ * custo real, custoLogistica > 0 e a taxa única da maquininha (vendas/saidas.ts).
+ * Quando essa saída já foi lançada, o DRE usa o valor lançado no lugar desta conta
+ * (custoParaDre) para não somar os dois.
  */
 import { prisma } from '../../lib/prisma.js';
 import { arredondar } from '../../lib/util.js';
@@ -158,3 +164,15 @@ export const SELECT_CUSTO_VENDA = {
 } as const;
 
 export { TIPOS_CARTAO };
+
+/**
+ * No DRE, a saída que já saiu do caixa substitui a linha calculada da mesma venda
+ * (custo estimado, frete padrão ou taxa da faixa). Onde não houve lançamento, vale o cálculo.
+ */
+export function custoParaDre(calculado: CustosVenda, lancado?: { produto?: number; frete?: number; taxa?: number } | null) {
+  return {
+    produto: lancado && lancado.produto != null ? lancado.produto : calculado.produto,
+    frete: lancado && lancado.frete != null ? lancado.frete : calculado.frete,
+    taxa: lancado && lancado.taxa != null ? lancado.taxa : calculado.taxaCartao,
+  };
+}

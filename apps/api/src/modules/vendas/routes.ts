@@ -63,6 +63,7 @@ import {
   desfazerCompraDaVenda,
   type CompraDesfeita,
 } from './service.js';
+import { resumoCaixaDaVenda, sincronizarSaidasDaVenda } from './saidas.js';
 import { acoesBody, aprovarBody, CAMPOS_LIVRES, converterBody, gerarNfeBody, gerarParcelasBody, listaQuery, notificarBody, situacaoBody, transferirVendedorBody, vendaSchema } from './schemas.js';
 import { htmlVenda } from './imprimir.js';
 import { gravarPdfVenda, nomeArquivoPdf, pdfVenda } from './pdf.js';
@@ -212,7 +213,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
 
   // ---------------------------------------------------------------- detalhe
   // lucro/margem do fechamento só para o dono e a gerência (o vendedor lança os custos, mas não vê o lucro)
-  const comFechamento = (req: { user: { perfil: string } }, v: Awaited<ReturnType<typeof vendaCompleta>>) => (req.user.perfil === 'ADMIN' || req.user.perfil === 'GERENTE' ? v : { ...v, fechamento: null });
+  const comFechamento = (req: { user: { perfil: string } }, v: Awaited<ReturnType<typeof vendaCompleta>>) => (req.user.perfil === 'ADMIN' || req.user.perfil === 'GERENTE' ? v : { ...v, fechamento: null, caixa: null });
 
   app.get('/api/v1/vendas/:id', async (req) => comFechamento(req, await vendaCompleta(idDe(req))));
 
@@ -312,6 +313,8 @@ export default async function vendasRoutes(app: FastifyInstance) {
           data.custoTotal = arredondar(itens.reduce((s, i) => s + i.custoUnitario * i.quantidade, 0));
         }
         if (Object.keys(data).length) await tx.venda.update({ where: { id }, data });
+        // custo ou frete informado depois do fechamento: gera (ou ajusta) a saída, sem duplicar
+        if (atual.contasLancadas) await sincronizarSaidasDaVenda(tx, id);
       });
       await auditar(req, 'Venda', id, 'ALTERAR', { ...data, ...(custosItens.length ? { custosItens: custosItens.length } : {}) });
       return comFechamento(req, await vendaCompleta(id));
@@ -497,7 +500,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const idsConsignados = new Set(consignados.map((c) => c.produtoId));
     const custoProdutos = arredondar(v.itens.filter((i: any) => !idsConsignados.has(i.produtoId)).reduce((s: number, i: any) => s + (i.custoUnitario || 0) * i.quantidade, 0));
     const compraRegistrada = await compraDaVenda(v.numero);
-    return { consignados: consignados.map(({ produtoId, ...c }) => c), podeFinalizar: !pendencias.length, pendencias, jaFinalizada: !!v.situacao.final && !v.situacao.cancelamento, situacaoAtual: { id: v.situacao.id, nome: v.situacao.nome }, destino: { id: destino.id, nome: destino.nome, cor: destino.cor }, contatoId: v.contatoId, custoProdutos, compraRegistrada, parcelas: await parcelasParaFinalizar(id), formas: await formasParaFinalizar(), carne: { ...(await previaCarneVenda(v.contatoId ?? null)), taxaEscolhida: (v as any).carneTaxaPct ?? null } };
+    return { consignados: consignados.map(({ produtoId, ...c }) => c), podeFinalizar: !pendencias.length, pendencias, jaFinalizada: !!v.situacao.final && !v.situacao.cancelamento, situacaoAtual: { id: v.situacao.id, nome: v.situacao.nome }, destino: { id: destino.id, nome: destino.nome, cor: destino.cor }, contatoId: v.contatoId, custoProdutos, compraRegistrada, caixa: await resumoCaixaDaVenda(prisma, id), parcelas: await parcelasParaFinalizar(id), formas: await formasParaFinalizar(), carne: { ...(await previaCarneVenda(v.contatoId ?? null)), taxaEscolhida: (v as any).carneTaxaPct ?? null } };
   });
 
   /** Finaliza (vai para "Fechada") a partir de qualquer situação, desde que a venda esteja completa. */

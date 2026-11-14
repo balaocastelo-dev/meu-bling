@@ -8,6 +8,9 @@
  *   Desde 28/10/2026 o resultado usa o CUSTO DE CADA VENDA (comum/custos-venda.ts): produto (CMV), imposto
  *   (alíquota em deduções), taxa de cartão e frete (despesas operacionais). As contas a pagar de compra de
  *   mercadoria, imposto sobre vendas e logística ficam fora do resultado (já cobertas) e saem em `informativo`.
+ *   Desde 14/11/2026 a saída lançada no fechamento (CMV_VENDA, FRETE_VENDA, TAXA_VENDA) substitui a linha
+ *   calculada daquela venda, para não somar de novo. Compra paga ao fornecedor (origem COMPRA) é estoque,
+ *   não uma segunda despesa de CMV — classifique o pagamento como compra/estoque, não como despesa.
  *   Desde 29/10/2026 cada OS segue a MESMA regra (comum/custos-os.ts): custo das peças (CMV), taxa de cartão,
  *   logística e mão de obra de terceiro (despesas operacionais); as contas a pagar de terceiros/laboratório
  *   também ficam no informativo.
@@ -20,7 +23,7 @@ import { endOfMonth, format, startOfMonth, addMonths } from 'date-fns';
 import { prisma } from '../../lib/prisma.js';
 import { arredondar } from '../../lib/util.js';
 import { OBS_FORA_DO_RESULTADO } from '../comum/financeiro.js';
-import { carregarCfgCustos, custosVenda, SELECT_CUSTO_VENDA } from '../comum/custos-venda.js';
+import { carregarCfgCustos, custoParaDre, custosVenda, SELECT_CUSTO_VENDA } from '../comum/custos-venda.js';
 import { custosOs, SELECT_CUSTO_OS } from '../comum/custos-os.js';
 
 /**
@@ -28,10 +31,21 @@ import { custosOs, SELECT_CUSTO_OS } from '../comum/custos-os.js';
  * como informativo): compra de mercadoria (CMV / pedido de compra sem categoria), imposto sobre vendas, logística
  * e mão de obra de terceiros da assistência (laboratório/técnico de fora, lançada em cada OS).
  */
-function cobertaPeloCustoDaVenda(cat: Cat | null | undefined, origemTipo: string | null): string | null {
-  if (cat?.grupoDre === 'CMV' || (origemTipo === 'COMPRA' && !cat)) return cat?.nome || 'Compra de mercadorias (pedidos de compra)';
+function cobertaPeloCustoDaVenda(cat: Cat | null | undefined, origemTipo: string | null, observacoes?: string | null): string | null {
+  // Pagamento ao fornecedor é estoque/compra, não uma segunda despesa de CMV — qualquer categoria.
+  if (origemTipo === 'COMPRA') return 'Compra de mercadorias (estoque — não entra de novo no CMV)';
+  // Saída do fechamento da venda: o DRE já usou esse valor no lugar do custo calculado.
+  if (origemTipo === 'VENDA') {
+    const obs = observacoes || '';
+    if (obs.includes('CMV_VENDA')) return 'Custo de mercadoria da venda (já no CMV)';
+    if (obs.includes('FRETE_VENDA')) return 'Frete da venda (já nas despesas)';
+    if (obs.includes('TAXA_VENDA')) return 'Taxa de cartão da venda (já nas despesas)';
+    return 'Saída da venda (já no custo de cada venda)';
+  }
+  if (origemTipo === 'IMPOSTO' || (observacoes || '').includes('PREVISAO_DAS')) return 'DAS previsto (já entra pela alíquota)';
+  if (cat?.grupoDre === 'CMV') return cat.nome;
   if (cat && cat.grupoDre === 'DEDUCAO' && /imposto|simples|das\b/i.test(cat.nome)) return cat.nome;
-  if (cat && /log[ií]stica|frete|entrega/i.test(cat.nome)) return cat.nome;
+  if (cat && /log[ií]stica|frete|entrega|taxa de cart|maquininha/i.test(cat.nome)) return cat.nome;
   if (cat && /terceir|laborat[óo]rio/i.test(cat.nome)) return cat.nome;
   return null;
 }
@@ -133,15 +147,32 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
     where: { tipo: 'PEDIDO', data: { gte: ini, lte: fim }, situacaoId: { in: sitVenda.map((s) => s.id) } },
     select: { ...SELECT_CUSTO_VENDA, itens: { select: { custoUnitario: true, quantidade: true, produto: { select: { tipo: true } }, total: true } } },
   });
-  // custo completo de cada venda: produto (CMV) + imposto (deduções, pela alíquota) + taxa de cartão + frete
+  // custo de cada venda: se a saída já foi lançada no caixa, vale ela; senão o cálculo (inclusive estimativa das vendas antigas)
   const cfg = await carregarCfgCustos();
+  const idsVenda = vendas.map((v) => v.id);
+  const saidasVenda = idsVenda.length
+    ? await prisma.contaPagar.findMany({
+        where: { origemTipo: 'VENDA', origemId: { in: idsVenda }, situacao: { not: 'CANCELADO' } },
+        select: { origemId: true, valor: true, observacoes: true },
+      })
+    : [];
+  const lancadoPorVenda = new Map<number, { produto?: number; frete?: number; taxa?: number }>();
+  for (const s of saidasVenda) {
+    if (!s.origemId) continue;
+    const a = lancadoPorVenda.get(s.origemId) || {};
+    const obs = s.observacoes || '';
+    if (obs.includes('CMV_VENDA')) a.produto = (a.produto || 0) + s.valor;
+    else if (obs.includes('FRETE_VENDA')) a.frete = (a.frete || 0) + s.valor;
+    else if (obs.includes('TAXA_VENDA')) a.taxa = (a.taxa || 0) + s.valor;
+    lancadoPorVenda.set(s.origemId, a);
+  }
   for (const v of vendas) {
     const servicos = v.itens.filter((i) => i.produto?.tipo === 'S').reduce((s, i) => s + i.total, 0);
     ac.receitaProdutos += v.total - servicos;
     ac.receitaServicos += servicos;
-    const c = custosVenda(v, cfg);
+    const c = custoParaDre(custosVenda(v, cfg), lancadoPorVenda.get(v.id));
     if (c.produto) add(ac.cmv, 'Custo dos produtos vendidos', c.produto);
-    if (c.taxaCartao) add(ac.despOper, 'Taxas de cartão (vendas)', c.taxaCartao);
+    if (c.taxa) add(ac.despOper, 'Taxas de cartão (vendas)', c.taxa);
     if (c.frete) add(ac.despOper, 'Frete das vendas', c.frete);
   }
   const ordens = await prisma.ordemServico.findMany({
@@ -170,7 +201,7 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
       situacao: { not: 'CANCELADO' },
       OR: [{ competencia: { gte: compIni, lte: compFim } }, { competencia: null, vencimento: { gte: ini, lte: fim } }],
     },
-    select: { valor: true, categoriaId: true, origemTipo: true, emprestimo: { select: { juros: true, valorDevolver: true } } },
+    select: { valor: true, categoriaId: true, origemTipo: true, observacoes: true, emprestimo: { select: { juros: true, valorDevolver: true } } },
   });
   for (const c of contas) {
     const cat = c.categoriaId ? cats.get(c.categoriaId) : null;
@@ -179,7 +210,7 @@ async function acumularCompetencia(ini: Date, fim: Date, cats: Map<number, Cat>)
       lancarEmprestimo(ac, c.valor, c.emprestimo);
       continue;
     }
-    const coberta = cobertaPeloCustoDaVenda(cat, c.origemTipo);
+    const coberta = cobertaPeloCustoDaVenda(cat, c.origemTipo, c.observacoes);
     if (coberta) {
       add(ac.informativo, coberta, c.valor, cat?.id ?? null);
       continue;
@@ -220,10 +251,18 @@ async function acumularCaixa(ini: Date, fim: Date, cats: Map<number, Cat>): Prom
   const movs = await prisma.movimentoFinanceiro.findMany({
     // transferências entre contas e ajustes de saldo não entram no DRE; NULL precisa ser incluído explicitamente
     where: { data: { gte: ini, lte: fim }, tipo: { in: ['ENTRADA', 'SAIDA'] }, OR: [{ observacoes: null }, { observacoes: { notIn: OBS_FORA_DO_RESULTADO } }] },
-    select: { tipo: true, valor: true, categoriaId: true, contaReceberId: true, contaPagarId: true, contaReceber: { select: { emprestimoId: true, carne: { select: { juros: true, total: true } } } }, contaPagar: { select: { emprestimo: { select: { juros: true, valorDevolver: true } } } } },
+    select: { tipo: true, valor: true, categoriaId: true, contaReceberId: true, contaPagarId: true, contaReceber: { select: { emprestimoId: true, carne: { select: { juros: true, total: true } } } }, contaPagar: { select: { origemTipo: true, observacoes: true, emprestimo: { select: { juros: true, valorDevolver: true } } } } },
   });
   for (const m of movs) {
     const cat = m.categoriaId ? cats.get(m.categoriaId) : null;
+    if (m.tipo === 'SAIDA' && m.contaPagar?.origemTipo === 'COMPRA') {
+      add(ac.informativo, 'Compra de mercadorias paga ao fornecedor (estoque — não é despesa de novo)', m.valor);
+      continue;
+    }
+    if (m.tipo === 'SAIDA' && (m.contaPagar?.origemTipo === 'IMPOSTO' || (m.contaPagar?.observacoes || '').includes('PREVISAO_DAS'))) {
+      add(ac.informativo, 'DAS (previsão ou guia — já entra pela alíquota)', m.valor);
+      continue;
+    }
     if (m.tipo === 'ENTRADA' && m.contaReceber?.emprestimoId) {
       add(ac.informativo, 'Empréstimos recebidos (dinheiro que entrou)', m.valor);
       continue;
