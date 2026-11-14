@@ -135,15 +135,16 @@ export function Table<T>({ colunas, dados, carregando, chave, onClickLinha, vazi
                   onClick={() => onClickLinha?.(linha)}
                 >
                   {cartao ? (
-                    <div className="flex items-start gap-2">
+                    <div className="flex flex-wrap items-start gap-2">
                       {selecao && (
                         <span className="pt-0.5">
                           <Caixinha id={Number(chave(linha))} />
                         </span>
                       )}
-                      <div className="min-w-0 flex-1">{cartao(linha, i)}</div>
+                      {/* min-w impede o título de virar uma coluna de uma letra quando os botões não cabem ao lado */}
+                      <div className="min-w-48 flex-1">{cartao(linha, i)}</div>
                       {colAcoes.length > 0 && (
-                        <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                           {colAcoes.map((c) => (
                             <span key={c.chave}>{c.render(linha, i)}</span>
                           ))}
