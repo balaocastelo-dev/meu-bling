@@ -20,7 +20,8 @@ async function entrarNoSistema(page: Page) {
     await page.goto(`${RAIZ}/login`, { waitUntil: 'domcontentloaded' });
     await page.fill('input[type=email]', 'admin@balao.info');
     await page.fill('input[type=password]', 'admin123');
-    await page.click('button[type=submit]');
+    // o login é navegação da própria tela (sem recarregar a página): não espera o "load" do documento
+    await page.click('button[type=submit]', { noWaitAfter: true });
     const entrou = await page.waitForURL((u) => !u.pathname.includes('login'), { timeout: 30000 }).then(() => true).catch(() => false);
     if (entrou) return;
     await page.waitForTimeout(5000);
