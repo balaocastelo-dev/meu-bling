@@ -41,7 +41,8 @@ export const parcelaSchema = z.object({
 export const vendaSchema = z.object({
   /** só é lido na criação; no PUT o tipo não muda (converter usa a rota própria) */
   tipo: z.enum(TIPOS_VENDA).default('PEDIDO'),
-  contatoId: z.coerce.number().int().positive(),
+  /** vazio = Consumidor final (a venda não exige CPF, endereço, e-mail nem telefone) */
+  contatoId: z.preprocess((v) => (v === '' || v === null ? undefined : v), z.coerce.number().int().positive().optional()),
   vendedorId: z.coerce.number().int().positive().nullable().optional(),
   /** anúncio da vitrine da equipe que trouxe este cliente */
   anuncioId: z.coerce.number().int().positive().nullable().optional(),

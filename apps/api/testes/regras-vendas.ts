@@ -229,23 +229,25 @@ async function main() {
   await A.post('/vendas', { contatoId: 99999999, itens: [{ descricao: 'x', quantidade: 1, valorUnitario: 1 }] }, [400, 404, 422]);
   await A.post('/vendas', { contatoId: cli.id, itens: [{ descricao: 'x', quantidade: -1, valorUnitario: 1 }] }, [400, 422]);
 
-  // ================================================================== finalizar venda (28/10/2026)
-  secao('Finalizar venda: de qualquer situação, só com cliente/produto/custo/pagamento/vendedor (28/10)');
+  // ================================================================== finalizar venda
+  secao('Finalizar venda: produto, custo, pagamento e vendedor — CPF e endereço do cliente não travam');
   const cliIncompleto = await adm.post('/contatos', { nome: `Cliente Incompleto ${SUF}`, tipoPessoa: 'F' }, 201);
   const vInc = await A.post('/vendas', { contatoId: cliIncompleto.id, data: hoje(), itens: [{ descricao: 'Item sem custo', quantidade: 1, valorUnitario: 100 }], parcelas: [{ dataVencimento: hoje(), valor: 100, formaPagamentoId: formas[0].id }] }, 201);
   const chk = await A.get(`/vendas/${vInc.id}/finalizacao`);
   const campos = (chk.pendencias as any[]).map((p) => p.campo);
-  verifica(chk.podeFinalizar === false, 'venda incompleta não pode ser finalizada', chk);
-  for (const c of ['cliente.cpf', 'cliente.telefone', 'cliente.email', 'cliente.endereco', 'itens.custo'])
-    verifica(campos.includes(c), `aponta o que falta: ${c}`, campos);
-  verifica((chk.pendencias as any[]).some((p) => p.onde === 'cliente') && chk.contatoId === cliIncompleto.id, 'pendência do cliente leva ao cadastro do cliente', chk);
+  verifica(chk.podeFinalizar === false, 'venda sem custo não pode ser finalizada', chk);
+  verifica(campos.includes('itens.custo'), 'aponta o produto sem custo', campos);
+  for (const c of ['cliente.cpf', 'cliente.telefone', 'cliente.email', 'cliente.endereco'])
+    verifica(!campos.includes(c), `não bloqueia o fechamento por falta de ${c}`, campos);
   const det = await A.get(`/vendas/${vInc.id}`);
-  verifica(det.finalizacao?.podeFinalizar === false && det.finalizacao.pendencias.length >= 5, 'detalhe da venda já traz o que falta', det.finalizacao);
+  verifica(det.finalizacao?.podeFinalizar === false && det.cadastroIncompleto === true, 'detalhe avisa cadastro incompleto e o que falta na venda', det.finalizacao);
   await A.post(`/vendas/${vInc.id}/finalizar`, {}, 422);
   await A.post(`/vendas/${vInc.id}/situacao`, { situacaoId: sit('Fechada') }, 422);
   await adm.post(`/vendas/${vInc.id}/situacao`, { situacaoId: sit('Fechada'), forcar: true }, 422);
-  await A.post('/vendas', { contatoId: cliIncompleto.id, situacaoId: sit('Fechada'), data: hoje(), itens: [{ descricao: 'x', quantidade: 1, valorUnitario: 10, custoUnitario: 5 }] }, 422);
-  verifica((await A.get(`/vendas/${vInc.id}`)).situacao.nome !== 'Fechada', 'continua sem finalizar');
+  verifica((await A.get(`/vendas/${vInc.id}`)).situacao.nome !== 'Fechada', 'sem custo continua sem finalizar');
+  // cliente só com o nome, com custo e vendedor: nasce já Fechada (parcela à vista é preenchida)
+  const jaFechada = await A.post('/vendas', { contatoId: cliIncompleto.id, situacaoId: sit('Fechada'), data: hoje(), itens: [{ descricao: 'x', quantidade: 1, valorUnitario: 10, custoUnitario: 5 }] }, 201);
+  verifica(jaFechada.situacao?.nome === 'Fechada', 'cliente só com o nome pode nascer já Fechada', jaFechada.situacao);
 
   // sem vendedor e sem forma de pagamento
   const semVend = await adm.post('/vendas', { contatoId: cli.id, vendedorId: null, data: hoje(), itens: [{ descricao: 'Com custo', quantidade: 1, valorUnitario: 100, custoUnitario: 50 }], parcelas: [{ dataVencimento: hoje(), valor: 100, formaPagamentoId: null }] }, 201);

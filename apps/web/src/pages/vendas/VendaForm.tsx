@@ -11,6 +11,7 @@ import { buscarContatos, buscarProdutos } from '@/lib/buscas';
 import { Button, DateInput, FormSkeleton, Input, MoneyInput, PageHeader, SearchSelect, Secao, Select, Textarea, ValorOculto } from '@/components/ui';
 import { ParcelasEditor, parcelasValidas } from '@/components/compartilhados/ParcelasEditor';
 import { ContatoRapidoDrawer } from '@/components/compartilhados/ContatoRapidoDrawer';
+import { AvisoCadastroIncompleto } from '@/components/compartilhados/AvisoCadastroIncompleto';
 import { useApresentacao } from '@/stores/apresentacao';
 import { arred, dataIso, hoje, moeda, rotulo } from '@/lib/format';
 import type { Contato, Produto, TipoVenda, Venda, VendaItem, VendaPayload } from '@/types';
@@ -212,7 +213,6 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
 
   const validar = (): boolean => {
     const e: Record<string, string> = {};
-    if (!form.contatoId) e.contatoId = 'Selecione o cliente';
     if (!form.data) e.data = 'Informe a data';
     if (form.itens.length === 0) e.itens = 'Adicione ao menos um item';
     form.itens.forEach((it, i) => {
@@ -243,7 +243,7 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
             ? 'Estoque/contas já lançados: só observações, transporte e custos internos podem ser alterados. Estorne antes para editar itens.'
             : orcamento
               ? 'O orçamento não mexe no estoque nem no financeiro. Depois de salvar, envie ao cliente e converta em venda quando ele aprovar.'
-              : 'Preencha cliente, itens e condições de pagamento.'
+              : 'Cliente é opcional (só o nome, ou nenhum). Itens e pagamento seguem para fechar a venda.'
         }
         acoes={
           <>
@@ -272,8 +272,8 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
             <SearchSelect
               className="sm:col-span-2 xl:col-span-5"
               label="Cliente"
-              obrigatorio
               erro={erros.contatoId}
+              placeholder="Opcional — sem cliente vira Consumidor final"
               valor={form.contatoId}
               rotuloAtual={clienteNome}
               disabled={bloqueado}
@@ -308,10 +308,15 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
               <Select className="xl:col-span-3" label="Situação inicial" value={form.situacaoId ?? ''} onChange={(e) => set('situacaoId', e.target.value ? Number(e.target.value) : null)} opcoes={opcoesDe(situacoes)} placeholder="Padrão (inicial)" ajuda={orcamento ? undefined : 'Ações da situação (lançar estoque/contas) rodam ao salvar.'} />
             )}
           </div>
-          {cliente && (
-            <p className="mt-2 text-xs text-slate-500">
-              {[cliente.celular && `Cel: ${cliente.celular}`, cliente.email, cliente.municipio && `${cliente.municipio}/${cliente.uf}`].filter(Boolean).join(' · ')}
-            </p>
+          {cliente ? (
+            <div className="mt-2 space-y-1">
+              <p className="text-xs text-slate-500">
+                {[cliente.celular && `Cel: ${cliente.celular}`, cliente.email, cliente.municipio && `${cliente.municipio}/${cliente.uf}`].filter(Boolean).join(' · ') || 'Só o nome — o restante pode ficar para depois.'}
+              </p>
+              <AvisoCadastroIncompleto contato={cliente} modo="linha" />
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-slate-500">Sem cliente, a venda fica no nome de Consumidor final. CPF, telefone, e-mail e endereço não travam o fechamento.</p>
           )}
         </Secao>
 

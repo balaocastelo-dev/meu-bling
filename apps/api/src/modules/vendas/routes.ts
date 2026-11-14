@@ -219,6 +219,8 @@ export default async function vendasRoutes(app: FastifyInstance) {
   // ---------------------------------------------------------------- criar
   app.post('/api/v1/vendas', async (req, reply) => {
     const body = vendaSchema.parse(req.body);
+    // sem cliente, a venda sai no Consumidor final — CPF e endereço não são obrigatórios para vender
+    if (!body.contatoId) body.contatoId = await consumidorFinalId();
     // vendedor padrão = vendedor vinculado ao usuário logado (define a comissão default dos itens)
     if (body.vendedorId === undefined) {
       // lido do banco (o vínculo pode ter mudado depois do login; vendedor sem cadastro ganha um)
@@ -229,7 +231,8 @@ export default async function vendasRoutes(app: FastifyInstance) {
     // para passar a venda a um colega existe "Transferir vendedor"
     const restrito = await vendedorRestrito(req.user);
     if (restrito !== null && restrito > 0) body.vendedorId = restrito;
-    // criar já numa situação final (Fechada / NF emitida) exige a venda completa
+    // criar já numa situação final (Fechada / NF emitida) exige produto, custo, pagamento e vendedor
+    // (dados fiscais do cliente ficam para a emissão da nota)
     if (body.tipo !== 'ORCAMENTO' && body.situacaoId) {
       const sit = await prisma.situacao.findUnique({ where: { id: body.situacaoId } });
       if (sit?.final && !sit.cancelamento) {
@@ -326,6 +329,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const corpoPut = { ...(req.body as Record<string, unknown>) };
     if ((await vendedorRestrito(req.user)) !== null) delete corpoPut.vendedorId;
     const body = vendaSchema.parse(mesclarComAtual(atual, corpoPut));
+    if (!body.contatoId) body.contatoId = await consumidorFinalId();
     await prisma.$transaction(async (tx) => {
       const { itens, totais, parcelas, data } = await prepararVenda(tx, body);
       // parcelas: preserva as já vinculadas a conta (não há, pois contas não lançadas) → recria

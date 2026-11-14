@@ -1,6 +1,6 @@
 /**
  * "Finalizar venda": resolve tudo na saída da venda.
- * - Só deixa confirmar com a venda completa (cliente, produto, custo, pagamento, vendedor).
+ * - Só deixa confirmar com produto, custo, pagamento e vendedor. Cliente pode ser só o nome, ou nenhum.
  * - Recebimento: cada parcela marcada como recebida no banco certo (sugerido pela forma de pagamento) ou em aberto.
  * - Compra: pergunta se registra a compra da mercadoria (com o custo da venda) e se ela já está paga (e de qual banco saiu).
  */

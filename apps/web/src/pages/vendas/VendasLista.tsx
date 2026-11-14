@@ -11,6 +11,7 @@ import { useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { OPCOES_PERIODO, periodoDe } from '@/lib/periodo';
 import { BarraFiltros, BuscaFiltro, Button, Card, ChipsSituacao, EmptyState, PageHeader, Pagination, PeriodoFiltro, SelectFiltro, StatusBadge, Table, type Coluna } from '@/components/ui';
 import { VendaAcoes, rotaDe } from '@/components/compartilhados/VendaAcoes';
+import { AvisoCadastroIncompleto } from '@/components/compartilhados/AvisoCadastroIncompleto';
 import { data, inteiro, moeda, rotulo } from '@/lib/format';
 import type { Paginado, TipoVenda, VendaResumo } from '@/types';
 
@@ -190,7 +191,7 @@ export default function VendasLista({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
           } as Coluna<VendaResumo>,
         ]
       : []),
-    { chave: 'contato', titulo: 'Cliente', render: (v) => <span className="block max-w-[320px] truncate">{v.contato?.nome}</span> },
+    { chave: 'contato', titulo: 'Cliente', render: (v) => <span className="flex max-w-[320px] items-center gap-2"><span className="truncate">{v.contato?.nome}</span><AvisoCadastroIncompleto contato={v.contato} /></span> },
     { chave: 'vendedor', titulo: 'Vendedor', ocultarMobile: true, render: (v) => <span className="text-slate-500">{v.vendedor?.nome ?? '—'}</span> },
     { chave: 'origem', titulo: 'Origem', ocultarMobile: true, render: (v) => <span className="text-xs text-slate-500">{v.origem ? rotulo(v.origem) : '—'}</span> },
     {

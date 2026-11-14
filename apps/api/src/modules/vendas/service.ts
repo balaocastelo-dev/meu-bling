@@ -4,6 +4,7 @@
  */
 import { prisma, type Tx } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
+import { faltasCadastroCliente } from '../comum/cadastro-cliente.js';
 import { mensagemPendencias, verificarNfe } from '../comum/nfe-checagem.js';
 import { arredondar, competenciaDe, proximoNumero } from '../../lib/util.js';
 import { executarAcoes, historico, mudarSituacao, situacaoInicial, situacoesPermitidas, type Acao, type ContextoAcao, type Modulo } from '../../core/situacoes.js';
@@ -36,7 +37,7 @@ export function sequenciaDe(tipo: TipoVenda | string) {
 
 // ---------------------------------------------------------------- includes
 export const includeLista = {
-  contato: { select: { id: true, nome: true, fantasia: true, documento: true, celular: true, email: true } },
+  contato: { select: { id: true, nome: true, fantasia: true, documento: true, celular: true, telefone: true, email: true, logradouro: true, numero: true, bairro: true, municipio: true, uf: true, cep: true } },
   vendedor: { select: { id: true, nome: true } },
   situacao: { select: { id: true, nome: true, cor: true, final: true, cancelamento: true } },
   nota: { select: { id: true, numero: true, serie: true, modelo: true, situacao: true, chave: true } },
@@ -79,7 +80,8 @@ export async function vendaCompleta(id: number) {
     if (fechada && fechada.id !== v.situacaoId && !permitidas.some((s) => s.id === fechada.id)) permitidas = [...permitidas, fechada].sort((a, b) => a.ordem - b.ordem);
   }
   const pendencias = modulo === 'VENDA' ? pendenciasFinalizacao(v as any) : [];
-  return { ...v, fechamento: fechamentoVenda(v, await carregarCfgCustos()), historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), finalizacao: { podeFinalizar: !pendencias.length, pendencias }, tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
+  const faltasCadastro = faltasCadastroCliente(v.contato);
+  return { ...v, fechamento: fechamentoVenda(v, await carregarCfgCustos()), historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), finalizacao: { podeFinalizar: !pendencias.length, pendencias }, cadastroIncompleto: faltasCadastro.length > 0, faltasCadastro, tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
 }
 
 /**
@@ -784,6 +786,8 @@ export async function temReserva(id: number, db: Db = prisma) {
  * Usada pela tela (POST /vendas) e pela porta do PDV do site (modules/site).
  */
 export async function criarVenda(body: VendaInput, usuarioId: number | null, observacaoHistorico?: string) {
+  const contatoId = body.contatoId || (await consumidorFinalId());
+  body.contatoId = contatoId;
   const modulo = moduloDe(body.tipo);
   const venda = await prisma.$transaction(async (tx) => {
     const { itens, totais, parcelas, data } = await prepararVenda(tx, body);
@@ -806,7 +810,7 @@ export async function criarVenda(body: VendaInput, usuarioId: number | null, obs
         validade: body.tipo === 'ORCAMENTO' ? validade : null,
         dataPrevista: body.dataPrevista,
         dataSaida: body.dataSaida,
-        contatoId: body.contatoId,
+        contatoId,
         vendedorId: body.vendedorId ?? null,
         anuncioId: body.anuncioId ?? null,
         situacaoId: situacao.id,
@@ -852,11 +856,12 @@ export async function criarVenda(body: VendaInput, usuarioId: number | null, obs
 
 // ---------------------------------------------------------------- finalização (regra do Balão, 28/10/2026)
 /**
- * Uma venda só pode ser FINALIZADA (ir para uma situação final: "Fechada" ou "NF emitida") com tudo preenchido:
- *  - cliente "Consumidor final" OU cliente com nome, CPF/CNPJ, telefone, e-mail e endereço completo;
+ * Uma venda só pode ser FINALIZADA (ir para uma situação final: "Fechada" ou "NF emitida") com:
  *  - ao menos um produto, todos com custo;
  *  - forma de pagamento em todas as parcelas;
  *  - vendedor responsável.
+ * Cliente é opcional: sem cliente, a venda usa "Consumidor final". CPF/CNPJ, telefone, e-mail e
+ * endereço NÃO bloqueiam o fechamento — a nota (NF-e/NFC-e) é que cobra isso, na hora de emitir.
  * Pode ser finalizada a partir de qualquer situação (inclusive Cancelada).
  */
 export interface PendenciaFinalizacao {
@@ -900,25 +905,8 @@ export function pendenciasFinalizacao(v: VendaParaFinalizar): PendenciaFinalizac
   const p: PendenciaFinalizacao[] = [];
   if (v.tipo === 'ORCAMENTO') return [{ campo: 'tipo', mensagem: 'Orçamento não é finalizado: converta em venda primeiro.', onde: 'venda' }];
 
-  const c = v.contato;
-  if (!c) p.push({ campo: 'cliente', mensagem: 'Selecione o cliente (ou "Consumidor final").', onde: 'venda' });
-  else if (!ehConsumidorFinal(c)) {
-    const vazio = (x: string | null | undefined) => !x || !String(x).trim();
-    const doc = (c.documento || '').replace(/\D/g, '');
-    if (vazio(c.nome)) p.push({ campo: 'cliente.nome', mensagem: 'Cliente sem nome.', onde: 'cliente' });
-    if (doc.length !== 11 && doc.length !== 14) p.push({ campo: 'cliente.cpf', mensagem: 'Cliente sem CPF (ou CNPJ) válido.', onde: 'cliente' });
-    if (vazio(c.celular) && vazio(c.telefone)) p.push({ campo: 'cliente.telefone', mensagem: 'Cliente sem telefone.', onde: 'cliente' });
-    if (vazio(c.email) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(c.email).trim())) p.push({ campo: 'cliente.email', mensagem: 'Cliente sem e-mail válido.', onde: 'cliente' });
-    const endFaltando = [
-      ['logradouro', 'rua'],
-      ['numero', 'número'],
-      ['bairro', 'bairro'],
-      ['municipio', 'cidade'],
-      ['uf', 'UF'],
-      ['cep', 'CEP'],
-    ].filter(([k]) => vazio((c as any)[k])).map(([, r]) => r);
-    if (endFaltando.length) p.push({ campo: 'cliente.endereco', mensagem: `Endereço do cliente incompleto (falta: ${endFaltando.join(', ')}).`, onde: 'cliente' });
-  }
+  // Sem cliente a venda segue (o servidor grava "Consumidor final"). Nome vazio no cadastro é o único dado de cliente que ainda trava.
+  if (v.contato && !(v.contato.nome || '').trim()) p.push({ campo: 'cliente.nome', mensagem: 'Cliente sem nome.', onde: 'cliente' });
 
   if (!v.itens.length) p.push({ campo: 'itens', mensagem: 'A venda não tem nenhum produto.', onde: 'venda' });
   const semCusto = v.itens.map((i, idx) => ({ i, idx })).filter(({ i }) => !(i.custoUnitario > 0));
