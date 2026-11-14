@@ -9,6 +9,7 @@ import { usePaginacao } from '@/hooks/usePaginacao';
 import { useCategoriasFinanceiras, useContasFinanceiras, useFormasPagamento, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { buscarContatos } from '@/lib/buscas';
 import { Badge, BarraFiltros, BuscaFiltro, Button, Card, Checkbox, DateInput, EmptyState, Input, Modal, MoneyInput, PageHeader, Pagination, PeriodoFiltro, SearchSelect, Select, SelectFiltro, StatCard, Table, Textarea, tomPorStatus, type Coluna } from '@/components/ui';
+import { TextoValores } from '@/components/compartilhados/TextoValores';
 import { arred, data, dataIso, diasAtraso, hoje, moeda, rotulo } from '@/lib/format';
 import type { ContaPagar, ContaReceber, ContasResposta } from '@/types';
 
@@ -284,9 +285,9 @@ export function ContasPage({ tipo }: Props) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     {l ? (
-                      <Link to={l} className="min-w-0 break-words text-sm font-medium text-slate-900 hover:text-brand-600">{c.descricao}</Link>
+                      <Link to={l} className="min-w-0 break-words text-sm font-medium text-slate-900 hover:text-brand-600"><TextoValores texto={c.descricao} /></Link>
                     ) : (
-                      <p className="min-w-0 break-words text-sm font-medium text-slate-900">{c.descricao}</p>
+                      <p className="min-w-0 break-words text-sm font-medium text-slate-900"><TextoValores texto={c.descricao} /></p>
                     )}
                     <span className="num shrink-0 text-sm font-semibold text-slate-900">{moeda(c.valor)}</span>
                   </div>

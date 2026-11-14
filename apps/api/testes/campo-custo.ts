@@ -15,11 +15,17 @@ import { encerrar, falhar, placar, secao, verifica } from './lib.js';
 const RAIZ = (process.argv[2] || 'http://localhost:3333').replace(/\/$/, '');
 
 async function entrarNoSistema(page: Page) {
-  await page.goto(`${RAIZ}/login`, { waitUntil: 'networkidle' });
-  await page.fill('input[type=email]', 'admin@balao.info');
-  await page.fill('input[type=password]', 'admin123');
-  await page.click('button[type=submit]');
-  await page.waitForURL((u) => !u.pathname.includes('login'), { timeout: 20000 });
+  // o login tem limite por minuto e a primeira tela às vezes demora a carregar no CI
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    await page.goto(`${RAIZ}/login`, { waitUntil: 'domcontentloaded' });
+    await page.fill('input[type=email]', 'admin@balao.info');
+    await page.fill('input[type=password]', 'admin123');
+    await page.click('button[type=submit]');
+    const entrou = await page.waitForURL((u) => !u.pathname.includes('login'), { timeout: 30000 }).then(() => true).catch(() => false);
+    if (entrou) return;
+    await page.waitForTimeout(5000);
+  }
+  throw new Error('login não saiu da tela de entrada');
 }
 
 /** Abre um orçamento novo com uma linha livre e devolve o campo de custo e o botão do olho. */
