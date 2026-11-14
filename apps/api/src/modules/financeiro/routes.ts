@@ -34,6 +34,7 @@ import { chavePeriodo, listarPeriodos, resolverPeriodo, type Agrupar } from './p
 import { OBS_FORA_DO_RESULTADO, OBS_AJUSTE_SALDO, OBS_TRANSFERENCIA } from '../comum/financeiro.js';
 import { extratoConta } from './extrato.js';
 import { resolvedorDeOrigem, selectTituloReceber, selectTituloPagar, type OrigemLancamento } from './origem-lancamento.js';
+import { aoMudarContaQuePodeSerDas } from '../vendas/saidas.js';
 
 const SIT_FILTRO = ['ABERTO', 'RECEBIDO', 'PAGO', 'PARCIAL', 'CANCELADO', 'ATRASADO', 'DEVOLVIDO', 'NAO_MAPEADA'] as const;
 
@@ -354,6 +355,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
       include,
     });
     await auditar(req, 'ContaPagar', c.id, 'CRIAR', { descricao: c.descricao, valor: c.valor });
+    await aoMudarContaQuePodeSerDas(c);
     return reply.code(201).send(c);
   });
 
@@ -376,6 +378,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     const c = await prisma.contaPagar.findUnique({ where: { id }, include });
     if (!c) throw new NotFound('Conta a pagar');
     await auditar(req, 'ContaPagar', id, 'ALTERAR', b);
+    await aoMudarContaQuePodeSerDas(c);
     return c;
   });
 
@@ -386,6 +389,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     if (['PAGO', 'PARCIAL'].includes(atual.situacao)) throw new AppError('Conta com baixa: estorne antes de cancelar.', 422, 'JA_BAIXADA');
     await prisma.contaPagar.update({ where: { id }, data: { situacao: 'CANCELADO' } });
     await auditar(req, 'ContaPagar', id, 'EXCLUIR');
+    await aoMudarContaQuePodeSerDas(atual);
     return { ok: true, situacao: 'CANCELADO' };
   });
 
@@ -406,6 +410,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
       observacoes: b.observacoes,
     });
     await auditar(req, 'ContaPagar', id, 'ACAO', { acao: 'baixar', valor, contaFinanceiraId: b.contaFinanceiraId });
+    await aoMudarContaQuePodeSerDas(r.conta);
     return { conta: r.conta, movimento: r.movimento };
   });
 
@@ -413,6 +418,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     const id = Number((req.params as any).id);
     const r = await estornarContaPagar(id);
     await auditar(req, 'ContaPagar', id, 'ACAO', { acao: 'estornar', movimentos: r.movimentosEstornados });
+    await aoMudarContaQuePodeSerDas(r.conta);
     return r;
   });
 

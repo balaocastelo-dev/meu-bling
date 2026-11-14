@@ -266,6 +266,25 @@ export default function VendaDetalhe() {
               </div>
             )}
           </div>
+          {venda.caixa && (
+            <div className="mt-3 space-y-1 rounded-md border border-slate-200 p-2.5 text-xs" data-testid="resumo-caixa-venda">
+              <p className="mb-1 flex items-center justify-between font-semibold uppercase tracking-wide text-slate-400">
+                <span>Caixa desta venda</span>
+                {venda.caixa.custoPendente && <Badge tom="amarelo">Custo pendente</Badge>}
+              </p>
+              <div className="flex justify-between"><span className="text-slate-500">{venda.caixa.previsto ? 'A receber agora' : 'Recebido'}</span><ValorOculto className="num">{moeda(venda.caixa.recebido)}</ValorOculto></div>
+              <div className="flex justify-between"><span className="text-slate-500">Custo do produto</span><ValorOculto className="num">{moeda(venda.caixa.custoProduto)}</ValorOculto></div>
+              <div className="flex justify-between"><span className="text-slate-500">Frete</span><ValorOculto className="num">{moeda(venda.caixa.frete)}</ValorOculto></div>
+              <div className="flex justify-between"><span className="text-slate-500">Taxa da máquina</span><ValorOculto className="num">{moeda(venda.caixa.taxa)}</ValorOculto></div>
+              <div className="flex justify-between"><span className="text-slate-500">Imposto previsto ({numero(venda.caixa.impostoPct, 1)}%)</span><ValorOculto className="num">{moeda(venda.caixa.impostoPrevisto)}</ValorOculto></div>
+              <div className="flex justify-between border-t border-slate-200 pt-1.5 text-sm font-semibold">
+                <span className="text-slate-700">Líquido</span>
+                <span className={`num ${venda.caixa.liquido < 0 ? 'text-red-600' : 'text-emerald-700'}`}><ValorOculto>{moeda(venda.caixa.liquido)}</ValorOculto></span>
+              </div>
+              {venda.caixa.custoPendente && <p className="text-[11px] text-amber-700">Tem item sem custo real. Esse item não sai do caixa até o custo ser informado.</p>}
+              <p className="text-[11px] text-slate-400">O imposto previsto não sai do caixa agora: acumula no DAS do mês.</p>
+            </div>
+          )}
           {!orcamento && (<>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <Button tamanho="sm" variante={venda.estoqueLancado ? 'perigo' : 'secundario'} icone={venda.estoqueLancado ? <Undo2 className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />} carregando={acoes.isPending} onClick={() => acoes.mutate([venda.estoqueLancado ? 'estornarEstoque' : 'lancarEstoque'])}>

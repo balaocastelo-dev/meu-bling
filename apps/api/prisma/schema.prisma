@@ -1166,7 +1166,7 @@ model ContaPagar {
   contaFinanceiraId Int?
   categoria         CategoriaFinanceira? @relation(fields: [categoriaId], references: [id])
   categoriaId       Int?
-  /// COMPRA | COMISSAO | MANUAL | IMPOSTO
+  /// COMPRA | COMISSAO | MANUAL | IMPOSTO | VENDA | CONSIGNACAO
   origemTipo        String               @default("MANUAL")
   origemId          Int?
   parcela           String?

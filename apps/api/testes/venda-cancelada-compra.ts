@@ -49,7 +49,7 @@ async function main() {
   const fin: any = await finalizar(v.id);
   verifica(fin.compra?.compra && fin.compra.paga, 'compra registrada e paga', fin.compra);
   const compraId = fin.compra.compra.id as number;
-  verifica(igual(await saldo(cora.id), 3500) && igual(await saldo(mp.id), -2691.99), 'Cora +3.500 e Mercado Pago −2.691,99 (compra paga de lá)', { cora: await saldo(cora.id), mp: await saldo(mp.id) });
+  verifica(igual(await saldo(cora.id), 808.01) && igual(await saldo(mp.id), -2691.99), 'Cora ficou com 808,01 (3.500 recebidos − 2.691,99 de custo) e o Mercado Pago pagou a compra', { cora: await saldo(cora.id), mp: await saldo(mp.id) });
   verifica((await pagar(compraId)).some((c) => c.situacao === 'PAGO'), 'conta a pagar da compra está PAGA');
 
   secao('Cancelar a venda: o pagamento da compra volta para o banco e a compra é cancelada');
@@ -71,7 +71,7 @@ async function main() {
   verifica(!chk2.compraRegistrada, 'tela de finalizar não considera a compra cancelada como registrada', chk2.compraRegistrada);
   const fin2: any = await finalizar(v.id);
   verifica(fin2.compra?.compra && !fin2.compra.jaExistia && fin2.compra.compra.id !== compraId, 'nova compra criada', fin2.compra);
-  verifica(igual(await saldo(mp.id), -2691.99) && igual(await saldo(cora.id), 3500), 'bancos lançados de novo', { mp: await saldo(mp.id), cora: await saldo(cora.id) });
+  verifica(igual(await saldo(mp.id), -2691.99) && igual(await saldo(cora.id), 808.01), 'bancos lançados de novo: Cora com o líquido e Mercado Pago com a compra', { mp: await saldo(mp.id), cora: await saldo(cora.id) });
 
   secao('Excluir a venda (depois de cancelar): a compra some junto e o dinheiro volta');
   await adm.post(`/vendas/${v.id}/situacao`, { situacaoId: cancelada }, 200);

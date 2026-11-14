@@ -479,6 +479,7 @@ export const ENDPOINTS: Endpoint[] = [
   { metodo: 'GET', caminho: '/dashboard/assistencia/pagamentos-tecnico', recurso: 'financeiro', resumo: 'Últimos pagamentos de técnico lançados no contas a pagar.' },
   { metodo: 'GET', caminho: '/dashboard/atividades', recurso: 'relatorios', resumo: 'Últimos lançamentos financeiros e acontecimentos do sistema.', filtros: ['limite (5–200)', 'categoria (vendas|os|compras|fiscal|financeiro|cadastros|sistema|acessos)', 'so (lancamentos|acontecimentos)'] },
   { metodo: 'GET', caminho: '/relatorios/dre', recurso: 'relatorios', resumo: 'DRE por competência ou caixa.', filtros: [...PERIODO, 'regime (competencia|caixa)', 'comparar'] },
+  { metodo: 'GET', caminho: '/relatorios/custos-nao-lancados', recurso: 'relatorios', resumo: 'Custo real e frete informado que não saíram do caixa no período (venda antiga ou item sem custo). Não gera lançamento.', filtros: [...PERIODO] },
   { metodo: 'GET', caminho: '/relatorios/vendas-por-periodo', recurso: 'relatorios', resumo: 'Vendas agrupadas por dia/semana/mês.', filtros: [...PERIODO, 'agrupar (dia|semana|mes)'] },
   { metodo: 'GET', caminho: '/relatorios/produtos-mais-vendidos', recurso: 'relatorios', resumo: 'Ranking de produtos.', filtros: [...PERIODO, 'limite'] },
   { metodo: 'GET', caminho: '/relatorios/estoque', recurso: 'relatorios', resumo: 'Posição de estoque com custo e valor.', filtros: ['depositoId', 'categoriaId'] },

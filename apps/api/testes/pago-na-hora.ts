@@ -102,9 +102,9 @@ async function main() {
   const cs = await contas();
   const sB = cs.find((c) => c.id === bancoB.id).saldoAtual;
   const sA = cs.find((c) => c.id === bancoA.id).saldoAtual;
-  verifica(igual(sB - saldoB0, 400), 'recebimento de 400 entrou no banco escolhido (B)', { sB });
-  verifica(igual(sA - saldoA0, -650), 'banco A: tirou o recebimento automático (400, foi para o B) e pagou a compra (250)', { sA, saldoA0 });
-  verifica(igual((await saldoTotal()) - totalAntes, 150), 'no total: +400 da venda − 250 da compra', { totalAntes });
+  verifica(igual(sB - saldoB0, 150), 'banco B ficou com 150: recebimento 400 menos o custo do produto 250', { sB });
+  verifica(igual(sA - saldoA0, -400), 'banco A pagou a compra de 250; o recebimento e o custo foram para o B', { sA, saldoA0 });
+  verifica(igual((await saldoTotal()) - totalAntes, -100), 'caixa no total: +400 da venda − 250 do custo − 250 da compra paga ao fornecedor', { totalAntes, depois: await saldoTotal() });
   const compra: any = await adm.get(`/compras/${fin.compra.compra.id}`);
   verifica(compra.situacao?.nome === 'Vendido' || compra.situacao?.nome === 'Fechado', 'compra criada (Vendido/Fechado)', compra.situacao);
   const chk2: any = await adm.get(`/vendas/${vf.id}/finalizacao`);
@@ -132,9 +132,12 @@ async function main() {
   const c4: any = await adm.get(`/vendas/${v4.id}/finalizacao`);
   await adm.post(`/vendas/${v4.id}/finalizar`, { recebimentos: [{ parcelaId: c4.parcelas[0].id, formaPagamentoId: dinheiro.id, recebido: true, contaFinanceiraId: mp.id }] }, 200);
   const mpDepois = (await contas()).find((c) => c.id === mp.id);
-  verifica(igual(mpDepois.saldoAtual, 190), 'Mercado Pago recebeu 190 (200 − 5%)', mpDepois);
+  verifica(igual(mpDepois.saldoAtual, 90), 'Mercado Pago ficou com 90: entrou 200, saiu a taxa de 10 (5%) e o custo de 100', mpDepois);
   const cr4 = await receber(v4.id);
-  verifica(cr4[0]?.situacao === 'RECEBIDO' && igual(cr4[0].desconto, 10), 'título quitado com 10 de taxa', cr4[0]);
+  verifica(cr4[0]?.situacao === 'RECEBIDO' && igual(cr4[0].valorRecebido, 200) && igual(cr4[0].desconto, 0), 'título recebido pelo valor cheio; a taxa sai num movimento próprio', cr4[0]);
+  const taxas: any = await adm.get(`/contas-pagar?origemTipo=VENDA&origemId=${v4.id}&limite=20`);
+  const saidas = (Array.isArray(taxas) ? taxas : taxas.data) as any[];
+  verifica(saidas.some((c) => c.observacoes === 'TAXA_VENDA' && igual(c.valor, 10) && c.situacao === 'PAGO') && saidas.some((c) => c.observacoes === 'CMV_VENDA' && igual(c.valor, 100) && c.situacao === 'PAGO'), 'taxa e custo saíram como contas a pagar já pagas', saidas.map((c) => ({ o: c.observacoes, v: c.valor, s: c.situacao })));
 
   secao('Link de pagamento sem token do Mercado Pago avisa o que falta');
   const semToken: any = await adm.post(`/vendas/${vf.id}/link-pagamento`, {}, 422);

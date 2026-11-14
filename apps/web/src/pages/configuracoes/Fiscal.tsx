@@ -6,6 +6,7 @@ import { RefreshCw, Save, ShieldCheck, Trash2, Upload, Wifi, WifiOff } from 'luc
 import { api, mensagemErro } from '@/lib/api';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { Badge, Button, FormSkeleton, Input, MoneyInput, PageHeader, Secao, Select } from '@/components/ui';
+import { opcoesDe, useContasFinanceiras } from '@/hooks/useListas';
 import { data, diasAtraso } from '@/lib/format';
 import type { Empresa, StatusSefaz } from '@/types';
 
@@ -18,8 +19,18 @@ export default function Fiscal() {
   const [form, setForm] = useState<Form | null>(null);
   const [senhaCert, setSenhaCert] = useState('');
   const [arquivoCert, setArquivoCert] = useState<File | null>(null);
+  const [contaSaidas, setContaSaidas] = useState('');
+  const [contaCusto, setContaCusto] = useState('');
+  const { data: contasFin } = useContasFinanceiras();
+  const { data: cfgs } = useQuery({ queryKey: ['configuracoes'], queryFn: () => api.get<Record<string, string>>('/configuracoes') });
   const certRef = useRef<HTMLInputElement>(null);
   const { data: sefaz, refetch: consultarSefaz, isFetching: consultando } = useQuery({ queryKey: ['sefaz-status'], queryFn: () => api.get<StatusSefaz>('/fiscal/status-sefaz').catch(() => null) });
+
+  useEffect(() => {
+    if (!cfgs) return;
+    setContaSaidas(cfgs['vendas.contaSaidasId'] || '');
+    setContaCusto(cfgs['vendas.contaCustoProdutoId'] || '');
+  }, [cfgs]);
 
   useEffect(() => {
     if (emp && !form) {
@@ -30,10 +41,14 @@ export default function Fiscal() {
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => (f ? { ...f, [k]: v } : f));
 
   const salvar = useMutation({
-    mutationFn: (f: Form) => api.put('/empresa', { ...f, cscToken: f.cscToken || undefined }),
+    mutationFn: async (f: Form) => {
+      await api.put('/empresa', { ...f, cscToken: f.cscToken || undefined });
+      await api.put('/configuracoes', { 'vendas.contaSaidasId': contaSaidas || null, 'vendas.contaCustoProdutoId': contaCusto || null });
+    },
     onSuccess: () => {
       toast.success('Configuração fiscal salva.');
       qc.invalidateQueries({ queryKey: ['empresa'] });
+      qc.invalidateQueries({ queryKey: ['configuracoes'] });
       setForm((f) => (f ? { ...f, cscToken: '' } : f));
     },
     onError: (e) => toast.error(mensagemErro(e)),
@@ -78,13 +93,19 @@ export default function Fiscal() {
               <MoneyInput label="Alíquota Simples (%) p/ DRE" prefixo="" value={form.aliquotaSimplesPct} onChange={(v) => set('aliquotaSimplesPct', v)} ajuda="Imposto sobre cada venda (DRE e lucro)." />
             </div>
           </Secao>
-          <Secao titulo="Custo de cada venda (DRE e dashboards)" descricao="Toda venda tem custo = produto + imposto (alíquota acima) + taxa do cartão + frete. Venda sem custo de produto informado usa uma estimativa fixa dentro da faixa abaixo.">
+          <Secao titulo="Custo de cada venda (DRE e dashboards)" descricao="No lucro e no DRE, venda sem custo real usa uma estimativa nesta faixa, e venda sem logística usa o frete padrão. Nenhum dos dois sai do caixa.">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <MoneyInput label="Cartão 1x / débito (%)" prefixo="" value={form.taxaCartao1xPct ?? 5} onChange={(v) => set('taxaCartao1xPct', v)} />
+              <MoneyInput label="Cartão 1x / débito (%)" prefixo="" value={form.taxaCartao1xPct ?? 5} onChange={(v) => set('taxaCartao1xPct', v)} ajuda="Usada no caixa só se a conta e a forma de pagamento não tiverem taxa." />
               <MoneyInput label="Cartão 12x (%)" prefixo="" value={form.taxaCartao12xPct ?? 12} onChange={(v) => set('taxaCartao12xPct', v)} ajuda="De 2x a 11x sobe em linha reta." />
-              <MoneyInput label="Frete por venda (R$)" value={form.freteVendaPadrao ?? 10} onChange={(v) => set('freteVendaPadrao', v)} ajuda="Usado quando a venda não tem logística lançada." />
-              <MoneyInput label="Custo produto mín. (%)" prefixo="" value={form.custoProdutoMinPct ?? 40} onChange={(v) => set('custoProdutoMinPct', v)} />
-              <MoneyInput label="Custo produto máx. (%)" prefixo="" value={form.custoProdutoMaxPct ?? 70} onChange={(v) => set('custoProdutoMaxPct', v)} />
+              <MoneyInput label="Frete por venda (R$)" value={form.freteVendaPadrao ?? 10} onChange={(v) => set('freteVendaPadrao', v)} ajuda="Só no lucro e no DRE. Não sai do caixa." />
+              <MoneyInput label="Custo produto mín. (%)" prefixo="" value={form.custoProdutoMinPct ?? 40} onChange={(v) => set('custoProdutoMinPct', v)} ajuda="Estimativa. Não sai do caixa." />
+              <MoneyInput label="Custo produto máx. (%)" prefixo="" value={form.custoProdutoMaxPct ?? 70} onChange={(v) => set('custoProdutoMaxPct', v)} ajuda="Estimativa. Não sai do caixa." />
+            </div>
+          </Secao>
+          <Secao titulo="Contas das saídas da venda" descricao="Ao fechar, o custo do produto, o frete informado e a taxa da máquina saem do caixa. O padrão é a mesma conta que recebeu a venda.">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Select label="Conta das saídas" value={contaSaidas} onChange={(e) => setContaSaidas(e.target.value)} opcoes={opcoesDe(contasFin)} placeholder="A mesma conta que recebeu a venda" ajuda="Frete e taxa. O custo do produto usa esta conta se a de baixo estiver vazia." />
+              <Select label="Conta do custo do produto" value={contaCusto} onChange={(e) => setContaCusto(e.target.value)} opcoes={opcoesDe(contasFin)} placeholder="A mesma das outras saídas" ajuda="Ex.: o caixa, se o custo não deve sair do banco que recebeu a venda." />
             </div>
           </Secao>
           <Secao titulo="Séries e numeração">

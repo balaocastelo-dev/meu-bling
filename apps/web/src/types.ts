@@ -506,6 +506,8 @@ export interface Venda extends VendaResumo {
   custoLogistica?: number;
   /** lucro/margem — só ADMIN/GERENTE (null para os demais) */
   fechamento?: FechamentoVenda | null;
+  /** o que entra e o que sai do caixa nesta venda — só ADMIN/GERENTE */
+  caixa?: CaixaVenda | null;
   observacoes?: string | null;
   observacoesInternas?: string | null;
   transportadoraId?: number | null;
@@ -523,6 +525,20 @@ export interface Venda extends VendaResumo {
   contato: Contato | Ref;
   linkPublico?: string;
   tokenPublico?: string;
+}
+
+export interface CaixaVenda {
+  recebido: number;
+  previsto: boolean;
+  custoProduto: number;
+  custoPendente: boolean;
+  itensSemCusto: string[];
+  frete: number;
+  taxa: number;
+  impostoPrevisto: number;
+  impostoPct: number;
+  liquido: number;
+  lancado: { cmv: boolean; frete: boolean; taxa: boolean };
 }
 
 export interface FechamentoVenda {
