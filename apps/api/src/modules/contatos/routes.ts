@@ -10,6 +10,7 @@ import { auditar } from '../../lib/auditoria.js';
 import { paginacaoSchema, paginar, respostaPaginada, somenteDigitos } from '../../lib/util.js';
 import { boolQuery, idDe } from '../comum/zod.js';
 import { consultarCnpj } from './cnpj.js';
+import { faltasCadastroCliente } from '../comum/cadastro-cliente.js';
 import { cnpjValido, cpfValido } from '../comum/nfe-checagem.js';
 
 const TIPOS = ['CLIENTE', 'FORNECEDOR', 'TRANSPORTADORA', 'AMBOS'] as const;
@@ -182,8 +183,11 @@ export default async function contatosRoutes(app: FastifyInstance) {
       prisma.contaReceber.aggregate({ where: { contatoId: id, situacao: { in: ['ABERTO', 'PARCIAL'] } }, _sum: { valor: true, valorRecebido: true } }),
       prisma.venda.findFirst({ where: { ...escopo, contatoId: id, tipo: 'PEDIDO', situacao: { cancelamento: false } }, orderBy: { data: 'desc' }, select: { data: true } }),
     ]);
+    const faltasCadastro = faltasCadastroCliente(c);
     return {
       ...c,
+      cadastroIncompleto: faltasCadastro.length > 0,
+      faltasCadastro,
       resumo: {
         totalVendas: vendasAgg._sum.total || 0,
         qtdVendas: vendasAgg._count.id,

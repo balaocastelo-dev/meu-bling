@@ -9,6 +9,7 @@ import { dataSchema, arredondar } from '../../lib/util.js';
 import { chavePeriodo, listarPeriodos, resolverPeriodo, agruparPadrao, type Agrupar } from '../financeiro/periodos.js';
 import { gerarDre } from './dre.js';
 import { carregarCfgCustos, custosVenda } from '../comum/custos-venda.js';
+import { relatorioCustoNaoLancado } from '../vendas/saidas.js';
 
 /** Gera CSV (separador ';', compatível com Excel BR) a partir de linhas-objeto. */
 function csv(linhas: Record<string, any>[], colunas?: { chave: string; titulo: string }[]): string {
@@ -53,6 +54,13 @@ export default async function relatoriosRoutes(app: FastifyInstance) {
       return enviarCsv(reply, `dre-${q.regime}`, csv(linhas, [{ chave: 'codigo', titulo: 'Código' }, { chave: 'conta', titulo: 'Conta' }, { chave: 'valor', titulo: 'Valor (R$)' }, { chave: 'pct', titulo: '% Receita' }]));
     }
     return dre;
+  });
+
+  // ---- Custo real que não saiu do caixa (vendas antigas ou item sem custo). Não gera movimento.
+  app.get('/api/v1/relatorios/custos-nao-lancados', { preHandler: gestao }, async (req) => {
+    const q = z.object({ dataInicial: dataSchema, dataFinal: dataSchema }).parse(req.query);
+    const { ini, fim } = await resolverPeriodo(q, 'mes');
+    return relatorioCustoNaoLancado(ini, fim);
   });
 
   // ---- Vendas por período

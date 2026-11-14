@@ -1157,7 +1157,7 @@ model ContaPagar {
   valorPago         Float                @default(0)
   juros             Float                @default(0)
   desconto          Float                @default(0)
-  /// ABERTO | PAGO | PARCIAL | CANCELADO
+  /// ABERTO | PAGO | PARCIAL | CANCELADO | DEVOLVIDO | NAO_MAPEADA
   situacao          String               @default("ABERTO")
   dataPagamento     DateTime?
   formaPagamento    FormaPagamento?      @relation(fields: [formaPagamentoId], references: [id])
@@ -1166,13 +1166,17 @@ model ContaPagar {
   contaFinanceiraId Int?
   categoria         CategoriaFinanceira? @relation(fields: [categoriaId], references: [id])
   categoriaId       Int?
-  /// COMPRA | COMISSAO | MANUAL | IMPOSTO
+  /// COMPRA | COMISSAO | MANUAL | IMPOSTO | VENDA | CONSIGNACAO
   origemTipo        String               @default("MANUAL")
   origemId          Int?
   parcela           String?
   observacoes       String?
   recorrente        Boolean              @default(false)
   blingId           String?              @unique
+  /// Código cru da situação no Bling: 1 em aberto, 2 pago, 3 parcial, 4 devolvido, 5 cancelado, 6 e 7 sem mapa local.
+  situacaoBling     Int?
+  /// Última vez que a sincronização de contas a pagar do Bling gravou este título.
+  sincronizadoEm    DateTime?
   criadoEm          DateTime             @default(now())
   atualizadoEm      DateTime             @updatedAt
 

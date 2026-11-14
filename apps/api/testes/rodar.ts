@@ -95,13 +95,17 @@ async function main() {
     rodar('Perfis de acesso', NPX, ['tsx', 'scripts/teste-perfis.ts', base]);
     rodar('Vendas por vendedor: cada vendedor/técnico só vê as próprias vendas, sem total da loja; gerente e ADMIN veem todas', NPX, ['tsx', 'testes/vendas-por-vendedor.ts', base]);
     rodar('Regras de vendas, painel, metas e desafios', NPX, ['tsx', 'testes/regras-vendas.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
+    rodar('Fechar venda com cliente só no nome, sem cliente, e nota fiscal só na emissão', NPX, ['tsx', 'testes/venda-cliente-opcional.ts', base], { env: { TZ: 'America/Sao_Paulo', SITE_CHAVE_INTEGRACAO: env.SITE_CHAVE_INTEGRACAO } });
     rodar('Baixa parcial de contas a pagar (pagar em partes, histórico, estorno de um pagamento)', NPX, ['tsx', 'testes/baixa-parcial.ts', base]);
     rodar('Edição de conta a pagar: aberto, parcial (sobe, desce, desce demais) e pago', NPX, ['tsx', 'testes/editar-conta-pagar.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
+    rodar('Contas a pagar do Bling: sincroniza pelo detalhe (JSON fixo, sem API real e sem banco de produção)', NPX, ['tsx', 'testes/sincronizar-contas-pagar.ts'], { env: { TZ: 'America/Sao_Paulo', TRILHA_AUDITORIA: 'off' } });
+    rodar('Baixa parcial na loja: saldo importado, Em aberto com PARCIAL, conciliação parcial, estorno de um recebimento e juros', NPX, ['tsx', 'testes/baixa-parcial-loja.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
     rodar('OS: custos internos (peça, logística, terceiros) fora da impressão + dashboard de assistência', NPX, ['tsx', 'testes/os-custos.ts', base]);
     rodar('Garantia escolhida (3/6/12) no certificado + apagar venda pelo ADMIN', NPX, ['tsx', 'testes/garantia-e-excluir-venda.ts', base]);
     rodar('Correções da Júlia: endereço no cadastro, CNPJ, 3x no cartão em 1 linha, envio na hora, só técnico, fila sem custo, IE travada', NPX, ['tsx', 'testes/julia-venda-assistencia.ts', base]);
     rodar('Vendas: custo do produto e logística internos (fora do cliente) + ordem do contas a pagar', NPX, ['tsx', 'testes/venda-custos.ts', base]);
     rodar('Venda paga na hora entra no caixa + ajuste de saldo fora do DRE + DRE', NPX, ['tsx', 'testes/pago-na-hora.ts', base]);
+    rodar('Fechar a venda: custo, frete e taxa saem do caixa; DAS é previsão e o real abate', NPX, ['tsx', 'testes/saidas-venda.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Link do Mercado Pago: até 12x, juros do cliente, sem cobrança real', NPX, ['tsx', 'testes/link-pagamento.ts', base], { env: { DATABASE_URL: env.DATABASE_URL } });
     rodar('Venda cancelada/excluída desfaz a compra registrada ao finalizar (dinheiro volta ao banco)', NPX, ['tsx', 'testes/venda-cancelada-compra.ts', base]);
     rodar('Empréstimos (Lumicred): repasse, cliente paga direto, capital de giro, cancelar; DRE só com juros', NPX, ['tsx', 'testes/emprestimos.ts', base], { env: { TZ: 'America/Sao_Paulo' } });

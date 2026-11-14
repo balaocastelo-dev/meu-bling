@@ -277,6 +277,9 @@ export interface Contato {
     emAberto: number;
     ultimaCompra: string | null;
   };
+  /** falta CPF, telefone, e-mail ou endereço — não impede vender */
+  cadastroIncompleto?: boolean;
+  faltasCadastro?: string[];
 }
 
 export interface HistoricoContato {
@@ -506,6 +509,8 @@ export interface Venda extends VendaResumo {
   custoLogistica?: number;
   /** lucro/margem — só ADMIN/GERENTE (null para os demais) */
   fechamento?: FechamentoVenda | null;
+  /** o que entra e o que sai do caixa nesta venda — só ADMIN/GERENTE */
+  caixa?: CaixaVenda | null;
   observacoes?: string | null;
   observacoesInternas?: string | null;
   transportadoraId?: number | null;
@@ -520,9 +525,26 @@ export interface Venda extends VendaResumo {
   situacoesPermitidas: SituacaoRef[];
   /** o que falta para finalizar a venda (vazio = pode finalizar) */
   finalizacao?: { podeFinalizar: boolean; pendencias: PendenciaFinalizacao[] };
+  /** falta CPF, telefone, e-mail ou endereço — não impede fechar a venda */
+  cadastroIncompleto?: boolean;
+  faltasCadastro?: string[];
   contato: Contato | Ref;
   linkPublico?: string;
   tokenPublico?: string;
+}
+
+export interface CaixaVenda {
+  recebido: number;
+  previsto: boolean;
+  custoProduto: number;
+  custoPendente: boolean;
+  itensSemCusto: string[];
+  frete: number;
+  taxa: number;
+  impostoPrevisto: number;
+  impostoPct: number;
+  liquido: number;
+  lancado: { cmv: boolean; frete: boolean; taxa: boolean };
 }
 
 export interface FechamentoVenda {
@@ -857,7 +879,7 @@ export interface KanbanColuna {
 // Financeiro
 // ---------------------------------------------------------------------
 
-export type SituacaoConta = 'ABERTO' | 'RECEBIDO' | 'PAGO' | 'PARCIAL' | 'CANCELADO';
+export type SituacaoConta = 'ABERTO' | 'RECEBIDO' | 'PAGO' | 'PARCIAL' | 'CANCELADO' | 'DEVOLVIDO' | 'NAO_MAPEADA';
 
 export interface ContaBase {
   id: number;
@@ -885,6 +907,8 @@ export interface ContaBase {
   atrasada?: boolean;
   /** saldo em aberto calculado pela API (valor + juros - pago - desconto) */
   saldo?: number;
+  /** importada do Bling sem movimento e com valor pago ≈ valor: o saldo real não veio */
+  saldoNaoInformado?: boolean;
   /** pagamentos/recebimentos (baixas) — só no detalhe */
   lancamentos?: MovimentoFinanceiro[];
 }
@@ -900,6 +924,9 @@ export interface ContaPagar extends ContaBase {
   valorPago: number;
   dataPagamento?: string | null;
   recorrente: boolean;
+  blingId?: string | null;
+  situacaoBling?: number | null;
+  sincronizadoEm?: string | null;
 }
 
 export interface ContasResposta<T> extends Paginado<T> {
@@ -951,7 +978,7 @@ export interface TransacaoBancaria {
   categoriaSugerida?: string | null;
   conciliado: boolean;
   fonte: string;
-  sugestoes?: { tipo: 'RECEBER' | 'PAGAR'; id: number; descricao: string; valor: number; vencimento: string; score: number }[];
+  sugestoes?: { tipo: 'RECEBER' | 'PAGAR'; id: number; descricao: string; valor: number; saldo?: number; parcial?: boolean; vencimento: string; score: number }[];
 }
 
 export interface ComissoesResposta extends Paginado<Comissao> {
@@ -1272,6 +1299,49 @@ export interface BlingImportStatus {
   emAndamento: boolean;
   progresso?: { entidade: string; feitos: number; total: number } | null;
   log: string[];
+}
+
+export interface LinhaSituacaoSync {
+  situacao: string;
+  rotulo: string;
+  quantidade: number;
+  soma: number;
+  saldo: number;
+}
+
+export interface RelatorioContasPagarBling {
+  modo: 'previa' | 'aplicar';
+  gravado: boolean;
+  periodo: { dataInicial: string | null; dataFinal: string | null };
+  consultas: string[];
+  lidos: number;
+  detalhes: number;
+  criados: number;
+  atualizados: number;
+  vinculados: number;
+  preservados: number;
+  porSituacaoBling: LinhaSituacaoSync[];
+  porSituacaoMeuBling: LinhaSituacaoSync[];
+  faltantes: { blingId: string; valor: number; vencimento: string | null; fornecedor: string | null; situacaoBling: number; acao: 'criar' | 'ambiguo' }[];
+  sobrando: { id: number; blingId: string | null; descricao: string; valor: number; vencimento: string; situacao: string }[];
+  divergencias: { blingId: string; contaId: number; campo: 'valor' | 'saldo' | 'vencimento' | 'fornecedor' | 'situacao'; bling: string; local: string; preservado: boolean }[];
+  duplicatasProvaveis: { blingId: string; motivo: string; contasLocais: { id: number; descricao: string; blingId: string | null }[] }[];
+  erros: { blingId: string | null; motivo: string }[];
+  situacoesRegistradas: { blingId: string; situacaoBling: number; motivo: string }[];
+  portadoresSemConta: { blingId: string; portadorBlingId: string }[];
+  cadastrosMinimos: { tipo: 'fornecedor' | 'categoria' | 'forma'; blingId: string; nome: string; criado: boolean }[];
+  interrompido: null | { consulta: string; pagina: number; titulosLidos: number; motivo: string };
+  log: string[];
+}
+
+export interface BlingSyncContasStatus {
+  emAndamento: boolean;
+  modo: 'previa' | 'aplicar' | null;
+  relatorio: RelatorioContasPagarBling | null;
+  erro: string | null;
+  iniciadoEm: string | null;
+  finalizadoEm: string | null;
+  progresso: { fase: string; feitos: number; total: number | null } | null;
 }
 
 export interface OpenFinanceStatus {

@@ -131,16 +131,33 @@ export async function blingGet<T = any>(caminho: string, params: Record<string, 
   return json as T;
 }
 
-/** Percorre todas as páginas (pagina=1..n, limite=100) até vir vazio. */
+/** A página inteira já foi vista: o Bling devolveu de novo os mesmos ids e a paginação não avançou. */
+export function paginaJaVista(ids: string[], vistos: ReadonlySet<string>): boolean {
+  return ids.length > 0 && ids.every((id) => !!id && vistos.has(id));
+}
+
+/** Percorre todas as páginas (pagina=1..n, limite=100) até vir vazio. Página repetida é erro, não um fim silencioso. */
 export async function* blingPaginar<T = any>(caminho: string, params: Record<string, string | number | undefined> = {}, limite = 100): AsyncGenerator<T[]> {
   let pagina = 1;
+  const vistos = new Set<string>();
   for (;;) {
     const r = await blingGet<{ data: T[] }>(caminho, { ...params, pagina, limite });
     const dados = r?.data || [];
     if (!dados.length) return;
+    const ids = dados.map((d) => (d && (d as any).id != null ? String((d as any).id) : ''));
+    if (paginaJaVista(ids, vistos)) {
+      throw new AppError(
+        `Bling ${caminho}: a página ${pagina} repetiu títulos já lidos (${ids.filter(Boolean).slice(0, 5).join(', ')}). A paginação não avançou.`,
+        502,
+        'BLING_PAGINA_REPETIDA',
+      );
+    }
+    for (const id of ids) if (id) vistos.add(id);
     yield dados;
     if (dados.length < limite) return;
     pagina += 1;
-    if (pagina > 5000) return;
+    if (pagina > 5000) {
+      throw new AppError(`Bling ${caminho}: parei na página ${pagina} para não seguir sem fim.`, 502, 'BLING_PAGINA_LIMITE');
+    }
   }
 }

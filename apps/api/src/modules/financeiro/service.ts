@@ -275,6 +275,169 @@ export async function estornarPagamentoContaPagar(contaId: number, movimentoId: 
   });
 }
 
+/**
+ * Estorna UM recebimento (baixa parcial ou total) de uma conta a receber, mantendo os demais.
+ * Mesma regra do estorno de um pagamento: reverte o caixa, libera a transação conciliada
+ * e recalcula valor recebido / juros / desconto / situação pelo que sobrou.
+ */
+export async function estornarRecebimentoContaReceber(contaId: number, movimentoId: number) {
+  return prisma.$transaction(async (tx) => {
+    const conta = await tx.contaReceber.findUnique({ where: { id: contaId } });
+    if (!conta) throw new NotFound('Conta a receber');
+    const mov = await tx.movimentoFinanceiro.findUnique({ where: { id: movimentoId } });
+    if (!mov || mov.contaReceberId !== contaId) throw new NotFound('Recebimento desta conta');
+
+    await tx.contaFinanceira.update({ where: { id: mov.contaFinanceiraId }, data: { saldoAtual: { decrement: arredondar(mov.valor) } } });
+    if (mov.transacaoId) await tx.transacaoBancaria.update({ where: { id: mov.transacaoId }, data: { conciliado: false } });
+    await tx.movimentoFinanceiro.delete({ where: { id: mov.id } });
+
+    const valorRecebido = Math.max(0, arredondar(conta.valorRecebido - mov.valor));
+    const juros = Math.max(0, arredondar(conta.juros - mov.juros));
+    const desconto = Math.max(0, arredondar(conta.desconto - mov.desconto));
+    const semBaixa = valorRecebido <= TOLERANCIA && desconto <= TOLERANCIA;
+    const quitada = !semBaixa && saldoContaReceber({ valor: conta.valor, valorRecebido, juros, desconto }) <= TOLERANCIA;
+    const ultimo = await tx.movimentoFinanceiro.findFirst({ where: { contaReceberId: contaId }, orderBy: { data: 'desc' } });
+
+    const atualizada = await tx.contaReceber.update({
+      where: { id: contaId },
+      data: {
+        valorRecebido: semBaixa ? 0 : valorRecebido,
+        juros: semBaixa ? 0 : juros,
+        desconto: semBaixa ? 0 : desconto,
+        situacao: semBaixa ? 'ABERTO' : quitada ? 'RECEBIDO' : 'PARCIAL',
+        dataRecebimento: quitada ? ultimo?.data ?? conta.dataRecebimento : null,
+      },
+    });
+    return { conta: atualizada, movimentoEstornado: mov };
+  });
+}
+
+// ---------------------------------------------------------------------
+// Contas a pagar importadas do Bling sem saldo
+// ---------------------------------------------------------------------
+/** Diferença aceita para tratar valorPago e valor como o mesmo número (arredondamento do Bling). */
+const APROX_VALOR_IMPORTADO = 0.02;
+/** Marca gravada quando a loja confirma que não falta nada — senão a conta continuaria na conferência. */
+const MARCA_SALDO_CONFERIDO = 'Saldo conferido:';
+
+/**
+ * Conta a pagar vinda do Bling em que o saldo não foi informado.
+ * O importador, sem o campo `saldo`, grava valorPago = valor (saldo 0) mesmo em PARCIAL/PAGO,
+ * e não cria MovimentoFinanceiro. Não dá para saber quanto falta: a loja informa.
+ */
+export function ehContaPagarImportadaSemSaldo(c: {
+  blingId?: string | null;
+  situacao: string;
+  valor: number;
+  valorPago: number;
+  movimentos: number;
+  observacoes?: string | null;
+}) {
+  if (!c.blingId) return false;
+  if (c.situacao !== 'PARCIAL' && c.situacao !== 'PAGO') return false;
+  if (c.movimentos !== 0) return false;
+  if (Math.abs(arredondar(c.valorPago) - arredondar(c.valor)) > APROX_VALOR_IMPORTADO) return false;
+  if ((c.observacoes || '').includes(MARCA_SALDO_CONFERIDO)) return false;
+  return true;
+}
+
+export interface ContaPagarSemSaldo {
+  id: number;
+  descricao: string;
+  contato: string | null;
+  vencimento: Date;
+  valor: number;
+  valorPago: number;
+  situacao: string;
+  blingId: string | null;
+  movimentos: number;
+  /** Saldo calculado com o que está gravado. Zero aqui não quer dizer que a conta está quitada. */
+  saldo: number;
+  saldoNaoInformado: true;
+}
+
+/** Lista as contas importadas sem saldo. Não altera nada e não inventa o que falta. */
+export async function listarContasPagarImportadasSemSaldo(): Promise<ContaPagarSemSaldo[]> {
+  const contas = await prisma.contaPagar.findMany({
+    where: { blingId: { not: null }, situacao: { in: ['PARCIAL', 'PAGO'] } },
+    include: { contato: { select: { nome: true } }, _count: { select: { lancamentos: true } } },
+    orderBy: [{ vencimento: 'asc' }, { id: 'asc' }],
+  });
+  return contas
+    .filter((c) => ehContaPagarImportadaSemSaldo({ ...c, movimentos: c._count.lancamentos }))
+    .map((c) => ({
+      id: c.id,
+      descricao: c.descricao,
+      contato: c.contato?.nome ?? null,
+      vencimento: c.vencimento,
+      valor: arredondar(c.valor),
+      valorPago: arredondar(c.valorPago),
+      situacao: c.situacao,
+      blingId: c.blingId,
+      movimentos: 0,
+      saldo: saldoContaPagar(c),
+      saldoNaoInformado: true as const,
+    }));
+}
+
+/** Ids da página que estão nessa situação (para a tela marcar a linha, sem varrer o banco inteiro). */
+export async function idsContaPagarSaldoNaoInformado(
+  itens: { id: number; blingId: string | null; situacao: string; valor: number; valorPago: number; observacoes: string | null }[],
+) {
+  const candidatos = itens.filter(
+    (c) =>
+      !!c.blingId &&
+      (c.situacao === 'PARCIAL' || c.situacao === 'PAGO') &&
+      Math.abs(arredondar(c.valorPago) - arredondar(c.valor)) <= APROX_VALOR_IMPORTADO &&
+      !(c.observacoes || '').includes(MARCA_SALDO_CONFERIDO),
+  );
+  if (!candidatos.length) return new Set<number>();
+  const comMovimento = await prisma.movimentoFinanceiro.findMany({
+    where: { contaPagarId: { in: candidatos.map((c) => c.id) } },
+    select: { contaPagarId: true },
+    distinct: ['contaPagarId'],
+  });
+  const temMov = new Set(comMovimento.map((m) => m.contaPagarId));
+  return new Set(candidatos.filter((c) => !temMov.has(c.id)).map((c) => c.id));
+}
+
+/**
+ * A loja diz quanto ainda falta pagar numa conta importada sem saldo.
+ * Grava valorPago = valor - restante, ajusta a situação e libera as baixas seguintes.
+ * Não cria movimento e não inventa o número: usa exatamente o que foi informado.
+ */
+export async function informarRestanteContaPagar(id: number, restante: number) {
+  return prisma.$transaction(async (tx) => {
+    const conta = await tx.contaPagar.findUnique({ where: { id }, include: { _count: { select: { lancamentos: true } } } });
+    if (!conta) throw new NotFound('Conta a pagar');
+    if (!ehContaPagarImportadaSemSaldo({ ...conta, movimentos: conta._count.lancamentos })) {
+      throw new AppError('Esta conta não é uma importação do Bling sem saldo informado.', 422, 'NAO_APLICA');
+    }
+    if (restante < -TOLERANCIA) throw new AppError('O valor que falta não pode ser negativo.', 422, 'VALOR_INVALIDO');
+    if (restante > conta.valor + TOLERANCIA) {
+      throw new AppError(`O que falta não pode passar do valor da conta (R$ ${conta.valor.toFixed(2).replace('.', ',')}).`, 422, 'VALOR_INVALIDO');
+    }
+    const falta = arredondar(Math.max(0, restante));
+    const valorPago = arredondar(Math.max(0, conta.valor - falta));
+    const saldo = saldoContaPagar({ valor: conta.valor, valorPago, juros: conta.juros, desconto: conta.desconto });
+    const situacao = saldo <= TOLERANCIA ? 'PAGO' : valorPago <= TOLERANCIA ? 'ABERTO' : 'PARCIAL';
+    const nota =
+      situacao === 'PAGO'
+        ? `${MARCA_SALDO_CONFERIDO} nada em aberto.`
+        : `Saldo informado: ainda falta R$ ${falta.toFixed(2).replace('.', ',')} (o Bling não tinha enviado o saldo).`;
+    const atualizada = await tx.contaPagar.update({
+      where: { id },
+      data: {
+        valorPago,
+        situacao,
+        dataPagamento: situacao === 'PAGO' ? conta.dataPagamento ?? new Date() : null,
+        observacoes: [conta.observacoes, nota].filter(Boolean).join('\n'),
+      },
+    });
+    return { conta: atualizada, saldo: saldoContaPagar(atualizada), saldoNaoInformado: false };
+  });
+}
+
 // ---------------------------------------------------------------------
 // Edição de conta a pagar
 // ---------------------------------------------------------------------

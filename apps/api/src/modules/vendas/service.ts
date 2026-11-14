@@ -4,6 +4,7 @@
  */
 import { prisma, type Tx } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
+import { faltasCadastroCliente } from '../comum/cadastro-cliente.js';
 import { mensagemPendencias, verificarNfe } from '../comum/nfe-checagem.js';
 import { arredondar, competenciaDe, proximoNumero } from '../../lib/util.js';
 import { executarAcoes, historico, mudarSituacao, situacaoInicial, situacoesPermitidas, type Acao, type ContextoAcao, type Modulo } from '../../core/situacoes.js';
@@ -21,6 +22,7 @@ import { comissoesDeAnuncio } from '../anuncios/comissao.js';
 import { vendedorDoUsuario } from '../comum/vendedores.js';
 import { anunciosDaOrigem } from '../anuncios/origem.js';
 import { baixarContaPagar, baixarContaReceber, saldoContaPagar, saldoContaReceber } from '../financeiro/service.js';
+import { estornarSaidasDaVenda, resumoCaixaDaVenda, sincronizarSaidasDaVenda } from './saidas.js';
 import type { ItemInput, ParcelaInput, TipoVenda, VendaInput } from './schemas.js';
 
 type Db = Tx | typeof prisma;
@@ -36,7 +38,7 @@ export function sequenciaDe(tipo: TipoVenda | string) {
 
 // ---------------------------------------------------------------- includes
 export const includeLista = {
-  contato: { select: { id: true, nome: true, fantasia: true, documento: true, celular: true, email: true } },
+  contato: { select: { id: true, nome: true, fantasia: true, documento: true, celular: true, telefone: true, email: true, logradouro: true, numero: true, bairro: true, municipio: true, uf: true, cep: true } },
   vendedor: { select: { id: true, nome: true } },
   situacao: { select: { id: true, nome: true, cor: true, final: true, cancelamento: true } },
   nota: { select: { id: true, numero: true, serie: true, modelo: true, situacao: true, chave: true } },
@@ -79,7 +81,9 @@ export async function vendaCompleta(id: number) {
     if (fechada && fechada.id !== v.situacaoId && !permitidas.some((s) => s.id === fechada.id)) permitidas = [...permitidas, fechada].sort((a, b) => a.ordem - b.ordem);
   }
   const pendencias = modulo === 'VENDA' ? pendenciasFinalizacao(v as any) : [];
-  return { ...v, fechamento: fechamentoVenda(v, await carregarCfgCustos()), historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), finalizacao: { podeFinalizar: !pendencias.length, pendencias }, tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
+  const caixa = v.tipo === 'PEDIDO' ? await resumoCaixaDaVenda(prisma, id) : null;
+  const faltasCadastro = faltasCadastroCliente(v.contato);
+  return { ...v, fechamento: fechamentoVenda(v, await carregarCfgCustos()), caixa, historico: hist, situacoesPermitidas: permitidas.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor })), finalizacao: { podeFinalizar: !pendencias.length, pendencias }, cadastroIncompleto: faltasCadastro.length > 0, faltasCadastro, tokenPublico: tokenPublico('venda', id), linkPublico: linkPublico('venda', id) };
 }
 
 /**
@@ -565,6 +569,8 @@ export async function acaoLancarContas(ctx: ContextoAcao) {
   await lancarCreditoBancarioVenda(tx, id);
   // parcelas na forma "Carnê" viram o carnê próprio (PIX no Cora) com juros pelo risco do cliente
   await lancarCarneVenda(tx, id);
+  // custo real, frete informado e previsão de DAS. A taxa entra depois, quando o dinheiro é recebido.
+  await sincronizarSaidasDaVenda(tx, id);
 }
 
 export async function acaoEstornarContas(ctx: ContextoAcao) {
@@ -574,6 +580,8 @@ export async function acaoEstornarContas(ctx: ContextoAcao) {
   if (!venda.contasLancadas) return;
   // recebimentos automáticos ("pago na hora") são desfeitos junto; baixas manuais continuam bloqueando
   await desfazerRecebimentoPagoNaHora(tx, id);
+  // custo, frete, taxa e a parte desta venda na previsão de DAS
+  await estornarSaidasDaVenda(tx, id);
   // crédito bancário: cancela a operação (bloqueia se o credor já foi pago)
   await estornarCreditoBancarioVenda(tx, id);
   await estornarCarneVenda(tx, id);
@@ -643,18 +651,18 @@ export async function receberVendaPagaNaHora(tx: Tx, vendaId: number, usuarioId:
     await baixarComTaxa(tx, { contaReceberId: cr.id, saldo, data: venda.data, contaFinanceiraId: contaId, formaPagamentoId: p.formaPagamentoId });
     baixadas++;
   }
+  // com o banco do recebimento já definido, a taxa vira saída e o custo vai para a conta certa
+  await sincronizarSaidasDaVenda(tx, vendaId);
   return baixadas;
 }
 
 /**
- * Baixa o recebimento na conta escolhida descontando a taxa da conta (ex.: Mercado Pago 5%):
- * entra no banco o valor − taxa; a taxa fica como desconto do título.
+ * Baixa o recebimento pelo valor cheio. A taxa da máquina não é mais desconto do título:
+ * sai em seguida como movimento de SAÍDA (TAXA_VENDA), para não ser contada duas vezes.
  */
 async function baixarComTaxa(tx: Tx, p: { contaReceberId: number; saldo: number; data: Date; contaFinanceiraId: number; formaPagamentoId: number | null }) {
-  const conta = await tx.contaFinanceira.findUnique({ where: { id: p.contaFinanceiraId }, select: { taxaRecebimentoPct: true } });
-  const taxa = arredondar(p.saldo * ((conta?.taxaRecebimentoPct || 0) / 100));
   await baixarContaReceber(
-    { id: p.contaReceberId, valor: arredondar(p.saldo - taxa), desconto: taxa, data: p.data, contaFinanceiraId: p.contaFinanceiraId, formaPagamentoId: p.formaPagamentoId, observacoes: OBS_PAGO_NA_HORA },
+    { id: p.contaReceberId, valor: arredondar(p.saldo), desconto: 0, data: p.data, contaFinanceiraId: p.contaFinanceiraId, formaPagamentoId: p.formaPagamentoId, observacoes: OBS_PAGO_NA_HORA },
     tx,
   );
 }
@@ -784,6 +792,8 @@ export async function temReserva(id: number, db: Db = prisma) {
  * Usada pela tela (POST /vendas) e pela porta do PDV do site (modules/site).
  */
 export async function criarVenda(body: VendaInput, usuarioId: number | null, observacaoHistorico?: string) {
+  const contatoId = body.contatoId || (await consumidorFinalId());
+  body.contatoId = contatoId;
   const modulo = moduloDe(body.tipo);
   const venda = await prisma.$transaction(async (tx) => {
     const { itens, totais, parcelas, data } = await prepararVenda(tx, body);
@@ -806,7 +816,7 @@ export async function criarVenda(body: VendaInput, usuarioId: number | null, obs
         validade: body.tipo === 'ORCAMENTO' ? validade : null,
         dataPrevista: body.dataPrevista,
         dataSaida: body.dataSaida,
-        contatoId: body.contatoId,
+        contatoId,
         vendedorId: body.vendedorId ?? null,
         anuncioId: body.anuncioId ?? null,
         situacaoId: situacao.id,
@@ -852,11 +862,12 @@ export async function criarVenda(body: VendaInput, usuarioId: number | null, obs
 
 // ---------------------------------------------------------------- finalização (regra do Balão, 28/10/2026)
 /**
- * Uma venda só pode ser FINALIZADA (ir para uma situação final: "Fechada" ou "NF emitida") com tudo preenchido:
- *  - cliente "Consumidor final" OU cliente com nome, CPF/CNPJ, telefone, e-mail e endereço completo;
+ * Uma venda só pode ser FINALIZADA (ir para uma situação final: "Fechada" ou "NF emitida") com:
  *  - ao menos um produto, todos com custo;
  *  - forma de pagamento em todas as parcelas;
  *  - vendedor responsável.
+ * Cliente é opcional: sem cliente, a venda usa "Consumidor final". CPF/CNPJ, telefone, e-mail e
+ * endereço NÃO bloqueiam o fechamento — a nota (NF-e/NFC-e) é que cobra isso, na hora de emitir.
  * Pode ser finalizada a partir de qualquer situação (inclusive Cancelada).
  */
 export interface PendenciaFinalizacao {
@@ -900,32 +911,12 @@ export function pendenciasFinalizacao(v: VendaParaFinalizar): PendenciaFinalizac
   const p: PendenciaFinalizacao[] = [];
   if (v.tipo === 'ORCAMENTO') return [{ campo: 'tipo', mensagem: 'Orçamento não é finalizado: converta em venda primeiro.', onde: 'venda' }];
 
-  const c = v.contato;
-  if (!c) p.push({ campo: 'cliente', mensagem: 'Selecione o cliente (ou "Consumidor final").', onde: 'venda' });
-  else if (!ehConsumidorFinal(c)) {
-    const vazio = (x: string | null | undefined) => !x || !String(x).trim();
-    const doc = (c.documento || '').replace(/\D/g, '');
-    if (vazio(c.nome)) p.push({ campo: 'cliente.nome', mensagem: 'Cliente sem nome.', onde: 'cliente' });
-    if (doc.length !== 11 && doc.length !== 14) p.push({ campo: 'cliente.cpf', mensagem: 'Cliente sem CPF (ou CNPJ) válido.', onde: 'cliente' });
-    if (vazio(c.celular) && vazio(c.telefone)) p.push({ campo: 'cliente.telefone', mensagem: 'Cliente sem telefone.', onde: 'cliente' });
-    if (vazio(c.email) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(c.email).trim())) p.push({ campo: 'cliente.email', mensagem: 'Cliente sem e-mail válido.', onde: 'cliente' });
-    const endFaltando = [
-      ['logradouro', 'rua'],
-      ['numero', 'número'],
-      ['bairro', 'bairro'],
-      ['municipio', 'cidade'],
-      ['uf', 'UF'],
-      ['cep', 'CEP'],
-    ].filter(([k]) => vazio((c as any)[k])).map(([, r]) => r);
-    if (endFaltando.length) p.push({ campo: 'cliente.endereco', mensagem: `Endereço do cliente incompleto (falta: ${endFaltando.join(', ')}).`, onde: 'cliente' });
-  }
+  // Sem cliente a venda segue (o servidor grava "Consumidor final"). Nome vazio no cadastro é o único dado de cliente que ainda trava.
+  if (v.contato && !(v.contato.nome || '').trim()) p.push({ campo: 'cliente.nome', mensagem: 'Cliente sem nome.', onde: 'cliente' });
 
   if (!v.itens.length) p.push({ campo: 'itens', mensagem: 'A venda não tem nenhum produto.', onde: 'venda' });
-  const semCusto = v.itens.map((i, idx) => ({ i, idx })).filter(({ i }) => !(i.custoUnitario > 0));
-  if (semCusto.length) {
-    const nomes = semCusto.slice(0, 3).map(({ i, idx }) => `${idx + 1}. ${i.descricao}`).join('; ');
-    p.push({ campo: 'itens.custo', mensagem: `${semCusto.length === 1 ? 'Produto sem custo' : `${semCusto.length} produtos sem custo`}: ${nomes}${semCusto.length > 3 ? '…' : ''}.`, onde: 'venda' });
-  }
+  // Item sem custo real não trava o fechamento: a saída de caixa fica como custo pendente
+  // e só é lançada quando o custo entra (no item ou no cadastro do produto).
 
   if (!v.parcelas.length || v.parcelas.some((x) => !x.formaPagamentoId)) p.push({ campo: 'pagamento', mensagem: 'Informe a forma de pagamento.', onde: 'venda' });
   if (!v.vendedorId) p.push({ campo: 'vendedor', mensagem: 'Informe o vendedor responsável.', onde: 'venda' });
@@ -1320,6 +1311,7 @@ export async function aplicarRecebimentosFinalizacao(vendaId: number, lista: Rec
     // parcelas que ficaram com "Crédito bancário" viram empréstimo (ou mudam de quem paga)
     await lancarCreditoBancarioVenda(tx, vendaId);
     await lancarCarneVenda(tx, vendaId);
+    await sincronizarSaidasDaVenda(tx, vendaId);
     return alterados;
   });
 }

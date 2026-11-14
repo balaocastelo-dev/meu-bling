@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { CircleCheck, Download, ExternalLink, FileUp, Loader2, Play, Save } from 'lucide-react';
+import { CircleCheck, Download, ExternalLink, Eye, FileUp, Loader2, Play, RefreshCw, Save } from 'lucide-react';
 import { api, mensagemErro, BASE_PATH } from '@/lib/api';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { Badge, Button, Card, Checkbox, DateInput, Input, PageHeader, Select, Skeleton } from '@/components/ui';
-import { dataHora } from '@/lib/format';
-import type { BlingImportStatus, BlingStatus } from '@/types';
+import { Badge, Button, Card, Checkbox, ConfirmDialog, DateInput, Input, PageHeader, Select, Skeleton } from '@/components/ui';
+import { dataHora, moeda } from '@/lib/format';
+import type { BlingImportStatus, BlingStatus, BlingSyncContasStatus, RelatorioContasPagarBling } from '@/types';
 
 const ENTIDADES = [
   { id: 'contatos', rotulo: 'Contatos (clientes/fornecedores)' },
@@ -29,6 +29,9 @@ export default function Bling() {
   const [fecharEmAberto, setFecharEmAberto] = useState(false);
   const [baixarNoCaixa, setBaixarNoCaixa] = useState(false);
   const [entCsv, setEntCsv] = useState('contatos');
+  const [syncDe, setSyncDe] = useState('');
+  const [syncAte, setSyncAte] = useState('');
+  const [confirmarSync, setConfirmarSync] = useState(false);
   const csvRef = useRef<HTMLInputElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -53,6 +56,11 @@ export default function Bling() {
     queryKey: ['bling-importar-status'],
     queryFn: () => api.get<BlingImportStatus>('/bling/importar/status').catch(() => null),
     refetchInterval: (q) => (q.state.data?.emAndamento ? 2000 : 15000),
+  });
+  const { data: sync } = useQuery({
+    queryKey: ['bling-contas-pagar'],
+    queryFn: () => api.get<BlingSyncContasStatus>('/bling/contas-pagar/sincronizar/status').catch(() => null),
+    refetchInterval: (q) => (q.state.data?.emAndamento ? 1500 : false),
   });
 
   useEffect(() => {
@@ -90,8 +98,20 @@ export default function Bling() {
     },
     onError: (e) => toast.error(mensagemErro(e)),
   });
+  const sincronizar = useMutation({
+    mutationFn: (modo: 'previa' | 'aplicar') => {
+      if ((syncDe && !syncAte) || (!syncDe && syncAte)) throw new Error('Informe as duas datas do período, ou deixe as duas em branco.');
+      return api.post('/bling/contas-pagar/sincronizar', { modo, dataInicial: syncDe || undefined, dataFinal: syncAte || undefined });
+    },
+    onSuccess: (_r, modo) => {
+      toast.success(modo === 'previa' ? 'Prévia iniciada. Nada será gravado.' : 'Sincronização iniciada.');
+      qc.invalidateQueries({ queryKey: ['bling-contas-pagar'] });
+    },
+    onError: (e) => toast.error(mensagemErro(e)),
+  });
 
   const pct = imp?.progresso && imp.progresso.total > 0 ? Math.round((imp.progresso.feitos / imp.progresso.total) * 100) : 0;
+  const syncOcupado = !!sync?.emAndamento || !!imp?.emAndamento;
 
   return (
     <div className="pb-6">
@@ -164,6 +184,30 @@ export default function Bling() {
               </div>
             )}
           </Card>
+
+          <Card titulo="4. Sincronizar contas a pagar" descricao="Separado da importação geral. Sem período, varre as situações 1 a 7. Com período, junta emissão, vencimento e pagamento. Lê o detalhe de cada título (é lá que está o saldo) e grava pelo id do Bling. A prévia não altera nada e não lança pagamento antigo no caixa.">
+            <div className="flex flex-wrap items-end gap-2">
+              <DateInput label="De (opcional)" value={syncDe} onChange={setSyncDe} className="w-44" />
+              <DateInput label="Até" value={syncAte} onChange={setSyncAte} className="w-44" />
+              <Button variante="secundario" icone={sync?.emAndamento && sync.modo === 'previa' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />} disabled={!status?.conectado || syncOcupado} carregando={sincronizar.isPending && sincronizar.variables === 'previa'} onClick={() => sincronizar.mutate('previa')}>Prévia</Button>
+              <Button variante="primario" icone={sync?.emAndamento && sync.modo === 'aplicar' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} disabled={!status?.conectado || syncOcupado} onClick={() => setConfirmarSync(true)}>Sincronizar contas a pagar</Button>
+            </div>
+            <p className="mt-2 text-[11px] text-slate-400">Em branco, lê todas as situações. Título de compra com o mesmo fornecedor, valor e vencimento recebe o id do Bling em vez de duplicar. Se o pagamento foi feito aqui, valor pago e situação ficam como estão.</p>
+            {sync?.emAndamento && (
+              <p className="mt-3 inline-flex items-center gap-1 text-xs text-slate-600"><Loader2 className="h-3 w-3 animate-spin" /> {sync.progresso?.fase ?? 'Sincronizando…'}{sync.progresso?.total ? ` (${sync.progresso.feitos}/${sync.progresso.total})` : sync.progresso?.feitos ? ` (${sync.progresso.feitos})` : ''}</p>
+            )}
+            {sync?.erro && <p className="mt-3 text-sm text-red-600">{sync.erro}</p>}
+            {sync?.relatorio && <RelatorioSync relatorio={sync.relatorio} />}
+            <ConfirmDialog
+              aberto={confirmarSync}
+              onFechar={() => setConfirmarSync(false)}
+              onConfirmar={() => sincronizar.mutate('aplicar')}
+              titulo="Sincronizar contas a pagar?"
+              descricao="Grava e atualiza os títulos pelo id do Bling. Não cria movimento de caixa para pagamento antigo. A prévia, ao lado, mostra o mesmo relatório sem gravar."
+              textoConfirmar="Sincronizar contas a pagar"
+              perigo={false}
+            />
+          </Card>
         </div>
 
         <Card titulo="Importar planilha (CSV)" descricao="Sem API: exporte Contatos ou Produtos do Bling em CSV e envie aqui.">
@@ -175,6 +219,111 @@ export default function Bling() {
           </div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function TabelaSituacao({ titulo, linhas }: { titulo: string; linhas: RelatorioContasPagarBling['porSituacaoBling'] }) {
+  const totalQtd = linhas.reduce((s, l) => s + l.quantidade, 0);
+  const totalSoma = linhas.reduce((s, l) => s + l.soma, 0);
+  return (
+    <div>
+      <p className="mb-1 text-xs font-medium text-slate-600">{titulo}</p>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-left text-slate-400">
+            <th className="py-1 font-medium">Situação</th>
+            <th className="py-1 text-right font-medium">Qtd</th>
+            <th className="py-1 text-right font-medium">Soma</th>
+            <th className="py-1 text-right font-medium">Saldo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.map((l) => (
+            <tr key={l.situacao} className="border-t border-slate-100">
+              <td className="py-1">{l.rotulo}</td>
+              <td className="num py-1 text-right">{l.quantidade}</td>
+              <td className="num py-1 text-right">{moeda(l.soma)}</td>
+              <td className="num py-1 text-right">{moeda(l.saldo)}</td>
+            </tr>
+          ))}
+          <tr className="border-t border-slate-200 font-medium text-slate-700">
+            <td className="py-1">Total</td>
+            <td className="num py-1 text-right">{totalQtd}</td>
+            <td className="num py-1 text-right">{moeda(totalSoma)}</td>
+            <td />
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ListaCurta({ titulo, vazio, children }: { titulo: string; vazio: string; children: ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-slate-600">{titulo}</p>
+      <div className="mt-1 text-xs text-slate-600">{children || <span className="text-slate-400">{vazio}</span>}</div>
+    </div>
+  );
+}
+
+/** Relatório da prévia ou da sincronização aplicada. */
+function RelatorioSync({ relatorio: r }: { relatorio: RelatorioContasPagarBling }) {
+  const corte = <T,>(lista: T[]) => lista.slice(0, 12);
+  return (
+    <div className="mt-4 space-y-4 border-t border-slate-100 pt-4" data-relatorio="contas-pagar">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tom={r.gravado ? 'verde' : 'amarelo'}>{r.gravado ? 'Aplicado' : 'Prévia — nada gravado'}</Badge>
+        <span className="text-xs text-slate-500">{r.lidos} na listagem · {r.detalhes} detalhes · {r.criados} {r.gravado ? 'criados' : 'a criar'} · {r.atualizados} {r.gravado ? 'atualizados' : 'a atualizar'} · {r.vinculados} compras {r.gravado ? 'vinculadas' : 'a vincular'} · {r.preservados} com pagamento local</span>
+      </div>
+      {r.interrompido && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          Parei na página {r.interrompido.pagina} ({r.interrompido.consulta}), com {r.interrompido.titulosLidos} títulos lidos. {r.interrompido.motivo}
+        </p>
+      )}
+      <div className="grid gap-4 md:grid-cols-2">
+        <TabelaSituacao titulo="No Bling" linhas={r.porSituacaoBling} />
+        <TabelaSituacao titulo={r.gravado ? 'No meu-bling, depois' : 'No meu-bling, se aplicar'} linhas={r.porSituacaoMeuBling} />
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <ListaCurta titulo={`Faltantes (${r.faltantes.length})`} vazio="Nenhum título do Bling ficou de fora.">
+          {r.faltantes.length ? corte(r.faltantes).map((f) => (
+            <p key={f.blingId}>Bling {f.blingId} · {moeda(f.valor)} · {f.vencimento ?? '—'} · {f.fornecedor ?? 'sem fornecedor'} · {f.acao === 'ambiguo' ? 'duplicata, não criei' : r.gravado ? 'criado' : 'seria criado'}</p>
+          )) : null}
+        </ListaCurta>
+        <ListaCurta titulo={`Sobrando no meu-bling (${r.sobrando.length})`} vazio="Nada no meu-bling ficou sem par no Bling.">
+          {r.sobrando.length ? corte(r.sobrando).map((c) => (
+            <p key={c.id}>#{c.id} {c.descricao} · {moeda(c.valor)} · {c.situacao}{c.blingId ? ` · Bling ${c.blingId}` : ''}</p>
+          )) : null}
+        </ListaCurta>
+        <ListaCurta titulo={`Divergências (${r.divergencias.length})`} vazio="Valor, saldo, vencimento, fornecedor e situação batem.">
+          {r.divergencias.length ? corte(r.divergencias).map((d, i) => (
+            <p key={`${d.blingId}-${d.campo}-${i}`}>Bling {d.blingId} · {d.campo}: Bling {d.bling} / aqui {d.local}{d.preservado ? ' (mantido: há pagamento feito aqui)' : ''}</p>
+          )) : null}
+        </ListaCurta>
+        <ListaCurta titulo={`Duplicatas prováveis (${r.duplicatasProvaveis.length})`} vazio="Nenhuma duplicata provável.">
+          {r.duplicatasProvaveis.length ? corte(r.duplicatasProvaveis).map((d) => (
+            <p key={d.blingId}>Bling {d.blingId}: {d.motivo} ({d.contasLocais.map((c) => `#${c.id}`).join(', ')})</p>
+          )) : null}
+        </ListaCurta>
+        <ListaCurta titulo={`Erros (${r.erros.length})`} vazio="Nenhum erro por título.">
+          {r.erros.length ? corte(r.erros).map((e, i) => (
+            <p key={i} className="text-red-600">{e.blingId ? `Bling ${e.blingId}: ` : ''}{e.motivo}</p>
+          )) : null}
+        </ListaCurta>
+        <ListaCurta titulo={`Situações 4, 6 e 7 (${r.situacoesRegistradas.length})`} vazio="Nenhuma situação devolvida ou sem mapa.">
+          {r.situacoesRegistradas.length ? corte(r.situacoesRegistradas).map((s) => (
+            <p key={s.blingId}>Bling {s.blingId} · situação {s.situacaoBling}: {s.motivo}</p>
+          )) : null}
+        </ListaCurta>
+      </div>
+      {r.cadastrosMinimos.length > 0 && (
+        <p className="text-xs text-slate-500">Cadastros mínimos: {r.cadastrosMinimos.map((c) => `${c.tipo} ${c.nome} (${c.criado ? 'criado' : 'seria criado'})`).join(' · ')}</p>
+      )}
+      {r.portadoresSemConta.length > 0 && (
+        <p className="text-xs text-slate-500">Portador sem conta financeira aqui: {r.portadoresSemConta.map((p) => `título ${p.blingId} → portador ${p.portadorBlingId}`).join(' · ')}</p>
+      )}
     </div>
   );
 }

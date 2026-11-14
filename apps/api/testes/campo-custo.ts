@@ -15,10 +15,26 @@ import { encerrar, falhar, placar, secao, verifica } from './lib.js';
 const RAIZ = (process.argv[2] || 'http://localhost:3333').replace(/\/$/, '');
 
 async function entrarNoSistema(page: Page) {
-  await page.goto(`${RAIZ}/login`, { waitUntil: 'networkidle' });
-  await page.fill('input[type=email]', 'admin@balao.info');
-  await page.fill('input[type=password]', 'admin123');
-  await page.click('button[type=submit]');
+  // o login pela tela disputa o limite de 20/min com os outros testes; entra pela API (com espera)
+  // e grava o token onde a tela lê, para o formulário não ficar parado no 429.
+  let corpo: { token?: string; usuario?: unknown } | null = null;
+  for (let i = 0; i < 4; i++) {
+    const r = await page.request.post(`${RAIZ}/api/v1/auth/login`, { data: { email: 'admin@balao.info', senha: 'admin123' } });
+    if (r.status() === 429) {
+      const espera = Number(r.headers()['retry-after'] || 15);
+      await page.waitForTimeout((Math.min(espera, 30) + 1) * 1000);
+      continue;
+    }
+    if (r.status() !== 200) throw new Error(`login da tela → ${r.status()}`);
+    corpo = await r.json();
+    break;
+  }
+  if (!corpo?.token) throw new Error('login da tela não devolveu token');
+  await page.goto(`${RAIZ}/login`, { waitUntil: 'domcontentloaded' });
+  await page.evaluate((dados) => {
+    localStorage.setItem('meu-bling-auth', JSON.stringify({ state: { token: dados.token, usuario: dados.usuario }, version: 0 }));
+  }, corpo);
+  await page.goto(`${RAIZ}/`, { waitUntil: 'domcontentloaded' });
   await page.waitForURL((u) => !u.pathname.includes('login'), { timeout: 20000 });
 }
 

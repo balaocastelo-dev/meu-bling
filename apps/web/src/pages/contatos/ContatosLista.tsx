@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { Badge, BarraFiltros, BuscaFiltro, Button, Card, EmptyState, PageHeader, Pagination, SelectFiltro, Table, Tabs, type Coluna } from '@/components/ui';
 import { documento, telefone } from '@/lib/format';
+import { AvisoCadastroIncompleto } from '@/components/compartilhados/AvisoCadastroIncompleto';
 import type { Contato, Paginado } from '@/types';
 
 /** Lista de contatos com abas Clientes / Fornecedores / Transportadoras */
@@ -21,7 +22,7 @@ export default function ContatosLista() {
       titulo: 'Nome',
       render: (c) => (
         <div className="min-w-0">
-          <p className="truncate font-medium text-slate-900">{c.nome}</p>
+          <p className="flex min-w-0 items-center gap-2 truncate font-medium text-slate-900"><span className="truncate">{c.nome}</span><AvisoCadastroIncompleto contato={c} /></p>
           {c.fantasia && <p className="truncate text-xs text-slate-400">{c.fantasia}</p>}
         </div>
       ),

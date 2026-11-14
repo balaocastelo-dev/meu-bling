@@ -1,6 +1,7 @@
 /**
  * "Finalizar venda": resolve tudo na saída da venda.
- * - Só deixa confirmar com a venda completa (cliente, produto, custo, pagamento, vendedor).
+ * - Só deixa confirmar com produto, forma de pagamento e vendedor. Cliente pode ser só o nome, ou nenhum.
+ * - Item sem custo real não trava: o resumo marca "Custo pendente" e o caixa não lança esse item.
  * - Recebimento: cada parcela marcada como recebida no banco certo (sugerido pela forma de pagamento) ou em aberto.
  * - Compra: pergunta se registra a compra da mercadoria (com o custo da venda) e se ela já está paga (e de qual banco saiu).
  */
@@ -17,7 +18,7 @@ import { DateInput, SearchSelect, Select } from '@/components/ui';
 import { useContasFinanceiras, opcoesDe } from '@/hooks/useListas';
 import { buscarContatos } from '@/lib/buscas';
 import { hoje, moeda } from '@/lib/format';
-import type { PendenciaFinalizacao } from '@/types';
+import type { CaixaVenda, PendenciaFinalizacao } from '@/types';
 
 interface Checagem {
   podeFinalizar: boolean;
@@ -41,6 +42,7 @@ interface Checagem {
     creditoPagador?: 'CLIENTE' | 'LOJA' | null;
   }[];
   formas: { id: number; nome: string; tipo: string; contaFinanceiraId: number | null; contasPermitidas: number[] }[];
+  caixa?: CaixaVenda | null;
   /** carnê próprio: risco do cliente e faixa de juros (o vendedor vê sem acesso ao financeiro) */
   carne?: {
     taxaMin: number;
@@ -71,6 +73,31 @@ function SimNao({ valor, onChange }: { valor: Escolha; onChange: (v: Escolha) =>
           {v === 'sim' ? 'Sim' : 'Não'}
         </button>
       ))}
+    </div>
+  );
+}
+
+function ResumoCaixa({ caixa }: { caixa: CaixaVenda }) {
+  const linha = (rotulo: string, valor: number) => (
+    <div className="flex justify-between"><span className="text-slate-500">{rotulo}</span><span className="num">{moeda(valor)}</span></div>
+  );
+  return (
+    <div className="space-y-1 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm" data-testid="resumo-caixa-fechamento">
+      <p className="flex items-center justify-between font-semibold text-slate-800">
+        Resumo do caixa
+        {caixa.custoPendente && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">Custo pendente</span>}
+      </p>
+      {linha(caixa.previsto ? 'A receber agora' : 'Recebido', caixa.recebido)}
+      {linha('Custo do produto', caixa.custoProduto)}
+      {linha('Frete', caixa.frete)}
+      {linha('Taxa da máquina', caixa.taxa)}
+      {linha(`Imposto previsto (${caixa.impostoPct.toLocaleString('pt-BR')}%)`, caixa.impostoPrevisto)}
+      <div className="flex justify-between border-t border-slate-200 pt-1.5 font-semibold">
+        <span>Líquido</span>
+        <span className={`num ${caixa.liquido < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{moeda(caixa.liquido)}</span>
+      </div>
+      {caixa.custoPendente && <p className="text-xs text-amber-700">Item sem custo real não sai do caixa. Informe o custo depois para gerar o lançamento.</p>}
+      <p className="text-xs text-slate-400">O imposto não sai do caixa nesta venda: fica previsto no DAS do mês.</p>
     </div>
   );
 }
@@ -222,6 +249,7 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
           <p className="text-sm text-slate-700">
             Deseja finalizar a venda nº <b>{numero}</b>? Ela sai de <b>{c.situacaoAtual.nome}</b> e vai para <b>{c.destino.nome}</b>: o estoque é baixado e o financeiro já fica resolvido.
           </p>
+          {c.caixa && <ResumoCaixa caixa={c.caixa} />}
 
           <section>
             <h3 className="mb-2 text-sm font-semibold text-slate-800">1. Recebimento da venda</h3>

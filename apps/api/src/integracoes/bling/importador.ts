@@ -795,6 +795,8 @@ async function importarCompras(r: { importados: number; atualizados: number; err
 
 // ---------------------------------------------------------------------
 // Contas a receber / pagar
+// A importação geral continua aqui (filtra só a emissão e não lê o detalhe).
+// Contas a pagar com saldo, devolvido e prévia: sincronizarContasPagar em contas-pagar.ts.
 // ---------------------------------------------------------------------
 const SIT_CONTA: Record<number, string> = { 1: 'ABERTO', 2: 'RECEBIDO', 3: 'PARCIAL', 4: 'CANCELADO', 5: 'CANCELADO' };
 
@@ -811,6 +813,9 @@ async function importarContas(tipo: 'receber' | 'pagar', r: { importados: number
         const cat = await categoriaFinPorBling(bid(c.categoria?.id));
         const sit = SIT_CONTA[num(c.situacao, 1)] || 'ABERTO';
         const valor = num(c.valor);
+        // Sem o campo saldo o Bling não diz o que falta. Não inventamos um número:
+        // em aberto fica o valor inteiro; PARCIAL/PAGO ficam com saldo 0 (valor pago = valor)
+        // e a loja informa quanto ainda falta na tela (conferência em /contas-pagar/conferencia).
         const saldo = c.saldo !== undefined ? num(c.saldo) : sit === 'ABERTO' ? valor : 0;
         const baixado = arredondar(Math.max(0, valor - saldo));
         const vencimento = dataDe(c.vencimento) || dataDe(c.vencimentoOriginal) || new Date();

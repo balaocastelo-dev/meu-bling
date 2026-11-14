@@ -69,6 +69,10 @@ export function tomPorStatus(s: string | null | undefined): Tom {
     case 'PROCESSANDO':
     case 'CONECTANDO':
       return 'amarelo';
+    case 'DEVOLVIDO':
+      return 'laranja';
+    case 'NAO_MAPEADA':
+      return 'roxo';
     case 'ABERTO':
       return 'azul';
     case 'INUTILIZADA':
