@@ -13,6 +13,7 @@
  */
 import type { Tx } from '../../lib/prisma.js';
 import { prisma } from '../../lib/prisma.js';
+import { TRANSACAO_VENDA } from '../../lib/transacao-venda.js';
 import { arredondar, competenciaDe } from '../../lib/util.js';
 import { categoriaPadraoId, type Db } from '../comum/financeiro.js';
 import { carregarCfgCustos, taxaCartaoPct, type CfgCustos } from '../comum/custos-venda.js';
@@ -159,7 +160,7 @@ async function idsCategoriaDas(db: Db): Promise<number[]> {
 async function somarDasReal(db: Db, competencia: string): Promise<number> {
   const ids = await idsCategoriaDas(db);
   if (!ids.length) return 0;
-  const contas = await db.contaPagar.findMany({
+  const soma = await db.contaPagar.aggregate({
     where: {
       competencia,
       situacao: { not: 'CANCELADO' },
@@ -167,9 +168,9 @@ async function somarDasReal(db: Db, competencia: string): Promise<number> {
       // observação nula também entra: em SQL, NOT LIKE não pega NULL
       OR: [{ observacoes: null }, { NOT: { observacoes: { contains: MARCA_DAS } } }],
     },
-    select: { valor: true },
+    _sum: { valor: true },
   });
-  return arredondar(contas.reduce((s, c) => s + c.valor, 0));
+  return arredondar(soma._sum.valor || 0);
 }
 
 async function gravarPrevisaoDas(tx: TxDb, competencia: string, map: Map<number, number>) {
@@ -244,7 +245,7 @@ export async function recalcularPrevisaoDas(db: Db, competencia: string | null |
     });
     await gravarPrevisaoDas(tx, competencia, parseVendasDas(atual?.observacoes));
   };
-  if (db === prisma) await prisma.$transaction(rodar);
+  if (db === prisma) await prisma.$transaction(rodar, TRANSACAO_VENDA);
   else await rodar(db as TxDb);
 }
 
@@ -371,19 +372,23 @@ async function montarPlano(db: Db, vendaId: number): Promise<Plano | null> {
   }
   custoProduto = arredondar(custoProduto);
   const frete = arredondar((venda.custoLogistica || 0) > 0 ? venda.custoLogistica : 0);
-  const cfg = await carregarCfgCustos();
+  // A configuração sai pela mesma conexão da transação. Pelo cliente de fora, com
+  // connection_limit=1, esta leitura espera a transação acabar e a transação espera a leitura: 5 s e morre.
+  const cfg = await carregarCfgCustos(false, db);
   const crIds = venda.parcelas.map((p) => p.contaReceberId).filter((x): x is number => !!x);
-  const movs = crIds.length
-    ? await db.movimentoFinanceiro.findMany({
+  // Soma por conta a receber e conta financeira. Não carrega os movimentos da loja inteira.
+  const grupos = crIds.length
+    ? await db.movimentoFinanceiro.groupBy({
+        by: ['contaReceberId', 'contaFinanceiraId'],
         where: { contaReceberId: { in: crIds }, tipo: 'ENTRADA', observacoes: OBS_RECEBIDO },
-        select: { contaFinanceiraId: true, valor: true, contaReceberId: true },
+        _sum: { valor: true },
       })
     : [];
   const contaDoRecebimento = new Map<number, number>();
   const entradasPorConta = new Map<number, number>();
-  for (const m of movs) {
+  for (const m of grupos) {
     if (m.contaReceberId) contaDoRecebimento.set(m.contaReceberId, m.contaFinanceiraId);
-    entradasPorConta.set(m.contaFinanceiraId, (entradasPorConta.get(m.contaFinanceiraId) || 0) + m.valor);
+    entradasPorConta.set(m.contaFinanceiraId, (entradasPorConta.get(m.contaFinanceiraId) || 0) + (m._sum.valor || 0));
   }
   const contasTaxa = await db.contaFinanceira.findMany({
     where: { id: { in: [...new Set([...contaDoRecebimento.values(), ...venda.parcelas.map((p) => p.formaPagamento?.contaFinanceiraId).filter((x): x is number => !!x)])] } },
@@ -505,7 +510,30 @@ export async function sincronizarSaidasDaVenda(tx: TxDb, vendaId: number) {
 /** Estorna CMV, frete e taxa e tira o imposto desta venda da previsão do mês. */
 export async function estornarSaidasDaVenda(tx: TxDb, vendaId: number) {
   const contas = await tx.contaPagar.findMany({ where: { origemTipo: 'VENDA', origemId: vendaId, situacao: { not: 'CANCELADO' } } });
-  for (const c of contas) await cancelarSaida(tx, c.id);
+  if (contas.length) {
+    const movs = await tx.movimentoFinanceiro.findMany({
+      where: { contaPagarId: { in: contas.map((c) => c.id) } },
+      select: { id: true, contaPagarId: true, contaFinanceiraId: true, tipo: true, valor: true },
+    });
+    const porConta = new Map<number, typeof movs>();
+    for (const m of movs) {
+      if (!m.contaPagarId) continue;
+      const lista = porConta.get(m.contaPagarId) ?? [];
+      lista.push(m);
+      porConta.set(m.contaPagarId, lista);
+    }
+    for (const c of contas) {
+      for (const m of porConta.get(c.id) ?? []) {
+        const delta = m.tipo === 'SAIDA' ? m.valor : m.tipo === 'ENTRADA' ? -m.valor : 0;
+        if (delta) await tx.contaFinanceira.update({ where: { id: m.contaFinanceiraId }, data: { saldoAtual: { increment: arredondar(delta) } } });
+        await tx.movimentoFinanceiro.delete({ where: { id: m.id } });
+      }
+      await tx.contaPagar.update({
+        where: { id: c.id },
+        data: { situacao: 'CANCELADO', valorPago: 0, juros: 0, desconto: 0, dataPagamento: null },
+      });
+    }
+  }
   await ajustarPrevisaoDasDaVenda(tx, vendaId, null);
 }
 

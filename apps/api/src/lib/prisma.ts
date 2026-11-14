@@ -31,6 +31,7 @@ const base = new PrismaClient({
  * Pode ser desligada com TRILHA_AUDITORIA=off (só para diagnóstico).
  */
 export const prisma = comTrilha(base);
+export { consultasRegistradas, limparConsultas } from '../modules/auditoria/trilha.js';
 
 export type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 

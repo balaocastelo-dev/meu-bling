@@ -8,6 +8,7 @@ import { criarLinkPagamento } from '../../integracoes/mercadopago/link.js';
 import { z } from 'zod';
 import { previaCarneVenda } from '../carnes/service.js';
 import { prisma } from '../../lib/prisma.js';
+import { TRANSACAO_VENDA } from '../../lib/transacao-venda.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
 import { arredondar, dataSchema, paginar, proximoNumero, respostaPaginada } from '../../lib/util.js';
@@ -107,7 +108,7 @@ eventos.ouvir('nfe.cancelada', (d) => moverVendaPorNota(d.notaId, 'Fechada', 'Au
 // venda paga na hora (dinheiro/PIX/cartão/transferência) entra no caixa ao salvar — vale para tela, PDV, API e clonagem
 eventos.ouvir('venda.alterada', async (d) => {
   if (d.tipo !== 'PEDIDO') return;
-  await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, d.vendaId));
+  await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, d.vendaId), TRANSACAO_VENDA);
 });
 
 /**
@@ -165,7 +166,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
   // se a edição destravou uma venda "paga na hora", o recebimento volta para o caixa no fim (deu certo ou não)
   app.addHook('onResponse', async (req) => {
     const id = (req as any).religarPagoNaHora as number | undefined;
-    if (id) await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, id)).catch((e) => req.log.error(e, 'religar pago na hora'));
+    if (id) await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, id), TRANSACAO_VENDA).catch((e) => req.log.error(e, 'religar pago na hora'));
   });
   // ---------------------------------------------------------------- listagem
   app.get('/api/v1/vendas', async (req) => {
@@ -256,8 +257,9 @@ export default async function vendasRoutes(app: FastifyInstance) {
     // venda travada só porque foi recebida automaticamente (pago na hora, estoque ainda não baixado):
     // desfaz o recebimento, deixa editar e recebe de novo no fim (hook onResponse)
     if (bloqueada && !atual.estoqueLancado && atual.tipo === 'PEDIDO' && (await soRecebimentoAutomatico(prisma, id))) {
-      await prisma.$transaction((tx) =>
-        acaoEstornarContas({ modulo: 'VENDA', entidadeId: id, tx, usuarioId: req.user.id, situacaoOrigemId: atual.situacaoId, situacaoDestinoId: atual.situacaoId }),
+      await prisma.$transaction(
+        (tx) => acaoEstornarContas({ modulo: 'VENDA', entidadeId: id, tx, usuarioId: req.user.id, situacaoOrigemId: atual.situacaoId, situacaoDestinoId: atual.situacaoId }),
+        TRANSACAO_VENDA,
       );
       (req as any).religarPagoNaHora = id;
       atual = await carregarVenda(prisma, id);
@@ -319,7 +321,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
         if (Object.keys(data).length) await tx.venda.update({ where: { id }, data });
         // custo ou frete informado depois do fechamento: gera (ou ajusta) a saída, sem duplicar
         if (atual.contasLancadas) await sincronizarSaidasDaVenda(tx, id);
-      });
+      }, TRANSACAO_VENDA);
       await auditar(req, 'Venda', id, 'ALTERAR', { ...data, ...(custosItens.length ? { custosItens: custosItens.length } : {}) });
       return comFechamento(req, await vendaCompleta(id));
     }
@@ -376,7 +378,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
         await acaoLiberarReserva(ctx);
         await acaoReservarEstoque(ctx);
       }
-    });
+    }, TRANSACAO_VENDA);
     await auditar(req, 'Venda', id, 'ALTERAR', { total: body.itens.length + ' itens' });
     // a data pode ter mudado: reavalia o período antigo e o novo
     const depois = await vendaCompleta(id);
@@ -393,7 +395,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     // venda só recebida automaticamente (pago na hora) e sem estoque baixado: tira do caixa e deixa excluir
     if (v.contasLancadas && !v.estoqueLancado && v.tipo === 'PEDIDO' && (await soRecebimentoAutomatico(prisma, id))) {
       const sit = v.situacaoId;
-      await prisma.$transaction((tx) => acaoEstornarContas({ modulo: 'VENDA', entidadeId: id, tx, usuarioId: req.user.id, situacaoOrigemId: sit, situacaoDestinoId: sit }));
+      await prisma.$transaction((tx) => acaoEstornarContas({ modulo: 'VENDA', entidadeId: id, tx, usuarioId: req.user.id, situacaoOrigemId: sit, situacaoDestinoId: sit }), TRANSACAO_VENDA);
       v = (await prisma.venda.findUnique({ where: { id }, include: { nota: true } }))!;
     }
     // NF-e autorizada existe na SEFAZ: apagar aqui deixaria a nota órfã e a loja sem o pedido
@@ -416,7 +418,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
       await prisma.$transaction(async (tx) => {
         if (v!.contasLancadas) await acaoEstornarContas({ ...ctx, tx });
         if (v!.estoqueLancado) await acaoEstornarEstoque({ ...ctx, tx });
-      });
+      }, TRANSACAO_VENDA);
       v = (await prisma.venda.findUnique({ where: { id }, include: { nota: true } }))!;
     }
     if (v.estoqueLancado || v.contasLancadas) {
@@ -444,7 +446,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
       // contas a receber canceladas (sem nenhum recebimento) da venda excluída não ficam órfãs
       await tx.contaReceber.deleteMany({ where: { origemTipo: 'VENDA', origemId: id, situacao: 'CANCELADO', valorRecebido: 0 } });
       return compra;
-    });
+    }, TRANSACAO_VENDA);
     await auditar(req, v.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', id, 'EXCLUIR', { numero: v.numero, compra: compraDesfeita ? { numero: compraDesfeita.numero, desfeita: compraDesfeita.desfeita, motivo: compraDesfeita.motivo } : undefined });
     eventos.emitir('venda.alterada', { vendaId: id, data: v.data, tipo: v.tipo });
     return { ok: true, compra: compraDesfeita };
@@ -551,7 +553,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     // garante as contas lançadas (pago na hora) e põe cada recebimento no banco escolhido
     const recebimentos = body.recebimentos?.length
       ? await aplicarRecebimentosFinalizacao(id, body.recebimentos)
-      : await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, id, req.user.id, { mesmoComContasLancadas: true }));
+      : await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, id, req.user.id, { mesmoComContasLancadas: true }), TRANSACAO_VENDA);
     // cobrança no Asaas sozinha, quando ligado em Configurações → Asaas. Nunca derruba a
     // venda: se o Asaas falhar, a venda segue finalizada e o vendedor gera a cobrança à mão.
     const cobrancaAsaas = await cobrancaAutomatica(id).catch(() => null);
@@ -586,7 +588,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const id = idDe(req);
     const body = gerarNfeBody.parse(req.body || {});
     exigirPedido(await carregarVenda(prisma, id), 'emitir nota fiscal');
-    const nota = await prisma.$transaction((tx) => gerarNfeDaVenda(tx, id, body.modelo as 55 | 65, body.informacoesComplementares));
+    const nota = await prisma.$transaction((tx) => gerarNfeDaVenda(tx, id, body.modelo as 55 | 65, body.informacoesComplementares), TRANSACAO_VENDA);
     await auditar(req, 'Venda', id, 'ACAO', { acao: 'gerarNfe', notaId: nota.id, modelo: body.modelo });
     return reply.code(201).send({ notaId: nota.id, numero: nota.numero, serie: nota.serie, modelo: nota.modelo, situacao: nota.situacao });
   });
@@ -752,8 +754,9 @@ export default async function vendasRoutes(app: FastifyInstance) {
     const tipo = orig.tipo === 'ORCAMENTO' ? 'ORCAMENTO' : 'PEDIDO';
     const rotulo = tipo === 'ORCAMENTO' ? 'orçamento' : 'venda';
     const validade = tipo === 'ORCAMENTO' ? new Date(hojeMeioDia().getTime() + 7 * 86400000) : null;
-    const { venda: nova } = await prisma.$transaction((tx) =>
-      copiarVenda(tx, orig, { tipo, usuarioId: req.user.id, observacoesInternas: `Clonada do ${rotulo} nº ${orig.numero}`, validade, historicoObs: `Clonada do ${rotulo} nº ${orig.numero}` }),
+    const { venda: nova } = await prisma.$transaction(
+      (tx) => copiarVenda(tx, orig, { tipo, usuarioId: req.user.id, observacoesInternas: `Clonada do ${rotulo} nº ${orig.numero}`, validade, historicoObs: `Clonada do ${rotulo} nº ${orig.numero}` }),
+      TRANSACAO_VENDA,
     );
     await auditar(req, tipo === 'ORCAMENTO' ? 'Orcamento' : 'Venda', nova.id, 'CRIAR', { duplicadaDe: orig.numero, numero: nova.numero });
     if (tipo === 'PEDIDO') eventos.emitir('venda.criada', { vendaId: nova.id, usuarioId: req.user.id });

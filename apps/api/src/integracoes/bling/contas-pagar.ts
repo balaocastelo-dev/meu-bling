@@ -514,7 +514,7 @@ export async function sincronizarContasPagar(opcoes: OpcoesSincronizarContasPaga
   const idsLocais = locais.map((c) => c.id);
   const comMovimento = new Set<number>();
   if (idsLocais.length) {
-    const movs = await banco.movimentoFinanceiro.findMany({ where: { contaPagarId: { in: idsLocais } }, select: { contaPagarId: true } });
+    const movs = await banco.movimentoFinanceiro.groupBy({ by: ['contaPagarId'], where: { contaPagarId: { in: idsLocais } } });
     for (const m of movs) if (m.contaPagarId) comMovimento.add(m.contaPagarId);
   }
 

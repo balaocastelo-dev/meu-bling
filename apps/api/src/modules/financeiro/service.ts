@@ -392,10 +392,9 @@ export async function idsContaPagarSaldoNaoInformado(
       !(c.observacoes || '').includes(MARCA_SALDO_CONFERIDO),
   );
   if (!candidatos.length) return new Set<number>();
-  const comMovimento = await prisma.movimentoFinanceiro.findMany({
+  const comMovimento = await prisma.movimentoFinanceiro.groupBy({
+    by: ['contaPagarId'],
     where: { contaPagarId: { in: candidatos.map((c) => c.id) } },
-    select: { contaPagarId: true },
-    distinct: ['contaPagarId'],
   });
   const temMov = new Set(comMovimento.map((m) => m.contaPagarId));
   return new Set(candidatos.filter((c) => !temMov.has(c.id)).map((c) => c.id));
