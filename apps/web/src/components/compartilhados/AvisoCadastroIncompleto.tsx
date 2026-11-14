@@ -24,7 +24,7 @@ export function AvisoCadastroIncompleto({
       cadastro incompleto
     </span>
   );
-  if (modo === 'selo') return <span className={className}>{selo}</span>;
+  if (modo === 'selo') return <span className={clsx('shrink-0', className)}>{selo}</span>;
   return (
     <p className={clsx('flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-amber-800', className)}>
       {selo}
