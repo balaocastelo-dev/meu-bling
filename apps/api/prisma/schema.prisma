@@ -1194,6 +1194,8 @@ model ContaPagar {
   revisoesAutomaticas LancamentoAutomatico[]
 
   @@index([vencimento, situacao])
+  @@index([origemTipo, origemId])
+  @@index([competencia])
 }
 
 /// Empréstimos e antecipações (ex.: Lumicred). O dinheiro entra na conta e devolve-se o valor + juros.
@@ -1282,6 +1284,8 @@ model MovimentoFinanceiro {
   lancamentoAutomaticoEntrada LancamentoAutomatico? @relation("LancamentoMovimentoEntrada")
 
   @@index([contaFinanceiraId, data])
+  @@index([contaReceberId])
+  @@index([contaPagarId])
 }
 
 /// Transações importadas do banco (Open Finance ou OFX) para conciliação

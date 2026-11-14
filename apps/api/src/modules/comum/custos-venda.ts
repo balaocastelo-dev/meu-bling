@@ -19,8 +19,10 @@
  * Quando essa saída já foi lançada, o DRE usa o valor lançado no lugar desta conta
  * (custoParaDre) para não somar os dois.
  */
-import { prisma } from '../../lib/prisma.js';
+import { prisma, type Tx } from '../../lib/prisma.js';
 import { arredondar } from '../../lib/util.js';
+
+type DbCfg = Tx | typeof prisma;
 
 export interface CfgCustos {
   impostoPct: number;
@@ -35,9 +37,14 @@ export const CFG_CUSTOS_PADRAO: CfgCustos = { impostoPct: 10, cartao1xPct: 5, ca
 
 let cache: { em: number; cfg: CfgCustos } | null = null;
 
-export async function carregarCfgCustos(forcar = false): Promise<CfgCustos> {
+/**
+ * Lê a configuração de custos. `db` é a transação quando a chamada está dentro
+ * de uma: o SQLite da loja tem uma conexão só, e consultar o cliente de fora
+ * enquanto a transação segura essa conexão trava até o timeout de 5 s.
+ */
+export async function carregarCfgCustos(forcar = false, db: DbCfg = prisma): Promise<CfgCustos> {
   if (!forcar && cache && Date.now() - cache.em < 30_000) return cache.cfg;
-  const e = await prisma.empresa.findUnique({
+  const e = await db.empresa.findUnique({
     where: { id: 1 },
     select: { aliquotaSimplesPct: true, taxaCartao1xPct: true, taxaCartao12xPct: true, freteVendaPadrao: true, custoProdutoMinPct: true, custoProdutoMaxPct: true },
   });

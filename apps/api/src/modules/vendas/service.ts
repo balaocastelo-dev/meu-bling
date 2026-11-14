@@ -3,6 +3,7 @@
  * handlers das ações do motor de situações (estoque, contas, comissões, reserva, NF-e).
  */
 import { prisma, type Tx } from '../../lib/prisma.js';
+import { TRANSACAO_VENDA } from '../../lib/transacao-venda.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { faltasCadastroCliente } from '../comum/cadastro-cliente.js';
 import { mensagemPendencias, verificarNfe } from '../comum/nfe-checagem.js';
@@ -406,7 +407,7 @@ export async function converterOrcamento(id: number, p: { usuarioId: number | nu
     });
     if (!orig.aprovadoEm) await tx.venda.update({ where: { id }, data: { aprovadoEm: new Date(), aprovadoPor: 'Conversão em venda' } });
     return r;
-  });
+  }, TRANSACAO_VENDA);
   const convertido = await situacaoPorNome('ORCAMENTO', 'Convertido em venda');
   if (convertido && convertido.id !== orig.situacaoId) {
     await mudarSituacao({ modulo: 'ORCAMENTO', entidadeId: id, situacaoDestinoId: convertido.id, usuarioId: p.usuarioId, forcar: true, observacao: `Convertido na venda nº ${venda.numero}` });
@@ -443,7 +444,7 @@ export async function transferirVendedor(id: number, vendedorId: number | null, 
     await tx.historicoSituacao.create({
       data: { entidadeTipo: moduloDe(v.tipo), entidadeId: id, deSituacaoId: v.situacaoId, deSituacao: v.situacao.nome, paraSituacaoId: v.situacaoId, paraSituacao: v.situacao.nome, usuarioId, observacao: `Vendedor alterado: ${v.vendedor?.nome || 'nenhum'} → ${novo?.nome || 'nenhum'}` },
     });
-  });
+  }, TRANSACAO_VENDA);
   eventos.emitir('venda.alterada', { vendaId: id, data: v.data, tipo: v.tipo });
   return { venda: await prisma.venda.findUnique({ where: { id } }), alterado: true };
 }
@@ -550,7 +551,7 @@ export async function acaoLancarContas(ctx: ContextoAcao) {
   }
   const anuncios = await anunciosDaOrigem(tx as any, venda);
   if (anuncios.porId.size) {
-    const f = fechamentoVenda(venda as any, await carregarCfgCustos());
+    const f = fechamentoVenda(venda as any, await carregarCfgCustos(false, tx));
     comissoes.push(
       ...comissoesDeAnuncio({
         itens: venda.itens.map((i) => ({ total: i.total, custo: arredondar(i.custoUnitario * i.quantidade), anuncioId: i.anuncioId })),
@@ -569,8 +570,9 @@ export async function acaoLancarContas(ctx: ContextoAcao) {
   await lancarCreditoBancarioVenda(tx, id);
   // parcelas na forma "Carnê" viram o carnê próprio (PIX no Cora) com juros pelo risco do cliente
   await lancarCarneVenda(tx, id);
-  // custo real, frete informado e previsão de DAS. A taxa entra depois, quando o dinheiro é recebido.
-  await sincronizarSaidasDaVenda(tx, id);
+  // custo real, frete informado e previsão de DAS. Quem vai receber na mesma transação adia:
+  // a taxa só existe depois que o dinheiro entra, e lançar duas vezes varria o caixa à toa.
+  if (!ctx.extras?.adiarSaidas) await sincronizarSaidasDaVenda(tx, id);
 }
 
 export async function acaoEstornarContas(ctx: ContextoAcao) {
@@ -634,7 +636,7 @@ export async function receberVendaPagaNaHora(tx: Tx, vendaId: number, usuarioId:
   const pagas = venda.parcelas.filter((p) => p.valor > 0 && p.formaPagamento && TIPOS_PAGO_NA_HORA.includes(p.formaPagamento.tipo));
   if (!pagas.length) return 0;
   if (!venda.contasLancadas) {
-    await acaoLancarContas({ modulo: 'VENDA', entidadeId: vendaId, tx, usuarioId, situacaoOrigemId: venda.situacaoId, situacaoDestinoId: venda.situacaoId });
+    await acaoLancarContas({ modulo: 'VENDA', entidadeId: vendaId, tx, usuarioId, situacaoOrigemId: venda.situacaoId, situacaoDestinoId: venda.situacaoId, extras: { adiarSaidas: true } });
   }
   const contaPadrao = await contaRecebimentoVendaId(tx);
   const parcelas = await tx.vendaParcela.findMany({ where: { id: { in: pagas.map((p) => p.id) } }, include: { contaReceber: true, formaPagamento: { include: { contaFinanceira: { select: { id: true, ativo: true } } } } } });
@@ -670,9 +672,20 @@ async function baixarComTaxa(tx: Tx, p: { contaReceberId: number; saldo: number;
 /** Desfaz só os recebimentos automáticos ("pago na hora") da venda: tira do caixa e volta a conta para aberto. */
 export async function desfazerRecebimentoPagoNaHora(tx: Tx, vendaId: number) {
   const contas = await tx.contaReceber.findMany({ where: { origemTipo: 'VENDA', origemId: vendaId } });
+  if (!contas.length) return 0;
+  const todos = await tx.movimentoFinanceiro.findMany({
+    where: { contaReceberId: { in: contas.map((c) => c.id) }, observacoes: OBS_PAGO_NA_HORA },
+  });
+  const porConta = new Map<number, typeof todos>();
+  for (const m of todos) {
+    if (!m.contaReceberId) continue;
+    const lista = porConta.get(m.contaReceberId) ?? [];
+    lista.push(m);
+    porConta.set(m.contaReceberId, lista);
+  }
   let desfeitos = 0;
   for (const c of contas) {
-    const movs = await tx.movimentoFinanceiro.findMany({ where: { contaReceberId: c.id, observacoes: OBS_PAGO_NA_HORA } });
+    const movs = porConta.get(c.id) ?? [];
     if (!movs.length) continue;
     let valorRecebido = c.valorRecebido;
     for (const m of movs) {
@@ -846,7 +859,7 @@ export async function criarVenda(body: VendaInput, usuarioId: number | null, obs
       data: { entidadeTipo: modulo, entidadeId: v.id, paraSituacaoId: situacao.id, paraSituacao: situacao.nome, usuarioId, observacao: observacaoHistorico ?? (body.tipo === 'ORCAMENTO' ? 'Orçamento criado' : 'Venda criada') },
     });
     return v;
-  });
+  }, TRANSACAO_VENDA);
 
   // ações da situação inicial escolhida (ex.: criar já "Em aberto" reserva estoque) — orçamento não tem ações
   if (body.tipo === 'PEDIDO') {
@@ -1003,9 +1016,17 @@ export async function desfazerCompraDaVenda(tx: Tx, venda: { id: number; numero:
   const obsAuto = obsCompraPagaAoFinalizar(venda.numero);
   const contas = await tx.contaPagar.findMany({ where: { origemTipo: 'COMPRA', origemId: compra.id } });
   const movsPorConta = new Map<number, { id: number; contaFinanceiraId: number; valor: number; juros: number; desconto: number; transacaoId: number | null; observacoes: string | null }[]>();
+  const movsDaCompra = contas.length
+    ? await tx.movimentoFinanceiro.findMany({ where: { contaPagarId: { in: contas.map((c) => c.id) } } })
+    : [];
+  for (const m of movsDaCompra) {
+    if (!m.contaPagarId) continue;
+    const lista = movsPorConta.get(m.contaPagarId) ?? [];
+    lista.push(m);
+    movsPorConta.set(m.contaPagarId, lista);
+  }
   for (const cp of contas) {
-    const movs = await tx.movimentoFinanceiro.findMany({ where: { contaPagarId: cp.id } });
-    movsPorConta.set(cp.id, movs);
+    const movs = movsPorConta.get(cp.id) ?? [];
     // pagamento feito à mão (ou importado): quem pagou decide — a compra fica
     const automaticos = movs.filter((m) => (m.observacoes || '') === obsAuto || (m.observacoes || '').startsWith(OBS_PAGO_COM_CREDITO));
     if (movs.length !== automaticos.length) return manter('o pagamento dela foi lançado à mão no contas a pagar');
@@ -1190,7 +1211,7 @@ export async function registrarCompraDaVenda(vendaId: number, p: CompraDaVendaIn
       }
     }
     return { id: c.id, numero: c.numero, total };
-  });
+  }, TRANSACAO_VENDA);
   eventos.emitir('compra.criada', { compraId: compra.id, usuarioId });
   return { compra, jaExistia: false, paga: p.paga };
 }
@@ -1245,6 +1266,16 @@ export async function aplicarRecebimentosFinalizacao(vendaId: number, lista: Rec
   return prisma.$transaction(async (tx) => {
     const venda = await tx.venda.findUnique({ where: { id: vendaId }, select: { data: true } });
     if (!venda) throw new NotFound('Venda');
+    const parcelas = await tx.vendaParcela.findMany({ where: { vendaId, id: { in: lista.map((r) => r.parcelaId) } }, select: { contaReceberId: true } });
+    const crIds = parcelas.map((p) => p.contaReceberId).filter((x): x is number => !!x);
+    const todosMovs = crIds.length ? await tx.movimentoFinanceiro.findMany({ where: { contaReceberId: { in: crIds } } }) : [];
+    const movsPorCr = new Map<number, typeof todosMovs>();
+    for (const m of todosMovs) {
+      if (!m.contaReceberId) continue;
+      const arr = movsPorCr.get(m.contaReceberId) ?? [];
+      arr.push(m);
+      movsPorCr.set(m.contaReceberId, arr);
+    }
     let alterados = 0;
     for (const r of lista) {
       const p = await tx.vendaParcela.findFirst({ where: { id: r.parcelaId, vendaId }, include: { contaReceber: true } });
@@ -1265,7 +1296,7 @@ export async function aplicarRecebimentosFinalizacao(vendaId: number, lista: Rec
       }
       const cr = p.contaReceber ? await tx.contaReceber.findUnique({ where: { id: p.contaReceber.id } }) : null;
       if (!cr || cr.situacao === 'CANCELADO') continue;
-      const movs = await tx.movimentoFinanceiro.findMany({ where: { contaReceberId: cr.id } });
+      const movs = movsPorCr.get(cr.id) ?? [];
       const soAutomatico = movs.every((m) => m.observacoes === OBS_PAGO_NA_HORA);
       if (!soAutomatico) continue; // recebimento lançado à mão: respeita
       // crédito bancário: o dinheiro vem do credor (empréstimo); o boleto do cliente fica em aberto
@@ -1313,7 +1344,7 @@ export async function aplicarRecebimentosFinalizacao(vendaId: number, lista: Rec
     await lancarCarneVenda(tx, vendaId);
     await sincronizarSaidasDaVenda(tx, vendaId);
     return alterados;
-  });
+  }, TRANSACAO_VENDA);
 }
 
 /** Formas de pagamento ativas com os bancos que recebem cada uma (tela de finalizar: forma → banco). */

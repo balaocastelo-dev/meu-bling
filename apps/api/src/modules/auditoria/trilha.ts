@@ -280,6 +280,32 @@ type Params = { model?: string; operation: string; args: any; query: (args: any)
 
 const DESLIGADA = process.env.TRILHA_AUDITORIA === 'off';
 
+/** Só com REGISTRAR_QUERIES=1 (teste). Guarda o filtro de cada consulta para provar que a venda não varre o caixa inteiro. */
+export interface ConsultaRegistrada {
+  model: string;
+  operation: string;
+  where: unknown;
+}
+const consultasRegistradasLista: ConsultaRegistrada[] = [];
+export function consultasRegistradas() {
+  return consultasRegistradasLista;
+}
+export function limparConsultas() {
+  consultasRegistradasLista.length = 0;
+}
+function anotarConsulta(model: string | undefined, operation: string, args: { where?: unknown } | undefined) {
+  if (process.env.REGISTRAR_QUERIES !== '1' || !model) return;
+  let where: unknown = null;
+  if (args && Object.prototype.hasOwnProperty.call(args, 'where')) {
+    try {
+      where = structuredClone(args.where);
+    } catch {
+      where = args.where ?? null;
+    }
+  }
+  consultasRegistradasLista.push({ model, operation, where });
+}
+
 export function comTrilha(base: PrismaClient) {
   baseCliente = base;
   modelos = (base as any)._runtimeDataModel?.models ?? {};
@@ -289,6 +315,7 @@ export function comTrilha(base: PrismaClient) {
       $allModels: {
         async $allOperations(p: any) {
           const { model, operation, args, query } = p as Params;
+          anotarConsulta(model, operation, args);
           if (DESLIGADA || !model || IGNORAR.has(model) || !modelos[model]) return query(args);
           const op = operation;
           if (!['create', 'createMany', 'createManyAndReturn', 'update', 'updateMany', 'updateManyAndReturn', 'upsert', 'delete', 'deleteMany'].includes(op)) return query(args);

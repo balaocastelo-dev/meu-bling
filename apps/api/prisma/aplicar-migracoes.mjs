@@ -35,6 +35,7 @@ const JULIA = '20261110060000_julia_venda_assistencia';
 const GARANTIA = '20261110140000_garantia_escolhida';
 const SEM_JUROS = '20261113120000_link_parcelas_sem_juros';
 const CONTAS_PAGAR_BLING = '20261114133000_conta_pagar_sincronismo_bling';
+const INDICES_VENDA = '20261114190000_indices_movimento_venda';
 
 /** Colunas que a migração de transferência copia antes de trocar a tabela. */
 const COLUNAS_ANTIGAS = [
@@ -147,6 +148,10 @@ function tabela(db, nome) {
   return !!db.prepare(`SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?`).get(nome);
 }
 
+function indice(db, nome) {
+  return !!db.prepare(`SELECT 1 AS ok FROM sqlite_master WHERE type = 'index' AND name = ?`).get(nome);
+}
+
 function colunas(db, nome) {
   return db.prepare(`SELECT name FROM pragma_table_info('${nome}')`).all().map((r) => r.name);
 }
@@ -179,6 +184,12 @@ function lerEstado(DatabaseSync, arquivo) {
       garantia: colunas(db, 'VendaItem').includes('garantiaMeses'),
       semJuros: !!(usuario && tabela(db, 'Venda') && colunas(db, 'Venda').includes('linkPagamentoSemJuros')),
       contasPagarBling: tabela(db, 'ContaPagar') && colunas(db, 'ContaPagar').includes('situacaoBling') && colunas(db, 'ContaPagar').includes('sincronizadoEm'),
+      indicesVenda:
+        tabela(db, 'MovimentoFinanceiro') &&
+        indice(db, 'MovimentoFinanceiro_contaReceberId_idx') &&
+        indice(db, 'MovimentoFinanceiro_contaPagarId_idx') &&
+        indice(db, 'ContaPagar_origemTipo_origemId_idx') &&
+        indice(db, 'ContaPagar_competencia_idx'),
       formato: classificarLancamento(nomes),
       aplicadas,
       falhas,
@@ -206,6 +217,7 @@ function baseline(estado) {
   if (estado.garantia) marcar.push(GARANTIA);
   if (estado.semJuros) marcar.push(SEM_JUROS);
   if (estado.contasPagarBling) marcar.push(CONTAS_PAGAR_BLING);
+  if (estado.indicesVenda) marcar.push(INDICES_VENDA);
   if (estado.formato === 'inesperado') {
     console.log('[banco] LancamentoAutomatico não está no formato da migração. Não vou recriar a tabela.');
   } else if (estado.formato === 'antigo') {

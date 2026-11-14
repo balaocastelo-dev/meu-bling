@@ -14,6 +14,7 @@
  */
 import { prisma, type Tx } from '../lib/prisma.js';
 import { AppError, NotFound } from '../lib/errors.js';
+import { TRANSACAO_VENDA } from '../lib/transacao-venda.js';
 import { parseJsonArray } from '../lib/util.js';
 import { eventos } from './eventos.js';
 
@@ -123,14 +124,17 @@ export interface MudarSituacaoParams {
 export async function executarAcoes(modulo: Modulo, entidadeId: number, acoes: Acao[], usuarioId: number | null) {
   const adaptador = adaptadores.get(modulo);
   if (!adaptador) throw new AppError(`Módulo ${modulo} não registrado.`, 500);
-  await prisma.$transaction(async (tx) => {
+  const rodar = async (tx: Tx) => {
     const atual = await adaptador.obterSituacaoId(entidadeId, tx);
     for (const acao of ordenar(acoes)) {
       const h = handlers.get(`${modulo}:${acao}`);
       if (!h) throw new AppError(`Ação "${acao}" não disponível para ${modulo}.`);
       await h({ modulo, entidadeId, tx, usuarioId, situacaoOrigemId: atual, situacaoDestinoId: atual });
     }
-  });
+  };
+  // Salvar a venda numa situação que lança estoque/contas entra por aqui (o padrão de 5 s estourava).
+  if (modulo === 'VENDA' || modulo === 'ORCAMENTO') await prisma.$transaction(rodar, TRANSACAO_VENDA);
+  else await prisma.$transaction(rodar);
 }
 
 export async function mudarSituacao(p: MudarSituacaoParams) {
@@ -208,7 +212,8 @@ export async function mudarSituacao(p: MudarSituacaoParams) {
 
       return { alterado: true, atualId, acoes: [...acoes], extras: ctx.extras };
     },
-    { timeout: 30000 },
+    // Venda já tinha 30 s (estoque + contas). O maxWait evita desistir enquanto outra gravação segura o SQLite.
+    p.modulo === 'VENDA' || p.modulo === 'ORCAMENTO' ? { timeout: 30_000, maxWait: 10_000 } : { timeout: 30_000 },
   );
 
   if (resultado.alterado) {

@@ -19,6 +19,7 @@
  * do ADMIN. Some sozinho assim que o custo é preenchido. O DRE e os dashboards precisam desse custo real.
  */
 import { prisma } from '../../lib/prisma.js';
+import { TRANSACAO_VENDA } from '../../lib/transacao-venda.js';
 import { comContexto } from '../auditoria/contexto.js';
 import { AppError } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
@@ -571,7 +572,7 @@ const corretores: Corretor[] = [
         await prisma.$transaction(async (tx) => {
           await tx.venda.update({ where: { id: v.id }, data: { situacaoId: fechada.id } });
           await tx.historicoSituacao.create({ data: { entidadeTipo: 'VENDA', entidadeId: v.id, deSituacaoId: v.situacaoId, deSituacao: v.situacao.nome, paraSituacaoId: fechada.id, paraSituacao: fechada.nome, usuarioId, observacao: `${ROBO}: pedido em aberto do Bling marcado como Fechado (regra da migração; sem lançar caixa/estoque)` } });
-        });
+        }, TRANSACAO_VENDA);
         // sem emitir 'venda.alterada': o "pago na hora" lançaria de novo um dinheiro que já entrou na importação
         return `Venda nº ${d.numero} (do Bling) marcada como Fechada.`;
       }
@@ -672,7 +673,7 @@ async function lancarVenda(d: { vendaId: number; numero: number }) {
   let pagoNaHora = 0;
   if (!v.contasLancadas) {
     // dinheiro/PIX/cartão: lança e já dá baixa no banco da forma de pagamento, como na hora da venda
-    pagoNaHora = await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, d.vendaId));
+    pagoNaHora = await prisma.$transaction((tx) => receberVendaPagaNaHora(tx, d.vendaId), TRANSACAO_VENDA);
     // crediário/boleto (ou sobra que não era "pago na hora"): contas a receber em aberto
     await executarAcoes('VENDA', d.vendaId, ['lancarContas'], null);
     feito.push(pagoNaHora ? `lancei o financeiro (com baixa de ${pagoNaHora} parcela${pagoNaHora > 1 ? 's' : ''} paga${pagoNaHora > 1 ? 's' : ''} na hora)` : 'lancei o contas a receber');
