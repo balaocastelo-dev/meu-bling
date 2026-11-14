@@ -79,7 +79,14 @@ export default function Emprestimos() {
   const { data: resp, isLoading } = useQuery({ queryKey: ['emprestimos', filtros], queryFn: () => api.get<Resposta>('/financeiro/emprestimos', filtros), placeholderData: (p) => p });
   const lista = useMemo(() => (resp?.data ?? []).filter((e) => (status === 'EM_ABERTO' ? e.status === 'ABERTO' || e.status === 'VENCIDO' : true)), [resp, status]);
   const [novo, setNovo] = useState(false);
-  const [abertoId, setAbertoId] = useState<number | null>(null);
+  const [abertoId, setAbertoId] = useState<number | null>(() => {
+    const n = Number(sp.get('id') || '');
+    return Number.isInteger(n) && n > 0 ? n : null;
+  });
+  useEffect(() => {
+    const n = Number(sp.get('id') || '');
+    if (Number.isInteger(n) && n > 0) setAbertoId(n);
+  }, [sp]);
   const t = resp?.totais;
 
   const colunas: Coluna<Emprestimo>[] = [
@@ -131,7 +138,7 @@ export default function Emprestimos() {
       </Card>
 
       <NovaOperacao aberto={novo} onFechar={() => setNovo(false)} onCriada={(id) => { setNovo(false); qc.invalidateQueries({ queryKey: ['emprestimos'] }); setAbertoId(id); }} />
-      <Detalhe id={abertoId} onFechar={() => setAbertoId(null)} />
+      <Detalhe id={abertoId} onFechar={() => { setAbertoId(null); if (sp.get('id')) { const n = new URLSearchParams(sp); n.delete('id'); setSp(n, { replace: true }); } }} />
     </div>
   );
 }

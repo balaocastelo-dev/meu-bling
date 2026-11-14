@@ -17,6 +17,7 @@ import {
   estornarPagamentoContaPagar,
   saldoContaPagar,
   saldoContaReceber,
+  alterarContaPagar,
   criarMovimentoAvulso,
   transferirEntreContas,
   ajustarSaldoConta,
@@ -330,16 +331,21 @@ export default async function financeiroRoutes(app: FastifyInstance) {
   app.put('/api/v1/contas-pagar/:id', { preHandler: fin }, async (req) => {
     const id = Number((req.params as any).id);
     const b = contaSchema.partial().parse(req.body);
-    const atual = await prisma.contaPagar.findUnique({ where: { id } });
-    if (!atual) throw new NotFound('Conta a pagar');
-    if (atual.situacao === 'CANCELADO') throw new AppError('Conta cancelada não pode ser alterada.', 422, 'SITUACAO_INVALIDA');
-    if (b.valor !== undefined && atual.situacao !== 'ABERTO') throw new AppError('Estorne a baixa antes de alterar o valor.', 422, 'JA_BAIXADA');
-    const data: any = { ...b };
-    delete data.vendedorId;
-    if (b.dataEmissao === undefined) delete data.dataEmissao;
-    if (b.vencimento === undefined) delete data.vencimento;
-    if (b.valor !== undefined) data.valor = arredondar(b.valor);
-    const c = await prisma.contaPagar.update({ where: { id }, data, include });
+    await alterarContaPagar(id, {
+      contatoId: b.contatoId,
+      descricao: b.descricao,
+      dataEmissao: b.dataEmissao,
+      vencimento: b.vencimento,
+      competencia: b.competencia,
+      valor: b.valor,
+      formaPagamentoId: b.formaPagamentoId,
+      contaFinanceiraId: b.contaFinanceiraId,
+      categoriaId: b.categoriaId,
+      observacoes: b.observacoes,
+      recorrente: b.recorrente,
+    });
+    const c = await prisma.contaPagar.findUnique({ where: { id }, include });
+    if (!c) throw new NotFound('Conta a pagar');
     await auditar(req, 'ContaPagar', id, 'ALTERAR', b);
     return c;
   });

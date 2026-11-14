@@ -38,6 +38,10 @@ const SITUACOES_ABERTAS = ['ABERTO', 'PARCIAL'];
 export function saldoContaPagar(c: { valor: number; valorPago: number; juros: number; desconto: number }) {
   return Math.max(0, arredondar(c.valor + c.juros - c.valorPago - c.desconto));
 }
+/** Principal já abatido: o dinheiro que saiu, sem os juros, mais o desconto concedido. */
+export function principalJaPago(c: { valorPago: number; juros: number; desconto: number }) {
+  return arredondar(c.valorPago - c.juros + c.desconto);
+}
 export function saldoContaReceber(c: { valor: number; valorRecebido: number; juros: number; desconto: number }) {
   return Math.max(0, arredondar(c.valor + c.juros - c.valorRecebido - c.desconto));
 }
@@ -268,6 +272,148 @@ export async function estornarPagamentoContaPagar(contaId: number, movimentoId: 
       },
     });
     return { conta: atualizada, movimentoEstornado: mov };
+  });
+}
+
+// ---------------------------------------------------------------------
+// Edição de conta a pagar
+// ---------------------------------------------------------------------
+/** Título cujo valor e vencimento só mudam no documento que o gerou. */
+const ORIGEM_NO_DOCUMENTO = new Set(['COMPRA', 'COMISSAO', 'EMPRESTIMO']);
+
+export interface AlteracaoContaPagar {
+  contatoId?: number | null;
+  descricao?: string;
+  dataEmissao?: Date | null;
+  vencimento?: Date | null;
+  competencia?: string | null;
+  valor?: number;
+  formaPagamentoId?: number | null;
+  contaFinanceiraId?: number | null;
+  categoriaId?: number | null;
+  observacoes?: string | null;
+  recorrente?: boolean;
+}
+
+function diaLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function reais(v: number): string {
+  return `R$ ${arredondar(v).toFixed(2).replace('.', ',')}`;
+}
+
+function nomeOrigem(tipo: string): string {
+  if (tipo === 'COMPRA') return 'compra';
+  if (tipo === 'COMISSAO') return 'comissão';
+  if (tipo === 'EMPRESTIMO') return 'empréstimo';
+  return 'documento de origem';
+}
+
+/**
+ * Altera uma conta a pagar conforme a situação.
+ * Pagamentos já lançados não mudam de conta financeira nem de categoria:
+ * `contaFinanceiraId` e `categoriaId` valem para o título (e para baixas futuras).
+ *
+ * - ABERTO: edita tudo; o saldo acompanha o novo valor.
+ * - PARCIAL: descrição, fornecedor, categoria, competência, observação, forma,
+ *   recorrência, vencimento e conta financeira padrão. O valor pode subir
+ *   (continua PARCIAL) ou descer até o principal já pago; se o saldo zera, fica PAGO.
+ * - PAGO: só descrição, observação, fornecedor e categoria do título.
+ * - CANCELADO: nada.
+ * - Origem COMPRA, COMISSAO ou EMPRESTIMO: valor e vencimento ficam no documento de origem.
+ */
+export async function alterarContaPagar(id: number, entrada: AlteracaoContaPagar) {
+  return prisma.$transaction(async (tx) => {
+    const atual = await tx.contaPagar.findUnique({ where: { id } });
+    if (!atual) throw new NotFound('Conta a pagar');
+    if (atual.situacao === 'CANCELADO') throw new AppError('Conta cancelada não pode ser alterada.', 422, 'SITUACAO_INVALIDA');
+
+    const descricao = entrada.descricao !== undefined && entrada.descricao !== atual.descricao ? entrada.descricao : undefined;
+    const observacoes = entrada.observacoes !== undefined && (entrada.observacoes ?? null) !== (atual.observacoes ?? null) ? entrada.observacoes : undefined;
+    const contatoId = entrada.contatoId !== undefined && (entrada.contatoId ?? null) !== (atual.contatoId ?? null) ? entrada.contatoId : undefined;
+    const categoriaId = entrada.categoriaId !== undefined && (entrada.categoriaId ?? null) !== (atual.categoriaId ?? null) ? entrada.categoriaId : undefined;
+    const competencia = entrada.competencia !== undefined && (entrada.competencia ?? null) !== (atual.competencia ?? null) ? entrada.competencia : undefined;
+    const formaPagamentoId = entrada.formaPagamentoId !== undefined && (entrada.formaPagamentoId ?? null) !== (atual.formaPagamentoId ?? null) ? entrada.formaPagamentoId : undefined;
+    const contaFinanceiraId = entrada.contaFinanceiraId !== undefined && (entrada.contaFinanceiraId ?? null) !== (atual.contaFinanceiraId ?? null) ? entrada.contaFinanceiraId : undefined;
+    const recorrente = entrada.recorrente !== undefined && entrada.recorrente !== atual.recorrente ? entrada.recorrente : undefined;
+    const dataEmissao = entrada.dataEmissao !== undefined && (entrada.dataEmissao === null || diaLocal(entrada.dataEmissao) !== diaLocal(atual.dataEmissao)) ? entrada.dataEmissao : undefined;
+    const vencimento = entrada.vencimento !== undefined && (entrada.vencimento === null || diaLocal(entrada.vencimento) !== diaLocal(atual.vencimento)) ? entrada.vencimento : undefined;
+    const valor = entrada.valor !== undefined && arredondar(entrada.valor) !== arredondar(atual.valor) ? arredondar(entrada.valor) : undefined;
+
+    const mudou = {
+      descricao: descricao !== undefined,
+      observacoes: observacoes !== undefined,
+      contatoId: contatoId !== undefined,
+      categoriaId: categoriaId !== undefined,
+      competencia: competencia !== undefined,
+      formaPagamentoId: formaPagamentoId !== undefined,
+      contaFinanceiraId: contaFinanceiraId !== undefined,
+      recorrente: recorrente !== undefined,
+      dataEmissao: dataEmissao !== undefined,
+      vencimento: vencimento !== undefined,
+      valor: valor !== undefined,
+    };
+    const alterados = (Object.keys(mudou) as (keyof typeof mudou)[]).filter((k) => mudou[k]);
+    if (!alterados.length) return atual;
+
+    if ((mudou.valor || mudou.vencimento) && ORIGEM_NO_DOCUMENTO.has(atual.origemTipo)) {
+      throw new AppError(`Valor e vencimento deste título se editam na ${nomeOrigem(atual.origemTipo)} de origem.`, 422, 'ORIGEM_DOCUMENTO');
+    }
+
+    const foraDoTexto = mudou.competencia || mudou.formaPagamentoId || mudou.contaFinanceiraId || mudou.recorrente || mudou.dataEmissao;
+    if (atual.situacao === 'PAGO' && (mudou.valor || mudou.vencimento)) {
+      throw new AppError('Valor e vencimento ficam bloqueados até estornar a baixa.', 422, 'JA_BAIXADA');
+    }
+    if (atual.situacao === 'PAGO' && foraDoTexto) {
+      throw new AppError('Conta paga só permite alterar descrição, observação, fornecedor e categoria.', 422, 'SITUACAO_INVALIDA');
+    }
+    if (atual.situacao === 'PARCIAL' && mudou.dataEmissao) {
+      throw new AppError('Conta parcial não permite alterar a data de emissão.', 422, 'SITUACAO_INVALIDA');
+    }
+
+    if (mudou.vencimento && !vencimento) throw new AppError('Informe o vencimento.', 422, 'VALIDACAO');
+    if (mudou.dataEmissao && !dataEmissao) throw new AppError('Informe a data de emissão.', 422, 'VALIDACAO');
+    if (mudou.valor && !(valor! > 0)) throw new AppError('Valor deve ser maior que zero.', 422, 'VALOR_INVALIDO');
+
+    let situacao = atual.situacao;
+    let dataPagamento: Date | undefined;
+    if (atual.situacao === 'PARCIAL' && mudou.valor) {
+      const piso = principalJaPago(atual);
+      if (valor! < piso) {
+        throw new AppError(
+          `O novo valor (${reais(valor!)}) fica abaixo do principal já pago (${reais(piso)}). Estorne a baixa excedente antes de reduzir o título.`,
+          422,
+          'VALOR_ABAIXO_DO_PAGO',
+        );
+      }
+      // saldo = valor − principal já pago; zerou, a conta está quitada
+      if (saldoContaPagar({ valor: valor!, valorPago: atual.valorPago, juros: atual.juros, desconto: atual.desconto }) <= TOLERANCIA) {
+        situacao = 'PAGO';
+        if (!atual.dataPagamento) {
+          const ultimo = await tx.movimentoFinanceiro.findFirst({ where: { contaPagarId: id }, orderBy: { data: 'desc' }, select: { data: true } });
+          dataPagamento = ultimo?.data ?? new Date();
+        }
+      }
+    }
+
+    return tx.contaPagar.update({
+      where: { id },
+      data: {
+        ...(descricao !== undefined ? { descricao } : {}),
+        ...(observacoes !== undefined ? { observacoes } : {}),
+        ...(contatoId !== undefined ? { contatoId } : {}),
+        ...(categoriaId !== undefined ? { categoriaId } : {}),
+        ...(competencia !== undefined ? { competencia } : {}),
+        ...(formaPagamentoId !== undefined ? { formaPagamentoId } : {}),
+        ...(contaFinanceiraId !== undefined ? { contaFinanceiraId } : {}),
+        ...(recorrente !== undefined ? { recorrente } : {}),
+        ...(dataEmissao ? { dataEmissao } : {}),
+        ...(vencimento ? { vencimento } : {}),
+        ...(valor !== undefined ? { valor } : {}),
+        ...(situacao !== atual.situacao ? { situacao, ...(dataPagamento ? { dataPagamento } : {}) } : {}),
+      },
+    });
   });
 }
 
