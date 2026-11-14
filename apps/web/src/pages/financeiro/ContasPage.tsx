@@ -209,7 +209,14 @@ export function ContasPage({ tipo }: Props) {
             valor={situacaoAtiva}
             onChange={(v) => pg.setFiltro('situacao', v)}
             placeholder="Todas situações"
-            opcoes={[{ valor: 'ABERTO', rotulo: 'Em aberto' }, { valor: 'ATRASADO', rotulo: 'Atrasadas' }, { valor: 'PARCIAL', rotulo: 'Parciais' }, { valor: ehReceber ? 'RECEBIDO' : 'PAGO', rotulo: ehReceber ? 'Recebidas' : 'Pagas' }, { valor: 'CANCELADO', rotulo: 'Canceladas' }]}
+            opcoes={[
+              { valor: 'ABERTO', rotulo: 'Em aberto' },
+              { valor: 'ATRASADO', rotulo: 'Atrasadas' },
+              { valor: 'PARCIAL', rotulo: 'Parciais' },
+              { valor: ehReceber ? 'RECEBIDO' : 'PAGO', rotulo: ehReceber ? 'Recebidas' : 'Pagas' },
+              { valor: 'CANCELADO', rotulo: 'Canceladas' },
+              ...(!ehReceber ? [{ valor: 'DEVOLVIDO', rotulo: 'Devolvidas' }, { valor: 'NAO_MAPEADA', rotulo: 'Bling 6/7' }] : []),
+            ]}
           />
           <SelectFiltro valor={pg.getFiltro('tipoData') || 'V'} onChange={(v) => pg.setFiltro('tipoData', v)} placeholder="" opcoes={[{ valor: 'V', rotulo: 'Por vencimento' }, { valor: 'E', rotulo: 'Por emissão' }, { valor: 'R', rotulo: ehReceber ? 'Por recebimento' : 'Por pagamento' }]} />
           <PeriodoFiltro inicial={pg.getFiltro('dataInicial')} final={pg.getFiltro('dataFinal')} onChange={(i, f) => pg.setFiltros({ dataInicial: i, dataFinal: f })} label="" />

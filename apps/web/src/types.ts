@@ -857,7 +857,7 @@ export interface KanbanColuna {
 // Financeiro
 // ---------------------------------------------------------------------
 
-export type SituacaoConta = 'ABERTO' | 'RECEBIDO' | 'PAGO' | 'PARCIAL' | 'CANCELADO';
+export type SituacaoConta = 'ABERTO' | 'RECEBIDO' | 'PAGO' | 'PARCIAL' | 'CANCELADO' | 'DEVOLVIDO' | 'NAO_MAPEADA';
 
 export interface ContaBase {
   id: number;
@@ -900,6 +900,9 @@ export interface ContaPagar extends ContaBase {
   valorPago: number;
   dataPagamento?: string | null;
   recorrente: boolean;
+  blingId?: string | null;
+  situacaoBling?: number | null;
+  sincronizadoEm?: string | null;
 }
 
 export interface ContasResposta<T> extends Paginado<T> {
@@ -1272,6 +1275,49 @@ export interface BlingImportStatus {
   emAndamento: boolean;
   progresso?: { entidade: string; feitos: number; total: number } | null;
   log: string[];
+}
+
+export interface LinhaSituacaoSync {
+  situacao: string;
+  rotulo: string;
+  quantidade: number;
+  soma: number;
+  saldo: number;
+}
+
+export interface RelatorioContasPagarBling {
+  modo: 'previa' | 'aplicar';
+  gravado: boolean;
+  periodo: { dataInicial: string | null; dataFinal: string | null };
+  consultas: string[];
+  lidos: number;
+  detalhes: number;
+  criados: number;
+  atualizados: number;
+  vinculados: number;
+  preservados: number;
+  porSituacaoBling: LinhaSituacaoSync[];
+  porSituacaoMeuBling: LinhaSituacaoSync[];
+  faltantes: { blingId: string; valor: number; vencimento: string | null; fornecedor: string | null; situacaoBling: number; acao: 'criar' | 'ambiguo' }[];
+  sobrando: { id: number; blingId: string | null; descricao: string; valor: number; vencimento: string; situacao: string }[];
+  divergencias: { blingId: string; contaId: number; campo: 'valor' | 'saldo' | 'vencimento' | 'fornecedor' | 'situacao'; bling: string; local: string; preservado: boolean }[];
+  duplicatasProvaveis: { blingId: string; motivo: string; contasLocais: { id: number; descricao: string; blingId: string | null }[] }[];
+  erros: { blingId: string | null; motivo: string }[];
+  situacoesRegistradas: { blingId: string; situacaoBling: number; motivo: string }[];
+  portadoresSemConta: { blingId: string; portadorBlingId: string }[];
+  cadastrosMinimos: { tipo: 'fornecedor' | 'categoria' | 'forma'; blingId: string; nome: string; criado: boolean }[];
+  interrompido: null | { consulta: string; pagina: number; titulosLidos: number; motivo: string };
+  log: string[];
+}
+
+export interface BlingSyncContasStatus {
+  emAndamento: boolean;
+  modo: 'previa' | 'aplicar' | null;
+  relatorio: RelatorioContasPagarBling | null;
+  erro: string | null;
+  iniciadoEm: string | null;
+  finalizadoEm: string | null;
+  progresso: { fase: string; feitos: number; total: number | null } | null;
 }
 
 export interface OpenFinanceStatus {

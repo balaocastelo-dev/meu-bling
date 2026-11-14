@@ -29,7 +29,7 @@ import { OBS_FORA_DO_RESULTADO, OBS_AJUSTE_SALDO, OBS_TRANSFERENCIA } from '../c
 import { extratoConta } from './extrato.js';
 import { resolvedorDeOrigem, selectTituloReceber, selectTituloPagar, type OrigemLancamento } from './origem-lancamento.js';
 
-const SIT_FILTRO = ['ABERTO', 'RECEBIDO', 'PAGO', 'PARCIAL', 'CANCELADO', 'ATRASADO'] as const;
+const SIT_FILTRO = ['ABERTO', 'RECEBIDO', 'PAGO', 'PARCIAL', 'CANCELADO', 'ATRASADO', 'DEVOLVIDO', 'NAO_MAPEADA'] as const;
 
 const listaSchema = paginacaoSchema.extend({
   situacao: z.enum(SIT_FILTRO).optional(),
@@ -256,7 +256,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     if (q.situacao === 'RECEBIDO') whereSit.situacao = 'PAGO';
     // ordem pedida pelo Thiago (26/10/2026): vencidas primeiro, depois a vencer, pagas por último
     // (canceladas no fim de tudo); dentro de cada grupo, por vencimento
-    const grupo = (c: { situacao: string; vencimento: Date }) => (c.situacao === 'CANCELADO' ? 3 : c.situacao === 'PAGO' ? 2 : c.vencimento < hoje ? 0 : 1);
+    const grupo = (c: { situacao: string; vencimento: Date }) => (c.situacao === 'CANCELADO' || c.situacao === 'DEVOLVIDO' || c.situacao === 'NAO_MAPEADA' ? 3 : c.situacao === 'PAGO' ? 2 : c.vencimento < hoje ? 0 : 1);
     const pagina = paginar(q) as { skip?: number; take?: number };
     const idsPagina = async () => {
       const todos = await prisma.contaPagar.findMany({ where: whereSit, select: { id: true, situacao: true, vencimento: true } });

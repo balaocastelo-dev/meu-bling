@@ -163,6 +163,8 @@ export const ROTULOS: Record<string, string> = {
   PAGO: 'Pago',
   PARCIAL: 'Parcial',
   CANCELADO: 'Cancelado',
+  DEVOLVIDO: 'Devolvido',
+  NAO_MAPEADA: 'Bling 6/7',
   ATRASADO: 'Atrasado',
   PENDENTE: 'Pendente',
   APROVADA: 'Aprovada',

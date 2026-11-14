@@ -17,7 +17,8 @@
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
     "test": "tsx testes/rodar.ts",
-    "test:rapido": "tsx testes/rodar.ts --rapido"
+    "test:rapido": "tsx testes/rodar.ts --rapido",
+    "test:contas-pagar": "tsx testes/sincronizar-contas-pagar.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
