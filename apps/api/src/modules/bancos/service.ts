@@ -6,13 +6,18 @@ import { prisma, type Tx } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { arredondar } from '../../lib/util.js';
 import { obterProvedor, type TransacaoOpenFinance } from '../../integracoes/openfinance/index.js';
-import { baixarContaReceber, baixarContaPagar, criarMovimentoAvulso, saldoContaPagar } from '../financeiro/service.js';
+import { baixarContaReceber, baixarContaPagar, criarMovimentoAvulso, saldoContaPagar, saldoContaReceber } from '../financeiro/service.js';
 
 export interface Sugestao {
   tipo: 'RECEBER' | 'PAGAR';
   id: number;
   descricao: string;
+  /** Valor que a conciliação vai baixar. Na quitação é o saldo do título; no parcial, o valor do extrato. */
   valor: number;
+  /** Saldo do título no momento da sugestão. */
+  saldo: number;
+  /** true quando o extrato é menor que o saldo (fora da tolerância de 1%) e a baixa será parcial. */
+  parcial: boolean;
   vencimento: Date;
   contato?: string | null;
   score: number;
@@ -89,41 +94,82 @@ export async function sincronizarTodas() {
   return resultados;
 }
 
+const PALAVRAS_GENERICAS = new Set(['conta', 'contas', 'pagar', 'receber', 'venda', 'compra', 'parcela', 'boleto', 'pagamento', 'recebimento', 'pix', 'ted', 'doc', 'transferencia']);
+
+function semAcento(s: string) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+/** O extrato cita o contato ou a descrição do título (palavra com 4+ letras, fora do vocabulário genérico). */
+function textoCasa(memo: string | null | undefined, descricao: string, contato?: string | null) {
+  if (!memo?.trim()) return false;
+  const m = semAcento(memo);
+  const tokens = [...semAcento(descricao).split(/[^a-z0-9]+/), ...semAcento(contato || '').split(/[^a-z0-9]+/)];
+  return tokens.some((p) => p.length >= 4 && !PALAVRAS_GENERICAS.has(p) && m.includes(p));
+}
+
 /**
- * Sugestões de conciliação: contas em aberto com valor igual (1.0) ou ±1% (0.8),
- * +0.1 se vencimento dentro de ±7 dias da transação. Máximo 5.
+ * Sugestões de conciliação.
+ * Quitação: saldo igual (1.0) ou dentro de 1% (0.8), +0.1 se o vencimento está a ±7 dias.
+ * Parcial: o débito/crédito é menor que o saldo (fora dessa tolerância) e o título casa
+ * pelo texto ou vence em até 15 dias — score abaixo de 1, para não baixar sozinho.
+ * Máximo 5.
  */
-export async function sugerirConciliacao(t: { valor: number; data: Date; tipo: string }): Promise<Sugestao[]> {
+export async function sugerirConciliacao(t: { valor: number; data: Date; tipo: string; descricao?: string | null }): Promise<Sugestao[]> {
   const alvo = Math.abs(t.valor);
+  if (alvo < 0.01) return [];
   const min = alvo * 0.99 - 0.01;
   const max = alvo * 1.01 + 0.01;
-  const out: Sugestao[] = [];
   const dentroVenc = (v: Date) => Math.abs(v.getTime() - t.data.getTime()) <= 7 * 86400000;
-  if (t.valor >= 0) {
-    const contas = await prisma.contaReceber.findMany({
-      where: { situacao: { in: ['ABERTO', 'PARCIAL'] }, valor: { gte: min * 0.5, lte: max * 2 } },
-      include: { contato: { select: { nome: true } } },
-      take: 200,
+  const perto = (v: Date) => Math.abs(v.getTime() - t.data.getTime()) <= 15 * 86400000;
+  const situacao = { in: ['ABERTO', 'PARCIAL'] as string[] };
+  const include = { contato: { select: { nome: true } } } as const;
+  const janela = { gte: subDays(t.data, 120), lte: addDays(t.data, 60) };
+  const out: Sugestao[] = [];
+
+  const avaliar = (resto: number, id: number, descricao: string, vencimento: Date, contato: string | null | undefined, tipo: 'RECEBER' | 'PAGAR') => {
+    if (resto < 0.01) return;
+    const quitacao = resto >= min && resto <= max;
+    const parcial = resto > max;
+    if (!quitacao && !parcial) return;
+    if (parcial && !textoCasa(t.descricao, descricao, contato) && !perto(vencimento)) return;
+    let score = quitacao ? (Math.abs(resto - alvo) < 0.005 ? 1.0 : 0.8) : 0.45;
+    if (!quitacao && textoCasa(t.descricao, descricao, contato)) score += 0.25;
+    if (dentroVenc(vencimento)) score += 0.1;
+    out.push({
+      tipo,
+      id,
+      descricao,
+      valor: quitacao ? resto : arredondar(alvo),
+      saldo: resto,
+      parcial: !quitacao,
+      vencimento,
+      contato,
+      score: arredondar(score, 2),
     });
-    for (const c of contas) {
-      const resto = arredondar(c.valor - c.valorRecebido - c.desconto);
-      if (resto < min || resto > max) continue;
-      let score = Math.abs(resto - alvo) < 0.005 ? 1.0 : 0.8;
-      if (dentroVenc(c.vencimento)) score += 0.1;
-      out.push({ tipo: 'RECEBER', id: c.id, descricao: c.descricao, valor: resto, vencimento: c.vencimento, contato: c.contato?.nome, score: arredondar(score, 2) });
+  };
+
+  if (t.valor >= 0) {
+    const [porValor, porData] = await Promise.all([
+      prisma.contaReceber.findMany({ where: { situacao, valor: { gte: min * 0.5, lte: max * 2 } }, include, take: 200 }),
+      prisma.contaReceber.findMany({ where: { situacao, vencimento: janela, valor: { gte: alvo * 0.5 } }, include, take: 200 }),
+    ]);
+    const vistos = new Set<number>();
+    for (const c of [...porValor, ...porData]) {
+      if (vistos.has(c.id)) continue;
+      vistos.add(c.id);
+      avaliar(saldoContaReceber(c), c.id, c.descricao, c.vencimento, c.contato?.nome, 'RECEBER');
     }
   } else {
-    const contas = await prisma.contaPagar.findMany({
-      where: { situacao: { in: ['ABERTO', 'PARCIAL'] }, valor: { gte: min * 0.5, lte: max * 2 } },
-      include: { contato: { select: { nome: true } } },
-      take: 200,
-    });
-    for (const c of contas) {
-      const resto = saldoContaPagar(c);
-      if (resto < min || resto > max) continue;
-      let score = Math.abs(resto - alvo) < 0.005 ? 1.0 : 0.8;
-      if (dentroVenc(c.vencimento)) score += 0.1;
-      out.push({ tipo: 'PAGAR', id: c.id, descricao: c.descricao, valor: resto, vencimento: c.vencimento, contato: c.contato?.nome, score: arredondar(score, 2) });
+    const [porValor, porData] = await Promise.all([
+      prisma.contaPagar.findMany({ where: { situacao, valor: { gte: min * 0.5, lte: max * 2 } }, include, take: 200 }),
+      prisma.contaPagar.findMany({ where: { situacao, vencimento: janela, valor: { gte: alvo * 0.5 } }, include, take: 200 }),
+    ]);
+    const vistos = new Set<number>();
+    for (const c of [...porValor, ...porData]) {
+      if (vistos.has(c.id)) continue;
+      vistos.add(c.id);
+      avaliar(saldoContaPagar(c), c.id, c.descricao, c.vencimento, c.contato?.nome, 'PAGAR');
     }
   }
   return out.sort((a, b) => b.score - a.score || Math.abs(a.vencimento.getTime() - t.data.getTime()) - Math.abs(b.vencimento.getTime() - t.data.getTime())).slice(0, 5);
@@ -144,7 +190,7 @@ export async function conciliar(
       if (t.valor < 0) throw new AppError('Transação de débito não pode baixar conta a receber.', 422, 'TIPO_INCOMPATIVEL');
       const conta = await tx.contaReceber.findUnique({ where: { id: p.id } });
       if (!conta) throw new NotFound('Conta a receber');
-      const resto = arredondar(conta.valor - conta.valorRecebido - conta.desconto);
+      const resto = saldoContaReceber(conta);
       // diferença pequena (até 1%) vira juros (a mais) ou desconto (a menos)
       const dif = arredondar(valor - resto);
       const r = await baixarContaReceber(

@@ -885,6 +885,8 @@ export interface ContaBase {
   atrasada?: boolean;
   /** saldo em aberto calculado pela API (valor + juros - pago - desconto) */
   saldo?: number;
+  /** importada do Bling sem movimento e com valor pago ≈ valor: o saldo real não veio */
+  saldoNaoInformado?: boolean;
   /** pagamentos/recebimentos (baixas) — só no detalhe */
   lancamentos?: MovimentoFinanceiro[];
 }
@@ -954,7 +956,7 @@ export interface TransacaoBancaria {
   categoriaSugerida?: string | null;
   conciliado: boolean;
   fonte: string;
-  sugestoes?: { tipo: 'RECEBER' | 'PAGAR'; id: number; descricao: string; valor: number; vencimento: string; score: number }[];
+  sugestoes?: { tipo: 'RECEBER' | 'PAGAR'; id: number; descricao: string; valor: number; saldo?: number; parcial?: boolean; vencimento: string; score: number }[];
 }
 
 export interface ComissoesResposta extends Paginado<Comissao> {

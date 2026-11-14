@@ -15,9 +15,14 @@ import {
   estornarContaReceber,
   estornarContaPagar,
   estornarPagamentoContaPagar,
+  estornarRecebimentoContaReceber,
   saldoContaPagar,
   saldoContaReceber,
   alterarContaPagar,
+  idsContaPagarSaldoNaoInformado,
+  listarContasPagarImportadasSemSaldo,
+  informarRestanteContaPagar,
+  ehContaPagarImportadaSemSaldo,
   criarMovimentoAvulso,
   transferirEntreContas,
   ajustarSaldoConta,
@@ -102,6 +107,9 @@ function filtroBase(q: z.infer<typeof listaSchema>, modulo: 'receber' | 'pagar')
   if (q.situacao === 'ATRASADO') {
     whereSit.situacao = { in: ['ABERTO', 'PARCIAL'] };
     whereSit.vencimento = { ...(whereSit.vencimento || {}), lt: hoje };
+  } else if (q.situacao === 'ABERTO') {
+    // "Em aberto" na tela inclui quem já teve baixa parcial, para o título não sumir da lista
+    whereSit.situacao = { in: ['ABERTO', 'PARCIAL'] };
   } else if (q.situacao) {
     whereSit.situacao = q.situacao;
   }
@@ -138,11 +146,11 @@ export default async function financeiroRoutes(app: FastifyInstance) {
         orderBy: [{ vencimento: 'asc' }, { id: 'asc' }],
         ...paginar(q),
       }),
-      prisma.contaReceber.findMany({ where: { ...where, situacao: { in: ['ABERTO', 'PARCIAL'] } }, select: { valor: true, valorRecebido: true, desconto: true, vencimento: true } }),
+      prisma.contaReceber.findMany({ where: { ...where, situacao: { in: ['ABERTO', 'PARCIAL'] } }, select: { valor: true, valorRecebido: true, juros: true, desconto: true, vencimento: true } }),
       prisma.contaReceber.aggregate({ where: { ...where, situacao: { in: ['RECEBIDO', 'PARCIAL'] } }, _sum: { valorRecebido: true } }),
     ]);
     const origem = await mapaOrigens(itens);
-    const rest = (c: { valor: number; valorRecebido: number; desconto: number }) => Math.max(0, c.valor - c.valorRecebido - c.desconto);
+    const rest = saldoContaReceber;
     return {
       ...respostaPaginada(
         itens.map((c) => ({ ...c, atrasada: ['ABERTO', 'PARCIAL'].includes(c.situacao) && c.vencimento < hoje, saldo: arredondar(rest(c)), origem: origem(c) })),
@@ -165,7 +173,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     });
     if (!c) throw new NotFound('Conta a receber');
     const origem = await mapaOrigens([c]);
-    return { ...c, atrasada: ['ABERTO', 'PARCIAL'].includes(c.situacao) && c.vencimento < startOfDay(new Date()), origem: origem(c) };
+    return { ...c, saldo: saldoContaReceber(c), atrasada: ['ABERTO', 'PARCIAL'].includes(c.situacao) && c.vencimento < startOfDay(new Date()), origem: origem(c) };
   });
 
   app.post('/api/v1/contas-receber', { preHandler: fin }, async (req, reply) => {
@@ -226,7 +234,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     const b = baixaSchema.parse(req.body);
     const atual = await prisma.contaReceber.findUnique({ where: { id } });
     if (!atual) throw new NotFound('Conta a receber');
-    const valor = b.valor ?? arredondar(atual.valor - atual.valorRecebido - atual.desconto - b.desconto + b.juros);
+    const valor = b.valor ?? arredondar(saldoContaReceber(atual) - b.desconto + b.juros);
     const r = await baixarContaReceber({
       id,
       valor,
@@ -245,6 +253,15 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     const id = Number((req.params as any).id);
     const r = await estornarContaReceber(id);
     await auditar(req, 'ContaReceber', id, 'ACAO', { acao: 'estornar', movimentos: r.movimentosEstornados });
+    return r;
+  });
+
+  /** Estorna só um recebimento (ex.: uma das baixas parciais), mantendo os demais. */
+  app.post('/api/v1/contas-receber/:id/pagamentos/:movimentoId/estornar', { preHandler: fin }, async (req) => {
+    const id = Number((req.params as any).id);
+    const movimentoId = Number((req.params as any).movimentoId);
+    const r = await estornarRecebimentoContaReceber(id, movimentoId);
+    await auditar(req, 'ContaReceber', id, 'ACAO', { acao: 'estornar_recebimento', movimentoId, valor: r.movimentoEstornado.valor, descricao: r.conta.descricao });
     return r;
   });
 
@@ -277,9 +294,10 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     ]);
     const origem = await mapaOrigens(itens);
     const rest = saldoContaPagar;
+    const semSaldo = await idsContaPagarSaldoNaoInformado(itens);
     return {
       ...respostaPaginada(
-        itens.map((c) => ({ ...c, atrasada: ['ABERTO', 'PARCIAL'].includes(c.situacao) && c.vencimento < hoje, saldo: arredondar(rest(c)), origem: origem(c) })),
+        itens.map((c) => ({ ...c, atrasada: ['ABERTO', 'PARCIAL'].includes(c.situacao) && c.vencimento < hoje, saldo: arredondar(rest(c)), saldoNaoInformado: semSaldo.has(c.id), origem: origem(c) })),
         total,
         q,
       ),
@@ -291,6 +309,16 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     };
   });
 
+  /**
+   * Conferência das contas a pagar importadas do Bling sem saldo
+   * (PARCIAL/PAGO, blingId, valor pago ≈ valor, nenhum movimento).
+   * Só lista: não inventa quanto falta.
+   */
+  app.get('/api/v1/contas-pagar/conferencia', { preHandler: fin }, async () => {
+    const contas = await listarContasPagarImportadasSemSaldo();
+    return { total: contas.length, contas };
+  });
+
   app.get('/api/v1/contas-pagar/:id', { preHandler: fin }, async (req) => {
     const id = Number((req.params as any).id);
     const c = await prisma.contaPagar.findUnique({
@@ -299,7 +327,8 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     });
     if (!c) throw new NotFound('Conta a pagar');
     const origem = await mapaOrigens([c]);
-    return { ...c, saldo: saldoContaPagar(c), atrasada: ['ABERTO', 'PARCIAL'].includes(c.situacao) && c.vencimento < startOfDay(new Date()), origem: origem(c) };
+    const saldoNaoInformado = ehContaPagarImportadaSemSaldo({ ...c, movimentos: c.lancamentos.length });
+    return { ...c, saldo: saldoContaPagar(c), saldoNaoInformado, atrasada: ['ABERTO', 'PARCIAL'].includes(c.situacao) && c.vencimento < startOfDay(new Date()), origem: origem(c) };
   });
 
   app.post('/api/v1/contas-pagar', { preHandler: fin }, async (req, reply) => {
@@ -384,6 +413,15 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     const id = Number((req.params as any).id);
     const r = await estornarContaPagar(id);
     await auditar(req, 'ContaPagar', id, 'ACAO', { acao: 'estornar', movimentos: r.movimentosEstornados });
+    return r;
+  });
+
+  /** A loja informa quanto ainda falta numa conta importada sem saldo. Libera as baixas seguintes. */
+  app.post('/api/v1/contas-pagar/:id/informar-restante', { preHandler: fin }, async (req) => {
+    const id = Number((req.params as any).id);
+    const b = z.object({ restante: z.number().min(0, 'Informe quanto ainda falta (zero se já está paga)') }).parse(req.body);
+    const r = await informarRestanteContaPagar(id, b.restante);
+    await auditar(req, 'ContaPagar', id, 'ACAO', { acao: 'informar_restante', restante: b.restante, valorPago: r.conta.valorPago, situacao: r.conta.situacao, descricao: r.conta.descricao });
     return r;
   });
 
@@ -515,14 +553,14 @@ export default async function financeiroRoutes(app: FastifyInstance) {
 
     // previsto: contas em aberto por vencimento dentro do período
     const [cr, cp] = await Promise.all([
-      prisma.contaReceber.findMany({ where: { situacao: { in: ['ABERTO', 'PARCIAL'] }, vencimento: { gte: ini, lte: fim } }, select: { vencimento: true, valor: true, valorRecebido: true, desconto: true } }),
+      prisma.contaReceber.findMany({ where: { situacao: { in: ['ABERTO', 'PARCIAL'] }, vencimento: { gte: ini, lte: fim } }, select: { vencimento: true, valor: true, valorRecebido: true, juros: true, desconto: true } }),
       prisma.contaPagar.findMany({ where: { situacao: { in: ['ABERTO', 'PARCIAL'] }, vencimento: { gte: ini, lte: fim } }, select: { vencimento: true, valor: true, valorPago: true, juros: true, desconto: true } }),
     ]);
     const prev = new Map(periodos.map((p) => [p, { periodo: p, receber: 0, pagar: 0 }]));
     for (const c of cr) {
       const k = chavePeriodo(c.vencimento, agrupar);
       const s = prev.get(k) || prev.set(k, { periodo: k, receber: 0, pagar: 0 }).get(k)!;
-      s.receber += Math.max(0, c.valor - c.valorRecebido - c.desconto);
+      s.receber += saldoContaReceber(c);
     }
     for (const c of cp) {
       const k = chavePeriodo(c.vencimento, agrupar);

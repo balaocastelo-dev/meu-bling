@@ -320,10 +320,16 @@ function Conciliacao({ contas }: { contas: ContaFinanceira[] }) {
                 {!t.conciliado && t.sugestoes && t.sugestoes.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {t.sugestoes.slice(0, 3).map((s) => (
-                      <button key={`${s.tipo}-${s.id}`} onClick={() => conciliar.mutate({ id: t.id, body: { tipo: s.tipo, id: s.id } })} className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs text-emerald-800 hover:bg-emerald-100" title={`Conciliar com ${s.tipo === 'RECEBER' ? 'conta a receber' : 'conta a pagar'} #${s.id}`}>
+                      <button key={`${s.tipo}-${s.id}`} onClick={() => conciliar.mutate({ id: t.id, body: { tipo: s.tipo, id: s.id } })} className={clsx('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs', s.parcial ? 'border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100' : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100')} title={s.parcial ? `${s.tipo === 'RECEBER' ? 'Receber' : 'Pagar'} ${moeda(s.valor)} de ${s.descricao} (saldo ${moeda(s.saldo ?? s.valor)})` : `Quitar ${s.descricao}`}>
                         <Link2 className="h-3 w-3" />
-                        <span className="max-w-[220px] truncate">{s.descricao}</span>
-                        <span className="num">{moeda(s.valor)}</span>
+                        {s.parcial ? (
+                          <span className="max-w-[320px] truncate">{s.tipo === 'RECEBER' ? 'Receber' : 'Pagar'} {moeda(s.valor)} desta conta · {s.descricao}</span>
+                        ) : (
+                          <>
+                            <span className="max-w-[220px] truncate">{s.descricao}</span>
+                            <span className="num">{moeda(s.valor)}</span>
+                          </>
+                        )}
                         <span className="text-[10px] opacity-70">{data(s.vencimento)} · {Math.round(s.score * (s.score <= 1 ? 100 : 1))}%</span>
                       </button>
                     ))}
