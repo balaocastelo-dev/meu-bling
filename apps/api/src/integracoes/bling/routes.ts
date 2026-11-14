@@ -9,6 +9,7 @@ import { auditar } from '../../lib/auditoria.js';
 import { randomToken } from '../../lib/crypto.js';
 import { blingStatus, trocarCodigo, urlAutorizacao, urlCallback, desconectarBling, blingGet, renovarToken } from './cliente.js';
 import { ENTIDADES, estadoImportacao, iniciarImportacao, importarCsv, type EntidadeBling } from './importador.js';
+import { estadoSincronizacaoContasPagar, iniciarSincronizacaoContasPagar, sincronizacaoContasPagarEmAndamento } from './contas-pagar.js';
 
 const states = new Map<string, number>(); // state OAuth → timestamp
 
@@ -79,6 +80,7 @@ export default async function blingRoutes(app: FastifyInstance) {
       })
       .parse(req.body);
     if (estadoImportacao().emAndamento) throw new AppError('Já existe uma importação em andamento.', 409, 'IMPORTACAO_EM_ANDAMENTO');
+    if (sincronizacaoContasPagarEmAndamento()) throw new AppError('A sincronização de contas a pagar está em andamento.', 409, 'SINCRONIZACAO_EM_ANDAMENTO');
     const opcoes = { detalhesProdutos: b.detalhesProdutos, dataFinal: b.dataFinal, fecharEmAberto: b.fecharEmAberto, baixarNoCaixa: b.baixarNoCaixa };
     const r = await iniciarImportacao(b.entidades, b.dataInicial, opcoes);
     await auditar(req, 'Empresa', 1, 'ACAO', { acao: 'bling.importar', entidades: b.entidades, dataInicial: b.dataInicial, ...opcoes });
@@ -86,6 +88,29 @@ export default async function blingRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/v1/bling/importar/status', { preHandler: cfg }, async () => estadoImportacao());
+
+  const periodo = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+  const syncSchema = z
+    .object({
+      modo: z.enum(['previa', 'aplicar']),
+      dataInicial: periodo.optional(),
+      dataFinal: periodo.optional(),
+    })
+    .refine((b) => (!b.dataInicial && !b.dataFinal) || (!!b.dataInicial && !!b.dataFinal), {
+      message: 'Informe as duas datas do período, ou deixe as duas em branco para varrer todas as situações.',
+    });
+
+  /** Prévia não grava. Aplicar usa a mesma sincronização e grava. Não lança pagamento antigo no caixa. */
+  app.post('/api/v1/bling/contas-pagar/sincronizar', { preHandler: cfg }, async (req, reply) => {
+    await exigirToken();
+    if (estadoImportacao().emAndamento) throw new AppError('Já existe uma importação em andamento.', 409, 'IMPORTACAO_EM_ANDAMENTO');
+    const b = syncSchema.parse(req.body);
+    const r = iniciarSincronizacaoContasPagar({ modo: b.modo, dataInicial: b.dataInicial, dataFinal: b.dataFinal });
+    await auditar(req, 'Empresa', 1, 'ACAO', { acao: 'bling.sincronizar-contas-pagar', modo: b.modo, dataInicial: b.dataInicial ?? null, dataFinal: b.dataFinal ?? null });
+    return reply.code(202).send({ emAndamento: true, modo: r.modo, iniciadoEm: r.iniciadoEm });
+  });
+
+  app.get('/api/v1/bling/contas-pagar/sincronizar/status', { preHandler: cfg }, async () => estadoSincronizacaoContasPagar());
 
   /** Importa CSV exportado do Bling (contatos ou produtos). */
   app.post('/api/v1/bling/importar-csv', { preHandler: cfg }, async (req) => {

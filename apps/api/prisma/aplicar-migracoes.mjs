@@ -34,6 +34,7 @@ const TELEFONE = '20261031140000_usuario_telefone';
 const JULIA = '20261110060000_julia_venda_assistencia';
 const GARANTIA = '20261110140000_garantia_escolhida';
 const SEM_JUROS = '20261113120000_link_parcelas_sem_juros';
+const CONTAS_PAGAR_BLING = '20261114133000_conta_pagar_sincronismo_bling';
 
 /** Colunas que a migração de transferência copia antes de trocar a tabela. */
 const COLUNAS_ANTIGAS = [
@@ -177,6 +178,7 @@ function lerEstado(DatabaseSync, arquivo) {
       julia: usuario && colunas(db, 'Usuario').includes('vendeTambem'),
       garantia: colunas(db, 'VendaItem').includes('garantiaMeses'),
       semJuros: !!(usuario && tabela(db, 'Venda') && colunas(db, 'Venda').includes('linkPagamentoSemJuros')),
+      contasPagarBling: tabela(db, 'ContaPagar') && colunas(db, 'ContaPagar').includes('situacaoBling') && colunas(db, 'ContaPagar').includes('sincronizadoEm'),
       formato: classificarLancamento(nomes),
       aplicadas,
       falhas,
@@ -203,6 +205,7 @@ function baseline(estado) {
   if (estado.julia) marcar.push(JULIA);
   if (estado.garantia) marcar.push(GARANTIA);
   if (estado.semJuros) marcar.push(SEM_JUROS);
+  if (estado.contasPagarBling) marcar.push(CONTAS_PAGAR_BLING);
   if (estado.formato === 'inesperado') {
     console.log('[banco] LancamentoAutomatico não está no formato da migração. Não vou recriar a tabela.');
   } else if (estado.formato === 'antigo') {

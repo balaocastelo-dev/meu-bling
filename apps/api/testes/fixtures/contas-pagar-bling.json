@@ -1,0 +1,221 @@
+{
+  "listagem": {
+    "1": [
+      { "id": 107, "situacao": 1, "valor": 150, "vencimento": "2026-03-15", "contato": { "id": 900, "nome": "Fornecedor Alfa" } },
+      { "id": 108, "situacao": 1, "valor": 70, "vencimento": "2026-03-20", "contato": { "id": 901, "nome": "Fornecedor Novo" }, "formaPagamento": { "id": 66, "descricao": "Boleto" } },
+      { "id": 109, "situacao": 1, "valor": 1000, "vencimento": "2026-02-05", "contato": { "id": 900, "nome": "Fornecedor Alfa" } },
+      { "id": 114, "situacao": 1, "valor": 25, "vencimento": "2026-06-01", "contato": { "id": 900, "nome": "Fornecedor Alfa" } },
+      { "id": 112, "situacao": 1, "valor": 40, "vencimento": "2026-04-01", "contato": { "id": 900, "nome": "Fornecedor Alfa" } },
+      { "id": 113, "situacao": 1, "valor": 8, "vencimento": "2026-04-02", "contato": { "id": 900, "nome": "Fornecedor Alfa" } }
+    ],
+    "2": [
+      { "id": 102, "situacao": 2, "valor": 50, "vencimento": "2026-02-10", "contato": { "id": 900, "nome": "Fornecedor Alfa" } },
+      { "id": 110, "situacao": 2, "valor": 90, "vencimento": "2026-01-15", "contato": { "id": 900, "nome": "Fornecedor Alfa" } },
+      { "id": 111, "situacao": 2, "valor": 18, "vencimento": "2026-01-20", "contato": { "id": 900, "nome": "Fornecedor Alfa" } }
+    ],
+    "3": [
+      { "id": 101, "situacao": 3, "valor": 200, "vencimento": "2026-01-20", "contato": { "id": 900, "nome": "Fornecedor Alfa" } }
+    ],
+    "4": [
+      { "id": 103, "situacao": 4, "valor": 30, "vencimento": "2026-01-25", "contato": { "id": 900, "nome": "Fornecedor Alfa" } }
+    ],
+    "5": [
+      { "id": 104, "situacao": 5, "valor": 15, "vencimento": "2026-01-26", "contato": { "id": 900, "nome": "Fornecedor Alfa" } }
+    ],
+    "6": [
+      { "id": 105, "situacao": 6, "valor": 10, "vencimento": "2026-01-27", "contato": { "id": 900, "nome": "Fornecedor Alfa" } }
+    ],
+    "7": [
+      { "id": 106, "situacao": 7, "valor": 12, "vencimento": "2026-01-28", "contato": { "id": 900, "nome": "Fornecedor Alfa" } }
+    ]
+  },
+  "detalhes": {
+    "101": {
+      "id": 101,
+      "situacao": 3,
+      "valor": 200,
+      "saldo": 80,
+      "vencimento": "2026-01-20",
+      "dataEmissao": "2026-01-02",
+      "competencia": "2026-01",
+      "historico": "Peças parciais",
+      "numeroDocumento": "NF-101",
+      "contato": { "id": 900 },
+      "formaPagamento": { "id": 66, "descricao": "Boleto" },
+      "categoria": { "id": 55, "descricao": "Peças e acessórios" },
+      "portador": { "id": 77 },
+      "ocorrencia": { "tipo": 1 }
+    },
+    "102": {
+      "id": 102,
+      "situacao": 2,
+      "valor": 50,
+      "saldo": 0,
+      "vencimento": "2026-02-10",
+      "dataEmissao": "2026-02-01",
+      "dataPagamento": "2026-02-02",
+      "competencia": "2026-02",
+      "historico": "Internet",
+      "contato": { "id": 900 },
+      "ocorrencia": { "tipo": 1 }
+    },
+    "103": {
+      "id": 103,
+      "situacao": 4,
+      "valor": 30,
+      "saldo": 30,
+      "vencimento": "2026-01-25",
+      "dataEmissao": "2026-01-10",
+      "competencia": "2026-01",
+      "historico": "Devolução de compra",
+      "contato": { "id": 900 },
+      "ocorrencia": { "tipo": 1 }
+    },
+    "104": {
+      "id": 104,
+      "situacao": 5,
+      "valor": 15,
+      "saldo": 15,
+      "vencimento": "2026-01-26",
+      "dataEmissao": "2026-01-11",
+      "competencia": "2026-01",
+      "historico": "Título cancelado",
+      "contato": { "id": 900 },
+      "ocorrencia": { "tipo": 1 }
+    },
+    "105": {
+      "id": 105,
+      "situacao": 6,
+      "valor": 10,
+      "saldo": 10,
+      "vencimento": "2026-01-27",
+      "dataEmissao": "2026-01-12",
+      "competencia": "2026-01",
+      "historico": "Situação seis",
+      "contato": { "id": 900 },
+      "ocorrencia": { "tipo": 1 }
+    },
+    "106": {
+      "id": 106,
+      "situacao": 7,
+      "valor": 12,
+      "saldo": 4,
+      "vencimento": "2026-01-28",
+      "dataEmissao": "2026-01-13",
+      "competencia": "2026-01",
+      "historico": "Situação sete",
+      "contato": { "id": 900 },
+      "ocorrencia": { "tipo": 1 }
+    },
+    "107": {
+      "id": 107,
+      "situacao": 1,
+      "valor": 150,
+      "saldo": 150,
+      "vencimento": "2026-03-15",
+      "dataEmissao": "2026-03-01",
+      "competencia": "2026-03",
+      "historico": "Compra de monitores",
+      "numeroDocumento": "NF-107",
+      "contato": { "id": 900 },
+      "ocorrencia": { "tipo": 1 }
+    },
+    "108": {
+      "id": 108,
+      "situacao": 1,
+      "valor": 70,
+      "saldo": 70,
+      "vencimento": "2026-03-20",
+      "dataEmissao": "2026-03-02",
+      "competencia": "2026-03",
+      "historico": "Peças",
+      "contato": { "id": 901 },
+      "formaPagamento": { "id": 66, "descricao": "Boleto" },
+      "categoria": { "id": 55, "descricao": "Peças e acessórios" },
+      "portador": { "id": 77 },
+      "ocorrencia": { "tipo": 1 }
+    },
+    "109": {
+      "id": 109,
+      "situacao": 1,
+      "valor": 1000,
+      "saldo": 1000,
+      "vencimento": "2026-02-05",
+      "dataEmissao": "2026-02-01",
+      "competencia": "2026-02",
+      "historico": "Aluguel da loja",
+      "numeroDocumento": "NF-9",
+      "contato": { "id": 900 },
+      "portador": { "id": 78 },
+      "ocorrencia": { "tipo": 3, "diaVencimento": 5 }
+    },
+    "110": {
+      "id": 110,
+      "situacao": 2,
+      "valor": 90,
+      "saldo": 0,
+      "vencimento": "2026-01-15",
+      "dataEmissao": "2026-01-05",
+      "dataPagamento": "2026-01-05",
+      "competencia": "2026-01",
+      "historico": "Energia",
+      "contato": { "id": 900 },
+      "ocorrencia": { "tipo": 1 }
+    },
+    "112": {
+      "id": 112,
+      "situacao": 1,
+      "valor": 40,
+      "saldo": 40,
+      "vencimento": "2026-04-01",
+      "dataEmissao": "2026-03-20",
+      "competencia": "2026-03",
+      "historico": "Compra ambígua",
+      "contato": { "id": 900 },
+      "ocorrencia": { "tipo": 1 }
+    },
+    "113": {
+      "id": 113,
+      "situacao": 1,
+      "valor": 8,
+      "vencimento": "2026-04-02",
+      "dataEmissao": "2026-03-21",
+      "historico": "Sem saldo no detalhe",
+      "contato": { "id": 900 },
+      "ocorrencia": { "tipo": 1 }
+    },
+    "114": {
+      "id": 114,
+      "situacao": 1,
+      "valor": 25,
+      "saldo": 25,
+      "vencimento": "2026-06-01",
+      "dataEmissao": "2026-05-01",
+      "competencia": "2026-05",
+      "historico": "Material",
+      "contato": { "id": 900 },
+      "ocorrencia": { "tipo": 1 }
+    },
+    "201": { "id": 201, "situacao": 1, "valor": 10, "saldo": 10, "vencimento": "2020-01-10", "dataEmissao": "2020-01-05", "historico": "Janela emissão", "contato": { "id": 1, "nome": "Antigo" }, "ocorrencia": { "tipo": 1 } },
+    "202": { "id": 202, "situacao": 2, "valor": 20, "saldo": 0, "vencimento": "2020-01-12", "dataEmissao": "2020-01-06", "dataPagamento": "2020-01-12", "historico": "Nas três janelas", "contato": { "id": 1, "nome": "Antigo" }, "ocorrencia": { "tipo": 1 } },
+    "203": { "id": 203, "situacao": 1, "valor": 30, "saldo": 30, "vencimento": "2020-01-15", "dataEmissao": "2019-12-01", "historico": "Janela vencimento", "contato": { "id": 1, "nome": "Antigo" }, "ocorrencia": { "tipo": 1 } },
+    "204": { "id": 204, "situacao": 2, "valor": 40, "saldo": 0, "vencimento": "2019-12-20", "dataEmissao": "2019-12-01", "dataPagamento": "2020-01-18", "historico": "Janela pagamento", "contato": { "id": 1, "nome": "Antigo" }, "ocorrencia": { "tipo": 1 } }
+  },
+  "periodo": {
+    "emissao": [
+      { "id": 201, "situacao": 1, "valor": 10, "vencimento": "2020-01-10", "contato": { "id": 1, "nome": "Antigo" } },
+      { "id": 202, "situacao": 2, "valor": 20, "vencimento": "2020-01-12", "contato": { "id": 1, "nome": "Antigo" } }
+    ],
+    "vencimento": [
+      { "id": 202, "situacao": 2, "valor": 20, "vencimento": "2020-01-12", "contato": { "id": 1, "nome": "Antigo" } },
+      { "id": 203, "situacao": 1, "valor": 30, "vencimento": "2020-01-15", "contato": { "id": 1, "nome": "Antigo" } }
+    ],
+    "pagamento": [
+      { "id": 204, "situacao": 2, "valor": 40, "vencimento": "2019-12-20", "contato": { "id": 1, "nome": "Antigo" } }
+    ]
+  },
+  "paginaRepetida": [
+    { "id": 301, "situacao": 1, "valor": 3, "vencimento": "2020-02-01", "contato": { "id": 1, "nome": "Antigo" } },
+    { "id": 302, "situacao": 1, "valor": 4, "vencimento": "2020-02-02", "contato": { "id": 1, "nome": "Antigo" } }
+  ]
+}

@@ -97,6 +97,7 @@ async function main() {
     rodar('Regras de vendas, painel, metas e desafios', NPX, ['tsx', 'testes/regras-vendas.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Baixa parcial de contas a pagar (pagar em partes, histórico, estorno de um pagamento)', NPX, ['tsx', 'testes/baixa-parcial.ts', base]);
     rodar('Edição de conta a pagar: aberto, parcial (sobe, desce, desce demais) e pago', NPX, ['tsx', 'testes/editar-conta-pagar.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
+    rodar('Contas a pagar do Bling: sincroniza pelo detalhe (JSON fixo, sem API real e sem banco de produção)', NPX, ['tsx', 'testes/sincronizar-contas-pagar.ts'], { env: { TZ: 'America/Sao_Paulo', TRILHA_AUDITORIA: 'off' } });
     rodar('OS: custos internos (peça, logística, terceiros) fora da impressão + dashboard de assistência', NPX, ['tsx', 'testes/os-custos.ts', base]);
     rodar('Garantia escolhida (3/6/12) no certificado + apagar venda pelo ADMIN', NPX, ['tsx', 'testes/garantia-e-excluir-venda.ts', base]);
     rodar('Correções da Júlia: endereço no cadastro, CNPJ, 3x no cartão em 1 linha, envio na hora, só técnico, fila sem custo, IE travada', NPX, ['tsx', 'testes/julia-venda-assistencia.ts', base]);

@@ -795,6 +795,8 @@ async function importarCompras(r: { importados: number; atualizados: number; err
 
 // ---------------------------------------------------------------------
 // Contas a receber / pagar
+// A importação geral continua aqui (filtra só a emissão e não lê o detalhe).
+// Contas a pagar com saldo, devolvido e prévia: sincronizarContasPagar em contas-pagar.ts.
 // ---------------------------------------------------------------------
 const SIT_CONTA: Record<number, string> = { 1: 'ABERTO', 2: 'RECEBIDO', 3: 'PARCIAL', 4: 'CANCELADO', 5: 'CANCELADO' };
 
