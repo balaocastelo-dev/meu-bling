@@ -96,7 +96,7 @@ export default function ProdutoDetalhe() {
                     {p.prontaEntrega ? 'Pronta entrega: está na loja.' : `${p.disponibilidade || 'Disponível'}: sai do distribuidor${p.fornecedor ? ` (${p.fornecedor})` : ''}.`}
                   </p>
                   <p className="text-xs text-slate-400">
-                    Nome, foto, preços e disponibilidade são atualizados pelo site{p.siteSincronizadoEm ? ` (última vez ${dataHora(p.siteSincronizadoEm)})` : ''}. Para mudar, mude no site. Fiscal e estoque são daqui.
+                    Foto, preços e disponibilidade vêm do site{p.siteSincronizadoEm ? ` (última vez ${dataHora(p.siteSincronizadoEm)})` : ''}. Nome e marca, depois que o produto entra, ficam os do sistema. Fiscal e estoque também.
                   </p>
                   <a href={`https://www.balao.info/product/${p.siteSlug || p.siteId}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
                     Ver no site <ExternalLink className="h-3 w-3" />

@@ -8,8 +8,13 @@
  * (`/api/crm/catalogo`), e não o MySQL da Hostinger: o banco do site tem cota
  * de conexões por hora e a sincronização não pode derrubar a loja.
  *
- * O que vem do site (e é sobrescrito a cada volta): nome, preço à vista (Pix),
- * preço no cartão, custo, foto, marca, categoria, fornecedor e disponibilidade.
+ * Nome e marca entram só na criação do produto. Quem já está no ERP pode ter
+ * sido ajustado à mão (ex.: "KABUM" → "BALAO.INFO" no nome, ou a marca
+ * "KABUM! essentials" → "BALAO.INFO") e a volta seguinte não desfaz isso.
+ * O que o site sobrescreve a cada volta, no produto novo e no que já existe:
+ * preço à vista (Pix), preço no cartão, custo, foto, categoria, fornecedor
+ * e disponibilidade. O vínculo de fornecedor (em geral KaBuM!) continua
+ * vindo do catálogo, como antes.
  * O que é do sistema e nunca é tocado: dados fiscais (NCM, CSOSN, CFOP…),
  * controle de estoque, saldos, mínimo e garantia.
  *
@@ -198,7 +203,7 @@ async function executar(opcoes: { produtos?: ProdutoDoSite[] }): Promise<Resulta
   const existentes = await prisma.produto.findMany({
     where: { OR: [{ siteId: { not: null } }, { codigo: { startsWith: PREFIXO_CODIGO } }] },
     select: {
-      id: true, siteId: true, codigo: true, nome: true, preco: true, precoCartao: true, precoCusto: true, imagemUrl: true, marca: true,
+      id: true, siteId: true, codigo: true, preco: true, precoCartao: true, precoCusto: true, imagemUrl: true,
       siteSlug: true, disponibilidade: true, prontaEntrega: true, fornecedor: true, categoriaId: true, ativo: true,
     },
   });
@@ -254,13 +259,13 @@ async function executar(opcoes: { produtos?: ProdutoDoSite[] }): Promise<Resulta
     } catch {
       categoriaId = null;
     }
-    const dados = {
+    // nome e marca só entram no produto que nasce. No que já existe, a loja pode
+    // ter trocado à mão e a volta do site não devolve o texto antigo.
+    const atualizacao = {
       siteId,
-      nome: c.nome,
       preco: c.preco,
       precoCartao: c.precoCartao,
       imagemUrl: c.imagemUrl,
-      marca: c.marca,
       siteSlug: c.siteSlug,
       disponibilidade: c.disponibilidade,
       prontaEntrega: c.prontaEntrega,
@@ -269,21 +274,20 @@ async function executar(opcoes: { produtos?: ProdutoDoSite[] }): Promise<Resulta
       ativo: true,
       ...(c.custo > 0 ? { precoCusto: c.custo } : {}),
     };
+    const dados = { ...atualizacao, nome: c.nome, marca: c.marca };
     const atual = porSiteId.get(siteId) ?? porCodigo.get(codigoDoSite(siteId));
     if (atual) {
       vistos.add(atual.id);
       const mudou =
         atual.siteId !== siteId ||
-        atual.nome !== dados.nome ||
-        atual.preco !== dados.preco ||
-        (atual.precoCartao ?? null) !== dados.precoCartao ||
+        atual.preco !== atualizacao.preco ||
+        (atual.precoCartao ?? null) !== atualizacao.precoCartao ||
         (c.custo > 0 && atual.precoCusto !== c.custo) ||
-        (atual.imagemUrl ?? null) !== dados.imagemUrl ||
-        (atual.marca ?? null) !== dados.marca ||
-        (atual.siteSlug ?? null) !== dados.siteSlug ||
-        (atual.disponibilidade ?? null) !== dados.disponibilidade ||
-        atual.prontaEntrega !== dados.prontaEntrega ||
-        (atual.fornecedor ?? null) !== dados.fornecedor ||
+        (atual.imagemUrl ?? null) !== atualizacao.imagemUrl ||
+        (atual.siteSlug ?? null) !== atualizacao.siteSlug ||
+        (atual.disponibilidade ?? null) !== atualizacao.disponibilidade ||
+        atual.prontaEntrega !== atualizacao.prontaEntrega ||
+        (atual.fornecedor ?? null) !== atualizacao.fornecedor ||
         (atual.categoriaId ?? null) !== categoriaId ||
         !atual.ativo;
       if (!mudou) {
@@ -291,7 +295,7 @@ async function executar(opcoes: { produtos?: ProdutoDoSite[] }): Promise<Resulta
         continue;
       }
       if (!atual.ativo) r.reativados++;
-      lote.push({ siteId, tipo: 'atualizar', id: atual.id, data: { ...dados, siteSincronizadoEm: inicio } });
+      lote.push({ siteId, tipo: 'atualizar', id: atual.id, data: { ...atualizacao, siteSincronizadoEm: inicio } });
     } else {
       // todo produto com código SITE-… já está em `existentes`: o código está livre
       lote.push({ siteId, tipo: 'criar', data: { ...dados, tipo: 'P', unidade: 'UN', codigo: codigoDoSite(siteId), siteSincronizadoEm: inicio } });

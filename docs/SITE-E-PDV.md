@@ -9,9 +9,14 @@ site (`www.balao.info/pdv`) manda as vendas para o /sistema**, não mais para o 
   variável `SITE_CATALOGO_URL`). Não toca o MySQL do site (cota de conexões por hora).
 - Serviço `catalogo-do-site` (`apps/api/src/modules/site/catalogo.ts`): 1 min depois de subir e a cada 30 min.
   Botão **Sincronizar agora** em Produtos (ADMIN/GERENTE). `SITE_SINCRONIZAR=0` desliga.
-- Vem do site (sobrescrito a cada volta): nome, preço à vista (Pix) → `preco`, preço no cartão → `precoCartao`, custo,
-  foto (`imagemUrl`), marca, categoria (caminho "A/B" vira categoria e subcategoria), fornecedor, disponibilidade.
-  `Pronta entrega` no site → `prontaEntrega = true` (selo verde nas telas). Código do produto: `SITE-<id do site>`.
+- Nome e marca vêm do site só na criação do produto. No produto que já existe, a sincronização
+  (automática, o botão "Sincronizar agora" e qualquer outra chamada de `sincronizarCatalogo`) não
+  sobrescreve esses dois campos. O vínculo de fornecedor (texto `fornecedor`, em geral KaBuM!) continua
+  sendo atualizado pelo catálogo.
+- Sobrescrito a cada volta, no produto novo e no que já existe: preço à vista (Pix) → `preco`, preço no
+  cartão → `precoCartao`, custo, foto (`imagemUrl`), categoria (caminho "A/B" vira categoria e
+  subcategoria), fornecedor, disponibilidade. `Pronta entrega` no site → `prontaEntrega = true` (selo
+  verde nas telas). Código do produto: `SITE-<id do site>`.
 - Fica do sistema e nunca é tocado: NCM/CSOSN/CFOP e demais dados fiscais, controle de estoque, saldos, mínimo, garantia.
 - Produto que saiu do site fica **inativo** (some da busca da venda; continua nas vendas antigas). Se o espelho
   vier com menos de 1.000 produtos, nada é desativado naquela volta.

@@ -55,7 +55,7 @@ export function CatalogoDoSite() {
           {e.rodando
             ? 'Sincronizando agora…'
             : quando
-              ? `Última sincronização ${quando} (automática a cada ${e.intervaloMinutos} min). Foto, preço e disponibilidade vêm do site; dados fiscais e estoque são do sistema.`
+              ? `Última sincronização ${quando} (automática a cada ${e.intervaloMinutos} min). Foto, preço e disponibilidade vêm do site; nome e marca só entram quando o produto é criado. Dados fiscais e estoque são do sistema.`
               : 'Ainda não sincronizou. A primeira volta roda 1 minuto depois do sistema subir.'}
           {e.ultimoErro && <span className="text-red-600"> Última tentativa falhou: {e.ultimoErro.mensagem}</span>}
         </p>
