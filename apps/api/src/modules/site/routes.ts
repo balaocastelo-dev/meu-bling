@@ -363,6 +363,7 @@ async function produtoDoItem(i: NovaVenda['itens'][number]): Promise<number | nu
   if (!siteId || siteId.startsWith('avulso')) return null;
   const achado = await prisma.produto.findFirst({ where: { OR: [{ siteId }, { codigo: codigoDoSite(siteId) }] }, select: { id: true, siteId: true } });
   if (achado) {
+    // produto que já existe: não reescreve nome nem marca (a sync do catálogo também não)
     if (!achado.siteId) await prisma.produto.update({ where: { id: achado.id }, data: { siteId } }).catch(() => undefined);
     return achado.id;
   }
