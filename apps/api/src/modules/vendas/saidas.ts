@@ -4,9 +4,12 @@
  * Na loja o produto, o frete e a taxa da máquina são pagos na hora. Além da entrada do valor
  * recebido, o fechamento lança contas a pagar já baixadas (MovimentoFinanceiro SAIDA) que
  * diminuem o saldo:
- *   - CMV_VENDA  — custo real dos itens (não usa a estimativa de 40–70%)
+ *   - CMV_VENDA  — custo real dos itens que a compra da venda ainda não pagou (não usa a estimativa de 40–70%)
  *   - FRETE_VENDA — Venda.custoLogistica, só quando for maior que zero (o frete padrão de R$ 10 não sai)
  *   - TAXA_VENDA — uma taxa só: a da conta, senão a da forma, senão a faixa 1x–12x do cartão
+ *
+ * Compra registrada ao finalizar (marcaCompraDaVenda) já tira o custo do caixa quando é paga.
+ * Esse custo não entra de novo no CMV — senão o mesmo valor sai duas vezes.
  *
  * O Simples não sai do caixa na venda: vira uma conta a pagar ABERTA por competência (PREVISAO_DAS).
  * Venda antiga não é relançada — estas funções só rodam quando a venda é fechada de novo daqui pra frente.
@@ -17,6 +20,7 @@ import { TRANSACAO_VENDA } from '../../lib/transacao-venda.js';
 import { arredondar, competenciaDe } from '../../lib/util.js';
 import { categoriaPadraoId, type Db } from '../comum/financeiro.js';
 import { carregarCfgCustos, taxaCartaoPct, type CfgCustos } from '../comum/custos-venda.js';
+import { marcaCompraDaVenda, numeroVendaDaMarcaCompra, PREFIXO_COMPRA_DA_VENDA, PREFIXO_COMPRA_PAGA_AO_FINALIZAR } from '../comum/compra-venda.js';
 import { baixarContaPagar } from '../financeiro/service.js';
 
 type TxDb = Tx;
@@ -279,6 +283,57 @@ async function cancelarSaida(tx: TxDb, id: number) {
   });
 }
 
+interface ItemMercadoria {
+  id?: number;
+  descricao: string;
+  quantidade: number;
+  custoUnitario: number;
+  produtoId: number | null;
+  precoCusto: number | null;
+}
+
+interface LinhaCompraCoberta {
+  produtoId: number | null;
+  descricao: string;
+}
+
+/**
+ * Separa o custo que ainda precisa sair como CMV do custo que a compra da venda já cobre.
+ * Coberto: item com custoUnitario > 0 (não consignado) que tem linha nessa compra, ou item
+ * ligado a ela por alocacaoCompra. Consignado não entra — o pagamento é da consignação.
+ */
+export function partirCustoDaVenda(itens: ItemMercadoria[], consignados: Set<number>, compra: { itens: LinhaCompraCoberta[] } | null, alocados: Set<number>) {
+  const linhas = new Map<string, number>();
+  if (compra) {
+    for (const it of compra.itens) {
+      const k = it.produtoId ? `p:${it.produtoId}` : `d:${it.descricao}`;
+      linhas.set(k, (linhas.get(k) || 0) + 1);
+    }
+  }
+  const itensSemCusto: string[] = [];
+  let custo = 0;
+  let coberto = 0;
+  for (const item of itens) {
+    if (item.produtoId && consignados.has(item.produtoId)) continue;
+    const doItem = item.custoUnitario > 0 ? item.custoUnitario : item.precoCusto && item.precoCusto > 0 ? item.precoCusto : 0;
+    const k = item.produtoId ? `p:${item.produtoId}` : `d:${item.descricao}`;
+    const n = linhas.get(k) || 0;
+    const porAlocacao = item.id != null && alocados.has(item.id);
+    const porLinha = item.custoUnitario > 0 && n > 0;
+    if (compra && (porAlocacao || porLinha)) {
+      if (n > 0) linhas.set(k, n - 1);
+      if (doItem > 0) coberto += doItem * item.quantidade;
+      continue;
+    }
+    if (!(doItem > 0)) {
+      itensSemCusto.push(item.descricao);
+      continue;
+    }
+    custo += doItem * item.quantidade;
+  }
+  return { custo: arredondar(custo), coberto: arredondar(coberto), itensSemCusto };
+}
+
 async function garantirSaidaPaga(tx: TxDb, p: { vendaId: number; marca: string; valor: number; contaId: number | null; categoriaId: number; descricao: string; data: Date; competencia: string }) {
   const existentes = await tx.contaPagar.findMany({
     where: { origemTipo: 'VENDA', origemId: p.vendaId, observacoes: { contains: p.marca }, situacao: { not: 'CANCELADO' } },
@@ -286,6 +341,7 @@ async function garantirSaidaPaga(tx: TxDb, p: { vendaId: number; marca: string; 
   });
   const alvo = existentes[0];
   for (const extra of existentes.slice(1)) await cancelarSaida(tx, extra.id);
+  // Custo zerado (a compra da venda já pagou, ou o item ficou sem custo): estorna e cancela o CMV que existir.
   if (p.valor < 0.01 || !p.contaId) {
     if (alvo) await cancelarSaida(tx, alvo.id);
     return;
@@ -354,23 +410,40 @@ async function montarPlano(db: Db, vendaId: number): Promise<Plano | null> {
   });
   if (!venda || venda.tipo !== 'PEDIDO') return null;
   const produtoIds = venda.itens.map((i) => i.produtoId).filter((x): x is number => !!x);
-  const consignados = new Set(
+  const consignados = new Set<number>(
     produtoIds.length
-      ? (await db.consignacao.findMany({ where: { produtoId: { in: produtoIds } }, select: { produtoId: true } })).map((c) => c.produtoId)
+      ? (await db.consignacao.findMany({ where: { produtoId: { in: produtoIds } }, select: { produtoId: true } })).map((c) => c.produtoId).filter((x): x is number => x != null)
       : [],
   );
-  const itensSemCusto: string[] = [];
-  let custoProduto = 0;
-  for (const item of venda.itens) {
-    if (item.produtoId && consignados.has(item.produtoId)) continue;
-    const doItem = item.custoUnitario > 0 ? item.custoUnitario : item.produto?.precoCusto && item.produto.precoCusto > 0 ? item.produto.precoCusto : 0;
-    if (!(doItem > 0)) {
-      itensSemCusto.push(item.descricao);
-      continue;
-    }
-    custoProduto += doItem * item.quantidade;
+  // A compra da venda (não cancelada) já leva o custo. Lê pela mesma conexão da transação:
+  // com connection_limit=1, um client de fora esperaria esta transação e ela esperaria o client.
+  const compra = await db.compra.findFirst({
+    where: { observacoesInternas: { contains: marcaCompraDaVenda(venda.numero) }, situacao: { cancelamento: false } },
+    select: { id: true, itens: { select: { produtoId: true, descricao: true } } },
+  });
+  const alocados = new Set<number>();
+  if (compra) {
+    const als = await db.alocacaoCompra.findMany({
+      where: { vendaItem: { vendaId }, compraItem: { compraId: compra.id } },
+      select: { vendaItemId: true },
+    });
+    for (const a of als) alocados.add(a.vendaItemId);
   }
-  custoProduto = arredondar(custoProduto);
+  const partido = partirCustoDaVenda(
+    venda.itens.map((i) => ({
+      id: i.id,
+      descricao: i.descricao,
+      quantidade: i.quantidade,
+      custoUnitario: i.custoUnitario,
+      produtoId: i.produtoId,
+      precoCusto: i.produto?.precoCusto ?? null,
+    })),
+    consignados,
+    compra,
+    alocados,
+  );
+  const itensSemCusto = partido.itensSemCusto;
+  const custoProduto = partido.custo;
   const frete = arredondar((venda.custoLogistica || 0) > 0 ? venda.custoLogistica : 0);
   // A configuração sai pela mesma conexão da transação. Pelo cliente de fora, com
   // connection_limit=1, esta leitura espera a transação acabar e a transação espera a leitura: 5 s e morre.
@@ -550,7 +623,7 @@ export async function relatorioCustoNaoLancado(ini: Date, fim: Date) {
       data: true,
       total: true,
       custoLogistica: true,
-      itens: { select: { descricao: true, quantidade: true, custoUnitario: true, produtoId: true, produto: { select: { precoCusto: true } } } },
+      itens: { select: { id: true, descricao: true, quantidade: true, custoUnitario: true, produtoId: true, produto: { select: { precoCusto: true } } } },
     },
     orderBy: [{ data: 'asc' }, { numero: 'asc' }],
   });
@@ -565,7 +638,30 @@ export async function relatorioCustoNaoLancado(ini: Date, fim: Date) {
       : [],
     produtoIds.length ? prisma.consignacao.findMany({ where: { produtoId: { in: produtoIds } }, select: { produtoId: true } }) : [],
   ]);
-  const cons = new Set(consignados.map((c) => c.produtoId));
+  const cons = new Set<number>(consignados.map((c) => c.produtoId).filter((x): x is number => x != null));
+  const numeros = new Set(vendas.map((v) => v.numero));
+  const comprasDaVenda = await prisma.compra.findMany({
+    where: { situacao: { cancelamento: false }, observacoesInternas: { contains: PREFIXO_COMPRA_DA_VENDA } },
+    select: { id: true, observacoesInternas: true, itens: { select: { produtoId: true, descricao: true } } },
+  });
+  const compraPorNumero = new Map<number, (typeof comprasDaVenda)[number]>();
+  for (const c of comprasDaVenda) {
+    const n = numeroVendaDaMarcaCompra(c.observacoesInternas);
+    if (n && numeros.has(n) && !compraPorNumero.has(n)) compraPorNumero.set(n, c);
+  }
+  const compraIds = [...compraPorNumero.values()].map((c) => c.id);
+  const alocs = compraIds.length
+    ? await prisma.alocacaoCompra.findMany({
+        where: { compraItem: { compraId: { in: compraIds } }, vendaItem: { vendaId: { in: ids } } },
+        select: { vendaItemId: true, compraItem: { select: { compraId: true } } },
+      })
+    : [];
+  const alocadosPorCompra = new Map<number, Set<number>>();
+  for (const a of alocs) {
+    const set = alocadosPorCompra.get(a.compraItem.compraId) ?? new Set<number>();
+    set.add(a.vendaItemId);
+    alocadosPorCompra.set(a.compraItem.compraId, set);
+  }
   const porVenda = new Map<number, { cmv: number; frete: number }>();
   for (const l of lancadas) {
     if (!l.origemId) continue;
@@ -581,6 +677,7 @@ export async function relatorioCustoNaoLancado(ini: Date, fim: Date) {
     total: number;
     custoReal: number;
     custoLancado: number;
+    custoNaCompra: number;
     custoNaoLancado: number;
     frete: number;
     freteLancado: number;
@@ -588,21 +685,26 @@ export async function relatorioCustoNaoLancado(ini: Date, fim: Date) {
     itensSemCusto: number;
   }[] = [];
   for (const v of vendas) {
-    let custoReal = 0;
-    let semCusto = 0;
-    for (const item of v.itens) {
-      if (item.produtoId && cons.has(item.produtoId)) continue;
-      const doItem = item.custoUnitario > 0 ? item.custoUnitario : item.produto?.precoCusto && item.produto.precoCusto > 0 ? item.produto.precoCusto : 0;
-      if (!(doItem > 0)) {
-        semCusto++;
-        continue;
-      }
-      custoReal += doItem * item.quantidade;
-    }
-    custoReal = arredondar(custoReal);
+    const compra = compraPorNumero.get(v.numero) ?? null;
+    const partido = partirCustoDaVenda(
+      v.itens.map((i) => ({
+        id: i.id,
+        descricao: i.descricao,
+        quantidade: i.quantidade,
+        custoUnitario: i.custoUnitario,
+        produtoId: i.produtoId,
+        precoCusto: i.produto?.precoCusto ?? null,
+      })),
+      cons,
+      compra,
+      compra ? (alocadosPorCompra.get(compra.id) ?? new Set<number>()) : new Set<number>(),
+    );
+    const custoReal = arredondar(partido.custo + partido.coberto);
+    const semCusto = partido.itensSemCusto.length;
     const frete = arredondar((v.custoLogistica || 0) > 0 ? v.custoLogistica : 0);
     const posto = porVenda.get(v.id) || { cmv: 0, frete: 0 };
-    const custoNaoLancado = arredondar(Math.max(0, custoReal - posto.cmv));
+    // O que a compra já cobre não é "custo que não saiu": ou já saiu no pagamento da compra, ou sai quando ela for paga.
+    const custoNaoLancado = arredondar(Math.max(0, partido.custo - posto.cmv));
     const freteNaoLancado = arredondar(Math.max(0, frete - posto.frete));
     if (custoNaoLancado < 0.01 && freteNaoLancado < 0.01 && semCusto === 0) continue;
     linhas.push({
@@ -612,6 +714,7 @@ export async function relatorioCustoNaoLancado(ini: Date, fim: Date) {
       total: v.total,
       custoReal,
       custoLancado: arredondar(posto.cmv),
+      custoNaCompra: partido.coberto,
       custoNaoLancado,
       frete,
       freteLancado: arredondar(posto.frete),
@@ -623,8 +726,97 @@ export async function relatorioCustoNaoLancado(ini: Date, fim: Date) {
   return {
     periodo: { dataInicial: ini, dataFinal: fim },
     aviso:
-      'Não gera lançamento. Mostra o custo real e o frete informado que não saíram do caixa (venda antiga ou item ainda sem custo). A estimativa de 40–70% e o frete padrão de R$ 10 não entram — eles não são dinheiro que saiu.',
+      'Não gera lançamento. Mostra o custo real e o frete informado que não saíram do caixa (venda antiga ou item ainda sem custo). Custo que já está na compra registrada ao finalizar a venda conta como coberto. A estimativa de 40–70% e o frete padrão de R$ 10 não entram — eles não são dinheiro que saiu.',
     vendas: linhas,
     totais: { vendas: linhas.length, custoNaoLancado: tot('custoNaoLancado'), freteNaoLancado: tot('freteNaoLancado') },
   };
+}
+
+export interface LinhaCmvDuplicado {
+  vendaId: number;
+  numero: number;
+  cmvId: number;
+  valor: number;
+  compraId: number;
+  compraNumero: number;
+}
+
+/**
+ * Vendas em que o custo saiu duas vezes: a compra foi paga ao finalizar (movimento com a observação
+ * do pagamento automático) e ainda existe CMV_VENDA ativo. Não grava nada.
+ */
+export async function listarCmvDuplicadoDaCompra(db: Db = prisma): Promise<LinhaCmvDuplicado[]> {
+  const cmvs = await db.contaPagar.findMany({
+    where: { origemTipo: 'VENDA', situacao: { not: 'CANCELADO' }, OR: [{ observacoes: { contains: MARCA_CMV } }, { parcela: MARCA_CMV }] },
+    select: { id: true, origemId: true, valor: true },
+    orderBy: { id: 'asc' },
+  });
+  const porVenda = new Map<number, { id: number; valor: number }>();
+  for (const c of cmvs) {
+    if (!c.origemId || porVenda.has(c.origemId)) continue;
+    porVenda.set(c.origemId, { id: c.id, valor: c.valor });
+  }
+  const ids = [...porVenda.keys()];
+  if (!ids.length) return [];
+  const vendas = await db.venda.findMany({ where: { id: { in: ids }, tipo: 'PEDIDO' }, select: { id: true, numero: true } });
+  const compras = await db.compra.findMany({
+    where: { situacao: { cancelamento: false }, observacoesInternas: { contains: PREFIXO_COMPRA_DA_VENDA } },
+    select: { id: true, numero: true, observacoesInternas: true },
+  });
+  const compraPorNumero = new Map<number, { id: number; numero: number }>();
+  for (const c of compras) {
+    const n = numeroVendaDaMarcaCompra(c.observacoesInternas);
+    if (n && !compraPorNumero.has(n)) compraPorNumero.set(n, { id: c.id, numero: c.numero });
+  }
+  const compraIds = [...compraPorNumero.values()].map((c) => c.id);
+  const pagos = compraIds.length
+    ? await db.movimentoFinanceiro.findMany({
+        where: {
+          observacoes: { contains: PREFIXO_COMPRA_PAGA_AO_FINALIZAR },
+          contaPagar: { origemTipo: 'COMPRA', origemId: { in: compraIds }, situacao: { not: 'CANCELADO' } },
+        },
+        select: { contaPagar: { select: { origemId: true } } },
+      })
+    : [];
+  const compraPaga = new Set(pagos.map((m) => m.contaPagar?.origemId).filter((x): x is number => !!x));
+  const linhas: LinhaCmvDuplicado[] = [];
+  for (const v of vendas) {
+    const compra = compraPorNumero.get(v.numero);
+    const cmv = porVenda.get(v.id);
+    if (!compra || !cmv || !compraPaga.has(compra.id)) continue;
+    linhas.push({ vendaId: v.id, numero: v.numero, cmvId: cmv.id, valor: cmv.valor, compraId: compra.id, compraNumero: compra.numero });
+  }
+  linhas.sort((a, b) => b.numero - a.numero);
+  return linhas;
+}
+
+/**
+ * Idempotente. dryRun (padrão) só lista. No modo real, sincroniza cada venda: o CMV duplicado é
+ * estornado e cancelado porque o custo já está na compra. Rodar de novo não acha mais nada.
+ */
+export async function corrigirCmvDuplicadoDaCompra(opts: { dryRun?: boolean } = {}) {
+  const dryRun = opts.dryRun !== false;
+  const vendas = await listarCmvDuplicadoDaCompra(prisma);
+  const valor = arredondar(vendas.reduce((s, v) => s + v.valor, 0));
+  if (dryRun) return { dryRun: true as const, quantidade: vendas.length, valor, vendas, aplicados: 0, restantes: vendas.length };
+  for (const v of vendas) {
+    await prisma.$transaction((tx) => sincronizarSaidasDaVenda(tx, v.vendaId), TRANSACAO_VENDA);
+  }
+  const restantes = await listarCmvDuplicadoDaCompra(prisma);
+  return { dryRun: false as const, quantidade: vendas.length, valor, vendas, aplicados: vendas.length, restantes: restantes.length };
+}
+
+/** Depois de cancelar ou apagar a compra da venda, o CMV volta a valer o custo que a compra não cobre mais. */
+export async function sincronizarSaidasDaVendaPeloNumero(numero: number) {
+  const venda = await prisma.venda.findFirst({ where: { tipo: 'PEDIDO', numero }, select: { id: true } });
+  if (!venda) return null;
+  await prisma.$transaction((tx) => sincronizarSaidasDaVenda(tx, venda.id), TRANSACAO_VENDA);
+  return venda.id;
+}
+
+export async function sincronizarSaidasDaCompraRegistrada(compraId: number) {
+  const compra = await prisma.compra.findUnique({ where: { id: compraId }, select: { observacoesInternas: true } });
+  const numero = numeroVendaDaMarcaCompra(compra?.observacoesInternas);
+  if (!numero) return null;
+  return sincronizarSaidasDaVendaPeloNumero(numero);
 }

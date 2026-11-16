@@ -24,7 +24,10 @@ import { vendedorDoUsuario } from '../comum/vendedores.js';
 import { anunciosDaOrigem } from '../anuncios/origem.js';
 import { baixarContaPagar, baixarContaReceber, saldoContaPagar, saldoContaReceber } from '../financeiro/service.js';
 import { estornarSaidasDaVenda, resumoCaixaDaVenda, sincronizarSaidasDaVenda } from './saidas.js';
+import { marcaCompraDaVenda, obsCompraPagaAoFinalizar } from '../comum/compra-venda.js';
 import type { ItemInput, ParcelaInput, TipoVenda, VendaInput } from './schemas.js';
+
+export { marcaCompraDaVenda, obsCompraPagaAoFinalizar };
 
 type Db = Tx | typeof prisma;
 
@@ -958,10 +961,6 @@ export async function situacaoFinalizar(db: Db = prisma) {
 }
 
 // ---------------------------------------------------------------- finalizar venda + registrar a compra
-/** Texto que marca a compra gerada ao finalizar a venda (evita registrar duas vezes). */
-export const marcaCompraDaVenda = (numeroVenda: number) => `Compra registrada ao finalizar a venda nº ${numeroVenda}`;
-/** Observação do pagamento lançado sozinho quando o vendedor diz, ao finalizar, que a compra já está paga. */
-export const obsCompraPagaAoFinalizar = (numeroVenda: number) => `Pago — informado ao finalizar a venda nº ${numeroVenda}`;
 
 /** Compra já registrada (e não cancelada) para esta venda pelo botão Finalizar, se houver. */
 export async function compraDaVenda(numeroVenda: number, db: Db = prisma) {
@@ -995,13 +994,18 @@ export async function desfazerCompraDaVenda(tx: Tx, venda: { id: number; numero:
   });
   if (!compra) return null;
   const r: CompraDesfeita = { compraId: compra.id, numero: compra.numero, desfeita: false, devolvido: [] };
+  // A compra deixou de cobrir o custo (ou foi mantida): o CMV da venda acompanha. Sem contas lançadas, não faz nada.
+  const alinhar = async (resultado: CompraDesfeita) => {
+    if (venda.id > 0) await sincronizarSaidasDaVenda(tx, venda.id);
+    return resultado;
+  };
   const manter = async (motivo: string) => {
     r.motivo = motivo;
     // fica registrado na compra por que ela não foi desfeita junto com a venda
     await tx.historicoSituacao.create({
       data: { entidadeTipo: 'COMPRA', entidadeId: compra.id, deSituacaoId: compra.situacaoId, deSituacao: compra.situacao.nome, paraSituacaoId: compra.situacaoId, paraSituacao: compra.situacao.nome, usuarioId, observacao: `Venda nº ${venda.numero} ${modo === 'excluir' ? 'excluída' : 'cancelada'}: esta compra foi mantida porque ${motivo}.` },
     });
-    return r;
+    return alinhar(r);
   };
   // mercadoria desta compra já saiu em OUTRA venda: a compra é real, não se mexe
   // (pelas alocações de verdade: quando a venda é apagada, as alocações dela somem em cascata e o contador fica velho)
@@ -1070,7 +1074,7 @@ export async function desfazerCompraDaVenda(tx: Tx, venda: { id: number; numero:
   await compraEstornarEstoque(ctx);
   r.desfeita = true;
 
-  if (modo === 'excluir' && (await apagarCompra(tx, compra.id))) return r; // a venda deixou de existir: a compra que nasceu dela some junto
+  if (modo === 'excluir' && (await apagarCompra(tx, compra.id))) return alinhar(r); // a venda deixou de existir: a compra que nasceu dela some junto
   const cancelado = await tx.situacao.findFirst({ where: { modulo: 'COMPRA', cancelamento: true, ativo: true }, orderBy: { ordem: 'asc' } });
   if (cancelado) {
     await tx.compra.update({ where: { id: compra.id }, data: { situacaoId: cancelado.id } });
@@ -1078,7 +1082,7 @@ export async function desfazerCompraDaVenda(tx: Tx, venda: { id: number; numero:
       data: { entidadeTipo: 'COMPRA', entidadeId: compra.id, deSituacaoId: compra.situacaoId, deSituacao: compra.situacao.nome, paraSituacaoId: cancelado.id, paraSituacao: cancelado.nome, usuarioId, observacao: `Automático: venda nº ${venda.numero} cancelada` },
     });
   }
-  return r;
+  return alinhar(r);
 }
 
 /** Apaga uma compra já sem estoque/contas lançados (contas canceladas sem pagamento e histórico junto). Não apaga se tem empréstimo ligado. */
@@ -1210,6 +1214,8 @@ export async function registrarCompraDaVenda(vendaId: number, p: CompraDaVendaIn
         if (saldo >= 0.01) await baixarContaPagar({ id: cp.id, valor: saldo, data: hoje, contaFinanceiraId: contaId, observacoes: obsCompraPagaAoFinalizar(venda.numero) }, tx);
       }
     }
+    // Se o CMV saiu antes da compra (venda já fechada, ou pago na hora ao salvar), cancela essa saída agora.
+    await sincronizarSaidasDaVenda(tx, vendaId);
     return { id: c.id, numero: c.numero, total };
   }, TRANSACAO_VENDA);
   eventos.emitir('compra.criada', { compraId: compra.id, usuarioId });

@@ -71,6 +71,8 @@ const BLOQUEADAS: { teste: RegExp; metodos?: string[] }[] = [
   { teste: /^\/site\/catalogo/ },
   // regras da consignação e robô: só pela tela do ADMIN
   { teste: /^\/consignacoes\/(regras|robo)$/, metodos: ['POST', 'PUT', 'PATCH', 'DELETE'] },
+  // estorna CMV duplicado da compra paga ao finalizar: só o ADMIN, e o modo real só com OK
+  { teste: /^\/vendas\/corrigir-cmv-duplicado$/ },
 ];
 
 /**

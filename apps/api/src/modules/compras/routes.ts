@@ -9,6 +9,8 @@ import { auditar } from '../../lib/auditoria.js';
 import { dataSchema, paginacaoSchema, paginar, proximoNumero, respostaPaginada } from '../../lib/util.js';
 import { eventos } from '../../core/eventos.js';
 import { executarAcoes, mudarSituacao, registrarAcao, registrarModulo, situacaoInicial, type Acao } from '../../core/situacoes.js';
+import { numeroVendaDaMarcaCompra } from '../comum/compra-venda.js';
+import { sincronizarSaidasDaCompraRegistrada, sincronizarSaidasDaVendaPeloNumero } from '../vendas/saidas.js';
 import { idDe, idsQuery } from '../comum/zod.js';
 import { intervalo } from '../comum/datas.js';
 import { cabecalhoEmpresa, dadosEmpresa, data as fData, enderecoLinha, esc, formatarDocumento, formatarTelefone, moeda, paginaHtml, qtd } from '../comum/html.js';
@@ -207,12 +209,14 @@ export default async function comprasRoutes(app: FastifyInstance) {
     const c = await prisma.compra.findUnique({ where: { id } });
     if (!c) throw new NotFound('Compra');
     if (c.estoqueLancado || c.contasLancadas) throw new AppError('Compra com estoque/contas lançados não pode ser excluída. Estorne antes.', 422, 'COMPRA_LANCADA');
+    const numeroVenda = numeroVendaDaMarcaCompra(c.observacoesInternas);
     await prisma.$transaction(async (tx) => {
       await tx.historicoSituacao.deleteMany({ where: { entidadeTipo: 'COMPRA', entidadeId: id } });
       await tx.compra.delete({ where: { id } });
       // contas a pagar canceladas (sem nenhum pagamento) da compra excluída não ficam órfãs
       await tx.contaPagar.deleteMany({ where: { origemTipo: 'COMPRA', origemId: id, situacao: 'CANCELADO', valorPago: 0 } });
     });
+    if (numeroVenda) await sincronizarSaidasDaVendaPeloNumero(numeroVenda);
     await auditar(req, 'Compra', id, 'EXCLUIR', { numero: c.numero });
     return { ok: true };
   });
@@ -222,6 +226,8 @@ export default async function comprasRoutes(app: FastifyInstance) {
     const body = z.object({ situacaoId: z.coerce.number().int().positive(), observacao: z.string().trim().nullable().optional(), forcar: z.boolean().optional() }).parse(req.body);
     if (body.forcar && req.user.perfil !== 'ADMIN' && req.user.perfil !== 'GERENTE') throw new AppError('Somente ADMIN/GERENTE pode forçar transições.', 403, 'SEM_PERMISSAO');
     const r = await mudarSituacao({ modulo: 'COMPRA', entidadeId: id, situacaoDestinoId: body.situacaoId, usuarioId: req.user.id, observacao: body.observacao, forcar: body.forcar });
+    // Cancelar (ou reabrir) a compra da venda: o CMV acompanha. A situação já foi gravada, então a compra cancelada não cobre mais o custo.
+    if (r.alterado) await sincronizarSaidasDaCompraRegistrada(id);
     await auditar(req, 'Compra', id, 'SITUACAO', { para: r.situacao.nome, acoes: r.acoes });
     return { situacao: { id: r.situacao.id, nome: r.situacao.nome, cor: r.situacao.cor }, acoesExecutadas: r.acoes, alterado: r.alterado };
   });
