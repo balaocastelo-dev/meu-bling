@@ -64,7 +64,7 @@ import {
   desfazerCompraDaVenda,
   type CompraDesfeita,
 } from './service.js';
-import { resumoCaixaDaVenda, sincronizarSaidasDaVenda } from './saidas.js';
+import { corrigirCmvDuplicadoDaCompra, resumoCaixaDaVenda, sincronizarSaidasDaVenda } from './saidas.js';
 import { acoesBody, aprovarBody, CAMPOS_LIVRES, converterBody, gerarNfeBody, gerarParcelasBody, listaQuery, notificarBody, situacaoBody, transferirVendedorBody, vendaSchema } from './schemas.js';
 import { htmlVenda } from './imprimir.js';
 import { gravarPdfVenda, nomeArquivoPdf, pdfVenda } from './pdf.js';
@@ -163,6 +163,16 @@ async function rodarAcoesIniciais(vendaId: number, acoesJson: string | null | un
 }
 
 export default async function vendasRoutes(app: FastifyInstance) {
+  /**
+   * CMV que saiu junto com a compra paga ao finalizar. dryRun (padrão) só lista.
+   * dryRun false estorna e cancela o CMV duplicado. Idempotente: a segunda chamada não acha mais nada.
+   * Não rode o modo real na loja sem o OK do Thiago.
+   */
+  app.post('/api/v1/vendas/corrigir-cmv-duplicado', { preHandler: app.exigirPerfil('ADMIN') }, async (req) => {
+    const body = z.object({ dryRun: z.boolean().optional() }).parse(req.body ?? {});
+    return corrigirCmvDuplicadoDaCompra({ dryRun: body.dryRun !== false });
+  });
+
   // se a edição destravou uma venda "paga na hora", o recebimento volta para o caixa no fim (deu certo ou não)
   app.addHook('onResponse', async (req) => {
     const id = (req as any).religarPagoNaHora as number | undefined;

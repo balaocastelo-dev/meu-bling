@@ -102,9 +102,9 @@ async function main() {
   const cs = await contas();
   const sB = cs.find((c) => c.id === bancoB.id).saldoAtual;
   const sA = cs.find((c) => c.id === bancoA.id).saldoAtual;
-  verifica(igual(sB - saldoB0, 150), 'banco B ficou com 150: recebimento 400 menos o custo do produto 250', { sB });
-  verifica(igual(sA - saldoA0, -400), 'banco A pagou a compra de 250; o recebimento e o custo foram para o B', { sA, saldoA0 });
-  verifica(igual((await saldoTotal()) - totalAntes, -100), 'caixa no total: +400 da venda − 250 do custo − 250 da compra paga ao fornecedor', { totalAntes, depois: await saldoTotal() });
+  verifica(igual(sB - saldoB0, 400), 'banco B ficou com 400: só o recebimento; o custo não sai de novo como CMV', { sB });
+  verifica(igual(sA - saldoA0, -400), 'banco A: o recebimento foi para o B e a compra de 250 saiu daqui; o CMV que saiu ao salvar voltou', { sA, saldoA0 });
+  verifica(igual((await saldoTotal()) - totalAntes, 150), 'caixa no total: +400 da venda − 250 da compra. O custo não sai duas vezes', { totalAntes, depois: await saldoTotal() });
   const compra: any = await adm.get(`/compras/${fin.compra.compra.id}`);
   verifica(compra.situacao?.nome === 'Vendido' || compra.situacao?.nome === 'Fechado', 'compra criada (Vendido/Fechado)', compra.situacao);
   const chk2: any = await adm.get(`/vendas/${vf.id}/finalizacao`);

@@ -107,6 +107,7 @@ async function main() {
     rodar('Vendas: custo do produto e logística internos (fora do cliente) + ordem do contas a pagar', NPX, ['tsx', 'testes/venda-custos.ts', base]);
     rodar('Venda paga na hora entra no caixa + ajuste de saldo fora do DRE + DRE', NPX, ['tsx', 'testes/pago-na-hora.ts', base]);
     rodar('Fechar a venda: custo, frete e taxa saem do caixa; DAS é previsão e o real abate', NPX, ['tsx', 'testes/saidas-venda.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
+    rodar('Compra já paga ao finalizar não lança o CMV de novo; a correção com prévia estorna o duplicado', NPX, ['tsx', 'testes/cmv-compra.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
     rodar('Fechar venda com 6.000 movimentos: a transação não varre o caixa e não estoura em 5 s', NPX, ['tsx', 'testes/transacao-venda.ts'], { env: { TZ: 'America/Sao_Paulo', TRILHA_AUDITORIA: 'off', REGISTRAR_QUERIES: '1' } });
     rodar('Link do Mercado Pago: até 12x, juros do cliente, sem cobrança real', NPX, ['tsx', 'testes/link-pagamento.ts', base], { env: { DATABASE_URL: env.DATABASE_URL } });
     rodar('Venda cancelada/excluída desfaz a compra registrada ao finalizar (dinheiro volta ao banco)', NPX, ['tsx', 'testes/venda-cancelada-compra.ts', base]);
