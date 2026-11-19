@@ -50,7 +50,6 @@ const Caixinhas = lazy(() => import('@/pages/financeiro/Caixinhas'));
 const Comissoes = lazy(() => import('@/pages/financeiro/Comissoes'));
 const Emprestimos = lazy(() => import('@/pages/financeiro/Emprestimos'));
 const Carnes = lazy(() => import('@/pages/financeiro/Carnes'));
-const LancamentosAutomaticos = lazy(() => import('@/pages/financeiro/LancamentosAutomaticos'));
 const ConsignacoesLista = lazy(() => import('@/pages/consignacoes/ConsignacoesLista'));
 const ConsignacaoForm = lazy(() => import('@/pages/consignacoes/ConsignacaoForm'));
 const ConsignacaoDetalhe = lazy(() => import('@/pages/consignacoes/ConsignacaoDetalhe'));
@@ -178,7 +177,6 @@ export const router = createBrowserRouter(
       { path: 'financeiro/receber', element: FIN(<ContasReceber />) },
       { path: 'financeiro/pagar', element: FIN(<ContasPagar />) },
       { path: 'financeiro/bancos', element: FIN(<Bancos />) },
-      { path: 'financeiro/lancamentos-automaticos', element: ADMIN(<LancamentosAutomaticos />) },
       { path: 'financeiro/bancos/:id', element: FIN(<ExtratoConta />) },
       { path: 'financeiro/fluxo-caixa', element: FIN(<FluxoCaixa />) },
       { path: 'financeiro/caixinhas', element: FIN(<Caixinhas />) },

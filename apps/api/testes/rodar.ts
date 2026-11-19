@@ -120,7 +120,6 @@ async function main() {
     rodar('Documentos da venda: recibo 80mm/A4, certificados de garantia, termo, licenças e versículo', NPX, ['tsx', 'testes/documentos.ts', base]);
     rodar('Porta do site: PDV, JUL.IA (orçamento e pedido em aberto), vendas por dia e por período', NPX, ['tsx', 'testes/integracao-site.ts', base], { env: { TZ: 'America/Sao_Paulo', SITE_CHAVE_INTEGRACAO: env.SITE_CHAVE_INTEGRACAO } });
     rodar('API externa: chaves, permissões, MCP para agentes de IA e webhooks', NPX, ['tsx', 'testes/api-externa.ts', base]);
-    rodar('Lançamentos automáticos: bot registra e-mail de banco pendente, sem saldo até o Confio', NPX, ['tsx', 'testes/lancamentos-automaticos.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Open Finance por conta: token sem segredo, vínculo na conta existente, sincronizar e desconectar', NPX, ['tsx', 'testes/open-finance.ts', base]);
     rodar('API externa: varredura — toda rota aberta para chave está documentada', NPX, ['tsx', 'testes/api-cobertura.ts'], { env });
     if (!RAPIDO) rodar('Campo de custo escondido: digitar o custo depois de clicar no olho grava o valor certo', NPX, ['tsx', 'testes/campo-custo.ts', base], { env: { TZ: 'America/Sao_Paulo' } });

@@ -1180,8 +1180,6 @@ export interface DashboardGeral {
   estoque: { abaixoMinimo: { produtoId: number; nome: string; codigo?: string | null; saldo: number; estoqueMinimo: number }[]; qtdAbaixoMinimo: number };
   fiscal: { pendentes: number; rejeitadas: number; ambiente?: string };
   comissoes: { pendentes: number; valorPendente?: number } | null;
-  /** fila de e-mails de banco que um bot lançou e ainda ninguém revisou */
-  lancamentosAutomaticos?: { pendentes: number; limiteValorAlto: number };
   whatsapp: { status: WhatsappStatus['status']; numero?: string | null };
   ultimosMovimentos: MovimentoDashboard[];
   alertas: { tipo: string; mensagem: string; link?: string }[];
