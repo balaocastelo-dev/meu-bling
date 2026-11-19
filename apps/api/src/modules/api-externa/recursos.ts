@@ -35,17 +35,6 @@ export const RECURSOS: Recurso[] = [
   { chave: 'consignacao', nome: 'Consignação', descricao: 'Equipamentos de clientes à venda na loja: contratos, fotos, desconto autorizado, diárias, pagamento ao consignante, retirada e painel.', rotas: [/^\/consignacoes(\/|$)/] },
   { chave: 'os', nome: 'Ordens de serviço', descricao: 'Assistência técnica: OS, kanban, peças, orçamento, situação, impressão.', rotas: [/^\/ordens-servico(\/|$)/] },
   { chave: 'financeiro', nome: 'Financeiro', descricao: 'Contas a receber e a pagar, empréstimos (Lumicred), baixas e estornos, caixa e bancos, extrato, transferências, conciliação bancária, Open Finance (sincronizar), categorias e contas financeiras.', rotas: [/^\/contas-receber(\/|$)/, /^\/contas-pagar(\/|$)/, /^\/financeiro(\/|$)/, /^\/bancos(\/|$)/, /^\/contas-financeiras(\/|$)/, /^\/categorias-financeiras(\/|$)/, /^\/open-finance\/(status|sincronizar)/] },
-  {
-    chave: 'lancamentos-automaticos',
-    nome: 'Lançamentos automáticos (revisão)',
-    descricao: 'O bot registra entradas, saídas e transferências lidas de e-mails de banco, e consulta as contas e categorias para escolher o id. Nascem pendentes: não alteram saldo. Quem aceita ou contesta é uma pessoa no painel.',
-    rotas: [
-      /^\/lancamentos-automaticos$/,
-      /^\/lancamentos-automaticos\/contas-financeiras$/,
-      /^\/lancamentos-automaticos\/categorias-financeiras$/,
-      /^\/lancamentos-automaticos\/importar$/,
-    ],
-  },
   { chave: 'fiscal', nome: 'Notas fiscais', descricao: 'NF-e/NFC-e: listar, criar, transmitir, consultar, carta de correção, XML, DANFE, e-mail; cancelar e inutilizar exigem nível total.', rotas: [/^\/notas-fiscais(\/|$)/, /^\/fiscal(\/|$)/] },
   { chave: 'comissoes', nome: 'Comissões, metas e desafios', descricao: 'Comissões de vendedores e técnicos (aprovar, pagar, cancelar), metas do mês, desafios e painel do vendedor.', rotas: [/^\/comissoes(\/|$)/, /^\/metas(\/|$)/, /^\/desafios(\/|$)/, /^\/painel-vendedor(\/|$)/] },
   { chave: 'relatorios', nome: 'Relatórios e dashboards', descricao: 'Dashboards, últimos acontecimentos, DRE, vendas por período, produtos mais vendidos, contas, estoque, comissões.', rotas: [/^\/relatorios(\/|$)/, /^\/dashboard(\/|$)/], maximo: 'LEITURA' },
@@ -301,58 +290,6 @@ export const ENDPOINTS: Endpoint[] = [
   { metodo: 'POST', caminho: '/ordens-servico/{id}/notificar', recurso: 'os', resumo: 'Envia a OS/orçamento ao cliente por WhatsApp ou e-mail.', corpo: { canal: 'WHATSAPP', templateId: null, mensagem: null } },
   { metodo: 'GET', caminho: '/ordens-servico/{id}/nfe/verificar', recurso: 'os', resumo: 'Confere se a OS tem tudo para a NF-e das peças.' },
   { metodo: 'POST', caminho: '/ordens-servico/{id}/gerar-nfe', recurso: 'os', resumo: 'Cria a NF-e das peças da OS (pendente).', corpo: { modelo: 55 } },
-
-  // ------------------------------------------------ lançamentos automáticos (e-mail de banco, fila de revisão)
-  {
-    metodo: 'GET',
-    caminho: '/lancamentos-automaticos',
-    recurso: 'lancamentos-automaticos',
-    resumo: 'Lista lançamentos que o bot registrou a partir de e-mails de banco. Sem status, devolve todos. Pendente ainda não entrou no saldo e não quitou conta.',
-    filtros: ['status (PENDENTE|CONFIADO|CONTESTADO)', 'contaFinanceiraId', ...PERIODO, ...PAG],
-  },
-  {
-    metodo: 'POST',
-    caminho: '/lancamentos-automaticos',
-    recurso: 'lancamentos-automaticos',
-    resumo: 'Registra um lançamento lido de e-mail de banco. Nasce PENDENTE: não altera saldo, não cria movimento e não dá baixa. ENTRADA ou SAIDA usam contaFinanceiraId e, se quiser, categoriaId (RECEITA na entrada, DESPESA na saída). TRANSFERENCIA usa contaFinanceiraId como origem e contaDestinoId como destino, sem categoria — no Confio vira a mesma transferência do sistema (duas pernas, categoria nula). Exemplo de transferência: {"tipo":"TRANSFERENCIA","data":"2026-10-31","valor":50,"contaFinanceiraId":3,"contaDestinoId":15,"contraparte":"Conta destino","emailOrigemId":"id-do-email"}. O mesmo emailOrigemId não duplica (idempotente: true). Confio não quita título.',
-    corpo: {
-      tipo: 'SAIDA',
-      data: '2026-10-31',
-      valor: 1500.5,
-      contaFinanceiraId: 1,
-      contaDestinoId: null,
-      contraparte: 'Distribuidora Exemplo Ltda',
-      categoriaId: 3,
-      emailOrigemId: 'id-do-email-no-provedor',
-      emailOrigemUrl: 'https://mail.google.com/mail/u/0/#inbox/id-do-email-no-provedor',
-      descricao: 'PIX enviado — aviso do banco',
-    },
-  },
-  {
-    metodo: 'GET',
-    caminho: '/lancamentos-automaticos/contas-financeiras',
-    recurso: 'lancamentos-automaticos',
-    resumo: 'Contas financeiras ativas (id, nome, tipo, banco) para preencher contaFinanceiraId e contaDestinoId. Não devolve saldo. A chave com leitura neste escopo já pode chamar; não precisa do escopo financeiro.',
-  },
-  {
-    metodo: 'GET',
-    caminho: '/lancamentos-automaticos/categorias-financeiras',
-    recurso: 'lancamentos-automaticos',
-    resumo: 'Categorias financeiras ativas (id, nome, tipo RECEITA ou DESPESA) para preencher categoriaId. Entrada usa RECEITA, saída usa DESPESA. Transferência não usa categoria.',
-  },
-  {
-    metodo: 'POST',
-    caminho: '/lancamentos-automaticos/importar',
-    recurso: 'lancamentos-automaticos',
-    resumo: 'Vincula na fila lançamentos que JÁ existem no sistema (não cria movimento e não altera saldo). Repetir o mesmo emailOrigemId não duplica. Confio nesses só marca a confirmação. Contestar marca estorno manual, sem desfazer o dinheiro. TRANSFERENCIA exige os dois movimentos. PAGAR/RECEBER exigem sistemaId do título.',
-    corpo: {
-      lancamentos: [
-        { emailOrigemId: 'id-do-email-transferencia', tipo: 'TRANSFERENCIA', valor: 50, data: '2026-10-30', contraparte: 'Conta destino', origemContaId: 3, destinoContaId: 15, movimentoSaidaId: 100, movimentoEntradaId: 101, situacao: 'TRANSFERIDO' },
-        { emailOrigemId: 'id-do-email-pagar', tipo: 'PAGAR', valor: 19.75, data: '2026-10-30', contraparte: 'Uber', sistemaId: 10, situacao: 'PAGO', contaFinanceiraId: 3, categoriaId: 9 },
-        { emailOrigemId: 'id-do-email-receber', tipo: 'RECEBER', valor: 29, data: '2026-10-30', contraparte: 'Cliente', sistemaId: 20, situacao: 'RECEBIDO', contaFinanceiraId: 3, categoriaId: 3 },
-      ],
-    },
-  },
 
   // ------------------------------------------------ financeiro
   { metodo: 'GET', caminho: '/financeiro/resumo', recurso: 'financeiro', resumo: 'Saldos das contas e o que há a receber/pagar hoje, na semana e atrasado.' },

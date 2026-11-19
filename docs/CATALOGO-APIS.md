@@ -2,7 +2,7 @@
 
 Levantamento das APIs do sistema — as que o MEU BLING **oferece** e as que ele **consome** lá fora (11 serviços).
 
-Os totais da seção 1 foram recontados no servidor depois da saída do JARVIS (469 rotas em `/api/v1`, nenhuma com "jarvis" no caminho). As tabelas do capítulo 5 são o levantamento anterior, só sem o bloco do JARVIS.
+Os totais da seção 1 foram recontados depois da saída dos lançamentos automáticos (460 rotas em `/api/v1`, nenhuma com esse caminho). As tabelas do capítulo 5 são o levantamento anterior, só sem o bloco do JARVIS.
 
 ---
 
@@ -10,14 +10,14 @@ Os totais da seção 1 foram recontados no servidor depois da saída do JARVIS (
 
 | | |
 |---|---|
-| Rotas HTTP publicadas | **471** |
-| Rotas sob `/api/v1` | 469 (as outras 2 são `/` e `/uploads/*`) |
+| Rotas HTTP publicadas | **462** |
+| Rotas sob `/api/v1` | 460 (as outras 2 são `/` e `/uploads/*`) |
 | Rotas públicas (sem login) | 28 |
-| Rotas abertas para chave de API | **272** |
-| Rotas fechadas para chave (só pela tela) | 169 |
-| Endpoints documentados no catálogo interno | 272 |
+| Rotas abertas para chave de API | **267** |
+| Rotas fechadas para chave (só pela tela) | 165 |
+| Endpoints documentados no catálogo interno | 267 |
 | Documentação desatualizada (endpoint que não existe mais) | **0** |
-| Módulos com `routes.ts` | 38 |
+| Módulos com `routes.ts` | 37 |
 | Serviços externos consumidos | 11 |
 
 A API é um **Fastify** (`apps/api`) com carregamento automático: cada pasta em `src/modules/*/routes.ts` e `src/integracoes/*/routes.ts` vira um bloco de rotas. O front (`apps/web`, React + Vite) é servido pelo mesmo processo em produção, por isso tudo responde no mesmo endereço.
@@ -1260,8 +1260,8 @@ Leitores de aviso disponíveis (campo `parser` da regra): `SUMUP_PIX`, `SUMUP_PA
 
 ### Está saudável
 
-- **Documentação bate com o código.** Das 272 entradas do catálogo interno (`api-externa/recursos.ts`), **nenhuma** aponta para rota que não existe mais. O teste `testes/api-cobertura.ts` segura isso a cada PR: rota nova aberta para chave sem documentação reprova o build.
-- **Toda rota aberta para chave está documentada.** 272 rotas abertas, 272 documentadas. Não há buraco entre o que a chave alcança e o que o OpenAPI mostra.
+- **Documentação bate com o código.** Das 267 entradas do catálogo interno (`api-externa/recursos.ts`), **nenhuma** aponta para rota que não existe mais. O teste `testes/api-cobertura.ts` segura isso a cada PR: rota nova aberta para chave sem documentação reprova o build.
+- **Toda rota aberta para chave está documentada.** 267 rotas abertas, 267 documentadas. Não há buraco entre o que a chave alcança e o que o OpenAPI mostra.
 - **Permissão em duas camadas.** A política central (`politicas.ts`) e o `preHandler` de cada rota — uma falha na outra segura.
 - **Erro com saída.** O padrão de devolver mensagem em português dizendo o que falta, com link para resolver, está aplicado nas rotas fiscais e de configuração.
 
@@ -1276,7 +1276,7 @@ Leitores de aviso disponíveis (campo `parser` da regra): `SUMUP_PIX`, `SUMUP_PA
 
 ### Sobre "abrir todas as APIs para chave"
 
-As 169 rotas fechadas para chave **não são esquecimento** — há uma lista de bloqueio explícita em `recursos.ts`. A tabela abaixo é o levantamento anterior das áreas mais sensíveis (não soma as 169; a conta fechada está na seção 1):
+As 165 rotas fechadas para chave **não são esquecimento** — há uma lista de bloqueio explícita em `recursos.ts`. A tabela abaixo é o levantamento anterior das áreas mais sensíveis (não soma as 165; a conta fechada está na seção 1):
 
 | Área | Rotas | Por quê |
 |---|---|---|

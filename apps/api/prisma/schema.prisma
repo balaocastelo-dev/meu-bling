@@ -2365,10 +2365,10 @@ model Anuncio {
 }
 
 // ---------------------------------------------------------------------
-// LANÇAMENTOS AUTOMÁTICOS (bot lê e-mail de banco → fila de revisão)
-// Pendente novo: não cria movimento e o saldo não muda.
-// Confio de um lançamento novo cria o movimento (ou a transferência). Contestar não mexe em dinheiro.
-// jaLancado: o dinheiro já entrou pelo caminho normal. Confio só confirma. Contestar pede estorno manual.
+// LANÇAMENTOS AUTOMÁTICOS — a tela, a API e o escopo saíram.
+// A tabela fica de propósito: linhas PENDENTE, CONFIADO e CONTESTADO
+// continuam no banco até o Thiago autorizar apagar. Nenhum código novo grava aqui.
+// Movimento já criado por um Confio antigo segue no caixa (MovimentoFinanceiro).
 // ---------------------------------------------------------------------
 
 model LancamentoAutomatico {

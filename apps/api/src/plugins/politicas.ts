@@ -62,9 +62,6 @@ const REGRAS: Regra[] = [
   { teste: /^\/robo-saude(\/|$)/, perfis: ['ADMIN'] },
   // Robô de e-mail dos bancos: mexe em dinheiro, então é só do gestor
   { teste: /^\/email-banco(\/|$)/, perfis: ['ADMIN'] },
-  // Lançamentos automáticos (bot + revisão): Confio mexe no saldo, então a tela é só do gestor.
-  // A chave de API entra como ADMIN e o escopo "lancamentos-automaticos" é que limita o bot.
-  { teste: /^\/lancamentos-automaticos(\/|$)/, perfis: ['ADMIN'] },
   { teste: /^\/notas-fiscais\/inutilizar/, perfis: GESTAO },
   { teste: /^\/whatsapp\/(conectar|desconectar)/, perfis: GESTAO },
   { metodos: MUT, teste: /^\/templates-notificacao(\/|$)/, perfis: GESTAO },
