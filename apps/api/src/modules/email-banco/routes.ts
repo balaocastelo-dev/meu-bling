@@ -28,7 +28,7 @@ import { paginacaoSchema, paginar, respostaPaginada } from '../../lib/util.js';
 import { lerCaixa } from '../../integracoes/email/leitor.js';
 import { obterConfig, rodarRobo } from './service.js';
 
-export const INTERVALO_MS = 30 * 60 * 1000; // 30 minutos, igual ao JARVIS
+export const INTERVALO_MS = 30 * 60 * 1000; // 30 minutos
 
 let rodando = false;
 

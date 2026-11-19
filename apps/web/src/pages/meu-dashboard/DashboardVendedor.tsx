@@ -16,8 +16,6 @@ import { data as fmtData, inteiro, moeda, numero } from '@/lib/format';
 import type { MeuDashboard, PainelVendedor } from '@/types';
 import { AlertasCorrija, Cabecalho, Lembretes, MetaDoMes, RankingDoMes } from './partes';
 import { MensagensCard } from '@/components/chat/MensagensCard';
-import SugestoesJarvis from '@/components/dashboard/SugestoesJarvis';
-
 export interface PropsRole {
   dados?: MeuDashboard;
   carregando: boolean;
@@ -116,7 +114,6 @@ export default function DashboardVendedor({ dados, carregando, faixa, filtros, v
 
       {/* ===== mensagens da equipe (some quando não há nada novo) ===== */}
       <MensagensCard />
-      <SugestoesJarvis />
 
       {/* ===== alertas e lembretes ===== */}
       <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">

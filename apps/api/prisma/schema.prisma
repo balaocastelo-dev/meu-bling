@@ -472,6 +472,7 @@ model Produto {
   nfItens     NotaFiscalItem[]
   consignacao Consignacao?
 
+  /// Relação órfã: a central de anúncios saiu do código. A tabela fica no banco (sem DROP).
   jarvisAnuncios JarvisAnuncio[]
   anuncios       Anuncio[]
 
@@ -2054,7 +2055,10 @@ model PushAssinatura {
 }
 
 // ---------------------------------------------------------------------
-// JARVIS — agente do gestor para R$ 1 milhão livres no caixa (docs/JARVIS.md)
+// JARVIS — tabelas órfãs de propósito.
+// Rotas, worker e telas saíram do código. Os models ficam no schema para
+// o banco não perder as linhas: não há migração de DROP. Nenhum módulo
+// lê ou grava estas tabelas até o Thiago autorizar apagar os dados.
 // ---------------------------------------------------------------------
 
 /// Foto do caixa livre a cada rodada do worker (gráfico de evolução do painel /jarvis)
@@ -2173,7 +2177,7 @@ model JarvisConfig {
   ultimoErro         String?
   atualizadoEm       DateTime  @updatedAt
 
-  // ---- Mercado Livre (docs/JARVIS.md §8). Segredos com enc: (AES-256-GCM / APP_SECRET)
+  // ---- Mercado Livre (credencial antiga, órfã). Segredos com enc: (AES-256-GCM / APP_SECRET)
   mlClientId     String?
   mlClientSecret String?
   mlAccessToken  String?
@@ -2267,7 +2271,7 @@ model EmailBancoMensagem {
   @@index([recebidoEm])
 }
 
-/// CENTRAL DE ANÚNCIOS (docs/JARVIS.md §9) — um anúncio montado uma vez, publicado por canal.
+/// CENTRAL DE ANÚNCIOS (tabela órfã) — um anúncio montado uma vez, publicado por canal.
 /// Canal com API oficial publica sozinho; canal sem API vira "kit pronto" para alguém publicar
 /// em um minuto. Automatizar site logado por navegador derruba a conta — não é feito aqui.
 model JarvisAnuncio {

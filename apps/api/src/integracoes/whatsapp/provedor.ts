@@ -2,7 +2,7 @@
  * De onde sai o WhatsApp da loja.
  *
  *   EVOLUTION  → a sessão fica no servidor Evolution API (um QR Code só para CRM, mensagens
- *                automáticas, orçamentos e a cobrança do JARVIS). É o padrão quando configurado.
+ *                automáticas e orçamentos). É o padrão quando configurado.
  *   BAILEYS    → a sessão é do próprio MEU BLING (como era antes). Fica como volta atrás:
  *                basta desligar a Evolution em Configurações → WhatsApp, sem mexer em código.
  *
