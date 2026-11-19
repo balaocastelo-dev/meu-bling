@@ -72,8 +72,6 @@ async function main() {
     ROBO_SAUDE: 'off',
     // link do Mercado Pago: os testes simulam a preferência e não geram cobrança
     MERCADOPAGO_MOCK: '1',
-    // idem o JARVIS: a rodada de 30 min só acontece quando o teste manda
-    JARVIS: 'off',
   };
   const base = `http://127.0.0.1:${porta}`;
   console.log(`\nBanco de teste: ${pasta} · API de teste: ${base}`);
@@ -117,7 +115,6 @@ async function main() {
     rodar('Consignação: contrato, assinatura pelo celular, desconto autorizado, venda na hora, diárias em dias úteis, quitação, retirada e vitrine do site', NPX, ['tsx', 'testes/consignacao.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Vitrine da equipe: anúncio próprio do técnico (33%) e do vendedor (20%) com comissão sobre o lucro', NPX, ['tsx', 'testes/anuncios.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Caixinhas (Nubank): por dia, sugestão de hoje, guardar/retirar fora do DRE + avisos do gestor', NPX, ['tsx', 'testes/caixinhas.ts', base]);
-    rodar('JARVIS: conserto pronto não retirado e orçamento parado viram sugestão com número real', NPX, ['tsx', 'testes/jarvis-caixa-parado.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Meu Dashboard: vendedor/técnico sem lucro, técnico que vende, alertas "Corrija", lembretes, metas e desafios de técnico, ver como', NPX, ['tsx', 'testes/meu-dashboard.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Robô de NF: NCM automático, cliente completo, Pronto pra NF, emitir com um clique, CFOP fora do estado', NPX, ['tsx', 'testes/robo-nf.ts', base]);
     rodar('Documentos da venda: recibo 80mm/A4, certificados de garantia, termo, licenças e versículo', NPX, ['tsx', 'testes/documentos.ts', base]);
@@ -131,11 +128,7 @@ async function main() {
     if (!RAPIDO) rodar('Layout em celular, tablet e computador (nada vaza da tela ou do card)', NPX, ['tsx', 'testes/layout.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Robô da Saúde: corrige sozinho, sugere com 1 clique, ignora, só ADMIN', NPX, ['tsx', 'testes/robo-saude.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
     rodar('Lembretes de custo: OS com os campos da venda, lembrete ao fechar, robô avisa técnicos e vendedores, DRE', NPX, ['tsx', 'testes/lembretes-custo.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
-    rodar('JARVIS: caixa livre, regras, sugestões (aceitar/adiar/recusar), feed por perfil, só ADMIN', NPX, ['tsx', 'testes/jarvis.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
-    rodar('Voz do JARVIS: fala por frases, resposta curta por voz e desistência rápida quando o PC não responde', NPX, ['tsx', 'testes/jarvis-voz.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
     rodar('Robô de e-mail dos bancos: parsers reais (SumUp/Asaas), trava de DKIM, baixa 1:1, senha mascarada, só ADMIN', NPX, ['tsx', 'testes/email-banco.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
-    rodar('Central de Anúncios: canais de API x kit, rascunho sem IA, nada publicado sem publicar', NPX, ['tsx', 'testes/jarvis-anuncios.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
-    rodar('Mercado Livre: OAuth, callback público, secret escondido, publicar sem conta não mente', NPX, ['tsx', 'testes/jarvis-mercadolivre.ts', base], { env: { DATABASE_URL: env.DATABASE_URL, TZ: 'America/Sao_Paulo' } });
     rodar('Chat da equipe: direta, sala privada, áudio, lida, WebSocket/polling, chamadas de voz e vídeo, push, ADMIN lê tudo, chamar atenção', NPX, ['tsx', 'testes/chat.ts', base]);
     rodar('Painel de auditoria: senha do dia, trilha antes/depois (itens e cascata), ao vivo, funcionários, reversão e refazer, agentes', NPX, ['tsx', 'testes/auditoria.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Links: todo link do sistema leva a uma tela que existe', NPX, ['tsx', 'testes/links.ts', base]);

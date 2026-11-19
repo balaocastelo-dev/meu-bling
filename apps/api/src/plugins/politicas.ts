@@ -60,9 +60,6 @@ const REGRAS: Regra[] = [
   // lembretes do Robô da Saúde para quem está logado (OS sem custo → técnico, venda sem custo → vendedor): todos
   { teste: /^\/robo-saude\/lembretes$/, perfis: 'TODOS' },
   { teste: /^\/robo-saude(\/|$)/, perfis: ['ADMIN'] },
-  // JARVIS: o feed de sugestões aparece no Meu Dashboard de todo mundo; o resto é só do gestor
-  { teste: /^\/jarvis\/feed$/, perfis: 'TODOS' },
-  { teste: /^\/jarvis(\/|$)/, perfis: ['ADMIN'] },
   // Robô de e-mail dos bancos: mexe em dinheiro, então é só do gestor
   { teste: /^\/email-banco(\/|$)/, perfis: ['ADMIN'] },
   // Lançamentos automáticos (bot + revisão): Confio mexe no saldo, então a tela é só do gestor.

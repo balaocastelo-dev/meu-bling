@@ -1,8 +1,8 @@
 # Catálogo de APIs do MEU BLING
 
-Levantamento completo das APIs do sistema — as que o MEU BLING **oferece** (444 rotas) e as que ele **consome** lá fora (14 serviços).
+Levantamento das APIs do sistema — as que o MEU BLING **oferece** e as que ele **consome** lá fora (11 serviços).
 
-Gerado a partir do código em `balaocastelo-dev/meu-bling`, subindo o servidor e lendo a tabela de rotas real do Fastify — não é lista escrita à mão, então confere com o que está no ar.
+Os totais da seção 1 foram recontados no servidor depois da saída do JARVIS (469 rotas em `/api/v1`, nenhuma com "jarvis" no caminho). As tabelas do capítulo 5 são o levantamento anterior, só sem o bloco do JARVIS.
 
 ---
 
@@ -10,15 +10,15 @@ Gerado a partir do código em `balaocastelo-dev/meu-bling`, subindo o servidor e
 
 | | |
 |---|---|
-| Rotas HTTP publicadas | **444** |
-| Rotas sob `/api/v1` | 443 (+ `/uploads/*`) |
-| Rotas públicas (sem login) | 27 |
-| Rotas abertas para chave de API | **249** |
-| Rotas fechadas para chave (só pela tela) | 194 |
-| Endpoints documentados no catálogo interno | 254 |
+| Rotas HTTP publicadas | **471** |
+| Rotas sob `/api/v1` | 469 (as outras 2 são `/` e `/uploads/*`) |
+| Rotas públicas (sem login) | 28 |
+| Rotas abertas para chave de API | **272** |
+| Rotas fechadas para chave (só pela tela) | 169 |
+| Endpoints documentados no catálogo interno | 272 |
 | Documentação desatualizada (endpoint que não existe mais) | **0** |
-| Módulos | 36 |
-| Serviços externos consumidos | 14 |
+| Módulos com `routes.ts` | 38 |
+| Serviços externos consumidos | 11 |
 
 A API é um **Fastify** (`apps/api`) com carregamento automático: cada pasta em `src/modules/*/routes.ts` e `src/integracoes/*/routes.ts` vira um bloco de rotas. O front (`apps/web`, React + Vite) é servido pelo mesmo processo em produção, por isso tudo responde no mesmo endereço.
 
@@ -36,7 +36,7 @@ A API é um **Fastify** (`apps/api`) com carregamento automático: cada pasta em
 | **Chave de API** | `X-API-Key: mb_...` (ou `Authorization: Bearer mb_...`) | Outro sistema, n8n, Make, planilha, robô |
 | **Chave na URL** | `POST /mcp/mb_...` | Conectores de IA que não conseguem mandar cabeçalho (precisa ligar "permitir na URL" na chave) |
 
-Fora isso, as rotas **públicas** não pedem nada: `POST /auth/login`, `GET /saude`, `/publico/*`, `/webhooks/*`, `/integracoes/site/*` (essa exige a chave do site), o retorno do Mercado Livre e o WebSocket do chat (que autentica na primeira mensagem).
+Fora isso, as rotas **públicas** não pedem nada: `POST /auth/login`, `GET /saude`, `/publico/*`, `/webhooks/*`, `/integracoes/site/*` (essa exige a chave do site) e o WebSocket do chat (que autentica na primeira mensagem).
 
 ### Convenções válidas em toda a API
 
@@ -65,26 +65,23 @@ Duas regras de negócio ficam embutidas na autenticação e valem para qualquer 
 
 ## 3. APIs que o MEU BLING consome lá fora
 
-Catorze serviços. A coluna "Onde está a credencial" importa: quase tudo fica **criptografado no banco** (AES-256-GCM com a `APP_SECRET`), não em arquivo — então trocar de servidor não perde configuração, mas perder a `APP_SECRET` inutiliza todos os segredos de uma vez.
+Onze serviços. A coluna "Onde está a credencial" importa: quase tudo fica **criptografado no banco** (AES-256-GCM com a `APP_SECRET`), não em arquivo — então trocar de servidor não perde configuração, mas perder a `APP_SECRET` inutiliza todos os segredos de uma vez.
 
 | Serviço | Para que serve na loja | Como autentica | Onde está a credencial | Código |
 |---|---|---|---|---|
 | **SEFAZ (NF-e 4.00)** | Emitir, cancelar, inutilizar e consultar NF-e e NFC-e | Certificado digital **A1** (TLS mútuo), SOAP 1.2 | Empresa → certificado `.pfx` + senha, criptografados | `integracoes/fiscal/sefaz.ts` |
 | **Bling API v3** | Importar o histórico (pedidos, orçamentos, produtos) do sistema antigo | OAuth 2.0 (authorization code + refresh) | Token criptografado na Empresa | `integracoes/bling/cliente.ts` |
 | **Mercado Pago** | Link de pagamento do pedido (Checkout Pro, cartão até 12× e PIX, juros do cliente) | `Bearer <Access Token>` de produção | Empresa → Mercado Pago, criptografado (ou `MERCADOPAGO_ACCESS_TOKEN`) | `integracoes/mercadopago/link.ts` |
-| **Mercado Livre** | Publicar anúncio a partir do produto; botão "Anunciar" | OAuth 2.0, retorno em `/jarvis/ml/callback` | Token criptografado no banco | `modules/jarvis/mercadolivre.ts` |
 | **Pluggy (Open Finance)** | Puxar extrato dos bancos para conciliar | `clientId` + `clientSecret` → token; webhook em `/webhooks/pluggy` | Empresa → Open Finance, criptografado | `integracoes/openfinance/pluggy.ts` |
-| **Anthropic** | Cérebro do JARVIS: sugestões, chat, montagem de anúncio | `x-api-key`, versão `2023-06-01` | Criptografada no banco; modelo padrão `claude-fable-5-1` | `modules/jarvis/ia.ts` |
+| **Anthropic** | Analista do painel de auditoria: padrões e perguntas sobre as últimas 24 h | `x-api-key`, versão `2023-06-01` | `ANTHROPIC_API_KEY` ou chave criptografada em Configurações (Painel → Agentes → Analista) | `modules/auditoria/analista.ts` |
 | **Gmail API** | Ler os e-mails dos bancos (SumUp, Cora, Mercado Pago) para conciliar | OAuth 2.0 Google | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` + refresh token no banco | `integracoes/email/leitor.ts` |
 | **WhatsApp (Baileys)** | QR Code único da loja: CRM, avisos e cobranças | Sessão do QR Code salva em `storage/whatsapp` | Nenhuma chave — é a sessão do aparelho | `integracoes/whatsapp/servico.ts` |
 | **SMTP** | Enviar pedido, orçamento, NF e cobrança por e-mail | Usuário e senha SMTP | Empresa → SMTP, senha criptografada | `integracoes/email/servico.ts` |
 | **ViaCEP** | Preencher endereço pelo CEP | Aberta, sem chave | — | `modules/contatos/routes.ts` |
 | **BrasilAPI** | Puxar dados da empresa pelo CNPJ | Aberta, sem chave | — | `modules/robo-nf/cliente.ts` |
 | **IBGE** | Código do município para a NF-e | Aberta, sem chave | — | `modules/robo-nf/cliente.ts` |
-| **Azure Speech** | Voz do JARVIS (opção em nuvem) | Chave de assinatura | `AZURE_SPEECH_KEY` / `AZURE_SPEECH_REGION` | `modules/jarvis/voz-azure.ts` |
-| **Voz clonada / Kokoro** | Voz do JARVIS rodando no PC da loja (RTX 4090) | Rede interna, sem chave | `VOZ_CLONE_URL`, `VOZ_KOKORO_URL` | `modules/jarvis/voz.ts` |
 
-**Quando o serviço está fora do ar:** o padrão do sistema é não travar a loja. Sem chave da Anthropic o JARVIS continua funcionando com os textos próprios de cada regra; sem certificado a emissão para e explica o que falta, com link para resolver. Vale manter esse padrão em qualquer integração nova.
+**Quando o serviço está fora do ar:** o padrão do sistema é não travar a loja. Sem chave da Anthropic o analista do painel de auditoria não gera o relatório do dia; sem certificado a emissão para e explica o que falta, com link para resolver. Vale manter esse padrão em qualquer integração nova.
 
 ---
 
@@ -108,7 +105,7 @@ Quem recebe **deve conferir a assinatura** antes de confiar no conteúdo — é 
 
 ---
 
-## 5. As 444 rotas, módulo por módulo
+## 5. Rotas, módulo por módulo
 
 Legenda das colunas:
 
@@ -548,44 +545,6 @@ Legenda das colunas:
 | `GET` | `/relatorios/produtos-mais-vendidos` | Ranking de produtos.<br>Filtros: `dataInicial`, `dataFinal`, `limite` | ADMIN, GERENTE, FINANCEIRO | `relatorios` · LEITURA |
 | `GET` | `/relatorios/vendas-por-periodo` | Vendas agrupadas por dia/semana/mês.<br>Filtros: `dataInicial`, `dataFinal`, `agrupar` | ADMIN, GERENTE, FINANCEIRO | `relatorios` · LEITURA |
 
-### JARVIS (agente do gestor)
-
-> JARVIS — o agente do gestor (docs/JARVIS.md). Objetivo: R$ 1.000.000 livres no caixa.   GET  /api/v1/jarvis/painel                 painel do ADMIN: caixa livre, mapa do milhão, sugestões, placar   GET  /api/v1/jarvis/evolucao               série do gráfico (filtro de data do sistema)   GET  /api/v1/jarvis/sugestoes              lista com filtro de situação   POST /api/v1/jarvis/sugestoes/:id/aceit
->
-> Código: `apps/api/src/modules/jarvis/routes.ts`
-
-| Método | Rota | O que faz | Perfis | Chave de API |
-|---|---|---|---|---|
-| `GET` | `/jarvis/anuncios` | Lista os anúncios de produtos já montados na Central de Anúncios, com a situação de cada canal (publicado, kit pronto, pendente, erro) e o produto ligado a ele.<br>Filtros: `limite` | ADMIN | — |
-| `POST` | `/jarvis/anuncios` | Salva o anúncio do produto (título, descrição, preço, fotos) e cria uma linha para cada canal escolhido: canais com API nascem pendentes de publicação e os canais de kit (OLX, Google Meu Negócio) já nascem prontos para alguém publicar à mão. ⚠️ Só grava o anúncio no sistema; não publica nada em canal nenhum. Fica registrado na auditoria. | ADMIN | — |
-| `POST` | `/jarvis/anuncios/:id/publicar` | Manda o sistema publicar esse anúncio no canal escolhido. Hoje só o Mercado Livre publica de verdade (e só se a conta estiver conectada); nos outros canais o sistema marca 'precisa configurar' e explica o que falta, em vez de dizer que publicou. ⚠️ Publica o produto na internet, com preço, em nome da loja: o anúncio passa a ficar visível para clientes. Chama a API do Mercado Livre. Canal de kit (OLX, Google Meu Negócio) é recusado com erro. | ADMIN | — |
-| `POST` | `/jarvis/anuncios/:id/publiquei` | Registra que alguém da loja publicou o kit à mão naquele canal e guarda o link onde o anúncio ficou, junto com o nome de quem publicou. ⚠️ Só anota no sistema; não publica nada. Fica registrado na auditoria. | ADMIN | — |
-| `GET` | `/jarvis/anuncios/canais` | Mostra a lista dos canais de anúncio (Mercado Livre, site, blog, Facebook, Instagram, Google Meu Negócio, OLX), dizendo qual publica sozinho, qual vira kit para publicar à mão, o motivo e o limite de caracteres do título. | ADMIN | — |
-| `POST` | `/jarvis/anuncios/rascunho` | Monta o texto do anúncio a partir do cadastro do produto: pega nome, marca, descrição, preço e fotos e devolve título, descrição longa e um texto adaptado para cada canal, já pronto para revisar. ⚠️ Quando há chave da Anthropic cadastrada, o texto é escrito pela IA — isso consome tokens pagos da conta da Anthropic. Sem chave, usa um texto padrão e não gasta nada. | ADMIN | — |
-| `GET` | `/jarvis/config` | Mostra a configuração do JARVIS: se está ligado, a meta de caixa e a data-alvo, o modelo de IA, os percentuais usados nos cálculos de preço, os dias para considerar estoque parado e a última rodada. A chave da Anthropic e o segredo do Mercado Livre só aparecem mascarados. | ADMIN | — |
-| `PUT` | `/jarvis/config` | Altera a configuração do JARVIS: liga ou desliga o robô, muda a meta de caixa e a data-alvo, troca o modelo de IA e a chave da Anthropic, ajusta os percentuais de compra/venda e de consignado, os dias de estoque parado e as credenciais do Mercado Livre. ⚠️ A chave da Anthropic e o Client Secret do Mercado Livre são gravados criptografados; mandar o campo em branco ou com a máscara não apaga o que já estava lá. Desligar o JARVIS aqui para as rodadas automáticas. Fica registrado na auditoria (sem a chave). | ADMIN | — |
-| `POST` | `/jarvis/config/testar-ia` | Testa se a chave da Anthropic e o modelo escolhido estão funcionando, e devolve em português o que deu errado (chave recusada, modelo inexistente, limite de uso atingido). ⚠️ Faz uma chamada real e paga à API da Anthropic (mensagem mínima, de 16 tokens). Se nenhuma chave for enviada, usa a que está cadastrada. | ADMIN | — |
-| `POST` | `/jarvis/confirmar` | É o botão 'pode fazer': executa a ação que o JARVIS havia deixado pendente no chat por mexer em dinheiro ou falar com cliente, e grava o resultado na conversa. ⚠️ Executa de verdade a ação, sem a trava que a fez ficar pendente: pode baixar conta, enviar WhatsApp a cliente ou excluir registro. Fica registrado na auditoria, mas muita coisa aqui não tem volta. | ADMIN | — |
-| `GET` | `/jarvis/conversas` | Lista as conversas do gestor com o JARVIS que não foram arquivadas, da mais recente para a mais antiga, com título e quantidade de mensagens. | ADMIN | — |
-| `DELETE` | `/jarvis/conversas/:id` | Tira a conversa da lista do chat do JARVIS (ela é arquivada, não apagada do banco). ⚠️ Fica registrado na auditoria. As mensagens continuam gravadas; só deixam de aparecer na lista. | ADMIN | — |
-| `GET` | `/jarvis/conversas/:id` | Abre uma conversa inteira do chat do JARVIS, com todas as mensagens do gestor e do robô em ordem. | ADMIN | — |
-| `GET` | `/jarvis/evolucao` | Devolve a série do gráfico de evolução do caixa: um ponto por dia com caixa livre, saldo dos bancos, saldo em caixa, contas a pagar dos próximos 30 dias, caixinhas e empréstimos.<br>Filtros: `dataInicial`, `dataFinal` | ADMIN | — |
-| `GET` | `/jarvis/feed` | Mostra a quem está logado só as sugestões abertas do JARVIS destinadas ao perfil dele (até 20). Vendedor e técnico não recebem o valor de impacto em dinheiro — só ADMIN e FINANCEIRO veem esse número. | todos | — |
-| `GET` | `/jarvis/ml/callback` | É a página que o Mercado Livre abre no navegador depois que o Thiago autoriza a aplicação: troca o código recebido pelos tokens de acesso, conecta a conta e mostra uma página dizendo se deu certo. ⚠️ Rota aberta, sem login — o que autentica é o código do Mercado Livre, que vale uma única vez. Chama a API do Mercado Livre e grava os tokens criptografados na configuração. Responde HTML, não JSON.<br>Filtros: `code`, `error`, `error_description` | **pública** | — |
-| `POST` | `/jarvis/ml/conectar` | Gera o link para o dono autorizar a loja na conta dele do Mercado Livre. Não conecta nada ainda: só devolve a URL para abrir no navegador. ⚠️ Exige que o Client ID do Mercado Livre já esteja cadastrado. Fica registrado na auditoria. | ADMIN | — |
-| `POST` | `/jarvis/ml/desconectar` | Desliga a conta do Mercado Livre do sistema, apagando os tokens de acesso guardados. Depois disso nenhum anúncio é publicado lá até reconectar. ⚠️ Apaga os tokens de forma irreversível: para voltar, é preciso autorizar a conta de novo pelo navegador. Fica registrado na auditoria. | ADMIN | — |
-| `GET` | `/jarvis/ml/status` | Diz como está a ligação com o Mercado Livre: se as credenciais estão cadastradas, se a conta está conectada, qual é o apelido da conta, quando o acesso expira e qual endereço de retorno usar no cadastro da aplicação. | ADMIN | — |
-| `GET` | `/jarvis/painel` | É o painel principal do JARVIS para o dono: quanto de caixa livre a loja tem hoje, o mapa até a meta do milhão (quanto falta, por dia útil, degrau atual, variação em 7 e 30 dias), as até 30 sugestões abertas, quanto dinheiro está 'em jogo' nelas, se a IA está ligada e quando foi a última rodada. ⚠️ Cálculo pesado: lê bancos, contas a pagar, caixinhas e empréstimos a cada chamada. | ADMIN | — |
-| `POST` | `/jarvis/perguntar` | Manda uma pergunta ao JARVIS no chat. Ele responde com os números reais da loja do momento e, se precisar, consulta o sistema sozinho; o que mexe em dinheiro ou fala com cliente volta como pendente para o gestor confirmar. ⚠️ Chama a API paga da Anthropic, podendo fazer até 6 voltas de ferramentas numa só resposta — é a rota mais cara e mais lenta do módulo. Durante essas voltas o JARVIS pode criar cliente, orçamento ou OS por conta própria (coisas reversíveis). Fica registrado na auditoria. | ADMIN | — |
-| `GET` | `/jarvis/placar` | Mostra o acerto do JARVIS: quantas sugestões foram aceitas, recusadas e estão abertas, as 20 últimas já medidas e a comparação entre o que ele estimou de ganho e o que o caixa realmente rendeu. | ADMIN | — |
-| `POST` | `/jarvis/rodar` | Faz o JARVIS rodar a rodada agora, sem esperar os 30 minutos: recalcula o caixa livre, grava a foto do dia, cria e atualiza as sugestões, fecha as que se resolveram sozinhas e mede o resultado das aceitas. ⚠️ Rodada pesada e demorada; quando há chave cadastrada, chama a API paga da Anthropic para reescrever os textos das sugestões novas. Se já houver uma rodada em andamento, avisa e não faz nada. Fica registrado na auditoria. | ADMIN | — |
-| `GET` | `/jarvis/sugestoes` | Lista as sugestões do JARVIS com seu título, texto, impacto estimado em reais, prioridade e situação, podendo filtrar por situação.<br>Filtros: `situacao`, `limite` | ADMIN | — |
-| `POST` | `/jarvis/sugestoes/:id/aceitar` | Aceita a sugestão e manda o JARVIS fazer o trabalho de verdade: dependendo da sugestão, ele coloca as cobranças na fila do WhatsApp ou baixa o preço dos produtos parados. Depois de 7 dias o sistema mede quanto isso rendeu. ⚠️ Executa a ação da sugestão: pode enfileirar mensagens de cobrança por WhatsApp para clientes (sem repetir a mesma conta no mesmo dia) ou alterar o preço de venda de produtos em lote — o preço antigo não é revertido automaticamente. Nunca baixa abaixo do custo mais 5% e não mexe em produto que vem do site. O percentual só vale para a sugestão de desconto em lote (1 a 60). Fica registrado na auditoria. | ADMIN | — |
-| `POST` | `/jarvis/sugestoes/:id/adiar` | Adia a sugestão por alguns dias: ela sai da lista e volta a aparecer sozinha quando o prazo vencer. ⚠️ Fica registrado na auditoria. | ADMIN | — |
-| `POST` | `/jarvis/sugestoes/:id/recusar` | Recusa a sugestão, com um motivo opcional. O JARVIS não cria essa mesma sugestão de novo pelos próximos 7 dias. ⚠️ Fica registrado na auditoria. | ADMIN | — |
-| `POST` | `/jarvis/voz` | Transforma um texto em áudio na voz do JARVIS e devolve o arquivo de som, para o painel falar com o dono. Frases repetidas saem na hora, do cache em disco. ⚠️ Frase nova chama um serviço externo de voz: primeiro a Azure (serviço pago da Microsoft, com cota mensal gratuita) e, se ela não estiver configurada, os servidores de voz do PC da loja. Responde 503 quando nenhuma voz está no ar. | ADMIN | — |
-| `GET` | `/jarvis/voz/estado` | Diz se a voz do JARVIS está disponível agora (Azure configurada ou o PC-servidor da loja respondendo), para a tela saber se pode pedir o áudio ou se usa a voz do próprio navegador. ⚠️ Consulta os servidores de voz do PC da loja com espera curta de 2,5 segundos. | ADMIN | — |
-
 ### Chat da equipe
 
 > CHAT DA EQUIPE — caixa de entrada, salas de reunião, texto, áudio gravado, arquivos, chamadas de voz/vídeo (WebRTC) e avisos no celular (Web Push). Tudo dentro do sistema, só com o navegador.   GET    /api/v1/chat/config                      onde ligar o tempo real, STUN/TURN, chave do push   GET    /api/v1/chat/ws                           WebSocket (autentica pela 1ª mensagem {tipo:'auth', token
@@ -845,7 +804,7 @@ Legenda das colunas:
 | `POST` | `/whatsapp/enviar-teste` | Envia uma mensagem direta (sem fila). | todos | `comunicacao` · GRAVACAO |
 | `GET` | `/whatsapp/eventos` | Acompanha ao vivo a situação do WhatsApp e as mensagens que chegam. ⚠️ Conexão que fica aberta enviando atualizações (SSE): manda o estado a cada mudança, as mensagens recebidas e um sinal de vida a cada 15 segundos. Não exige perfil específico e reflete só a sessão própria do sistema, não a do servidor Evolution. | todos | — |
 | `GET` | `/whatsapp/evolution` | Mostra a configuração do servidor de WhatsApp da loja e qual motor está no ar. ⚠️ Só para ADMIN. A chave de acesso nunca aparece: vem mascarada, mostrando só os últimos caracteres. | todos | — |
-| `PUT` | `/whatsapp/evolution` | Salva o endereço, a chave e a instância do servidor de WhatsApp e escolhe se ele é quem manda. ⚠️ Só para ADMIN. Ligar aqui troca o motor do WhatsApp de toda a loja (CRM, mensagens automáticas, orçamentos e cobrança do JARVIS passam a sair pelo servidor Evolution) — pode exigir ler o QR Code de novo. A chave fica guardada criptografada e, se vier vazia ou mascarada, a anterior é mantida. Fica registrado na auditoria. | todos | — |
+| `PUT` | `/whatsapp/evolution` | Salva o endereço, a chave e a instância do servidor de WhatsApp e escolhe se ele é quem manda. ⚠️ Só para ADMIN. Ligar aqui troca o motor do WhatsApp de toda a loja (CRM, mensagens automáticas e orçamentos passam a sair pelo servidor Evolution) — pode exigir ler o QR Code de novo. A chave fica guardada criptografada e, se vier vazia ou mascarada, a anterior é mantida. Fica registrado na auditoria. | todos | — |
 | `GET` | `/whatsapp/evolution/instancias` | Lista as instâncias existentes no servidor de WhatsApp, para escolher a certa. ⚠️ Só para ADMIN. Consulta o servidor externo usando a configuração já salva; se não houver configuração, dá erro. | todos | — |
 | `POST` | `/whatsapp/evolution/testar` | Testa endereço, chave e instância do servidor de WhatsApp antes de salvar. ⚠️ Só para ADMIN. Fala com o servidor externo apenas para conferir, sem gravar nada. Se a chave vier mascarada ou em branco, usa a que já está salva; sem nenhuma chave, responde pedindo a chave. | todos | — |
 | `POST` | `/whatsapp/reconectar` | Reconecta a sessão do WhatsApp (sem precisar de novo QR). | todos | `comunicacao` · GRAVACAO |
@@ -1206,7 +1165,7 @@ código — só limite de 120 chamadas por minuto.
 
 **Para que serve no MEU BLING**
 É o canal de WhatsApp da loja: CRM dos vendedores, mensagens automáticas por situação, envio de
-orçamentos e de documentos em PDF, e a cobrança do JARVIS. Arquivos:
+orçamentos e de documentos em PDF. Arquivos:
 `integracoes/whatsapp/routes.ts`, `provedor.ts`, `evolution.ts`, `servico.ts`.
 
 Há **dois motores**, escolhidos em `provedor.ts`:
@@ -1301,8 +1260,8 @@ Leitores de aviso disponíveis (campo `parser` da regra): `SUMUP_PIX`, `SUMUP_PA
 
 ### Está saudável
 
-- **Documentação bate com o código.** Das 254 entradas do catálogo interno (`api-externa/recursos.ts`), **nenhuma** aponta para rota que não existe mais. O teste `testes/api-cobertura.ts` segura isso a cada PR: rota nova aberta para chave sem documentação reprova o build.
-- **Toda rota aberta para chave está documentada.** 249 rotas abertas, 249 documentadas. Não há buraco entre o que a chave alcança e o que o OpenAPI mostra.
+- **Documentação bate com o código.** Das 272 entradas do catálogo interno (`api-externa/recursos.ts`), **nenhuma** aponta para rota que não existe mais. O teste `testes/api-cobertura.ts` segura isso a cada PR: rota nova aberta para chave sem documentação reprova o build.
+- **Toda rota aberta para chave está documentada.** 272 rotas abertas, 272 documentadas. Não há buraco entre o que a chave alcança e o que o OpenAPI mostra.
 - **Permissão em duas camadas.** A política central (`politicas.ts`) e o `preHandler` de cada rota — uma falha na outra segura.
 - **Erro com saída.** O padrão de devolver mensagem em português dizendo o que falta, com link para resolver, está aplicado nas rotas fiscais e de configuração.
 
@@ -1317,7 +1276,7 @@ Leitores de aviso disponíveis (campo `parser` da regra): `SUMUP_PIX`, `SUMUP_PA
 
 ### Sobre "abrir todas as APIs para chave"
 
-As 194 rotas fechadas para chave **não são esquecimento** — há uma lista de bloqueio explícita em `recursos.ts`. O que está fechado hoje:
+As 169 rotas fechadas para chave **não são esquecimento** — há uma lista de bloqueio explícita em `recursos.ts`. A tabela abaixo é o levantamento anterior das áreas mais sensíveis (não soma as 169; a conta fechada está na seção 1):
 
 | Área | Rotas | Por quê |
 |---|---|---|
@@ -1325,9 +1284,8 @@ As 194 rotas fechadas para chave **não são esquecimento** — há uma lista de
 | As próprias chaves e webhooks | 17 | Chave que cria chave anula o controle de permissão |
 | Certificado, SMTP, configurações, empresa | 9 | Segredos e configuração fiscal |
 | Bling, Open Finance (vincular) | 12 | Conexões bancárias e de ERP |
-| JARVIS | 29 | Gasta API paga, publica anúncio, fala com cliente |
 | Chat da equipe | 28 | Conversas privadas e áudios dos funcionários |
 | E-mails dos bancos | 14 | Leitura de caixa postal |
 | Robôs, caixinhas, lembretes, meu-dashboard, avisos | 28 | Operacionais — candidatos naturais a abrir |
 
-Abrir tudo de uma vez transformaria qualquer chave vazada em controle total da loja, incluindo ler as conversas privadas da equipe. A sugestão é abrir **por área**, começando pelas operacionais de baixo risco (caixinhas, lembretes, meu-dashboard, metas de técnico, leitura dos robôs) e tratar JARVIS, chat e e-mail de banco como decisão à parte.
+Abrir tudo de uma vez transformaria qualquer chave vazada em controle total da loja, incluindo ler as conversas privadas da equipe. A sugestão é abrir **por área**, começando pelas operacionais de baixo risco (caixinhas, lembretes, meu-dashboard, metas de técnico, leitura dos robôs) e tratar chat e e-mail de banco como decisão à parte.

@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { MensagensCard } from '@/components/chat/MensagensCard';
-import SugestoesJarvis from '@/components/dashboard/SugestoesJarvis';
 import { BlocosAlerta } from '@/components/dashboard/BlocosAlerta';
 import { CardRoboSaude } from '@/components/compartilhados/RoboSaude';
 import { Link, useNavigate } from 'react-router-dom';
@@ -299,7 +298,6 @@ export default function DashboardGeral({ acoesExtras }: { acoesExtras?: React.Re
       {/* ===== PRECISA DE VOCÊ: tudo que pede atenção agora, em blocos ===== */}
       <Aparecer>
         <MensagensCard />
-        <SugestoesJarvis />
       </Aparecer>
       {data && data.alertas.length > 0 && (
         <Aparecer>

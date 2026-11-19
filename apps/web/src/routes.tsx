@@ -15,8 +15,6 @@ const Perfil = lazy(() => import('@/pages/auth/Perfil'));
 const DashboardVendas = lazy(() => import('@/pages/dashboard/DashboardVendas'));
 const DashboardAssistencia = lazy(() => import('@/pages/dashboard/DashboardAssistencia'));
 const DashboardConsignacao = lazy(() => import('@/pages/dashboard/DashboardConsignacao'));
-const Jarvis = lazy(() => import('@/pages/jarvis/Jarvis'));
-const JarvisAnuncios = lazy(() => import('@/pages/jarvis/Anuncios'));
 const MeuDashboard = lazy(() => import('@/pages/meu-dashboard/MeuDashboard'));
 const PainelVendedor = lazy(() => import('@/pages/vendedor/PainelVendedor'));
 const MetasDesafios = lazy(() => import('@/pages/vendedor/MetasDesafios'));
@@ -88,7 +86,6 @@ const ConfigOpenFinance = lazy(() => import('@/pages/configuracoes/OpenFinance')
 const ConfigRoboEmail = lazy(() => import('@/pages/configuracoes/RoboEmail'));
 const ConfigBling = lazy(() => import('@/pages/configuracoes/Bling'));
 const ConfigSaude = lazy(() => import('@/pages/configuracoes/Saude'));
-const ConfigJarvis = lazy(() => import('@/pages/configuracoes/Jarvis'));
 const ConfigWhatsapp = lazy(() => import('@/pages/configuracoes/Whatsapp'));
 const ConfigApi = lazy(() => import('@/pages/configuracoes/ApiIntegracoes'));
 const BlingCallback = lazy(() => import('@/pages/configuracoes/BlingCallback'));
@@ -137,8 +134,6 @@ export const router = createBrowserRouter(
       { path: 'dashboard/vendas', element: ADMIN(<DashboardVendas />) },
       { path: 'dashboard/assistencia', element: ADMIN(<DashboardAssistencia />) },
       { path: 'dashboard/consignacao', element: GESTAO(<DashboardConsignacao />) },
-      { path: 'jarvis', element: ADMIN(<Jarvis />) },
-      { path: 'jarvis/anuncios', element: ADMIN(<JarvisAnuncios />) },
       { path: 'perfil', element: S(<Perfil />) },
       { path: 'meu-painel', element: S(<Somente perfis={['ADMIN', 'GERENTE', 'VENDEDOR', 'TECNICO']}><PainelVendedor /></Somente>) },
       { path: 'metas-desafios', element: GESTAO(<MetasDesafios />) },
@@ -226,7 +221,6 @@ export const router = createBrowserRouter(
       { path: 'configuracoes/robo-email', element: ADMIN(<ConfigRoboEmail />) },
       { path: 'configuracoes/bling', element: ADMIN(<ConfigBling />) },
       { path: 'configuracoes/saude', element: ADMIN(<ConfigSaude />) },
-      { path: 'configuracoes/jarvis', element: ADMIN(<ConfigJarvis />) },
       { path: 'configuracoes/whatsapp', element: ADMIN(<ConfigWhatsapp />) },
       { path: 'configuracoes/api', element: ADMIN(<ConfigApi />) },
       { path: 'configuracoes/bling/callback', element: ADMIN(<BlingCallback />) },

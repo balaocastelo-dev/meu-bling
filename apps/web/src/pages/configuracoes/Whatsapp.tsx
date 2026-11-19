@@ -2,7 +2,7 @@
  * Configurações → WhatsApp (só ADMIN): o QR Code principal da loja.
  *
  * O WhatsApp aceita uma sessão por número. Ligando o servidor Evolution, o CRM dos
- * vendedores, as mensagens automáticas, os orçamentos e a cobrança do JARVIS passam a
+ * vendedores, as mensagens automáticas e os orçamentos passam a
  * usar o mesmo número e o mesmo QR Code. Desligando, volta para a sessão própria do
  * sistema — sem mexer em código.
  */
@@ -116,7 +116,7 @@ export default function ConfigWhatsapp() {
       <PageHeader
         migalhas={[{ rotulo: 'Configurações', para: '/configuracoes' }, { rotulo: 'WhatsApp' }]}
         titulo="WhatsApp da loja"
-        descricao="Um QR Code só para tudo: CRM dos vendedores, mensagens automáticas, orçamentos e as cobranças do JARVIS."
+        descricao="Um QR Code só para tudo: CRM dos vendedores, mensagens automáticas e orçamentos."
         extra={
           <div className="flex flex-wrap items-center gap-2">
             <Badge tom={tomPorStatus(estado?.status ?? 'DESCONECTADO')} ponto>

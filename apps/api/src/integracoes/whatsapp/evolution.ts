@@ -4,7 +4,7 @@
  * O WhatsApp aceita uma sessão por número. Enquanto o MEU BLING abria a própria sessão
  * (Baileys), ele brigava pelo número com o CRM dos vendedores — daí a necessidade de dois
  * QR Codes. A Evolution API segura a sessão e todos os sistemas falam com ela por HTTP:
- * CRM, mensagens automáticas por situação, orçamentos e a cobrança do JARVIS saem do mesmo
+ * CRM, mensagens automáticas por situação e orçamentos saem do mesmo
  * número, com o histórico junto.
  *
  * A configuração (endereço, chave e instância) fica em Configurações → WhatsApp, com a
