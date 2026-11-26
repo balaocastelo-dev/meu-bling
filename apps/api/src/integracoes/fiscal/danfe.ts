@@ -8,6 +8,7 @@ import type { Empresa } from '@prisma/client';
 import type { NotaCompleta } from './xml.js';
 import { formatarChave } from './chave.js';
 import { logoParaPdf } from '../../modules/comum/logo.js';
+import { nomeArquivoDanfe } from '../../modules/comum/nome-arquivo.js';
 
 const moeda = (v: number) => (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const docFmt = (d?: string | null) => {
@@ -35,7 +36,7 @@ function pdfParaBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
 
 /** DANFE A4 para NF-e (modelo 55). */
 export async function gerarDanfe(emp: Empresa, nota: NotaCompleta): Promise<Buffer> {
-  const doc = new PDFDocument({ size: 'A4', margin: 20, info: { Title: `DANFE ${nota.numero}` } });
+  const doc = new PDFDocument({ size: 'A4', margin: 20, info: { Title: nomeArquivoDanfe(nota).replace(/\.pdf$/i, '') } });
   const W = 595.28 - 40; // largura útil
   const x0 = 20;
   let y = 20;
@@ -187,7 +188,7 @@ export async function gerarDanfe(emp: Empresa, nota: NotaCompleta): Promise<Buff
 /** DANFE NFC-e (modelo 65) — cupom 80mm com QR Code. */
 export async function gerarDanfeNfce(emp: Empresa, nota: NotaCompleta): Promise<Buffer> {
   const largura = 226.77; // 80mm
-  const doc = new PDFDocument({ size: [largura, 640 + nota.itens.length * 26], margin: 8, info: { Title: `NFC-e ${nota.numero}` } });
+  const doc = new PDFDocument({ size: [largura, 640 + nota.itens.length * 26], margin: 8, info: { Title: nomeArquivoDanfe(nota).replace(/\.pdf$/i, '') } });
   const W = largura - 16;
   let y = 10;
   const texto = (txt: string, opts: { size?: number; bold?: boolean; align?: 'left' | 'center' | 'right'; x?: number; w?: number } = {}) => {

@@ -66,6 +66,7 @@ import {
 } from './service.js';
 import { corrigirCmvDuplicadoDaCompra, resumoCaixaDaVenda, sincronizarSaidasDaVenda } from './saidas.js';
 import { acoesBody, aprovarBody, CAMPOS_LIVRES, converterBody, gerarNfeBody, gerarParcelasBody, listaQuery, notificarBody, situacaoBody, transferirVendedorBody, vendaSchema } from './schemas.js';
+import { responderHtml } from '../comum/html.js';
 import { htmlVenda } from './imprimir.js';
 import { gravarPdfVenda, nomeArquivoPdf, pdfVenda } from './pdf.js';
 
@@ -653,7 +654,7 @@ export default async function vendasRoutes(app: FastifyInstance) {
   // ---------------------------------------------------------------- imprimir
   app.get('/api/v1/vendas/:id/imprimir', async (req, reply) => {
     const v = await carregarVenda(prisma, idDe(req));
-    return reply.type('text/html; charset=utf-8').send(await htmlVenda(v));
+    return responderHtml(reply, await htmlVenda(v));
   });
 
   // PDF do pedido/orçamento (mesmo conteúdo da impressão) — ?download=1 força o download

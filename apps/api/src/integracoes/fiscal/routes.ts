@@ -12,6 +12,7 @@ import { orientacaoNota } from './orientacao.js';
 import { caminhoXml } from './service.js';
 import { registrarServico } from '../../core/servicos.js';
 import { vendedorRestrito } from '../../modules/comum/escopo-vendas.js';
+import { nomeArquivoDanfe } from '../../modules/comum/nome-arquivo.js';
 
 const itemSchema = z.object({
   produtoId: z.number().int().nullable().optional(),
@@ -263,9 +264,9 @@ export default async function fiscalRoutes(app: FastifyInstance) {
 
   app.get('/api/v1/notas-fiscais/:id/danfe', async (req, reply) => {
     const id = Number((req.params as any).id);
-    const { buffer } = await fiscal.gerarPdfDanfe(id);
+    const { buffer, nota } = await fiscal.gerarPdfDanfe(id);
     const q = z.object({ download: z.coerce.boolean().optional() }).parse(req.query);
-    reply.header('Content-Disposition', `${q.download ? 'attachment' : 'inline'}; filename="DANFE-${id}.pdf"`);
+    reply.header('Content-Disposition', `${q.download ? 'attachment' : 'inline'}; filename="${nomeArquivoDanfe(nota)}"`);
     return reply.type('application/pdf').send(buffer);
   });
 
@@ -288,7 +289,7 @@ export default async function fiscalRoutes(app: FastifyInstance) {
         html: `<p>Olá ${nota.contato?.nome || ''},</p><p>Segue em anexo a NF-e nº <b>${nota.numero}</b> (chave ${nota.chave}).</p><p>${emp.nomeFantasia || emp.razaoSocial}</p>`,
         anexos: [
           { filename: `NFe-${nota.chave}.xml`, content: `<?xml version="1.0" encoding="UTF-8"?>${xml}`, contentType: 'application/xml' },
-          { filename: `DANFE-${nota.numero}.pdf`, content: buffer, contentType: 'application/pdf' },
+          { filename: nomeArquivoDanfe(nota), content: buffer, contentType: 'application/pdf' },
         ],
       });
       enviado = true;

@@ -2,6 +2,7 @@
  * HTML imprimível do pedido de venda / orçamento (A4).
  */
 import { cabecalhoEmpresa, dadosEmpresa, data, enderecoLinha, esc, formatarDocumento, formatarTelefone, moeda, paginaHtml, qtd } from '../comum/html.js';
+import { tituloDocumento } from '../comum/nome-arquivo.js';
 import { arredondar } from '../../lib/util.js';
 import type { carregarVenda } from './service.js';
 
@@ -112,7 +113,7 @@ export async function htmlVenda(v: Venda): Promise<string> {
   }
   <div class="rodape">Documento sem valor fiscal. Emitido em ${data(new Date())} ${new Date().toLocaleTimeString('pt-BR')} — ${esc(emp.nome)}</div>`;
 
-  return paginaHtml(`${orcamento ? 'Orçamento' : 'Pedido de venda'} nº ${v.numero}`, corpo);
+  return paginaHtml(tituloDocumento({ tipo: orcamento ? 'Orcamento' : 'Pedido', numero: v.numero, nomePessoa: c?.nome }), corpo);
 }
 
 function fretePorConta(v: number) {

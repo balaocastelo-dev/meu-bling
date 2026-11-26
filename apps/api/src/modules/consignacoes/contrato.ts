@@ -8,7 +8,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { prisma } from '../../lib/prisma.js';
 import { env } from '../../lib/env.js';
-import { esc, enderecoLinha, formatarDocumento, formatarTelefone } from '../comum/html.js';
+import { esc, enderecoLinha, formatarDocumento, formatarTelefone, SCRIPT_TITULO_IMPRESSAO } from '../comum/html.js';
+import { tituloDocumento } from '../comum/nome-arquivo.js';
 import { logoParaHtml } from '../comum/logo.js';
 import { COR_MARCA } from '../documentos/config.js';
 import { sortearVersiculo } from '../documentos/versiculos.js';
@@ -62,7 +63,7 @@ export async function htmlContrato(c: ConsignacaoLida, opts: { botaoImprimir?: b
   ];
 
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Contrato de consignação nº ${c.numero}</title>
+<title>${esc(tituloDocumento({ tipo: 'Contrato', numero: c.numero, nomePessoa: pessoa.nome }))}</title>
 <style>
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 @page { size: A4; margin: 0; }
@@ -143,5 +144,5 @@ ${descontos.length ? `<div class="legal" style="text-align:left;color:#374151">D
 <div style="text-align:center;font-size:9.5px;margin-top:8px">${esc(emp?.municipio || 'Campinas')}, ${extenso(c.dataEntrada)}.</div>
 
 <div class="rodape"><div class="versiculo">“${esc(v.texto)}” <b>— ${esc(v.ref)}</b></div><div class="legal">Contrato nº ${c.numero} · acompanhe pelo link enviado no seu WhatsApp</div></div>
-</div></body></html>`;
+</div>${SCRIPT_TITULO_IMPRESSAO}</body></html>`;
 }

@@ -37,6 +37,7 @@ import { registrarServico } from '../../core/servicos.js';
 import { criarVenda, gerarNfeDaVenda } from '../vendas/service.js';
 import type { VendaInput } from '../vendas/schemas.js';
 import * as fiscal from '../../integracoes/fiscal/service.js';
+import { nomeArquivoDanfe } from '../comum/nome-arquivo.js';
 import { mensagemPendencias } from '../comum/nfe-checagem.js';
 import {
   INTERVALO_SINCRONIZACAO_MS,
@@ -704,10 +705,8 @@ export default async function siteRoutes(app: FastifyInstance) {
 
   app.get('/api/v1/integracoes/site/notas/:id/danfe', comChave, async (req, reply) => {
     const id = Number((req.params as { id: string }).id);
-    const n = await prisma.notaFiscal.findUnique({ where: { id }, select: { id: true, situacao: true, numero: true } });
-    if (!n) throw new NotFound('Nota fiscal');
-    const { buffer } = await fiscal.gerarPdfDanfe(id);
-    reply.header('Content-Disposition', `inline; filename="DANFE-${n.numero}.pdf"`);
+    const { buffer, nota } = await fiscal.gerarPdfDanfe(id);
+    reply.header('Content-Disposition', `inline; filename="${nomeArquivoDanfe(nota)}"`);
     return reply.type('application/pdf').send(buffer);
   });
 

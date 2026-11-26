@@ -47,6 +47,7 @@ function portaLivre(): Promise<number> {
 
 async function main() {
   const inicio = Date.now();
+  rodar('Nomes de arquivo dos PDFs e das impressões', NPX, ['tsx', 'testes/nome-arquivo.ts']);
   if (!RAPIDO) {
     rodar('Tipos da API (TypeScript)', NPX, ['tsc', '-p', 'tsconfig.json', '--noEmit']);
     rodar('Tipos da tela (TypeScript)', NPX, ['tsc', '--noEmit', '-p', 'tsconfig.json'], { cwd: WEB });

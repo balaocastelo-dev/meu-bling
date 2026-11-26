@@ -8,6 +8,8 @@
  * É gerado no navegador de propósito: o relatório é sempre o que está na tela,
  * com os mesmos filtros e a mesma ordem que a pessoa está vendo.
  */
+import { nomeArquivoDocumento, trechoNome } from '@/lib/nome-arquivo';
+
 export interface RelatorioSelecao {
   titulo: string;
   colunas: string[];
@@ -20,13 +22,21 @@ export interface RelatorioSelecao {
 
 const esc = (v: string) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
 
+/** Relatorio-Vendas-selecionadas-2026-11-26 — lista, sem número de pedido. */
+function tituloDaJanela(titulo: string): string {
+  const d = new Date();
+  const dia = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return nomeArquivoDocumento({ tipo: 'Relatorio', extras: [trechoNome(titulo), dia], ext: '' });
+}
+
 /** Colunas de número (valor, total, qtd) saem alinhadas à direita. */
 const ehNumero = (titulo: string) => /valor|total|pre[çc]o|custo|qtd|quantidade|saldo|estoque/i.test(titulo);
 
 export function relatorioDaSelecao(r: RelatorioSelecao) {
   const agora = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  const tituloJanela = tituloDaJanela(r.titulo);
   const html = `<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(r.titulo)}</title>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(tituloJanela)}</title>
 <style>
   @page { size: A4; margin: 12mm; }
   * { box-sizing: border-box; }
@@ -67,7 +77,7 @@ export function relatorioDaSelecao(r: RelatorioSelecao) {
     }
   </table>
   <footer>Documento interno — gerado pelo MEU BLING</footer>
-  <script>window.onload = () => { window.focus(); window.print(); };<\/script>
+  <script>window.addEventListener('beforeprint',function(){document.title=${JSON.stringify(tituloJanela)};});window.onload = () => { window.focus(); window.print(); };<\/script>
 </body></html>`;
 
   const janela = window.open('', '_blank');

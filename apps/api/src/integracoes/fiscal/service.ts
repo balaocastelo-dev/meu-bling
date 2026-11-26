@@ -49,7 +49,7 @@ export function caminhoDanfe(chave: string) {
 }
 
 /** Gera (ou regenera) o PDF do DANFE e salva em storage/danfe/<chave>.pdf */
-export async function gerarPdfDanfe(notaId: number): Promise<{ buffer: Buffer; caminho: string | null }> {
+export async function gerarPdfDanfe(notaId: number): Promise<{ buffer: Buffer; caminho: string | null; nota: Awaited<ReturnType<typeof carregarNota>> }> {
   const nota = await carregarNota(notaId);
   const emp = await empresa();
   const buffer = nota.modelo === 65 ? await gerarDanfeNfce(emp, nota) : await gerarDanfe(emp, nota);
@@ -59,7 +59,7 @@ export async function gerarPdfDanfe(notaId: number): Promise<{ buffer: Buffer; c
     fs.writeFileSync(caminho, buffer);
     await prisma.notaFiscal.update({ where: { id: notaId }, data: { danfePath: `/uploads/danfe/${nota.chave}.pdf` } });
   }
-  return { buffer, caminho };
+  return { buffer, caminho, nota };
 }
 
 export async function transmitir(notaId: number) {

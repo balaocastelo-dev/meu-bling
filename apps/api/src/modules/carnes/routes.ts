@@ -8,7 +8,7 @@ import { auditar } from '../../lib/auditoria.js';
 import { prisma } from '../../lib/prisma.js';
 import { AppError, NotFound } from '../../lib/errors.js';
 import { dataSchema } from '../../lib/util.js';
-import { dadosEmpresa } from '../comum/html.js';
+import { dadosEmpresa, responderHtml } from '../comum/html.js';
 import { htmlCarne } from './render.js';
 import { avaliar, carregarCfgRisco, carregarHistoricos, CLASSES } from './risco.js';
 import { alterarCarne, calcularParcelas, cancelarCarne, carneCompleto, configCarne, criarCarne, estornarParcela, listarCarnes, previaCarneVenda, receberParcela, vencimentosMensais } from './service.js';
@@ -189,7 +189,7 @@ export default async function carnesRoutes(app: FastifyInstance) {
     const { id } = idSchema.parse(req.params);
     const q = z.object({ abertas: z.coerce.boolean().optional() }).parse(req.query);
     const [c, e] = await Promise.all([carneCompleto(id), dadosEmpresa()]);
-    return reply.type('text/html; charset=utf-8').send(await htmlCarne(c, e, { soAbertas: q.abertas }));
+    return responderHtml(reply, await htmlCarne(c, e, { soAbertas: q.abertas }));
   });
 
   // ---- pela venda (vendedor imprime na hora)
@@ -204,6 +204,6 @@ export default async function carnesRoutes(app: FastifyInstance) {
     const c = await prisma.carne.findFirst({ where: { vendaId: id, situacao: { not: 'CANCELADO' } }, orderBy: { id: 'desc' }, select: { id: true } });
     if (!c) throw new AppError('Esta venda não tem carnê.', 404, 'SEM_CARNE');
     const [carne, e] = await Promise.all([carneCompleto(c.id), dadosEmpresa()]);
-    return reply.type('text/html; charset=utf-8').send(await htmlCarne(carne, e));
+    return responderHtml(reply, await htmlCarne(carne, e));
   });
 }

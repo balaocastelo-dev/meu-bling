@@ -3,6 +3,7 @@
  * via do técnico (sem valores) e etiqueta 80x50mm.
  */
 import { cabecalhoEmpresa, dadosEmpresa, data, enderecoLinha, esc, formatarDocumento, formatarTelefone, moeda, paginaHtml, qtd } from '../comum/html.js';
+import { tituloDocumento } from '../comum/nome-arquivo.js';
 import { linkPublico } from '../publico/token.js';
 import type { carregarOs } from './service.js';
 
@@ -101,7 +102,7 @@ export async function htmlOsCliente(os: Os): Promise<string> {
     <div>${esc(os.contato.nome)}<br><span class="muted">Assinatura do cliente — declaro estar de acordo com os termos acima</span></div>
   </div>
   <div class="rodape">Emitido em ${data(new Date())} ${new Date().toLocaleTimeString('pt-BR')} — ${esc(emp.nome)}${emp.telefone ? ' · ' + esc(emp.telefone) : ''}</div>`;
-  return paginaHtml(`OS nº ${os.numero} — via do cliente`, corpo, `.termos p { margin: 3px 0; font-size: 10.5px; line-height: 1.35; }`);
+  return paginaHtml(tituloDocumento({ tipo: 'OS', numero: os.numero, nomePessoa: os.contato?.nome }), corpo, `.termos p { margin: 3px 0; font-size: 10.5px; line-height: 1.35; }`);
 }
 
 export async function htmlOsTecnico(os: Os): Promise<string> {
@@ -129,7 +130,7 @@ export async function htmlOsTecnico(os: Os): Promise<string> {
   <div class="assinatura"><div>Técnico: ${esc(os.tecnico?.nome || '____________________')}</div><div>Data / hora de conclusão</div></div>
   <div class="rodape">Via interna — não entregar ao cliente. Emitido em ${data(new Date())}</div>`;
   return paginaHtml(
-    `OS nº ${os.numero} — via do técnico`,
+    tituloDocumento({ tipo: 'OS', numero: os.numero, nomePessoa: os.contato?.nome, sufixo: 'tecnico' }),
     corpo,
     `.check { display:inline-block; width:12px; height:12px; border:1px solid #111; vertical-align:middle; margin-right:4px; } .checklist { display:grid; grid-template-columns: repeat(3, 1fr); gap: 5px 12px; } .chk { font-size: 11.5px; }`,
   );
@@ -159,5 +160,5 @@ export async function htmlOsEtiqueta(os: Os): Promise<string> {
     .cliente { font-weight: bold; font-size: 12px; }
     .base { display:flex; justify-content:space-between; margin-top: 1mm; font-size: 10px; }
   `;
-  return paginaHtml(`Etiqueta OS ${os.numero}`, corpo, css);
+  return paginaHtml(tituloDocumento({ tipo: 'OS', numero: os.numero, nomePessoa: os.contato?.nome, sufixo: 'etiqueta' }), corpo, css);
 }

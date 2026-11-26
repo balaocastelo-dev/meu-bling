@@ -7,7 +7,8 @@
  * Pedido do Thiago (28/10/2026): documentos totalmente preenchidos, sem espaço em branco,
  * com informações institucionais e um versículo bíblico sorteado (com citação) no rodapé de cada folha.
  */
-import { esc, formatarDocumento, formatarTelefone, enderecoLinha } from '../comum/html.js';
+import { esc, formatarDocumento, formatarTelefone, enderecoLinha, SCRIPT_TITULO_IMPRESSAO } from '../comum/html.js';
+import { tituloDocumento } from '../comum/nome-arquivo.js';
 import { arredondar } from '../../lib/util.js';
 import { COR_MARCA, INSTITUCIONAL, OFERTA_LICENCA, TEMAS } from './config.js';
 import type { ContextoDoc, ItemDoc } from './dados.js';
@@ -201,6 +202,7 @@ function pagina(titulo: string, corpo: string, cupom = false): string {
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(titulo)}</title><style>${CSS}${cupom ? '@page { size: 80mm auto; margin: 0; }' : ''}</style></head>
 <body><div class="botoes"><button onclick="window.print()">Imprimir / Salvar PDF</button></div>${corpo}
+${SCRIPT_TITULO_IMPRESSAO}
 <script>if (location.search.includes('auto=1')) window.addEventListener('load', () => setTimeout(() => window.print(), 500));</script></body></html>`;
 }
 
@@ -556,12 +558,16 @@ function kit(c: ContextoDoc, vers: () => Versiculo): string {
 
 export function htmlDocumento(c: ContextoDoc, formato: FormatoDoc): string {
   const vers = sorteador();
-  const n = c.venda.numero;
-  if (formato === 'cupom') return pagina(`Recibo ${n} (80mm)`, cupom80(c, vers), true);
+  const titulo = tituloDocumento({
+    tipo: formato === 'cupom' ? 'Recibo-80mm' : formato === 'garantia' ? 'Garantia' : 'Recibo',
+    numero: c.venda.numero,
+    nomePessoa: c.venda.contato?.nome,
+  });
+  if (formato === 'cupom') return pagina(titulo, cupom80(c, vers), true);
   if (formato === 'garantia') {
     const k = kit(c, vers);
     // sem aparelho com certificado: o recibo A4 já traz a garantia de cada item
-    return pagina(`Garantia — pedido ${n}`, k || reciboA4(c, vers));
+    return pagina(titulo, k || reciboA4(c, vers));
   }
-  return pagina(`Recibo ${n}`, reciboA4(c, vers) + kit(c, vers));
+  return pagina(titulo, reciboA4(c, vers) + kit(c, vers));
 }

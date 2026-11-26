@@ -413,6 +413,7 @@ function ListaOs({ tecnicoId }: { tecnicoId: string }) {
         etiquetas={etiquetas ?? []}
         titulo="Etiquetas das ordens de serviço"
         permiteCopias={false}
+        origem="os"
       />
       <EditarEmLote
         aberto={editar}

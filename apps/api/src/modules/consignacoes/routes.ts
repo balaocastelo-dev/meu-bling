@@ -16,6 +16,7 @@ import { dataSchema } from '../../lib/util.js';
 import { eventos } from '../../core/eventos.js';
 import { registrarServico } from '../../core/servicos.js';
 import { hojeMeioDia } from '../comum/datas.js';
+import { responderHtml } from '../comum/html.js';
 import { htmlContrato } from './contrato.js';
 import { carregarConsignacao, lerRegras, REGRAS_PADRAO, salvarRegras, STATUS, TIPOS_EQUIPAMENTO, atualizarQuitacao } from './nucleo.js';
 import {
@@ -191,7 +192,7 @@ export default async function consignacoesRoutes(app: FastifyInstance) {
     const { id } = idSchema.parse(req.params);
     const c = await carregarConsignacao(id);
     if (!c) throw new NotFound('Consignação');
-    return reply.type('text/html; charset=utf-8').send(await htmlContrato(c));
+    return responderHtml(reply, await htmlContrato(c));
   });
 
   app.post('/api/v1/consignacoes/:id/fotos', async (req, reply) => {
@@ -304,7 +305,7 @@ export default async function consignacoesRoutes(app: FastifyInstance) {
     const c0 = await prisma.consignacao.findUnique({ where: { token }, select: { id: true } });
     if (!c0) throw new NotFound('Consignação');
     const c = await carregarConsignacao(c0.id);
-    return reply.type('text/html; charset=utf-8').send(await htmlContrato(c!));
+    return responderHtml(reply, await htmlContrato(c!));
   });
 
   app.post('/api/v1/publico/consignacao/:token/assinar', limite, async (req) => {
