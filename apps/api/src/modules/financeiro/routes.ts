@@ -35,6 +35,14 @@ import { OBS_FORA_DO_RESULTADO, OBS_AJUSTE_SALDO, OBS_TRANSFERENCIA } from '../c
 import { extratoConta } from './extrato.js';
 import { resolvedorDeOrigem, selectTituloReceber, selectTituloPagar, type OrigemLancamento } from './origem-lancamento.js';
 import { aoMudarContaQuePodeSerDas } from '../vendas/saidas.js';
+import { promoverPapel, type PapelComercial } from '../comum/papel-contato.js';
+
+/** Cliente numa conta a receber, ou fornecedor numa conta a pagar, passa a AMBOS se ainda não tiver o papel. */
+async function promoverContatoDaConta(contatoId: number | null | undefined, papel: PapelComercial) {
+  if (!contatoId) return;
+  const c = await prisma.contato.findUnique({ where: { id: contatoId }, select: { id: true, tipo: true } });
+  if (c) await promoverPapel(prisma, c, papel);
+}
 
 const SIT_FILTRO = ['ABERTO', 'RECEBIDO', 'PAGO', 'PARCIAL', 'CANCELADO', 'ATRASADO', 'DEVOLVIDO', 'NAO_MAPEADA'] as const;
 
@@ -180,6 +188,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
   app.post('/api/v1/contas-receber', { preHandler: fin }, async (req, reply) => {
     const b = contaSchema.parse(req.body);
     if (!b.vencimento) throw new AppError('Informe o vencimento.', 400, 'VALIDACAO');
+    await promoverContatoDaConta(b.contatoId, 'CLIENTE');
     const c = await prisma.contaReceber.create({
       data: {
         contatoId: b.contatoId ?? null,
@@ -210,6 +219,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
     if (!atual) throw new NotFound('Conta a receber');
     if (atual.situacao === 'CANCELADO') throw new AppError('Conta cancelada não pode ser alterada.', 422, 'SITUACAO_INVALIDA');
     if (b.valor !== undefined && atual.situacao !== 'ABERTO') throw new AppError('Estorne a baixa antes de alterar o valor.', 422, 'JA_BAIXADA');
+    await promoverContatoDaConta(b.contatoId, 'CLIENTE');
     const data: any = { ...b };
     delete data.recorrente;
     if (b.dataEmissao === undefined) delete data.dataEmissao;
@@ -335,6 +345,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
   app.post('/api/v1/contas-pagar', { preHandler: fin }, async (req, reply) => {
     const b = contaSchema.parse(req.body);
     if (!b.vencimento) throw new AppError('Informe o vencimento.', 400, 'VALIDACAO');
+    await promoverContatoDaConta(b.contatoId, 'FORNECEDOR');
     const c = await prisma.contaPagar.create({
       data: {
         contatoId: b.contatoId ?? null,
@@ -362,6 +373,7 @@ export default async function financeiroRoutes(app: FastifyInstance) {
   app.put('/api/v1/contas-pagar/:id', { preHandler: fin }, async (req) => {
     const id = Number((req.params as any).id);
     const b = contaSchema.partial().parse(req.body);
+    await promoverContatoDaConta(b.contatoId, 'FORNECEDOR');
     await alterarContaPagar(id, {
       contatoId: b.contatoId,
       descricao: b.descricao,

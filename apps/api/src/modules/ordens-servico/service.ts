@@ -16,6 +16,7 @@ import { criarNotaPendente } from '../comum/nfe.js';
 import { mensagemPendencias, verificarNfe } from '../comum/nfe-checagem.js';
 import { hojeMeioDia, inicioDia } from '../comum/datas.js';
 import { cfgCustosAtual, cfgCustosOs, custosOs, pendenciasCustoOs, type OsParaCusto, type PendenciaCusto } from '../comum/custos-os.js';
+import { promoverPapel } from '../comum/papel-contato.js';
 import type { CfgCustos } from '../comum/custos-venda.js';
 
 type Db = Tx | typeof prisma;
@@ -184,8 +185,9 @@ export async function osCompleta(id: number) {
 
 /** Monta itens e totais. */
 export async function prepararOs(db: Db, body: OsInput) {
-  const contato = await db.contato.findUnique({ where: { id: body.contatoId } });
-  if (!contato) throw new AppError('Cliente não encontrado.', 422, 'CONTATO');
+  const achado = await db.contato.findUnique({ where: { id: body.contatoId } });
+  if (!achado) throw new AppError('Cliente não encontrado.', 422, 'CONTATO');
+  const contato = await promoverPapel(db, achado, 'CLIENTE');
   let comissaoVendedorPadrao = 0;
   let comissaoTecnicoPadrao = 0;
   if (body.vendedorId) {

@@ -9,7 +9,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { AlertTriangle, BookOpen, CheckCircle2, Copy, Plus, Printer, RotateCcw, Settings2, ShieldCheck, Undo2, Wallet } from 'lucide-react';
 import { abrirEmNovaAba, api, mensagemErro } from '@/lib/api';
-import { buscarContatos } from '@/lib/buscas';
+import { buscarContatosComPapel } from '@/lib/buscas';
+import { aoEscolherPapel } from '@/lib/papel-contato';
 import { useContasFinanceiras, opcoesDe } from '@/hooks/useListas';
 import { Badge, BarraFiltros, BuscaFiltro, Button, Card, DateInput, Drawer, EmptyState, Input, Modal, MoneyInput, PageHeader, SearchSelect, Segmentado, Select, StatCard, Table, Tabs, Textarea, type Coluna } from '@/components/ui';
 import { data, hoje, moeda, numero } from '@/lib/format';
@@ -359,7 +360,7 @@ function NovoCarne({ aberto, inicial, onFechar }: { aberto: boolean; inicial: { 
       rodape={<><Button variante="secundario" onClick={onFechar}>Cancelar</Button><Button carregando={criar.isPending} disabled={!f.clienteId || !(f.valor > 0)} onClick={() => criar.mutate()}>Emitir carnê</Button></>}
     >
       <div className="space-y-4">
-        <SearchSelect label="Cliente" obrigatorio valor={f.clienteId} rotuloAtual={f.clienteNome} buscar={(t) => buscarContatos(t, 'CLIENTE')} onChange={(id, op) => setF((x) => ({ ...x, clienteId: id as number | null, clienteNome: op?.rotulo ?? null, taxa: null }))} />
+        <SearchSelect label="Cliente" obrigatorio valor={f.clienteId} rotuloAtual={f.clienteNome} buscar={(t) => buscarContatosComPapel(t)} onChange={(id, op) => { setF((x) => ({ ...x, clienteId: id as number | null, clienteNome: op?.rotulo ?? null, taxa: null })); aoEscolherPapel(qc, op?.dados, 'CLIENTE'); }} />
         {risco && (
           <div className={`flex items-start gap-3 rounded-lg p-3 text-sm ${risco.apto ? 'bg-emerald-50 text-emerald-900' : risco.comRessalva ? 'bg-amber-50 text-amber-900' : 'bg-red-50 text-red-800'}`}>
             <SeloClasse classe={risco.classe} score={risco.score} />

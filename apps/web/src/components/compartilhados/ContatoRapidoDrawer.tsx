@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Download, Search } from 'lucide-react';
-import { api, mensagemErro } from '@/lib/api';
-import { Button, Drawer, Input, Select } from '@/components/ui';
-import { somenteDigitos } from '@/lib/format';
+import { ApiError, api, mensagemErro } from '@/lib/api';
+import { Badge, Button, Drawer, Input, Select } from '@/components/ui';
+import { documento, somenteDigitos, telefone } from '@/lib/format';
+import { mensagemContatoExistente, rotuloPapel, tipoParaPromover, type PapelComercial } from '@/lib/papel-contato';
 import type { Contato, DadosCnpj, TipoContato } from '@/types';
 
 interface Props {
@@ -44,8 +45,18 @@ export function ContatoRapidoDrawer({ aberto, onFechar, onCriado, tipo = 'CLIENT
   const [form, setForm] = useState({ ...VAZIO });
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [buscandoCnpj, setBuscandoCnpj] = useState(false);
+  const [duplicado, setDuplicado] = useState<Contato | null>(null);
+  const [usando, setUsando] = useState(false);
   const ultimoCep = useRef('');
-  const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const papel: PapelComercial = tipo === 'FORNECEDOR' ? 'FORNECEDOR' : 'CLIENTE';
+  const set = (k: keyof typeof form, v: string) => {
+    if (k === 'documento') setDuplicado(null);
+    setForm((f) => ({ ...f, [k]: v }));
+  };
+
+  useEffect(() => {
+    if (!aberto) setDuplicado(null);
+  }, [aberto]);
 
   const ehJuridica = form.tipoPessoa === 'J';
 
@@ -120,14 +131,51 @@ export function ContatoRapidoDrawer({ aberto, onFechar, onCriado, tipo = 'CLIENT
       }),
     onSuccess: (c) => {
       toast.success(`${tipo === 'FORNECEDOR' ? 'Fornecedor' : 'Cliente'} cadastrado.`);
-      qc.invalidateQueries({ queryKey: ['contatos'] });
-      onCriado(c);
-      setForm({ ...VAZIO });
-      ultimoCep.current = '';
-      onFechar();
+      fecharCom(c);
     },
-    onError: (e) => toast.error(mensagemErro(e)),
+    onError: async (e) => {
+      if (e instanceof ApiError && e.code === 'DOCUMENTO_DUPLICADO') {
+        const id = (e.detalhes as { contatoId?: number } | undefined)?.contatoId;
+        if (id) {
+          try {
+            setDuplicado(await api.get<Contato>(`/contatos/${id}`));
+            return;
+          } catch {
+            /* se o detalhe falhar, o toast abaixo ainda explica o 409 */
+          }
+        }
+      }
+      toast.error(mensagemErro(e));
+    },
   });
+
+  const fecharCom = (c: Contato) => {
+    qc.invalidateQueries({ queryKey: ['contatos'] });
+    onCriado(c);
+    setForm({ ...VAZIO });
+    setDuplicado(null);
+    ultimoCep.current = '';
+    onFechar();
+  };
+
+  const usarExistente = async () => {
+    if (!duplicado) return;
+    setUsando(true);
+    try {
+      const promove = tipoParaPromover(duplicado.tipo, papel);
+      const reativar = duplicado.ativo === false;
+      let c = duplicado;
+      if (promove || reativar) {
+        c = await api.put<Contato>(`/contatos/${duplicado.id}`, { ...(promove ? { tipo: promove } : {}), ...(reativar ? { ativo: true } : {}) });
+      }
+      toast.success(mensagemContatoExistente(papel, !!promove, reativar));
+      fecharCom(c);
+    } catch (e) {
+      toast.error(mensagemErro(e));
+    } finally {
+      setUsando(false);
+    }
+  };
 
   return (
     <Drawer
@@ -148,6 +196,22 @@ export function ContatoRapidoDrawer({ aberto, onFechar, onCriado, tipo = 'CLIENT
       }
     >
       <div className="space-y-4">
+        {duplicado && (
+          <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <p className="text-sm font-medium text-amber-950">Este documento já está cadastrado. Use o contato existente — não criamos outro com o mesmo CPF/CNPJ.</p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-slate-900">{duplicado.nome}</p>
+                <p className="truncate text-xs text-slate-600">{[documento(duplicado.documento), telefone(duplicado.celular || duplicado.telefone)].filter(Boolean).join(' · ') || 'Sem telefone'}</p>
+              </div>
+              <Badge tom={duplicado.tipo === 'CLIENTE' ? 'azul' : duplicado.tipo === 'FORNECEDOR' ? 'laranja' : duplicado.tipo === 'AMBOS' ? 'verde' : 'neutro'}>{rotuloPapel(duplicado.tipo)}</Badge>
+            </div>
+            {duplicado.ativo === false && <p className="text-xs text-amber-800">Este contato está inativo. Reativar faz ele voltar para as buscas.</p>}
+            <Button variante="primario" tamanho="sm" carregando={usando} onClick={() => void usarExistente()}>
+              {duplicado.ativo === false ? 'Reativar e usar' : 'Usar este contato'}
+            </Button>
+          </div>
+        )}
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Select label="Pessoa" value={form.tipoPessoa} onChange={(e) => set('tipoPessoa', e.target.value)} opcoes={[{ valor: 'F', rotulo: 'Física' }, { valor: 'J', rotulo: 'Jurídica' }]} />

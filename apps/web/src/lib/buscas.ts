@@ -4,7 +4,9 @@
 import { createElement } from 'react';
 import { api } from '@/lib/api';
 import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/ProdutoSite';
+import { Badge } from '@/components/ui/Badge';
 import { documento, moeda } from '@/lib/format';
+import { rotuloPapel } from '@/lib/papel-contato';
 import type { OpcaoBusca } from '@/components/ui/SearchSelect';
 import type { Contato, Paginado, Produto, TipoContato } from '@/types';
 
@@ -14,6 +16,22 @@ export async function buscarContatos(texto: string, tipo?: TipoContato): Promise
     id: c.id,
     rotulo: c.nome,
     sub: [c.fantasia, documento(c.documento), c.celular || c.telefone].filter(Boolean).join(' · '),
+    dados: c,
+  }));
+}
+
+/**
+ * Busca de cliente ou fornecedor nas telas de compra, venda, OS e financeiro.
+ * Lista qualquer contato comercial ativo (cliente, fornecedor ou os dois), com a tag do papel atual.
+ * Não inclui quem é só transportadora. O filtro ?tipo= da lista de cadastros continua separado.
+ */
+export async function buscarContatosComPapel(texto: string): Promise<OpcaoBusca[]> {
+  const r = await api.get<Paginado<Contato>>('/contatos', { pesquisa: texto, comercial: true, ativo: true, limite: 15 });
+  return r.data.map((c) => ({
+    id: c.id,
+    rotulo: c.nome,
+    sub: [c.fantasia, documento(c.documento), c.celular || c.telefone].filter(Boolean).join(' · '),
+    selo: createElement(Badge, { tom: c.tipo === 'CLIENTE' ? 'azul' : c.tipo === 'FORNECEDOR' ? 'laranja' : 'verde', children: rotuloPapel(c.tipo) }),
     dados: c,
   }));
 }

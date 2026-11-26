@@ -16,7 +16,8 @@ import { Modal } from '@/components/ui/Modal';
 import { Textarea } from '@/components/ui/Input';
 import { DateInput, SearchSelect, Select } from '@/components/ui';
 import { useContasFinanceiras, opcoesDe } from '@/hooks/useListas';
-import { buscarContatos } from '@/lib/buscas';
+import { buscarContatosComPapel } from '@/lib/buscas';
+import { aoEscolherPapel } from '@/lib/papel-contato';
 import { hoje, moeda } from '@/lib/format';
 import type { CaixaVenda, PendenciaFinalizacao } from '@/types';
 
@@ -357,10 +358,11 @@ export function FinalizarVendaModal({ vendaId, numero, aberto, onFechar }: { ven
                       label="Fornecedor (opcional)"
                       valor={fornecedorId}
                       rotuloAtual={fornecedorNome}
-                      buscar={(t) => buscarContatos(t, 'FORNECEDOR')}
+                      buscar={(t) => buscarContatosComPapel(t)}
                       onChange={(v, op) => {
                         setFornecedorId((v as number) ?? null);
                         setFornecedorNome(op?.rotulo ?? null);
+                        aoEscolherPapel(qc, op?.dados, 'FORNECEDOR');
                       }}
                     />
                     <div className="flex flex-wrap items-center justify-between gap-2">

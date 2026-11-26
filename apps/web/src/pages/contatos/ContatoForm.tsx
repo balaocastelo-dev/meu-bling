@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Download, Save, Search, X } from 'lucide-react';
-import { api, mensagemErro } from '@/lib/api';
+import { ApiError, api, mensagemErro } from '@/lib/api';
 import { useVendedores, opcoesDe } from '@/hooks/useListas';
-import { Button, Checkbox, FormSkeleton, Input, MoneyInput, PageHeader, Secao, Select, Textarea } from '@/components/ui';
-import { somenteDigitos } from '@/lib/format';
+import { Badge, Button, Checkbox, FormSkeleton, Input, MoneyInput, PageHeader, Secao, Select, Textarea } from '@/components/ui';
+import { documento, somenteDigitos, telefone } from '@/lib/format';
+import { rotuloPapel, tipoParaPromover } from '@/lib/papel-contato';
 import type { Contato, DadosCnpj, TipoContato } from '@/types';
 
 type Form = Omit<Contato, 'id' | 'resumo' | 'vendedor' | 'criadoEm'>;
@@ -53,6 +54,8 @@ export default function ContatoForm() {
   const [form, setForm] = useState<Form>(() => vazio((sp.get('tipo') as TipoContato) || 'CLIENTE'));
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [buscandoCnpj, setBuscandoCnpj] = useState(false);
+  const [duplicado, setDuplicado] = useState<Contato | null>(null);
+  const [usando, setUsando] = useState(false);
 
   const { data: contato, isLoading } = useQuery({ queryKey: ['contato', id], queryFn: () => api.get<Contato>(`/contatos/${id}`), enabled: editando });
   useEffect(() => {
@@ -142,8 +145,46 @@ export default function ContatoForm() {
       qc.invalidateQueries({ queryKey: ['contato', String(c.id)] });
       nav(`/contatos/${c.id}`);
     },
-    onError: (e) => toast.error(mensagemErro(e)),
+    onError: async (e) => {
+      if (!editando && e instanceof ApiError && e.code === 'DOCUMENTO_DUPLICADO') {
+        const id = (e.detalhes as { contatoId?: number } | undefined)?.contatoId;
+        if (id) {
+          try {
+            setDuplicado(await api.get<Contato>(`/contatos/${id}`));
+            return;
+          } catch {
+            /* cai no toast */
+          }
+        }
+      }
+      setDuplicado(null);
+      toast.error(mensagemErro(e));
+    },
   });
+
+  const usarExistente = async () => {
+    if (!duplicado || editando) return;
+    setUsando(true);
+    try {
+      let promove: 'AMBOS' | null = null;
+      if (duplicado.tipo !== 'TRANSPORTADORA' && form.tipo !== 'TRANSPORTADORA') {
+        if (form.tipo === 'AMBOS') promove = duplicado.tipo === 'AMBOS' ? null : 'AMBOS';
+        else if (form.tipo === 'CLIENTE' || form.tipo === 'FORNECEDOR') promove = tipoParaPromover(duplicado.tipo, form.tipo);
+      }
+      const reativar = duplicado.ativo === false;
+      let destino = duplicado;
+      if (promove || reativar) {
+        destino = await api.put<Contato>(`/contatos/${duplicado.id}`, { ...(promove ? { tipo: promove } : {}), ...(reativar ? { ativo: true } : {}) });
+        toast.success(reativar ? 'Contato reativado e aberto.' : 'Contato existente marcado com o papel pedido.');
+      }
+      qc.invalidateQueries({ queryKey: ['contatos'] });
+      nav(`/contatos/${destino.id}`);
+    } catch (e) {
+      toast.error(mensagemErro(e));
+    } finally {
+      setUsando(false);
+    }
+  };
 
   const submeter = () => {
     if (!form.nome.trim()) return toast.error('Informe o nome.');
@@ -167,6 +208,21 @@ export default function ContatoForm() {
         }
       />
       <div className="space-y-4">
+        {duplicado && !editando && (
+          <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm font-medium text-amber-950">Já existe um contato com este documento. O cadastro não foi duplicado.</p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-slate-900">{duplicado.nome}</p>
+                <p className="truncate text-xs text-slate-600">{[documento(duplicado.documento), telefone(duplicado.celular || duplicado.telefone)].filter(Boolean).join(' · ') || 'Sem telefone'}</p>
+              </div>
+              <Badge tom={duplicado.tipo === 'CLIENTE' ? 'azul' : duplicado.tipo === 'FORNECEDOR' ? 'laranja' : duplicado.tipo === 'AMBOS' ? 'verde' : 'neutro'}>{rotuloPapel(duplicado.tipo)}</Badge>
+            </div>
+            <Button variante="primario" tamanho="sm" carregando={usando} onClick={() => void usarExistente()}>
+              {duplicado.ativo === false ? 'Reativar e abrir' : 'Usar este contato'}
+            </Button>
+          </div>
+        )}
         <Secao titulo="Identificação">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-12">
             <Select className="xl:col-span-3" label="Tipo de contato" value={form.tipo} onChange={(e) => set('tipo', e.target.value as TipoContato)} opcoes={[{ valor: 'CLIENTE', rotulo: 'Cliente' }, { valor: 'FORNECEDOR', rotulo: 'Fornecedor' }, { valor: 'TRANSPORTADORA', rotulo: 'Transportadora' }, { valor: 'AMBOS', rotulo: 'Cliente e fornecedor' }]} />
@@ -177,7 +233,10 @@ export default function ContatoForm() {
               className="xl:col-span-3"
               label={ehJuridica ? 'CNPJ' : 'CPF'}
               value={form.documento ?? ''}
-              onChange={(e) => set('documento', e.target.value)}
+              onChange={(e) => {
+                set('documento', e.target.value);
+                setDuplicado(null);
+              }}
               inputMode="numeric"
               ajuda="Pode digitar com pontos e traço. Se o dígito não bater, o cadastro salva e avisamos."
               onKeyDown={(e) => ehJuridica && e.key === 'Enter' && (e.preventDefault(), importarCnpj())}

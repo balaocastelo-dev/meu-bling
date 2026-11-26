@@ -13,6 +13,20 @@ import { consultarCnpj } from './cnpj.js';
 import { faltasCadastroCliente } from '../comum/cadastro-cliente.js';
 import { cnpjValido, cpfValido } from '../comum/nfe-checagem.js';
 
+const selectDuplicado = { id: true, nome: true, tipo: true, ativo: true, documento: true, celular: true, telefone: true } as const;
+
+function erroDocumentoDuplicado(dup: { id: number; nome: string; tipo: string; ativo: boolean; documento: string | null; celular: string | null; telefone: string | null }): never {
+  throw new AppError(`Já existe um contato com este documento: ${dup.nome} (id ${dup.id}).`, 409, 'DOCUMENTO_DUPLICADO', {
+    contatoId: dup.id,
+    nome: dup.nome,
+    tipo: dup.tipo,
+    ativo: dup.ativo,
+    documento: dup.documento,
+    celular: dup.celular,
+    telefone: dup.telefone,
+  });
+}
+
 const TIPOS = ['CLIENTE', 'FORNECEDOR', 'TRANSPORTADORA', 'AMBOS'] as const;
 
 const texto = z.string().trim().nullable().optional();
@@ -125,6 +139,8 @@ export default async function contatosRoutes(app: FastifyInstance) {
       .extend({
         pesquisa: z.string().trim().optional(),
         tipo: z.enum(TIPOS).optional(),
+        /** Busca das telas de cliente/fornecedor: CLIENTE, FORNECEDOR e AMBOS. Não muda o filtro ?tipo=. */
+        comercial: boolQuery,
         ativo: boolQuery,
         vendedorId: z.coerce.number().int().optional(),
         uf: z.string().trim().optional(),
@@ -133,8 +149,10 @@ export default async function contatosRoutes(app: FastifyInstance) {
 
     const where: any = { ativo: q.ativo, vendedorId: q.vendedorId, uf: q.uf || undefined };
     if (q.tipo) {
-      // AMBOS atende como cliente e fornecedor
+      // AMBOS atende como cliente e fornecedor. A lista de Cadastros continua filtrando por um tipo.
       where.tipo = q.tipo === 'CLIENTE' || q.tipo === 'FORNECEDOR' ? { in: [q.tipo, 'AMBOS'] } : q.tipo;
+    } else if (q.comercial) {
+      where.tipo = { in: ['CLIENTE', 'FORNECEDOR', 'AMBOS'] };
     }
     if (q.pesquisa) {
       const p = q.pesquisa;
@@ -301,8 +319,8 @@ export default async function contatosRoutes(app: FastifyInstance) {
     body.documento = doc.documento;
     if (doc.tipoPessoa) body.tipoPessoa = doc.tipoPessoa;
     if (body.documento) {
-      const dup = await prisma.contato.findFirst({ where: { documento: body.documento }, select: { id: true, nome: true } });
-      if (dup) throw new AppError(`Já existe um contato com este documento: ${dup.nome} (id ${dup.id}).`, 409, 'DOCUMENTO_DUPLICADO', { contatoId: dup.id });
+      const dup = await prisma.contato.findFirst({ where: { documento: body.documento }, select: selectDuplicado });
+      if (dup) erroDocumentoDuplicado(dup);
     }
     const c = await prisma.contato.create({ data: body as any });
     await auditar(req, 'Contato', c.id, 'CRIAR', { nome: c.nome, documento: c.documento });
@@ -323,8 +341,8 @@ export default async function contatosRoutes(app: FastifyInstance) {
       avisoDocumento = doc.aviso;
     }
     if (body.documento && body.documento !== atual.documento) {
-      const dup = await prisma.contato.findFirst({ where: { documento: body.documento, id: { not: id } }, select: { id: true, nome: true } });
-      if (dup) throw new AppError(`Já existe um contato com este documento: ${dup.nome} (id ${dup.id}).`, 409, 'DOCUMENTO_DUPLICADO', { contatoId: dup.id });
+      const dup = await prisma.contato.findFirst({ where: { documento: body.documento, id: { not: id } }, select: selectDuplicado });
+      if (dup) erroDocumentoDuplicado(dup);
     }
     const c = await prisma.contato.update({ where: { id }, data: body as any });
     await auditar(req, 'Contato', id, 'ALTERAR', body);
