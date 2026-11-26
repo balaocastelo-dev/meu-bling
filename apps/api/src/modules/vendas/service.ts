@@ -25,6 +25,7 @@ import { anunciosDaOrigem } from '../anuncios/origem.js';
 import { baixarContaPagar, baixarContaReceber, saldoContaPagar, saldoContaReceber } from '../financeiro/service.js';
 import { estornarSaidasDaVenda, resumoCaixaDaVenda, sincronizarSaidasDaVenda } from './saidas.js';
 import { marcaCompraDaVenda, obsCompraPagaAoFinalizar } from '../comum/compra-venda.js';
+import { promoverPapel } from '../comum/papel-contato.js';
 import type { ItemInput, ParcelaInput, TipoVenda, VendaInput } from './schemas.js';
 
 export { marcaCompraDaVenda, obsCompraPagaAoFinalizar };
@@ -249,8 +250,9 @@ export async function comissaoPadraoVendedor(db: Db, vendedorId: number | null |
 
 /** Prepara os dados (itens, parcelas, totais) de um body validado. */
 export async function prepararVenda(db: Db, body: VendaInput) {
-  const contato = await db.contato.findUnique({ where: { id: body.contatoId } });
-  if (!contato) throw new AppError('Cliente não encontrado.', 422, 'CONTATO');
+  const achado = await db.contato.findUnique({ where: { id: body.contatoId } });
+  if (!achado) throw new AppError('Cliente não encontrado.', 422, 'CONTATO');
+  const contato = await promoverPapel(db, achado, 'CLIENTE');
   const comissaoPadrao = await comissaoPadraoVendedor(db, body.vendedorId);
   const itens = await montarItens(db, body.itens, comissaoPadrao);
   const totais = calcularTotais(itens, body);
@@ -1167,6 +1169,8 @@ export async function registrarCompraDaVenda(vendaId: number, p: CompraDaVendaIn
   const marca = marcaCompraDaVenda(venda.numero);
 
   const compra = await prisma.$transaction(async (tx) => {
+    const fornecedor = await tx.contato.findUnique({ where: { id: fornecedorId }, select: { id: true, tipo: true } });
+    if (fornecedor) await promoverPapel(tx, fornecedor, 'FORNECEDOR');
     const numero = await proximoNumero('COMPRA', tx);
     const linhas = itens.map((i, idx) => ({ produtoId: i.produtoId, descricao: i.descricao, unidade: i.unidade, quantidade: i.quantidade, valorUnitario: i.custoUnitario, total: arredondar(i.custoUnitario * i.quantidade), ordem: idx }));
     const total = arredondar(linhas.reduce((s, l) => s + l.total, 0));

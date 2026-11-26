@@ -5,7 +5,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { AlertTriangle, Ban, BadgeDollarSign, CalendarClock, HandCoins, Landmark, Pencil, Plus, Repeat2, Send, Wallet } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
-import { buscarContatos } from '@/lib/buscas';
+import { buscarContatos, buscarContatosComPapel } from '@/lib/buscas';
+import { aoEscolherPapel } from '@/lib/papel-contato';
 import { useContasFinanceiras, opcoesDe } from '@/hooks/useListas';
 import { Badge, BarraFiltros, BuscaFiltro, Button, Card, DateInput, Drawer, EmptyState, Input, Modal, MoneyInput, PageHeader, PeriodoFiltro, SearchSelect, Segmentado, Select, SelectFiltro, StatCard, Table, Textarea, type Coluna } from '@/components/ui';
 import { data, hoje, moeda, numero } from '@/lib/format';
@@ -145,6 +146,7 @@ export default function Emprestimos() {
 
 // ------------------------------------------------------------------ nova operação
 function NovaOperacao({ aberto, onFechar, onCriada }: { aberto: boolean; onFechar: () => void; onCriada: (id: number) => void }) {
+  const qc = useQueryClient();
   const { data: contasFin } = useContasFinanceiras();
   const vazio = { credorId: null as number | null, credorNome: null as string | null, modalidade: 'REPASSE' as Modalidade, clienteId: null as number | null, clienteNome: null as string | null, contaReceberClienteId: '' as number | '', valorRecebido: 0, taxaPct: 6, prazoDias: 30, parcelas: 1, dataOperacao: hoje(), contaFinanceiraId: '' as number | '', codigo: '', descricao: '', observacoes: '' };
   const [f, setF] = useState(vazio);
@@ -226,7 +228,7 @@ function NovaOperacao({ aberto, onFechar, onCriada }: { aberto: boolean; onFecha
         </div>
         {f.modalidade !== 'CAPITAL_GIRO' && (
           <div className="grid gap-3 sm:grid-cols-2">
-            <SearchSelect label="Cliente que comprou no boleto" valor={f.clienteId} rotuloAtual={f.clienteNome} buscar={(t) => buscarContatos(t, 'CLIENTE')} onChange={(id, op) => setF((x) => ({ ...x, clienteId: id, clienteNome: op?.rotulo ?? null, contaReceberClienteId: '' }))} />
+            <SearchSelect label="Cliente que comprou no boleto" valor={f.clienteId} rotuloAtual={f.clienteNome} buscar={(t) => buscarContatosComPapel(t)} onChange={(id, op) => { setF((x) => ({ ...x, clienteId: id, clienteNome: op?.rotulo ?? null, contaReceberClienteId: '' })); aoEscolherPapel(qc, op?.dados, 'CLIENTE'); }} />
             <Select
               label="Boleto do cliente (conta a receber)"
               obrigatorio={f.modalidade === 'DIRETO'}

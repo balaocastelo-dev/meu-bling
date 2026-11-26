@@ -6,7 +6,8 @@ import { AlertTriangle, Plus, Save, Trash2, UserPlus, X } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { useCategoriasFinanceiras, useDepositos, useSituacoes, useTecnicos, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { useAuth } from '@/stores/auth';
-import { buscarContatos, buscarProdutos } from '@/lib/buscas';
+import { buscarContatosComPapel, buscarProdutos } from '@/lib/buscas';
+import { aoEscolherPapel } from '@/lib/papel-contato';
 import { Button, Checkbox, DateInput, FormSkeleton, Input, Modal, MoneyInput, PageHeader, SearchSelect, Secao, Select, Textarea, ValorOculto } from '@/components/ui';
 import { ParcelasEditor, parcelasValidas } from '@/components/compartilhados/ParcelasEditor';
 import { ContatoRapidoDrawer } from '@/components/compartilhados/ContatoRapidoDrawer';
@@ -310,10 +311,11 @@ export default function OsForm() {
               erro={erros.contatoId}
               valor={form.contatoId}
               rotuloAtual={clienteNome}
-              buscar={(t) => buscarContatos(t, 'CLIENTE')}
+              buscar={(t) => buscarContatosComPapel(t)}
               onChange={(v, op) => {
                 set('contatoId', v);
                 setClienteNome(op?.rotulo ?? null);
+                aoEscolherPapel(qc, op?.dados, 'CLIENTE');
               }}
               rodape={<button type="button" onClick={() => setDrawer(true)} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-brand-600 hover:bg-brand-50"><UserPlus className="h-4 w-4" /> Cadastrar novo cliente</button>}
             />

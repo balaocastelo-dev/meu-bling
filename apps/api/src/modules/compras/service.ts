@@ -13,6 +13,7 @@ import { cancelarContasPagar, categoriaPadraoId } from '../comum/financeiro.js';
 import { hojeMeioDia } from '../comum/datas.js';
 import { estornarCreditoBancarioCompra, lancarCreditoBancarioCompra } from '../emprestimos/credito.js';
 import { aoEstornarVendaConsignado, aoVenderConsignado, consignacaoDaCompra } from '../consignacoes/nucleo.js';
+import { promoverPapel } from '../comum/papel-contato.js';
 
 type Db = Tx | typeof prisma;
 
@@ -86,8 +87,10 @@ export async function compraCompleta(id: number) {
 
 /** Monta itens (total inclui IPI) e totais. */
 export async function prepararCompra(db: Db, body: CompraInput) {
-  const fornecedor = await db.contato.findUnique({ where: { id: body.fornecedorId } });
-  if (!fornecedor) throw new AppError('Fornecedor não encontrado.', 422, 'FORNECEDOR');
+  const achado = await db.contato.findUnique({ where: { id: body.fornecedorId } });
+  if (!achado) throw new AppError('Fornecedor não encontrado.', 422, 'FORNECEDOR');
+  // Rede de segurança: um cliente escolhido (ou colado) como fornecedor passa a ser os dois.
+  const fornecedor = await promoverPapel(db, achado, 'FORNECEDOR');
   const ids = [...new Set(body.itens.map((i) => i.produtoId).filter((x): x is number => !!x))];
   const produtos = ids.length ? await db.produto.findMany({ where: { id: { in: ids } } }) : [];
   const mapa = new Map(produtos.map((p) => [p.id, p]));
@@ -315,7 +318,7 @@ export async function importarXmlNfe(xml: string, usuarioId: number, opcoes: { d
         });
         fornecedorNovo = true;
       } else if (fornecedor.tipo === 'CLIENTE') {
-        fornecedor = await tx.contato.update({ where: { id: fornecedor.id }, data: { tipo: 'AMBOS' } });
+        fornecedor = await promoverPapel(tx, fornecedor, 'FORNECEDOR');
       }
 
       // ---- itens

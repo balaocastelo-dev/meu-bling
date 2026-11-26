@@ -7,7 +7,8 @@ import { api, mensagemErro } from '@/lib/api';
 import { useCategoriasFinanceiras, useDepositos, useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
 import { useAuth } from '@/stores/auth';
 import { FotoProduto, SeloProntaEntrega } from '@/components/compartilhados/ProdutoSite';
-import { buscarContatos, buscarProdutos } from '@/lib/buscas';
+import { buscarContatos, buscarContatosComPapel, buscarProdutos } from '@/lib/buscas';
+import { aoEscolherPapel } from '@/lib/papel-contato';
 import { Button, DateInput, FormSkeleton, Input, MoneyInput, PageHeader, SearchSelect, Secao, Select, Textarea, ValorOculto } from '@/components/ui';
 import { ParcelasEditor, parcelasValidas } from '@/components/compartilhados/ParcelasEditor';
 import { ContatoRapidoDrawer } from '@/components/compartilhados/ContatoRapidoDrawer';
@@ -277,11 +278,12 @@ export default function VendaForm({ tipo = 'PEDIDO' }: { tipo?: TipoVenda }) {
               valor={form.contatoId}
               rotuloAtual={clienteNome}
               disabled={bloqueado}
-              buscar={(t) => buscarContatos(t, 'CLIENTE')}
+              buscar={(t) => buscarContatosComPapel(t)}
               onChange={(idSel, op) => {
                 set('contatoId', idSel);
                 setClienteNome(op?.rotulo ?? null);
                 setCliente((op?.dados as Contato) ?? null);
+                aoEscolherPapel(qc, op?.dados, 'CLIENTE');
               }}
               rodape={
                 <>

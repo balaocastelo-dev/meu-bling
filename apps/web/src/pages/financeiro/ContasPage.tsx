@@ -7,7 +7,8 @@ import { CheckCheck, CircleDollarSign, Clock, ExternalLink, History, Pencil, Plu
 import { api, mensagemErro } from '@/lib/api';
 import { usePaginacao } from '@/hooks/usePaginacao';
 import { useCategoriasFinanceiras, useContasFinanceiras, useFormasPagamento, useVendedores, opcoesDe } from '@/hooks/useListas';
-import { buscarContatos } from '@/lib/buscas';
+import { buscarContatosComPapel } from '@/lib/buscas';
+import { aoEscolherPapel } from '@/lib/papel-contato';
 import { Badge, BarraFiltros, BuscaFiltro, Button, Card, Checkbox, DateInput, EmptyState, Input, Modal, MoneyInput, PageHeader, Pagination, PeriodoFiltro, SearchSelect, Select, SelectFiltro, StatCard, Table, Textarea, tomPorStatus, type Coluna } from '@/components/ui';
 import { TextoValores } from '@/components/compartilhados/TextoValores';
 import { arred, data, dataIso, diasAtraso, hoje, moeda, rotulo } from '@/lib/format';
@@ -559,6 +560,7 @@ function Resumo({ rotulo: r, valor, tom }: { rotulo: string; valor: string; tom?
 
 /** Modal de lançamento manual de conta */
 function NovaContaModal({ tipo, aberto, onFechar, onConcluido, categorias, formas, contasFin }: { tipo: 'receber' | 'pagar'; aberto: boolean; onFechar: () => void; onConcluido: () => void; categorias: { id: number; nome: string; tipo: string }[]; formas: { id: number; nome: string }[]; contasFin: { id: number; nome: string }[] }) {
+  const qc = useQueryClient();
   const ehReceber = tipo === 'receber';
   const base = ehReceber ? '/contas-receber' : '/contas-pagar';
   const [form, setForm] = useState({ descricao: '', contatoId: null as number | null, vencimento: hoje(), valor: 0, categoriaId: '' as number | '', formaPagamentoId: '' as number | '', contaFinanceiraId: '' as number | '', competencia: hoje().slice(0, 7), observacoes: '', recorrente: false });
@@ -589,7 +591,7 @@ function NovaContaModal({ tipo, aberto, onFechar, onConcluido, categorias, forma
     >
       <div className="grid grid-cols-2 gap-3">
         <Input className="col-span-2" label="Descrição" obrigatorio value={form.descricao} onChange={(e) => set('descricao', e.target.value)} autoFocus />
-        <SearchSelect className="col-span-2" label={ehReceber ? 'Cliente' : 'Fornecedor'} valor={form.contatoId} onChange={(v) => set('contatoId', v)} buscar={(t) => buscarContatos(t, ehReceber ? 'CLIENTE' : 'FORNECEDOR')} />
+        <SearchSelect className="col-span-2" label={ehReceber ? 'Cliente' : 'Fornecedor'} valor={form.contatoId} onChange={(v, op) => { set('contatoId', v); aoEscolherPapel(qc, op?.dados, ehReceber ? 'CLIENTE' : 'FORNECEDOR'); }} buscar={(t) => buscarContatosComPapel(t)} />
         <MoneyInput label="Valor" obrigatorio value={form.valor} onChange={(v) => set('valor', v)} />
         <DateInput label="Vencimento" value={form.vencimento} onChange={(v) => set('vencimento', v)} />
         <Select label="Categoria" value={form.categoriaId} onChange={(e) => set('categoriaId', e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(categorias.filter((c) => c.tipo === (ehReceber ? 'RECEITA' : 'DESPESA')))} placeholder="—" />
@@ -605,6 +607,7 @@ function NovaContaModal({ tipo, aberto, onFechar, onConcluido, categorias, forma
 
 /** Edição de conta a pagar. O que pode mudar depende da situação e da origem. */
 function EditarContaModal({ conta, onFechar, onConcluido, categorias, formas, contasFin }: { conta: ContaPagar; onFechar: () => void; onConcluido: () => void; categorias: { id: number; nome: string; tipo: string }[]; formas: { id: number; nome: string }[]; contasFin: { id: number; nome: string }[] }) {
+  const qc = useQueryClient();
   const pago = conta.situacao === 'PAGO';
   const parcial = conta.situacao === 'PARCIAL';
   const origem = avisoOrigem(conta);
@@ -690,7 +693,7 @@ function EditarContaModal({ conta, onFechar, onConcluido, categorias, formas, co
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Input className="col-span-2" label="Descrição" obrigatorio value={form.descricao} onChange={(e) => set('descricao', e.target.value)} autoFocus />
-        <SearchSelect className="col-span-2" label="Fornecedor" valor={form.contatoId} rotuloAtual={conta.contato?.nome} onChange={(v) => set('contatoId', v)} buscar={(t) => buscarContatos(t, 'FORNECEDOR')} />
+        <SearchSelect className="col-span-2" label="Fornecedor" valor={form.contatoId} rotuloAtual={conta.contato?.nome} onChange={(v, op) => { set('contatoId', v); aoEscolherPapel(qc, op?.dados, 'FORNECEDOR'); }} buscar={(t) => buscarContatosComPapel(t)} />
         <MoneyInput label="Valor" obrigatorio value={form.valor} onChange={(v) => set('valor', v)} disabled={travaValor} title={motivoValor} erro={abaixo ? `Fica abaixo do principal já pago (${moeda(piso)}). Estorne a baixa excedente.` : undefined} ajuda={!travaValor && !abaixo ? (parcial && saldoPrevisto <= 0.009 ? 'O saldo zera e a conta fica paga.' : `Saldo em aberto: ${moeda(Math.max(0, saldoPrevisto))}`) : motivoValor} />
         <DateInput label="Vencimento" value={form.vencimento} onChange={(v) => set('vencimento', v)} disabled={travaValor} title={motivoValor} ajuda={motivoValor} />
         <Select label="Categoria" value={form.categoriaId} onChange={(e) => set('categoriaId', e.target.value ? Number(e.target.value) : '')} opcoes={opcoesDe(categorias.filter((c) => c.tipo === 'DESPESA'))} placeholder="—" ajuda={parcial ? 'Não altera a categoria dos pagamentos já lançados.' : undefined} />

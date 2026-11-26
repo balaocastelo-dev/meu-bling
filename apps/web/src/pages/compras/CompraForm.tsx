@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { Plus, Save, Trash2, UserPlus, X } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
 import { useCategoriasFinanceiras, useDepositos, useSituacoes, opcoesDe } from '@/hooks/useListas';
-import { buscarContatos, buscarProdutos } from '@/lib/buscas';
+import { buscarContatosComPapel, buscarProdutos } from '@/lib/buscas';
+import { aoEscolherPapel } from '@/lib/papel-contato';
 import { Button, DateInput, FormSkeleton, Input, MoneyInput, PageHeader, SearchSelect, Secao, Select, Textarea } from '@/components/ui';
 import { ParcelasEditor, parcelasValidas } from '@/components/compartilhados/ParcelasEditor';
 import { ContatoRapidoDrawer } from '@/components/compartilhados/ContatoRapidoDrawer';
@@ -153,10 +154,11 @@ export default function CompraForm() {
               valor={form.fornecedorId}
               rotuloAtual={fornecedorNome}
               disabled={bloqueado}
-              buscar={(t) => buscarContatos(t, 'FORNECEDOR')}
+              buscar={(t) => buscarContatosComPapel(t)}
               onChange={(v, op) => {
                 set('fornecedorId', v);
                 setFornecedorNome(op?.rotulo ?? null);
+                aoEscolherPapel(qc, op?.dados, 'FORNECEDOR');
               }}
               rodape={
                 <button type="button" onClick={() => setDrawer(true)} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-brand-600 hover:bg-brand-50">
