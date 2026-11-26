@@ -46,8 +46,27 @@ async function provocar409(page: Page, caminho: string, tituloPagina: RegExp, ro
   return dialog;
 }
 
+/** A suíte inteira já logou várias vezes neste minuto; o login aceita 20/min e responde 429. */
+async function loginAdmin() {
+  for (let i = 0; i < 4; i++) {
+    const r = await fetch(API + '/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'admin@balao.info', senha: 'admin123' }),
+    });
+    if (r.status === 429) {
+      const espera = Number(r.headers.get('retry-after')) || 15;
+      await new Promise((ok) => setTimeout(ok, (Math.min(espera, 61) + 1) * 1000));
+      continue;
+    }
+    const json = await r.json().catch(() => ({}));
+    return { status: r.status, json };
+  }
+  return { status: 429, json: {} as Record<string, unknown> };
+}
+
 async function main() {
-  const login = await api('', 'POST', '/auth/login', { email: 'admin@balao.info', senha: 'admin123' });
+  const login = await loginAdmin();
   if (login.status !== 200 || !login.json?.token) {
     falhar(`login da tela → ${login.status}`);
     return encerrar('Tela Usar este contato');
