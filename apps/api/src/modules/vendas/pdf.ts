@@ -9,6 +9,7 @@ import { env } from '../../lib/env.js';
 import { arredondar } from '../../lib/util.js';
 import { dadosEmpresa, enderecoLinha, formatarDocumento, formatarTelefone } from '../comum/html.js';
 import { logoParaPdf } from '../comum/logo.js';
+import { nomeArquivoDocumento } from '../comum/nome-arquivo.js';
 import type { carregarVenda } from './service.js';
 
 type Venda = Awaited<ReturnType<typeof carregarVenda>>;
@@ -31,9 +32,13 @@ function fretePorConta(v: number) {
   return ({ 0: 'Emitente (CIF)', 1: 'Destinatário (FOB)', 2: 'Terceiros', 9: 'Sem frete' } as Record<number, string>)[v] || String(v);
 }
 
-/** Nome do arquivo público do PDF (ex.: Orcamento-12.pdf / Pedido-24838.pdf). */
-export function nomeArquivoPdf(v: { tipo: string; numero: number }) {
-  return `${v.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Pedido'}-${v.numero}.pdf`;
+/** Nome do arquivo público do PDF (ex.: Orcamento-12-Jose-da-Silva.pdf / Pedido-25070-Kairo-Costa.pdf). */
+export function nomeArquivoPdf(v: { tipo: string; numero: number; contato?: { nome?: string | null } | null }) {
+  return nomeArquivoDocumento({
+    tipo: v.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Pedido',
+    numero: v.numero,
+    nomePessoa: v.contato?.nome,
+  });
 }
 
 export async function pdfVenda(v: Venda): Promise<Buffer> {
@@ -43,7 +48,7 @@ export async function pdfVenda(v: Venda): Promise<Buffer> {
   const titulo = orcamento ? 'ORÇAMENTO' : 'PEDIDO DE VENDA';
   const descontoCalc = v.descontoTipo === 'PERCENTUAL' ? arredondar(v.totalProdutos * (v.descontoValor / 100)) : v.descontoValor;
 
-  const doc = new PDFDocument({ size: 'A4', margin: 36, info: { Title: `${titulo} nº ${v.numero}`, Author: emp.nome } });
+  const doc = new PDFDocument({ size: 'A4', margin: 36, info: { Title: nomeArquivoPdf(v).replace(/\.pdf$/i, ''), Author: emp.nome } });
   const x0 = 36;
   const W = 595.28 - 72;
   let y = 36;
@@ -253,7 +258,18 @@ export async function pdfVenda(v: Venda): Promise<Buffer> {
 export async function gravarPdfVenda(v: Venda): Promise<string> {
   const pasta = path.join(env.STORAGE_DIR, 'pedidos');
   fs.mkdirSync(pasta, { recursive: true });
-  const arquivo = path.join(pasta, nomeArquivoPdf(v));
+  const nome = nomeArquivoPdf(v);
+  const arquivo = path.join(pasta, nome);
   fs.writeFileSync(arquivo, await pdfVenda(v));
+  // só o arquivo antigo sem o cliente (Pedido-123.pdf). Notificações que já apontam para ele continuam válidas se a remoção falhar.
+  const legado = `${v.tipo === 'ORCAMENTO' ? 'Orcamento' : 'Pedido'}-${v.numero}.pdf`;
+  if (legado !== nome) {
+    const antigo = path.join(pasta, legado);
+    try {
+      if (fs.existsSync(antigo)) fs.unlinkSync(antigo);
+    } catch {
+      /* o anexo novo já está gravado com o cliente */
+    }
+  }
   return arquivo;
 }

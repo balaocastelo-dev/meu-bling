@@ -13,7 +13,8 @@ import { numeroVendaDaMarcaCompra } from '../comum/compra-venda.js';
 import { sincronizarSaidasDaCompraRegistrada, sincronizarSaidasDaVendaPeloNumero } from '../vendas/saidas.js';
 import { idDe, idsQuery } from '../comum/zod.js';
 import { intervalo } from '../comum/datas.js';
-import { cabecalhoEmpresa, dadosEmpresa, data as fData, enderecoLinha, esc, formatarDocumento, formatarTelefone, moeda, paginaHtml, qtd } from '../comum/html.js';
+import { cabecalhoEmpresa, dadosEmpresa, data as fData, enderecoLinha, esc, formatarDocumento, formatarTelefone, moeda, paginaHtml, qtd, responderHtml } from '../comum/html.js';
+import { tituloDocumento } from '../comum/nome-arquivo.js';
 import {
   acaoEstornarContas,
   acaoEstornarEstoque,
@@ -315,7 +316,8 @@ export default async function comprasRoutes(app: FastifyInstance) {
     <table><thead><tr><th>Parcela</th><th>Vencimento</th><th>Forma</th><th class="num">Valor</th><th>Situação</th></tr></thead><tbody>${parcelas}</tbody></table>
     ${c.observacoes ? `<h2>Observações</h2><div class="obs">${esc(c.observacoes)}</div>` : ''}
     <div class="rodape">Emitido em ${fData(new Date())} — ${esc(emp.nome)}</div>`;
-    return reply.type('text/html; charset=utf-8').send(paginaHtml(`Pedido de compra nº ${c.numero}`, corpo));
+    const titulo = tituloDocumento({ tipo: 'Compra', numero: c.numero, nomePessoa: f.nome });
+    return responderHtml(reply, paginaHtml(titulo, corpo));
   });
 }
 

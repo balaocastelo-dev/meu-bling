@@ -6,7 +6,8 @@
  * Cada parcela: canhoto à esquerda (fica no carnê, lado do grampo) e a lâmina com o QR Code do PIX.
  */
 import QRCode from 'qrcode';
-import { esc, formatarDocumento, formatarTelefone } from '../comum/html.js';
+import { esc, formatarDocumento, formatarTelefone, SCRIPT_TITULO_IMPRESSAO } from '../comum/html.js';
+import { tituloDocumento } from '../comum/nome-arquivo.js';
 import { COR_MARCA } from '../documentos/config.js';
 import { VERSICULOS } from '../documentos/versiculos.js';
 import type { carneCompleto } from './service.js';
@@ -175,6 +176,9 @@ export async function htmlCarne(c: Carne, e: Empresa, opcoes: { soAbertas?: bool
     while (grupo.length < 3) grupo.push('<div class="lamina vazia"></div>');
     folhas.push(`<div class="folha">${grupo.join('')}</div>`);
   }
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Carnê nº ${c.numero} — ${esc(c.cliente.nome)}</title><style>${CSS}</style></head>
-<body><div class="botoes"><button onclick="window.print()">Imprimir / salvar PDF</button></div>${folhas.join('')}</body></html>`;
+  const extras: Array<string | number> = [];
+  if (c.venda?.numero) extras.push('Pedido', c.venda.numero);
+  const titulo = tituloDocumento({ tipo: 'Carne', numero: c.numero, extras, nomePessoa: c.cliente?.nome, sufixo: opcoes.soAbertas ? '2via' : undefined });
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${CSS}</style></head>
+<body><div class="botoes"><button onclick="window.print()">Imprimir / salvar PDF</button></div>${folhas.join('')}${SCRIPT_TITULO_IMPRESSAO}</body></html>`;
 }

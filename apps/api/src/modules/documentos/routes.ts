@@ -8,6 +8,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../../lib/errors.js';
 import { carregarContexto } from './dados.js';
+import { responderHtml } from '../comum/html.js';
 import { htmlDocumento } from './render.js';
 import { prisma } from '../../lib/prisma.js';
 import { auditar } from '../../lib/auditoria.js';
@@ -22,7 +23,7 @@ export default async function documentosRoutes(app: FastifyInstance) {
   app.get('/api/v1/vendas/:id/documentos', async (req, reply) => {
     const q = z.object({ formato: z.enum(['cupom', 'a4', 'garantia']).default('a4') }).parse(req.query);
     const c = await carregarContexto(idDe(req));
-    return reply.type('text/html; charset=utf-8').send(htmlDocumento(c, q.formato));
+    return responderHtml(reply, htmlDocumento(c, q.formato));
   });
 
   app.get('/api/v1/vendas/:id/documentos/resumo', async (req) => {

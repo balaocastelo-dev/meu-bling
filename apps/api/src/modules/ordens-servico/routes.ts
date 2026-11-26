@@ -38,6 +38,7 @@ import {
 } from './service.js';
 import { pecasSemCustoOs } from '../comum/custos-os.js';
 import { arredondar } from '../../lib/util.js';
+import { responderHtml } from '../comum/html.js';
 import { htmlOsCliente, htmlOsEtiqueta, htmlOsTecnico } from './imprimir.js';
 
 registrarModulo('OS', {
@@ -527,7 +528,7 @@ export default async function ordensServicoRoutes(app: FastifyInstance) {
     const q = z.object({ via: z.enum(['cliente', 'tecnico', 'etiqueta']).default('cliente') }).parse(req.query);
     const os = await carregarOs(prisma, idDe(req));
     const html = q.via === 'tecnico' ? await htmlOsTecnico(os) : q.via === 'etiqueta' ? await htmlOsEtiqueta(os) : await htmlOsCliente(os);
-    return reply.type('text/html; charset=utf-8').send(html);
+    return responderHtml(reply, html);
   });
 
   // ---------------------------------------------------------------- notificar

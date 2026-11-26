@@ -14,6 +14,7 @@ import { eventos } from '../../core/eventos.js';
 import { registrarServico } from '../../core/servicos.js';
 import { enviarEmail, smtpConfigurado } from '../../integracoes/email/servico.js';
 import { enviarDocumento, enviarTexto, status as statusWhatsApp } from '../../integracoes/whatsapp/provedor.js';
+import { nomeArquivoDanfe } from '../comum/nome-arquivo.js';
 
 export type OrigemTipo = 'VENDA' | 'COMPRA' | 'OS' | 'NFE' | 'CONTA' | 'MANUAL' | 'CONSIGNACAO';
 export type Canal = 'EMAIL' | 'WHATSAPP';
@@ -252,8 +253,9 @@ export async function montarVariaveis(origemTipo: OrigemTipo, origemId: number):
       const xml = path.join(env.STORAGE_DIR, 'nfe', `${n.chave}.xml`);
       const pdf = path.join(env.STORAGE_DIR, 'danfe', `${n.chave}.pdf`);
       if (fs.existsSync(xml)) anexos.push({ filename: `NFe-${n.chave}.xml`, path: xml, contentType: 'application/xml' });
-      if (fs.existsSync(pdf)) anexos.push({ filename: `DANFE-${n.numero}.pdf`, path: pdf, contentType: 'application/pdf' });
-      else if (n.danfePath && fs.existsSync(n.danfePath)) anexos.push({ filename: `DANFE-${n.numero}.pdf`, path: n.danfePath, contentType: 'application/pdf' });
+      const nomeDanfe = nomeArquivoDanfe(n);
+      if (fs.existsSync(pdf)) anexos.push({ filename: nomeDanfe, path: pdf, contentType: 'application/pdf' });
+      else if (n.danfePath && fs.existsSync(n.danfePath)) anexos.push({ filename: nomeDanfe, path: n.danfePath, contentType: 'application/pdf' });
     }
     const link = n.venda ? `${env.APP_URL.replace(/\/$/, '')}/p/venda/${tokenPublico(n.venda.id)}` : n.os ? `${env.APP_URL.replace(/\/$/, '')}/p/os/${tokenPublico(n.os.id)}` : '';
     return {
@@ -486,7 +488,10 @@ export async function enviarNotificacao(n: {
       // percebe uma notificação presa (a API caiu no meio do envio).
       await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIANDO', agendadaPara: new Date() } });
       const r = await enviarTexto(n.destinatario, n.corpo);
-      if (n.anexoPath && fs.existsSync(n.anexoPath)) await enviarDocumento(n.destinatario, n.anexoPath, path.basename(n.anexoPath));
+      if (n.anexoPath && fs.existsSync(n.anexoPath)) {
+        const anexoPath = n.anexoPath;
+        await enviarDocumento(n.destinatario, anexoPath, await nomePublicoDoAnexo({ anexoPath, origemTipo: n.origemTipo, origemId: n.origemId }));
+      }
       await prisma.notificacao.update({ where: { id: n.id }, data: { status: 'ENVIADA', enviadaEm: new Date(), erro: null, externalId: r.id } });
       return { status: 'ENVIADA', erro: null };
     }
@@ -554,9 +559,21 @@ export async function processarFila(limite = 10) {
   return { processadas };
 }
 
+/** Nome que o cliente vê no anexo. No DANFE o arquivo no disco continua sendo a chave; o nome público leva NF, pedido/OS e cliente. */
+async function nomePublicoDoAnexo(n: { anexoPath: string; origemTipo: string | null; origemId: number | null }): Promise<string> {
+  if (n.origemTipo === 'NFE' && n.origemId) {
+    const nota = await prisma.notaFiscal.findUnique({
+      where: { id: n.origemId },
+      select: { numero: true, modelo: true, contato: { select: { nome: true } }, venda: { select: { numero: true } }, os: { select: { numero: true } } },
+    });
+    if (nota) return nomeArquivoDanfe(nota);
+  }
+  return path.basename(n.anexoPath);
+}
+
 async function anexosDaNotificacao(n: { anexoPath: string | null; origemTipo: string | null; origemId: number | null }) {
   const anexos: { filename: string; path: string; contentType?: string }[] = [];
-  if (n.anexoPath && fs.existsSync(n.anexoPath)) anexos.push({ filename: path.basename(n.anexoPath), path: n.anexoPath });
+  if (n.anexoPath && fs.existsSync(n.anexoPath)) anexos.push({ filename: await nomePublicoDoAnexo({ ...n, anexoPath: n.anexoPath }), path: n.anexoPath });
   if (n.origemTipo === 'NFE' && n.origemId) {
     try {
       const m = await montarVariaveis('NFE', n.origemId);

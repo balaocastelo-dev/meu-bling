@@ -90,7 +90,7 @@ const ESTILO_COMUM = `
  * Abre a janela de impressão com as etiquetas.
  * `copias` repete cada etiqueta (ex.: 5 unidades do mesmo produto na prateleira).
  */
-export function imprimirEtiquetas(etiquetas: Etiqueta[], formato: FormatoEtiqueta, copias = 1) {
+export function imprimirEtiquetas(etiquetas: Etiqueta[], formato: FormatoEtiqueta, copias = 1, tituloJanela = 'Etiquetas-produtos') {
   if (!etiquetas.length) throw new Error('Nenhuma etiqueta para imprimir.');
   const lista = etiquetas.flatMap((e) => Array.from({ length: Math.max(1, Math.min(copias, 50)) }, () => e));
 
@@ -106,10 +106,10 @@ export function imprimirEtiquetas(etiquetas: Etiqueta[], formato: FormatoEtiquet
          @media print { .et { border-color: #eee; } }`;
 
   const conteudo = lista.map((e) => `<div class="et">${corpo(e, true)}</div>`).join('');
-  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Etiquetas</title>
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(tituloJanela)}</title>
 <style>${ESTILO_COMUM}${estilo}</style></head>
 <body>${formato === 'a4' ? `<div class="folha">${conteudo}</div>` : conteudo}
-<script>window.onload = () => { window.focus(); window.print(); };<\/script></body></html>`;
+<script>window.addEventListener('beforeprint',function(){document.title=${JSON.stringify(tituloJanela)};});window.onload = () => { window.focus(); window.print(); };<\/script></body></html>`;
 
   const janela = window.open('', '_blank');
   if (!janela) throw new Error('O navegador bloqueou a janela. Libere os pop-ups deste site para imprimir.');

@@ -130,14 +130,49 @@ export const api = {
   },
 };
 
-/** Abre um conteúdo (HTML/PDF) autenticado em nova aba */
+function escaparHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * Abre um conteúdo autenticado em nova aba.
+ * PDF: uma página HTML com o título do documento (senão o "Salvar" sugere o UUID do blob).
+ * HTML: o próprio <title> já é o nome que o navegador oferece em "Salvar como PDF".
+ */
 export async function abrirEmNovaAba(caminho: string, params?: Query) {
-  const { blob } = await api.blob(caminho, params);
-  const url = URL.createObjectURL(blob);
-  const win = window.open(url, '_blank');
-  if (!win) throw new ApiError(0, 'O navegador bloqueou a abertura da nova aba.', 'POPUP');
-  // libera o objeto depois de um tempo (a aba já carregou)
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  const { blob, nome } = await api.blob(caminho, params);
+  const tipo = (blob.type || '').toLowerCase();
+  const ehPdf = tipo.includes('pdf') || (nome ?? '').toLowerCase().endsWith('.pdf');
+  if (!ehPdf) {
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) throw new ApiError(0, 'O navegador bloqueou a abertura da nova aba.', 'POPUP');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return;
+  }
+  const arquivo = nome && nome.toLowerCase().endsWith('.pdf') ? nome : 'documento.pdf';
+  const titulo = arquivo.replace(/\.pdf$/i, '');
+  const file = new File([blob], arquivo, { type: 'application/pdf' });
+  const pdfUrl = URL.createObjectURL(file);
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${escaparHtml(titulo)}</title>
+<style>html,body{margin:0;height:100%;background:#525659}iframe{border:0;width:100%;height:100%}
+.bar{position:fixed;top:8px;right:8px;z-index:2}a{background:#111;color:#fff;padding:6px 12px;border-radius:6px;font:13px/1.2 sans-serif;text-decoration:none}</style>
+</head><body>
+<div class="bar"><a href="${pdfUrl}" download="${escaparHtml(arquivo)}">Baixar</a></div>
+<iframe src="${pdfUrl}" title="${escaparHtml(titulo)}"></iframe>
+<script>window.addEventListener('beforeprint',function(){document.title=${JSON.stringify(titulo)};});</script>
+</body></html>`;
+  const pagina = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+  const win = window.open(pagina, '_blank');
+  if (!win) {
+    URL.revokeObjectURL(pagina);
+    URL.revokeObjectURL(pdfUrl);
+    throw new ApiError(0, 'O navegador bloqueou a abertura da nova aba.', 'POPUP');
+  }
+  setTimeout(() => {
+    URL.revokeObjectURL(pagina);
+    URL.revokeObjectURL(pdfUrl);
+  }, 120_000);
 }
 
 /** Força o download de um arquivo autenticado */

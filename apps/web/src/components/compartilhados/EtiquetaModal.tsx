@@ -19,6 +19,7 @@ export function EtiquetaModal({
   etiquetas,
   titulo = 'Imprimir etiquetas',
   permiteCopias = true,
+  origem = 'produtos',
 }: {
   aberto: boolean;
   onFechar: () => void;
@@ -26,6 +27,8 @@ export function EtiquetaModal({
   titulo?: string;
   /** produto: várias cópias da mesma etiqueta faz sentido; OS: não */
   permiteCopias?: boolean;
+  /** define o título da janela de impressão (não há um único pedido no lote) */
+  origem?: 'produtos' | 'os';
 }) {
   const [formato, setFormato] = useState<FormatoEtiqueta>(() => {
     try {
@@ -43,7 +46,7 @@ export function EtiquetaModal({
       /* navegador sem armazenamento: só não lembra da escolha */
     }
     try {
-      imprimirEtiquetas(etiquetas, formato, permiteCopias ? copias : 1);
+      imprimirEtiquetas(etiquetas, formato, permiteCopias ? copias : 1, origem === 'os' ? 'Etiquetas-OS' : 'Etiquetas-produtos');
       onFechar();
     } catch (e) {
       toast.error(mensagemErro(e));

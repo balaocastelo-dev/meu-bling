@@ -181,6 +181,7 @@ export default function ProdutosLista() {
           }}
           etiquetas={etiquetas ?? []}
           titulo="Etiquetas de produto"
+          origem="produtos"
         />
         <EditarEmLote
           aberto={editar}

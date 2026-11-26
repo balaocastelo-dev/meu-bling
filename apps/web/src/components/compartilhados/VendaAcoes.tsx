@@ -24,7 +24,8 @@ import {
   Trash2,
   UserRoundCog,
 } from 'lucide-react';
-import { abrirEmNovaAba, api, ApiError, mensagemErro } from '@/lib/api';
+import { abrirEmNovaAba, api, ApiError, baixarArquivo, mensagemErro } from '@/lib/api';
+import { nomeArquivoDocumento } from '@/lib/nome-arquivo';
 import { moeda } from '@/lib/format';
 import { useAuth } from '@/stores/auth';
 import { useSituacoes, useVendedores, opcoesDe } from '@/hooks/useListas';
@@ -149,15 +150,11 @@ export function VendaAcoes({ venda, contexto = 'lista' }: Props) {
 
   const baixarPdf = async () => {
     try {
-      const { blob, nome } = await api.blob(`/vendas/${venda.id}/pdf`, { download: 1 });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = nome || `${orcamento ? 'Orcamento' : 'Pedido'}-${venda.numero}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      await baixarArquivo(
+        `/vendas/${venda.id}/pdf`,
+        nomeArquivoDocumento({ tipo: orcamento ? 'Orcamento' : 'Pedido', numero: venda.numero, nomePessoa: venda.contato?.nome }),
+        { download: 1 },
+      );
     } catch (e) {
       erro(e);
     }

@@ -118,6 +118,9 @@ export function cabecalhoEmpresa(emp: Awaited<ReturnType<typeof dadosEmpresa>>):
   </div>`;
 }
 
+/** Reforço do título na hora de imprimir: o "Salvar como PDF" usa o document.title. */
+export const SCRIPT_TITULO_IMPRESSAO = `<script>window.addEventListener('beforeprint',function(){document.title=document.title;});</script>`;
+
 export function paginaHtml(titulo: string, corpo: string, cssExtra = ''): string {
   return `<!doctype html>
 <html lang="pt-BR">
@@ -130,7 +133,17 @@ export function paginaHtml(titulo: string, corpo: string, cssExtra = ''): string
 <body>
 <div class="botoes no-print"><button onclick="window.print()">Imprimir</button></div>
 ${corpo}
+${SCRIPT_TITULO_IMPRESSAO}
 <script>if (location.search.includes('auto=1')) { window.addEventListener('load', () => setTimeout(() => window.print(), 300)); }</script>
 </body>
 </html>`;
+}
+
+/** Manda o HTML de impressão com o filename no padrão (o Salvar como PDF continua dependendo do title). */
+export function responderHtml(reply: { header(name: string, value: string): unknown; type(ct: string): { send(body: string): unknown } }, html: string) {
+  const titulo = /<title>([^<]*)<\/title>/i.exec(html)?.[1] ?? '';
+  if (/^[A-Za-z0-9][A-Za-z0-9-]{0,74}[A-Za-z0-9]$/.test(titulo)) {
+    reply.header('Content-Disposition', `inline; filename="${titulo}.html"`);
+  }
+  return reply.type('text/html; charset=utf-8').send(html);
 }
