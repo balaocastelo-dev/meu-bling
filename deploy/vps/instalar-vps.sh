@@ -80,18 +80,17 @@ TURN_PORT_ATUAL="$(grep -m1 '^TURN_PORT=' "$ENV_FILE" | cut -d= -f2-)"
 msg "Pastas de dados em $DADOS"
 mkdir -p "$DADOS/data" "$DADOS/storage"
 
+msg "Cópia do banco antes de mexer (fica em $DADOS/antes-do-deploy)"
+# Roda antes do build de propósito: se o disco estiver cheio das cópias
+# antigas, a limpeza libera espaço antes da imagem. O script comprime
+# (zstd, ou gzip), confere a cópia e só então fica com as 2 mais recentes.
+# Se a conferência ou o espaço falhar, ele sai com erro e o container no ar
+# não é trocado — a versão continua a mesma.
+# Se um passo seguinte falhar, esta cópia é o caminho de volta mais curto.
+DADOS="$DADOS" bash "$CODIGO/deploy/vps/copia-antes-do-deploy.sh"
+
 msg "Construindo a imagem (base ${CAMINHO}/)"
 docker build --build-arg "VITE_BASE_PATH=${CAMINHO}/" -t "$CONTAINER" "$CODIGO"
-
-msg "Cópia do banco antes de mexer (fica em $DADOS/antes-do-deploy)"
-# Se o passo seguinte falhar, esta cópia é o caminho de volta mais curto.
-mkdir -p "$DADOS/antes-do-deploy"
-if [ -f "$DADOS/data/meubling.db" ]; then
-  cp "$DADOS/data/meubling.db" "$DADOS/antes-do-deploy/meubling-$(date +%Y%m%d%H%M%S).db"
-  # guarda as 5 últimas
-  ls -1t "$DADOS/antes-do-deploy"/meubling-*.db 2>/dev/null | tail -n +6 | xargs -r rm -f
-  echo "cópia feita"
-fi
 
 msg "Conferindo a mudança de banco ANTES de derrubar o sistema"
 # Aplica as migrações (prisma migrate deploy, inclusive Usuario.telefone) numa CÓPIA do banco.
@@ -109,7 +108,7 @@ else
   tail -25 /tmp/meu-bling-migracao.log
   echo
   erro "A mudança de banco não passou (detalhes acima). O sistema NÃO foi derrubado e continua no ar com a versão anterior.
-   Resolva a pendência no banco (a cópia de segurança está em $DADOS/antes-do-deploy) e rode este instalador de novo."
+   Resolva a pendência no banco (a cópia comprimida está em $DADOS/antes-do-deploy; restaure com deploy/vps/restaurar-antes-do-deploy.sh) e rode este instalador de novo."
 fi
 
 msg "Trocando o container"
@@ -217,7 +216,9 @@ else
 fi
 
 msg "Backup diário (cron 03:00 → /root/backups/meu-bling, guarda 14 dias)"
-chmod +x "$CODIGO/deploy/vps/backup.sh"
+chmod +x "$CODIGO/deploy/vps/backup.sh" \
+  "$CODIGO/deploy/vps/copia-antes-do-deploy.sh" \
+  "$CODIGO/deploy/vps/restaurar-antes-do-deploy.sh"
 LINHA_CRON="0 3 * * * bash $CODIGO/deploy/vps/backup.sh >> /var/log/meu-bling-backup.log 2>&1"
 # mantém as outras linhas do cron; "|| true" porque o grep -v sem linhas sobrando sai com 1 (e o set -e mataria o script)
 { crontab -l 2>/dev/null | grep -v 'meu-bling' || true; echo "$LINHA_CRON"; } | crontab -
@@ -236,6 +237,8 @@ cat <<EOF
    Login inicial: admin@balao.info / admin123 — troque na primeira entrada.
    Dados: ${DADOS}   Segredos: ${ENV_FILE}   Logs: docker logs -f ${CONTAINER}
    Backup: todo dia às 03:00 em /root/backups/meu-bling (log em /var/log/meu-bling-backup.log)
+   Cópia antes do deploy: ${DADOS}/antes-do-deploy (comprimida, só as 2 mais recentes).
+   Restaurar essa cópia, com o container parado: bash ${CODIGO}/deploy/vps/restaurar-antes-do-deploy.sh
    PDV do site: chave SITE_CHAVE_INTEGRACAO em ${ENV_FILE} (a mesma vai na Vercel como MEU_BLING_CHAVE).
    Chat da equipe: tempo real em CHAT_REALTIME_URL, TURN (coturn) no container meu-bling-turn, porta ${TURN_PORT_ATUAL}.
 EOF

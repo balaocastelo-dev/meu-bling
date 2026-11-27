@@ -25,12 +25,23 @@ A VPS `srv1963897.hstgr.cloud` (Hostinger KVM 2, Ubuntu 24.04, Docker + Caddy no
 3. Abrir https://www.balao.info/sistema → `admin@balao.info` / `admin123` → trocar a senha.
 4. Atualizações futuras: `git pull` + `.\scripts\deploy-vps.ps1` de novo (banco e arquivos ficam em `/var/lib/meu-bling`, fora do container). Leva uns 5 minutos (build do Docker); o sistema fica fora do ar só nos segundos da troca do container.
 5. Backup: `deploy/vps/backup.sh` roda todo dia às 03:00 pelo cron da VPS → `/root/backups/meu-bling/meu-bling-AAAA-MM-DD.tgz` (guarda 14 dias; log em `/var/log/meu-bling-backup.log`). Baixe uma cópia de vez em quando: `scp root@179.199.148.87:/root/backups/meu-bling/*.tgz D:\backups\`.
+6. Cópia rápida antes de cada deploy: o instalador grava o banco comprimido em `/var/lib/meu-bling/antes-do-deploy` (`meubling-AAAAMMDDHHMMSS.db.zst`, ou `.db.gz` se o zstd não estiver instalado). Ficam só as **2 mais recentes** — entram na conta também as cópias antigas sem compressão (`.db`). As antigas só saem depois que a cópia nova existe, tem tamanho acima do mínimo e passa em `zstd -t` ou `gzip -t`. Se não houver espaço para a nova, o instalador apaga antes apenas o que passar dessas 2 e avisa; a única cópia existente é mantida. Se a conferência falhar, nada anterior é apagado e o container não é trocado.
+
+   Restaurar essa cópia (com o container parado):
+
+   ```bash
+   docker stop meu-bling
+   bash /opt/meu-bling/deploy/vps/restaurar-antes-do-deploy.sh
+   docker start meu-bling
+   ```
+
+   O script usa a mais recente, ou o caminho que você passar. Na mão: `zstd -d -c /var/lib/meu-bling/antes-do-deploy/meubling-XXXXXXXX.db.zst > /var/lib/meu-bling/data/meubling.db` (gzip: `gzip -dc ARQUIVO.db.gz > /var/lib/meu-bling/data/meubling.db`; cópia antiga sem compressão: `cp ARQUIVO.db /var/lib/meu-bling/data/meubling.db`).
 
 Guarde `/etc/meu-bling.env`: o `APP_SECRET` dele descriptografa o certificado A1, a senha SMTP e os tokens (está dentro do backup).
 
 **Status: no ar desde 19/10/2026.** Primeiro deploy quebrou duas vezes — CRLF nos scripts (resolvido com `.gitattributes`) e `npm install` rodando `prisma generate` antes de o schema estar na imagem (resolvido no `Dockerfile`).
 
-Comandos úteis na VPS: `docker logs -f meu-bling` · `docker restart meu-bling` · `curl 127.0.0.1:3333/api/v1/saude` · `bash /opt/meu-bling/deploy/vps/backup.sh`.
+Comandos úteis na VPS: `docker logs -f meu-bling` · `docker restart meu-bling` · `curl 127.0.0.1:3333/api/v1/saude` · `bash /opt/meu-bling/deploy/vps/backup.sh` · restaurar a cópia de antes do deploy (container parado): `bash /opt/meu-bling/deploy/vps/restaurar-antes-do-deploy.sh`.
 
 **Chat da equipe (29/10/2026):** o rewrite da Vercel não carrega WebSocket, então o navegador liga o tempo real direto na VPS (`CHAT_REALTIME_URL` em `/etc/meu-bling.env`, gravado pelo instalador) e, se não conseguir, cai para long polling. As chamadas de voz/vídeo usam o coturn (container `meu-bling-turn`, portas 3478 udp/tcp e 49160–49200 udp) como servidor de passagem para quem está fora da loja. Detalhes em `docs/CHAT.md`.
 
