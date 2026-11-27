@@ -103,6 +103,16 @@ if [ "$magic" != "SQLite format 3" ]; then
   erro "O arquivo descomprimido não é um banco SQLite. O banco atual não foi alterado."
 fi
 
+if command -v sqlite3 >/dev/null 2>&1; then
+  saida_check=$(sqlite3 "$tmp" "PRAGMA quick_check;" 2>&1 || true)
+  limpo=${saida_check//[$' \t\r\n']/}
+  if [ "$limpo" != "ok" ]; then
+    rm -f -- "$tmp"
+    erro "PRAGMA quick_check não devolveu ok. O banco atual não foi alterado."
+  fi
+  printf 'PRAGMA quick_check da restauração: ok\n'
+fi
+
 mv -f -- "$tmp" "$DESTINO"
 chmod --reference="$origem" "$DESTINO" 2>/dev/null || true
 printf 'Banco restaurado em %s (%s).\n' "$DESTINO" "$(du -h "$DESTINO" | awk '{ print $1 }')"

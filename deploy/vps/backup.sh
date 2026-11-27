@@ -4,8 +4,9 @@
 # Gera /root/backups/meu-bling/meu-bling-AAAA-MM-DD.tgz e apaga os com mais de 14 dias.
 # O instalar-vps.sh agenda este script no cron (03:00). Para rodar na mão: bash /opt/meu-bling/deploy/vps/backup.sh
 # Restaurar: parar o container, extrair data/ e storage/ em /var/lib/meu-bling e o .env em /etc, subir de novo.
-# A cópia rápida de antes do deploy (só o banco, comprimida, 2 últimas) fica em
-# /var/lib/meu-bling/antes-do-deploy (.db.zst, .db.gz ou .db antiga). Com o container parado:
+# A cópia rápida de antes do deploy usa sqlite3 .backup (o banco está em WAL; cp a quente
+# corrompe) e PRAGMA quick_check, depois comprime. Ficam 2 que passaram na conferência,
+# em /var/lib/meu-bling/antes-do-deploy. Com o container parado:
 #   bash /opt/meu-bling/deploy/vps/restaurar-antes-do-deploy.sh
 #
 set -euo pipefail

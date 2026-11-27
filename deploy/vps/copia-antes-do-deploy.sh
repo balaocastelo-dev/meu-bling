@@ -4,65 +4,68 @@
 # Destino: ${DADOS}/antes-do-deploy/meubling-AAAAMMDDHHMMSS.db.zst
 #          (ou .db.gz se o zstd não existir).
 #
-# Regras:
-# - Ficam só as 2 cópias mais recentes (data de modificação). Entram na conta
-#   .db.zst, .db.gz e a .db antiga sem compressão — senão o disco continua cheio.
-# - As antigas só saem DEPOIS que a cópia nova existe, tem tamanho acima do
-#   mínimo e passa no teste de integridade (zstd -t ou gzip -t).
-# - Se a conferência falhar, nenhuma cópia anterior é apagada e o script
-#   termina com erro. O instalar-vps.sh chama isto antes de trocar o container,
-#   então a versão no ar continua a mesma.
-# - Se não houver espaço para a cópia nova, apaga antes só o que passar das
-#   2 mais recentes e avisa. Nunca apaga a única cópia existente.
+# O banco no ar está em WAL. Copiar o arquivo com cp pega uma imagem
+# cortada (o quick_check acusa "database disk image is malformed").
+# Aqui a cópia nasce com sqlite3 ".backup" (se falhar, VACUUM INTO),
+# que inclui o que está no -wal. Nunca usamos cp do arquivo aberto.
 #
-# Compressor: zstd. Se não estiver instalado e este script rodar como root,
-# tenta `apt-get install zstd`. Se não der, usa gzip.
+# Ordem:
+# 1. Backup consistente.
+# 2. PRAGMA quick_check no arquivo ainda sem comprimir. Se não for "ok",
+#    a cópia é descartada, nada anterior sai e o instalador não troca o container.
+# 3. Comprime, confere com zstd -t ou gzip -t e o tamanho mínimo.
+# 4. Só então a retenção. Entram nas 2 vagas só cópias que passaram na
+#    conferência (marca em .conferidas/, ou um .db antigo cujo quick_check
+#    devolve ok). Cópias sem isso não ocupam vaga e saem depois que a nova passou.
+#
+# Se não houver espaço para o backup e o arquivo comprimido ao mesmo tempo,
+# apaga antes só o que passar das 2 mais recentes e avisa. A única cópia
+# existente fica. Se a conferência da nova falhar depois disso, não apaga mais nada.
+#
+# sqlite3: o do host. Se faltar e este script for root, tenta apt. Se ainda
+# faltar, usa o sqlite3 da imagem Docker ${CONTAINER} (sem publicar porta).
+# Compressor: zstd; apt se for root e não existir; senão gzip.
 #
 # Restaurar, com o container parado:
 #   bash /opt/meu-bling/deploy/vps/restaurar-antes-do-deploy.sh
-# Na mão:
-#   zstd -d -c /var/lib/meu-bling/antes-do-deploy/meubling-XXXXXXXX.db.zst \
-#     > /var/lib/meu-bling/data/meubling.db
-#   gzip -dc /var/lib/meu-bling/antes-do-deploy/meubling-XXXXXXXX.db.gz \
-#     > /var/lib/meu-bling/data/meubling.db
 #
 # Variáveis (a VPS usa o padrão; os testes é que definem as outras):
-#   DADOS, BANCO, PASTA, MANTER (padrão 2)
-#   COPIA_MINIMO_BYTES   mínimo em bytes da cópia comprimida
-#   COPIA_BYTES_LIVRES   substitui o df
-#   COPIA_AGORA          carimbo AAAAMMDDHHMMSS no nome do arquivo
-#   COPIA_NAO_INSTALAR_ZSTD=1   não chama o apt
+#   DADOS, BANCO, PASTA, MANTER (padrão 2), CONTAINER (padrão meu-bling)
+#   COPIA_MINIMO_BYTES, COPIA_BYTES_LIVRES, COPIA_AGORA
+#   COPIA_NAO_INSTALAR_ZSTD=1  COPIA_NAO_INSTALAR_SQLITE=1  COPIA_NAO_USAR_CONTAINER=1
 
 set -euo pipefail
 
-# Ordenação e números estáveis (o find não pode trocar o ponto por vírgula).
 export LC_ALL=C
 
 DADOS="${DADOS:-/var/lib/meu-bling}"
 BANCO="${BANCO:-$DADOS/data/meubling.db}"
 PASTA="${PASTA:-$DADOS/antes-do-deploy}"
 MANTER="${MANTER:-2}"
+CONTAINER="${CONTAINER:-meu-bling}"
+MARCAS="${PASTA}/.conferidas"
 
-# Arquivo .parcial da tentativa atual. O trap apaga se sairmos no meio,
-# para não deixar um pedaço grande ocupando o disco. Cópia conferida não
-# usa esse nome.
 parcial=""
+snapshot=""
 liberou_espaco=0
+MODO_SQLITE=""
+MOTIVO_QUICK=""
 
-limpar_parcial() {
+limpar_incompletos() {
   if [ -n "$parcial" ] && [ -f "$parcial" ]; then
     rm -f -- "$parcial" || true
   fi
+  if [ -n "$snapshot" ] && [ -f "$snapshot" ]; then
+    rm -f -- "$snapshot" || true
+  fi
 }
-trap limpar_parcial EXIT
+trap limpar_incompletos EXIT
 
 erro() {
   printf '\n[ERRO] %s\n' "$1" >&2
   exit 1
 }
 
-# Mensagem de falha. Se já tivemos que abrir espaço, não dizemos que nada
-# foi apagado — as que restaram (as mais recentes) é que ficam no lugar.
 falha_sem_trocar() {
   local detalhe=$1
   if [ "$liberou_espaco" -eq 1 ]; then
@@ -84,7 +87,10 @@ formatar_bytes() {
   fi
 }
 
-# Mais recente primeiro. Só cópia com nome final: .parcial fica de fora.
+segundos_entre() {
+  awk -v a="$1" -v b="$2" 'BEGIN { printf "%.1f", (b - a) }'
+}
+
 listar_copias() {
   find "$PASTA" -maxdepth 1 -type f \
     \( -name 'meubling-*.db' -o -name 'meubling-*.db.zst' -o -name 'meubling-*.db.gz' \) \
@@ -102,6 +108,14 @@ bytes_livres() {
   df -B1 --output=avail "$PASTA" | awk 'NR==2 { print $1 }'
 }
 
+tamanho_arquivo() {
+  if [ -f "$1" ]; then
+    stat -c '%s' "$1"
+  else
+    printf '0\n'
+  fi
+}
+
 exigir_inteiro() {
   local valor=$1
   local nome=$2
@@ -112,9 +126,6 @@ exigir_inteiro() {
   esac
 }
 
-# 256 KiB recusa arquivo vazio ou cortado no começo de um banco grande
-# (o da loja tem alguns GB). Banco pequeno: piso menor, porque o zstd de
-# um arquivo curto pode ficar com poucas dezenas de bytes e ainda ser válido.
 minimo_razoavel() {
   local origem=$1
   if [ -n "${COPIA_MINIMO_BYTES:-}" ]; then
@@ -130,8 +141,6 @@ minimo_razoavel() {
   fi
 }
 
-# Apaga da posição MANTER em diante (0 = a mais recente).
-# Não faz nada se houver uma cópia só — essa nunca é apagada.
 apagar_alem_de() {
   local manter=$1
   local -a lista=()
@@ -149,22 +158,234 @@ apagar_alem_de() {
     caminho=${lista[$i]}
     tam=$(stat -c '%s' "$caminho")
     rm -f -- "$caminho"
+    rm -f -- "$MARCAS/${caminho##*/}"
     printf 'Apagada: %s (%s)\n' "$caminho" "$(formatar_bytes "$tam")"
     i=$((i + 1))
   done
 }
 
-mostrar_restantes() {
-  local caminho tam
-  printf 'Cópias que ficaram:\n'
-  while IFS= read -r caminho; do
-    [ -n "$caminho" ] || continue
-    tam=$(stat -c '%s' "$caminho")
-    printf '  %s (%s)\n' "$caminho" "$(formatar_bytes "$tam")"
-  done < <(listar_copias)
+# Imprime "host" ou "container". Mensagens de apt vão para o stderr.
+escolher_sqlite() {
+  if command -v sqlite3 >/dev/null 2>&1; then
+    printf 'host\n'
+    return 0
+  fi
+  if [ "${COPIA_NAO_INSTALAR_SQLITE:-}" != 1 ] && [ "$(id -u)" -eq 0 ] && command -v apt-get >/dev/null 2>&1; then
+    printf 'sqlite3 não encontrado; tentando instalar via apt...\n' >&2
+    local log_apt=/tmp/meu-bling-apt-sqlite.log
+    if DEBIAN_FRONTEND=noninteractive apt-get update -qq >"$log_apt" 2>&1 \
+      && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends sqlite3 >>"$log_apt" 2>&1; then
+      hash -r
+    else
+      printf 'Não consegui instalar o sqlite3 (detalhes em %s).\n' "$log_apt" >&2
+    fi
+    if command -v sqlite3 >/dev/null 2>&1; then
+      printf 'sqlite3 instalado.\n' >&2
+      printf 'host\n'
+      return 0
+    fi
+  fi
+  if [ "${COPIA_NAO_USAR_CONTAINER:-}" != 1 ] && command -v docker >/dev/null 2>&1 \
+    && docker image inspect "$CONTAINER" >/dev/null 2>&1; then
+    if docker run --rm --network none --entrypoint sqlite3 "$CONTAINER" -version >/dev/null 2>&1; then
+      printf 'Usando o sqlite3 da imagem %s.\n' "$CONTAINER" >&2
+      printf 'container\n'
+      return 0
+    fi
+  fi
+  return 1
 }
 
-conferir_copia() {
+escolher_compressor() {
+  if command -v zstd >/dev/null 2>&1; then
+    printf 'zstd\n'
+    return 0
+  fi
+  if [ "${COPIA_NAO_INSTALAR_ZSTD:-}" != 1 ] && [ "$(id -u)" -eq 0 ] && command -v apt-get >/dev/null 2>&1; then
+    printf 'zstd não encontrado; tentando instalar via apt...\n' >&2
+    local log_apt=/tmp/meu-bling-apt-zstd.log
+    if DEBIAN_FRONTEND=noninteractive apt-get update -qq >"$log_apt" 2>&1 \
+      && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends zstd >>"$log_apt" 2>&1; then
+      hash -r
+    else
+      printf 'Não consegui instalar o zstd (detalhes em %s). Vou comprimir com gzip.\n' "$log_apt" >&2
+    fi
+    if command -v zstd >/dev/null 2>&1; then
+      printf 'zstd instalado.\n' >&2
+      printf 'zstd\n'
+      return 0
+    fi
+  fi
+  if command -v gzip >/dev/null 2>&1; then
+    printf 'gzip\n'
+    return 0
+  fi
+  return 1
+}
+
+# Roda .backup ou VACUUM INTO dentro de um container novo, sem publicar porta.
+# A imagem precisa já existir aqui: não puxa nada da internet.
+backup_container() {
+  local origem=$1
+  local destino=$2
+  local modo=$3
+  local srcdir=${origem%/*}
+  local destdir=${destino%/*}
+  local base=${origem##*/}
+  local destbase=${destino##*/}
+  local cmd
+  if [ "$modo" = backup ]; then
+    cmd=".backup '/dest/${destbase}'"
+  else
+    cmd="VACUUM INTO '/dest/${destbase}'"
+  fi
+  docker run --rm --network none --entrypoint sqlite3 \
+    -v "$srcdir:/src" \
+    -v "$destdir:/dest" \
+    "$CONTAINER" \
+    "/src/${base}" "$cmd"
+}
+
+fazer_backup() {
+  local origem=$1
+  local destino=$2
+  local t0 t1
+  rm -f -- "$destino"
+  t0=${EPOCHREALTIME:-$(date +%s)}
+  if [ "$MODO_SQLITE" = host ]; then
+    if ! sqlite3 "$origem" ".backup '$destino'"; then
+      printf 'O .backup não concluiu; tentando VACUUM INTO...\n'
+      rm -f -- "$destino"
+      if ! sqlite3 "$origem" "VACUUM INTO '$destino'"; then
+        return 1
+      fi
+    fi
+  else
+    if ! backup_container "$origem" "$destino" backup; then
+      printf 'O .backup no container não concluiu; tentando VACUUM INTO...\n'
+      rm -f -- "$destino"
+      if ! backup_container "$origem" "$destino" vacuum; then
+        return 1
+      fi
+    fi
+  fi
+  t1=${EPOCHREALTIME:-$(date +%s)}
+  printf 'Backup consistente em %s s.\n' "$(segundos_entre "$t0" "$t1")"
+}
+
+# 0 se a saída do quick_check, sem espaços, for exatamente ok.
+quick_check_arquivo() {
+  local arq=$1
+  local saida t0 t1 limpo dir base
+  MOTIVO_QUICK=""
+  t0=${EPOCHREALTIME:-$(date +%s)}
+  if [ "$MODO_SQLITE" = host ]; then
+    saida=$(sqlite3 "$arq" "PRAGMA quick_check;" 2>&1 || true)
+  else
+    dir=${arq%/*}
+    base=${arq##*/}
+    saida=$(docker run --rm --network none --entrypoint sqlite3 \
+      -v "$dir:/db" \
+      "$CONTAINER" \
+      "/db/${base}" "PRAGMA quick_check;" 2>&1 || true)
+  fi
+  t1=${EPOCHREALTIME:-$(date +%s)}
+  limpo=${saida//[$' \t\r\n']/}
+  if [ "$limpo" = "ok" ]; then
+    printf 'PRAGMA quick_check: ok (%s s).\n' "$(segundos_entre "$t0" "$t1")"
+    return 0
+  fi
+  MOTIVO_QUICK=${saida//$'\n'/ }
+  MOTIVO_QUICK=${MOTIVO_QUICK:0:180}
+  printf 'PRAGMA quick_check falhou (%s s).\n' "$(segundos_entre "$t0" "$t1")" >&2
+  return 1
+}
+
+marca_de() {
+  printf '%s\n' "$MARCAS/${1##*/}"
+}
+
+# 0 se esta cópia pode ocupar uma das vagas da retenção.
+copia_conferida() {
+  local arq=$1
+  local marca
+  marca=$(marca_de "$arq")
+  if [ -f "$marca" ]; then
+    return 0
+  fi
+  case "$arq" in
+    *.db.zst|*.db.gz)
+      return 1
+      ;;
+    *.db)
+      printf 'Conferindo cópia antiga com PRAGMA quick_check: %s\n' "$arq"
+      if quick_check_arquivo "$arq"; then
+        mkdir -p "$MARCAS"
+        printf 'ok\n' >"$marca"
+        return 0
+      fi
+      printf 'Cópia antiga reprovada no quick_check: %s\n' "$MOTIVO_QUICK"
+      return 1
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+aplicar_retencao() {
+  local -a todas=()
+  local -A fica=()
+  local arq vagas tam total
+  mapfile -t todas < <(listar_copias)
+  vagas=$MANTER
+  for arq in "${todas[@]}"; do
+    [ -n "$arq" ] || continue
+    if [ "$vagas" -le 0 ]; then
+      break
+    fi
+    if copia_conferida "$arq"; then
+      fica["$arq"]=1
+      vagas=$((vagas - 1))
+      printf 'Válida: %s\n' "$arq"
+    else
+      printf 'Não passou na conferência e não ocupa vaga: %s\n' "$arq"
+    fi
+  done
+  if [ "${#fica[@]}" -eq 0 ]; then
+    printf 'Nenhuma cópia conferida. Nada foi apagado.\n'
+    return 0
+  fi
+  total=${#todas[@]}
+  for arq in "${todas[@]}"; do
+    [ -n "$arq" ] || continue
+    if [ -n "${fica[$arq]:-}" ]; then
+      continue
+    fi
+    if [ "$total" -le 1 ]; then
+      printf 'A única cópia restante foi mantida: %s\n' "$arq"
+      break
+    fi
+    tam=$(stat -c '%s' "$arq")
+    rm -f -- "$arq"
+    rm -f -- "$(marca_de "$arq")"
+    printf 'Apagada: %s (%s)\n' "$arq" "$(formatar_bytes "$tam")"
+    total=$((total - 1))
+  done
+  if [ "${#fica[@]}" -eq 1 ]; then
+    printf 'Ficou 1 cópia que passou na conferência em %s.\n' "$PASTA"
+  else
+    printf 'Ficaram %s cópias que passaram na conferência em %s.\n' "${#fica[@]}" "$PASTA"
+  fi
+  printf 'Cópias que ficaram:\n'
+  for arq in "${todas[@]}"; do
+    [ -n "${fica[$arq]:-}" ] || continue
+    [ -f "$arq" ] || continue
+    printf '  %s (%s)\n' "$arq" "$(formatar_bytes "$(stat -c '%s' "$arq")")"
+  done
+}
+
+conferir_comprimido() {
   local arq=$1
   local minimo=$2
   local ext=$3
@@ -200,36 +421,6 @@ conferir_copia() {
   return 0
 }
 
-# zstd se existir (ou se der para instalar). Senão gzip. Imprime o nome.
-escolher_compressor() {
-  if command -v zstd >/dev/null 2>&1; then
-    printf 'zstd\n'
-    return 0
-  fi
-  if [ "${COPIA_NAO_INSTALAR_ZSTD:-}" != 1 ] && [ "$(id -u)" -eq 0 ] && command -v apt-get >/dev/null 2>&1; then
-    printf 'zstd não encontrado; tentando instalar via apt...\n' >&2
-    # A saída do apt fica num log: o nome do compressor sai sozinho no
-    # stdout (quem chama captura com $(...)). O log não tem segredo.
-    local log_apt=/tmp/meu-bling-apt-zstd.log
-    if DEBIAN_FRONTEND=noninteractive apt-get update -qq >"$log_apt" 2>&1 \
-      && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends zstd >>"$log_apt" 2>&1; then
-      hash -r
-    else
-      printf 'Não consegui instalar o zstd (detalhes em %s). Vou comprimir com gzip.\n' "$log_apt" >&2
-    fi
-    if command -v zstd >/dev/null 2>&1; then
-      printf 'zstd instalado.\n' >&2
-      printf 'zstd\n'
-      return 0
-    fi
-  fi
-  if command -v gzip >/dev/null 2>&1; then
-    printf 'gzip\n'
-    return 0
-  fi
-  return 1
-}
-
 case "$MANTER" in
   ''|*[!0-9]*) erro "MANTER inválido (${MANTER}). Use um inteiro maior ou igual a 1. Nada foi apagado e a versão no ar não foi trocada." ;;
 esac
@@ -244,19 +435,19 @@ fi
 
 mkdir -p "$PASTA"
 
-# Tentativa anterior interrompida. Não é cópia conferida, então não entra
-# na retenção — e não pode continuar ocupando o disco.
-parciais=()
-mapfile -t parciais < <(find "$PASTA" -maxdepth 1 -type f -name 'meubling-*.parcial' -printf '%p\n' 2>/dev/null || true)
-if [ "${#parciais[@]}" -gt 0 ]; then
-  printf 'Removendo %s arquivo(s) de cópia incompleta de uma tentativa anterior.\n' "${#parciais[@]}"
-  for caminho_parcial in "${parciais[@]}"; do
+sobras=()
+mapfile -t sobras < <(find "$PASTA" -maxdepth 1 -type f \
+  \( -name 'meubling-*.parcial' -o -name 'meubling-*.snapshot' \) \
+  -printf '%p\n' 2>/dev/null || true)
+if [ "${#sobras[@]}" -gt 0 ]; then
+  printf 'Removendo %s arquivo(s) de cópia incompleta de uma tentativa anterior.\n' "${#sobras[@]}"
+  for caminho_parcial in "${sobras[@]}"; do
     rm -f -- "$caminho_parcial"
     printf 'Removido incompleto: %s\n' "$caminho_parcial"
   done
 fi
 
-origem=$(stat -c '%s' "$BANCO")
+origem=$(tamanho_arquivo "$BANCO")
 if [ "$origem" -lt 1 ]; then
   erro "O banco em ${BANCO} está vazio. Não fiz cópia e não apaguei nada. A versão no ar não foi trocada."
 fi
@@ -268,17 +459,16 @@ if [ -n "${COPIA_MINIMO_BYTES:-}" ]; then
   fi
 fi
 
-# Pior caso: os dados quase não comprimem e o arquivo fica perto do original.
-# O cabeçalho do zstd/gzip em um banco grande é pequeno. Se a escrita mesmo
-# assim encher o disco, a conferência falha e as cópias que ficaram não saem.
-preciso=$origem
-minimo=$(minimo_razoavel "$origem")
+wal=$(tamanho_arquivo "${BANCO}-wal")
+logico=$((origem + wal))
+# O .backup grava o banco inteiro e o comprimido fica ao lado até o zstd -t / gzip -t.
+preciso=$((logico * 2))
 
 livre=$(bytes_livres)
 exigir_inteiro "$livre" "o espaço livre em disco"
 
 if [ "$livre" -lt "$preciso" ]; then
-  printf 'AVISO: espaço livre (%s) não cobre a cópia nova (cerca de %s, o tamanho do banco).\n' \
+  printf 'AVISO: espaço livre (%s) não cobre a cópia nova (cerca de %s: backup consistente e arquivo comprimido ao mesmo tempo).\n' \
     "$(formatar_bytes "$livre")" "$(formatar_bytes "$preciso")"
   existentes=()
   mapfile -t existentes < <(listar_copias)
@@ -311,6 +501,8 @@ if [ "$livre" -lt "$preciso" ]; then
   fi
 fi
 
+MODO_SQLITE=$(escolher_sqlite) || falha_sem_trocar "Não há sqlite3 no host, o apt não instalou e a imagem ${CONTAINER} também não tem. Sem isso a cópia a quente corrompe o banco. Nada foi apagado e a versão no ar não foi trocada."
+
 compressor=$(escolher_compressor) || falha_sem_trocar "Nem zstd nem gzip estão disponíveis para comprimir o banco."
 case "$compressor" in
   zstd) ext=zst ;;
@@ -327,43 +519,59 @@ if [ -e "$final" ]; then
   stamp="${stamp}-$$"
   final="$PASTA/meubling-${stamp}.db.${ext}"
 fi
+snapshot="$PASTA/meubling-${stamp}.db.snapshot"
 parcial="${final}.parcial"
 
-printf 'Comprimindo o banco com %s...\n' "$compressor"
+printf 'Gerando cópia consistente com sqlite3 .backup (o banco está em WAL; não uso cp do arquivo aberto)...\n'
+if ! fazer_backup "$BANCO" "$snapshot"; then
+  rm -f -- "$snapshot" || true
+  snapshot=""
+  falha_sem_trocar "Não consegui gerar a cópia consistente do banco (sqlite3 .backup / VACUUM INTO)."
+fi
+if [ ! -s "$snapshot" ]; then
+  rm -f -- "$snapshot" || true
+  snapshot=""
+  falha_sem_trocar "A cópia consistente ficou vazia."
+fi
+if ! quick_check_arquivo "$snapshot"; then
+  rm -f -- "$snapshot" || true
+  snapshot=""
+  falha_sem_trocar "A cópia nova do banco não passou na conferência: PRAGMA quick_check não devolveu ok (${MOTIVO_QUICK:-sem resposta}). O arquivo incompleto foi descartado."
+fi
+
+tam_snap=$(stat -c '%s' "$snapshot")
+minimo=$(minimo_razoavel "$tam_snap")
+
+printf 'Comprimindo a cópia já conferida com %s...\n' "$compressor"
 if [ "$compressor" = zstd ]; then
-  if ! zstd -q -3 -T0 -f -o "$parcial" -- "$BANCO"; then
-    if ! zstd -q -3 -f -o "$parcial" -- "$BANCO"; then
-      falha_sem_trocar "Não consegui comprimir o banco com o zstd."
+  if ! zstd -q -3 -T0 -f -o "$parcial" -- "$snapshot"; then
+    if ! zstd -q -3 -f -o "$parcial" -- "$snapshot"; then
+      falha_sem_trocar "Não consegui comprimir a cópia com o zstd."
     fi
   fi
 else
-  if ! gzip -c -n -- "$BANCO" >"$parcial"; then
-    falha_sem_trocar "Não consegui comprimir o banco com o gzip."
+  if ! gzip -c -n -- "$snapshot" >"$parcial"; then
+    falha_sem_trocar "Não consegui comprimir a cópia com o gzip."
   fi
 fi
 
 MOTIVO=""
-if ! conferir_copia "$parcial" "$minimo" "$ext"; then
+if ! conferir_comprimido "$parcial" "$minimo" "$ext"; then
   rm -f -- "$parcial" || true
   parcial=""
+  rm -f -- "$snapshot" || true
+  snapshot=""
   falha_sem_trocar "A cópia nova do banco não passou na conferência: ${MOTIVO}. O arquivo incompleto foi descartado."
 fi
 
 mv -f -- "$parcial" "$final"
 parcial=""
 chmod --reference="$BANCO" "$final" 2>/dev/null || true
-printf 'Cópia conferida: %s (%s; banco de origem %s).\n' \
-  "$final" "$(formatar_bytes "$(stat -c '%s' "$final")")" "$(formatar_bytes "$origem")"
+mkdir -p "$MARCAS"
+printf 'ok\n' >"$(marca_de "$final")"
+rm -f -- "$snapshot"
+snapshot=""
+printf 'Cópia conferida: %s (%s; backup consistente %s).\n' \
+  "$final" "$(formatar_bytes "$(stat -c '%s' "$final")")" "$(formatar_bytes "$tam_snap")"
 
-existentes=()
-mapfile -t existentes < <(listar_copias)
-qtd=${#existentes[@]}
-if [ "$qtd" -gt "$MANTER" ]; then
-  apagar_alem_de "$MANTER"
-  printf 'Mantidas as %s cópias mais recentes em %s.\n' "$MANTER" "$PASTA"
-elif [ "$qtd" -eq 1 ]; then
-  printf 'Há 1 cópia em %s. Nada a apagar.\n' "$PASTA"
-else
-  printf 'Há %s cópias em %s (limite %s). Nada a apagar.\n' "$qtd" "$PASTA" "$MANTER"
-fi
-mostrar_restantes
+aplicar_retencao

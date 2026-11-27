@@ -82,12 +82,12 @@ mkdir -p "$DADOS/data" "$DADOS/storage"
 
 msg "Cópia do banco antes de mexer (fica em $DADOS/antes-do-deploy)"
 # Roda antes do build de propósito: se o disco estiver cheio das cópias
-# antigas, a limpeza libera espaço antes da imagem. O script comprime
-# (zstd, ou gzip), confere a cópia e só então fica com as 2 mais recentes.
-# Se a conferência ou o espaço falhar, ele sai com erro e o container no ar
-# não é trocado — a versão continua a mesma.
+# antigas, a limpeza libera espaço antes da imagem. O banco está em WAL:
+# a cópia usa sqlite3 .backup e PRAGMA quick_check, comprime (zstd ou gzip)
+# e só então fica com as 2 que passaram na conferência. Não é cp do arquivo aberto.
+# Se a conferência falhar, o script sai com erro e o container no ar não é trocado.
 # Se um passo seguinte falhar, esta cópia é o caminho de volta mais curto.
-DADOS="$DADOS" bash "$CODIGO/deploy/vps/copia-antes-do-deploy.sh"
+DADOS="$DADOS" CONTAINER="$CONTAINER" bash "$CODIGO/deploy/vps/copia-antes-do-deploy.sh"
 
 msg "Construindo a imagem (base ${CAMINHO}/)"
 docker build --build-arg "VITE_BASE_PATH=${CAMINHO}/" -t "$CONTAINER" "$CODIGO"
@@ -237,7 +237,7 @@ cat <<EOF
    Login inicial: admin@balao.info / admin123 — troque na primeira entrada.
    Dados: ${DADOS}   Segredos: ${ENV_FILE}   Logs: docker logs -f ${CONTAINER}
    Backup: todo dia às 03:00 em /root/backups/meu-bling (log em /var/log/meu-bling-backup.log)
-   Cópia antes do deploy: ${DADOS}/antes-do-deploy (comprimida, só as 2 mais recentes).
+   Cópia antes do deploy: sqlite3 .backup + quick_check, comprimida, só as 2 que passaram (${DADOS}/antes-do-deploy).
    Restaurar essa cópia, com o container parado: bash ${CODIGO}/deploy/vps/restaurar-antes-do-deploy.sh
    PDV do site: chave SITE_CHAVE_INTEGRACAO em ${ENV_FILE} (a mesma vai na Vercel como MEU_BLING_CHAVE).
    Chat da equipe: tempo real em CHAT_REALTIME_URL, TURN (coturn) no container meu-bling-turn, porta ${TURN_PORT_ATUAL}.
