@@ -25,7 +25,14 @@ export default function Usuarios() {
       rota="/usuarios"
       rotuloNovo="Novo usuário"
       vazio={{ nome: '', email: '', telefone: '', perfil: 'VENDEDOR', ativo: true, vendedorId: null, tecnicoId: null, vendeTambem: true, senha: '' }}
-      validar={(f) => (!f.nome?.trim() ? 'Informe o nome.' : !f.email?.trim() ? 'Informe o e-mail.' : !f.id && (f.senha ?? '').length < 8 ? 'Senha inicial com ao menos 8 caracteres.' : null)}
+      validar={(f) => {
+        if (!f.nome?.trim()) return 'Informe o nome.';
+        if (!f.email?.trim()) return 'Informe o e-mail.';
+        const senha = f.senha ?? '';
+        if (!f.id && senha.length < 8) return 'A senha deve ter pelo menos 8 caracteres';
+        if (f.id && senha.length > 0 && senha.length < 8) return 'A senha deve ter pelo menos 8 caracteres';
+        return null;
+      }}
       antesDeSalvar={(f) => { const { ultimoLogin: _u, criadoEm: _c, ...resto } = f; if (!resto.senha) delete resto.senha; return resto; }}
       colunas={[
         { titulo: 'Nome', render: (u) => <span className="font-medium">{u.nome}</span> },

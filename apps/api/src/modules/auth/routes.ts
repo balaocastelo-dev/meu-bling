@@ -4,8 +4,8 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../../lib/prisma.js';
 import { AppError, Forbidden, NotFound } from '../../lib/errors.js';
 import { auditar } from '../../lib/auditoria.js';
-import { env } from '../../lib/env.js';
 import { COOKIE_SESSAO, COOKIE_PATH } from '../../plugins/arquivos.js';
+import { gravarCookieSessao } from './sessao.js';
 import { DESCRICAO_PERFIS } from '../../plugins/politicas.js';
 import { tecnicoDoUsuario, vendedorDoUsuario } from '../comum/vendedores.js';
 
@@ -42,8 +42,27 @@ export default async function authRoutes(app: FastifyInstance) {
     req.user = payload;
     await auditar(req, 'Usuario', u.id, 'LOGIN');
     // cookie usado apenas para servir arquivos (/uploads/*) em <img>/<a>; a API usa o Bearer
-    reply.setCookie(COOKIE_SESSAO, token, { path: COOKIE_PATH, httpOnly: true, sameSite: 'lax', secure: env.isProd && env.APP_URL.startsWith('https'), maxAge: 12 * 3600 });
+    gravarCookieSessao(reply, token);
     return reply.send({ token, usuario: payload, senhaFraca: body.senha === 'admin123' });
+  });
+
+  /**
+   * Sessão deslizante: emite outro JWT de 30 dias com os dados atuais do banco
+   * e regrava o cookie mb_token. Não audita (seria uma linha a cada uso) e não
+   * invalida os outros aparelhos. Usuário inativo não renova.
+   */
+  app.post('/api/v1/auth/renovar', async (req, reply) => {
+    const u = await prisma.usuario.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, nome: true, email: true, perfil: true, vendedorId: true, tecnicoId: true, ativo: true },
+    });
+    if (!u || !u.ativo) {
+      throw new AppError('Seu usuário foi desativado. Fale com o administrador.', 401, 'USUARIO_INATIVO');
+    }
+    const payload = { id: u.id, nome: u.nome, email: u.email, perfil: u.perfil as any, vendedorId: u.vendedorId, tecnicoId: u.tecnicoId };
+    const token = app.jwt.sign(payload);
+    gravarCookieSessao(reply, token);
+    return { token, usuario: payload };
   });
 
   app.post('/api/v1/auth/logout', async (_req, reply) => {
@@ -88,7 +107,7 @@ export default async function authRoutes(app: FastifyInstance) {
     const token = app.jwt.sign(payload);
     req.user = payload;
     await auditar(req, 'Usuario', u.id, 'ALTERAR', { perfil: u.perfil, proprio: true });
-    reply.setCookie(COOKIE_SESSAO, token, { path: COOKIE_PATH, httpOnly: true, sameSite: 'lax', secure: env.isProd && env.APP_URL.startsWith('https'), maxAge: 12 * 3600 });
+    gravarCookieSessao(reply, token);
     return { token, usuario: payload, alterado: atual.perfil !== body.perfil };
   });
 

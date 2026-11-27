@@ -3,6 +3,7 @@ import jwt from '@fastify/jwt';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { env } from '../lib/env.js';
 import { AppError, Forbidden } from '../lib/errors.js';
+import { SESSAO_EXPIRES_IN } from '../modules/auth/sessao.js';
 import { prisma } from '../lib/prisma.js';
 import { permitido, CAMPOS_EMPRESA_ADMIN } from './politicas.js';
 import { chaveDaUrl, chaveDoCabecalho, conferirChave, registrarChamada } from '../modules/api-externa/chaves.js';
@@ -51,7 +52,7 @@ const ROTAS_PUBLICAS = [
 ];
 
 export default fp(async function authPlugin(app: FastifyInstance) {
-  await app.register(jwt, { secret: env.JWT_SECRET, sign: { expiresIn: '12h' } });
+  await app.register(jwt, { secret: env.JWT_SECRET, sign: { expiresIn: SESSAO_EXPIRES_IN } });
 
   app.decorate('autenticar', async (req: FastifyRequest, reply: FastifyReply) => {
     try {

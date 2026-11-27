@@ -106,6 +106,8 @@ const REGRAS: Regra[] = [
   { teste: /^\/dashboard(\/|$)/, perfis: ['ADMIN'] },
 
   // ---- operação (todos os perfis autenticados)
+  // sessão deslizante: qualquer pessoa logada renova o próprio token
+  { metodos: M('POST'), teste: /^\/auth\/renovar$/, perfis: 'TODOS' },
   // pedidos de venda, de compra e OS: todos os funcionários
   { metodos: MUT, teste: /^\/(vendas|compras|ordens-servico|contatos)(\/|$)/, perfis: OPERACAO },
   { teste: /.*/, perfis: 'TODOS' },

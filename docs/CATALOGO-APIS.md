@@ -32,7 +32,7 @@ A API é um **Fastify** (`apps/api`) com carregamento automático: cada pasta em
 
 | Forma | Como manda | Para que serve |
 |---|---|---|
-| **Sessão (JWT)** | `Authorization: Bearer <token>` do `POST /auth/login`, vale 12 h | As telas do sistema, usadas pelos funcionários |
+| **Sessão (JWT)** | `Authorization: Bearer <token>` do `POST /auth/login`, vale 30 dias e renova em `POST /auth/renovar` enquanto a tela está em uso | As telas do sistema, usadas pelos funcionários |
 | **Chave de API** | `X-API-Key: mb_...` (ou `Authorization: Bearer mb_...`) | Outro sistema, n8n, Make, planilha, robô |
 | **Chave na URL** | `POST /mcp/mb_...` | Conectores de IA que não conseguem mandar cabeçalho (precisa ligar "permitir na URL" na chave) |
 
@@ -121,8 +121,9 @@ Legenda das colunas:
 |---|---|---|---|---|
 | `GET` | `/auditoria` | Trilha de auditoria: quem fez o quê, quando.<br>Filtros: `entidade`, `entidadeId`, `limite` | ADMIN, GERENTE | `sistema` · LEITURA |
 | `GET` | `/auth/eu` | Diz quem está logado agora: nome, e-mail, perfil e se está ligado a um cadastro de vendedor ou técnico. | todos | — |
-| `POST` | `/auth/login` | Entra no sistema com e-mail e senha e devolve o passe de acesso (token) usado no resto do dia. ⚠️ SENSÍVEL: porta de entrada do sistema. Aceita no máximo 20 tentativas por minuto. Avisa quando a senha ainda é a de fábrica e grava o login na auditoria. O passe vale 12 horas. | **pública** | — |
+| `POST` | `/auth/login` | Entra no sistema com e-mail e senha e devolve o passe de acesso (token). ⚠️ SENSÍVEL: porta de entrada do sistema. Aceita no máximo 20 tentativas por minuto. Avisa quando a senha ainda é a de fábrica e grava o login na auditoria. O passe e o cookie `mb_token` valem 30 dias. Senha errada responde 401 `CREDENCIAIS` (“E-mail ou senha inválidos.”), sem derrubar uma sessão que já exista. | **pública** | — |
 | `POST` | `/auth/logout` | Sai do sistema, limpando o cookie de sessão usado para ver arquivos e imagens. | todos | — |
+| `POST` | `/auth/renovar` | Emite outro passe de 30 dias com nome, e-mail, perfil e vínculos lidos agora do banco, e regrava o cookie `mb_token`. A tela chama sozinha ao abrir, ao voltar a ficar visível e antes de vencer. O passe anterior continua válido até a hora original (vários aparelhos ao mesmo tempo). Usuário inativo recebe 401 “Seu usuário foi desativado. Fale com o administrador.” Não entra na auditoria. | todos | — |
 | `GET` | `/auth/perfis` | Explica em texto o que cada perfil de usuário pode fazer (dono, gerente, financeiro, vendedor, técnico), para escolher na hora de cadastrar alguém. | todos | — |
 | `PUT` | `/auth/senha` | Troca a própria senha, confirmando a senha atual. ⚠️ SENSÍVEL: muda credencial de acesso. A nova senha precisa de pelo menos 8 caracteres; a atual é conferida antes. | todos | — |
 | `GET` | `/usuarios` | Lista as pessoas que usam o sistema, com perfil, se estão ativas, o cadastro de vendedor ou técnico ligado e o último login. ⚠️ SENSÍVEL: mexe em usuários. Só dono ou gerente. Nenhuma senha é devolvida. Nunca fica disponível para chave de API. | ADMIN | — |

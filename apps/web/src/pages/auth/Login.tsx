@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Lock, Mail } from 'lucide-react';
 import { api, mensagemErro } from '@/lib/api';
+import { AVISO_SESSAO } from '@/lib/sessao';
 import { useAuth } from '@/stores/auth';
 import { Button, Input } from '@/components/ui';
 import { Logo } from '@/components/layout/Sidebar';
@@ -16,6 +17,18 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [carregando, setCarregando] = useState(false);
+
+  useEffect(() => {
+    if (token) return;
+    let aviso: string | null = null;
+    try {
+      aviso = sessionStorage.getItem(AVISO_SESSAO);
+      if (aviso) sessionStorage.removeItem(AVISO_SESSAO);
+    } catch {
+      /* aba sem sessionStorage */
+    }
+    if (aviso) toast.error(aviso);
+  }, [token]);
 
   if (token) return <Navigate to="/" replace />;
 
