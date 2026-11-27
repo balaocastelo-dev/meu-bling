@@ -136,6 +136,7 @@ async function main() {
     rodar('Cliente e fornecedor no mesmo contato: documento único, busca comercial e promoção para AMBOS', NPX, ['tsx', 'testes/contato-papel.ts', base]);
     if (!RAPIDO) rodar('Tela: Usar este contato quando o CPF já existe (compra, venda e OS)', NPX, ['tsx', 'testes/contato-papel-tela.ts', base], { env: { TZ: 'America/Sao_Paulo' } });
     rodar('Integridade dos dados depois dos testes (Saúde do sistema)', NPX, ['tsx', 'testes/integridade.ts', base]);
+    rodar('Sessão de 30 dias: renovar, senha errada, token vencido e senha com 8 caracteres', NPX, ['tsx', 'testes/sessao.ts', base], { env: { TZ: 'America/Sao_Paulo', JWT_SECRET: env.JWT_SECRET } });
     // por último: manda lixo em todas as rotas (pode bagunçar os dados de teste)
     rodar('Robustez: todas as rotas da API com dados errados e sem login (nunca 500)', NPX, ['tsx', 'testes/robustez.ts'], { env });
 

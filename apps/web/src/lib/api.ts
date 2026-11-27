@@ -6,6 +6,7 @@
  * - redireciona para /login em 401
  */
 import { useAuth } from '@/stores/auth';
+import { AVISO_SESSAO, decidir401, type Decisao401 } from '@/lib/sessao';
 import type { ErroApi } from '@/types';
 
 /** Caminho base do app (ex.: '/sistema' quando publicado em www.balao.info/sistema). Vem do `base` do Vite. */
@@ -53,24 +54,38 @@ function headersAuth(extra?: HeadersInit): Headers {
   return h;
 }
 
-async function tratarResposta<T>(res: Response): Promise<T> {
+async function lerErro(res: Response): Promise<Partial<ErroApi>> {
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return (await res.json().catch(() => ({}))) as Partial<ErroApi>;
+  }
+  const txt = await res.text().catch(() => '');
+  return { erro: txt || undefined };
+}
+
+/** Logout + aviso na tela de login. O 401 de senha errada não passa por aqui. */
+export function aplicar401(decisao: Decisao401) {
+  if (!decisao.deslogar) return;
+  useAuth.getState().logout();
+  try {
+    sessionStorage.setItem(AVISO_SESSAO, decisao.mensagem);
+  } catch {
+    /* aba sem sessionStorage */
+  }
+  if (decisao.redirecionar) location.href = `${BASE_PATH}/login`;
+}
+
+async function tratarResposta<T>(res: Response, caminho: string): Promise<T> {
   if (res.status === 401) {
-    // Sessão expirada: limpa e manda para o login (exceto se já estiver lá)
-    useAuth.getState().logout();
-    if (!location.pathname.startsWith(`${BASE_PATH}/login`) && !location.pathname.startsWith(`${BASE_PATH}/p/`)) {
-      location.href = `${BASE_PATH}/login`;
-    }
-    throw new ApiError(401, 'Sessão expirada. Faça login novamente.', 'NAO_AUTENTICADO');
+    const corpo = await lerErro(res);
+    const decisao = decidir401({ caminho, pathname: location.pathname, basePath: BASE_PATH, code: corpo.code, erro: corpo.erro });
+    aplicar401(decisao);
+    throw new ApiError(401, decisao.mensagem, corpo.code || (decisao.deslogar ? 'NAO_AUTENTICADO' : 'CREDENCIAIS'), corpo.detalhes);
   }
   const contentType = res.headers.get('content-type') || '';
   if (!res.ok) {
-    let corpo: Partial<ErroApi> = {};
-    if (contentType.includes('application/json')) {
-      corpo = (await res.json().catch(() => ({}))) as Partial<ErroApi>;
-    } else {
-      const txt = await res.text().catch(() => '');
-      corpo = { erro: txt || res.statusText };
-    }
+    const corpo = await lerErro(res);
+    if (!corpo.erro) corpo.erro = res.statusText;
     const msg =
       corpo.erro ||
       (res.status === 404 ? 'Recurso não encontrado (rota ainda não disponível).' : `Erro ${res.status}`);
@@ -97,7 +112,7 @@ async function requisicao<T>(method: string, caminho: string, body?: unknown, pa
   } catch {
     throw new ApiError(0, 'Não foi possível conectar à API. Verifique se o servidor está no ar.', 'REDE');
   }
-  return tratarResposta<T>(res);
+  return tratarResposta<T>(res, caminho);
 }
 
 export const api = {
@@ -122,7 +137,7 @@ export const api = {
       throw new ApiError(0, 'Não foi possível conectar à API.', 'REDE');
     }
     if (!res.ok) {
-      await tratarResposta(res);
+      await tratarResposta(res, caminho);
     }
     const disp = res.headers.get('content-disposition') || '';
     const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disp);

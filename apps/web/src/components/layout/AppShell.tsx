@@ -7,11 +7,13 @@ import { CommandPalette } from './CommandPalette';
 import { ChatProvider } from '@/components/chat/ChatProvider';
 import { useAuth } from '@/stores/auth';
 import { useApresentacao } from '@/stores/apresentacao';
+import { useRenovacaoSessao } from '@/lib/renovarSessao';
 
 /** Casca da aplicação autenticada: sidebar + topbar + conteúdo */
 export function AppShell() {
   const token = useAuth((s) => s.token);
   const loc = useLocation();
+  useRenovacaoSessao(!!token);
   const [menuAberto, setMenuAberto] = useState(false);
   const [buscaAberta, setBuscaAberta] = useState(false);
   // modo apresentação (segunda tela do cliente): sem menu, sem barra, sem margem

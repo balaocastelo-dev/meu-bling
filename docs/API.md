@@ -1,6 +1,6 @@
 # MEU BLING — Contrato da API (v1)
 
-Base: `http://localhost:3333/api/v1`. JSON. Autenticação: `Authorization: Bearer <token>` (JWT, 12h).
+Base: `http://localhost:3333/api/v1`. JSON. Autenticação: `Authorization: Bearer <token>` (JWT, 30 dias; `POST /auth/renovar` emite outro enquanto a sessão está em uso).
 Todas as rotas em `/api/*` exigem token, exceto `POST /auth/login`, `GET /saude`, `/publico/*`, `/webhooks/*`.
 Outros sistemas e agentes de IA usam **chaves de API** (`X-API-Key: mb_...`) com permissão por área, configuradas em Configurações → API e integrações — ver `API-EXTERNA.md`.
 
@@ -16,7 +16,8 @@ Outros sistemas e agentes de IA usam **chaves de API** (`X-API-Key: mb_...`) com
 - Campos criptografados (senhas de certificado/SMTP, tokens) nunca são devolvidos; a API devolve `***` ou `temSenha: true`.
 
 ## Autenticação / usuários (pronto)
-- `POST /auth/login` `{email, senha}` → `{ token, usuario: {id,nome,email,perfil,vendedorId,tecnicoId} }`
+- `POST /auth/login` `{email, senha}` → `{ token, usuario: {id,nome,email,perfil,vendedorId,tecnicoId} }` (token e cookie `mb_token` por 30 dias)
+- `POST /auth/renovar` (autenticado) → `{ token, usuario }` novo, de 30 dias, com os dados atuais do banco. Usuário inativo recebe 401 `USUARIO_INATIVO`. Não grava auditoria e não derruba outros aparelhos.
 - `GET /auth/eu` → usuário atual
 - `PUT /auth/senha` `{senhaAtual, novaSenha}`
 - `GET/POST /usuarios`, `PUT/DELETE /usuarios/:id` (ADMIN) — body `{nome,email,senha?,perfil,ativo,vendedorId?,tecnicoId?}`

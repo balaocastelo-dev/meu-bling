@@ -20,7 +20,7 @@ export default function Perfil() {
   const salvar = async (e: FormEvent) => {
     e.preventDefault();
     if (novaSenha !== confirmar) return toast.error('A confirmação não confere com a nova senha.');
-    if (novaSenha.length < 6) return toast.error('A nova senha deve ter ao menos 6 caracteres.');
+    if (novaSenha.length < 8) return toast.error('A nova senha deve ter pelo menos 8 caracteres');
     setCarregando(true);
     try {
       await api.put('/auth/senha', { senhaAtual, novaSenha });
@@ -72,10 +72,10 @@ export default function Perfil() {
           )}
         </Card>
         <Card titulo="Alterar senha">
-          <form onSubmit={salvar} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <form onSubmit={salvar} noValidate className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Input label="Senha atual" type="password" required value={senhaAtual} onChange={(e) => setSenhaAtual(e.target.value)} autoComplete="current-password" />
-            <Input label="Nova senha" type="password" required value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} autoComplete="new-password" />
-            <Input label="Confirmar nova senha" type="password" required value={confirmar} onChange={(e) => setConfirmar(e.target.value)} autoComplete="new-password" />
+            <Input label="Nova senha" type="password" required minLength={8} value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} autoComplete="new-password" />
+            <Input label="Confirmar nova senha" type="password" required minLength={8} value={confirmar} onChange={(e) => setConfirmar(e.target.value)} autoComplete="new-password" />
             <div className="sm:col-span-2 lg:col-span-3">
               <Button type="submit" variante="primario" carregando={carregando}>
                 Salvar nova senha

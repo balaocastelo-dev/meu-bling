@@ -2,7 +2,8 @@
  * Cliente da API do Painel de auditoria: a sessão normal (Bearer) + o token do painel (x-auditoria),
  * que o ADMIN ganha ao digitar a senha do dia. Guardado na aba (sessionStorage) por 4 h.
  */
-import { API_BASE, ApiError, qs } from '@/lib/api';
+import { API_BASE, ApiError, aplicar401, BASE_PATH, qs } from '@/lib/api';
+import { decidir401 } from '@/lib/sessao';
 import { useAuth } from '@/stores/auth';
 
 const CHAVE = 'meu-bling.painel-auditoria';
@@ -48,9 +49,9 @@ async function chamar<T>(metodo: string, caminho: string, body?: unknown, params
   }
   const corpo: any = await res.json().catch(() => ({}));
   if (res.status === 401) {
-    useAuth.getState().logout();
-    location.reload();
-    throw new ApiError(401, 'Sessão expirada.', 'NAO_AUTENTICADO');
+    const decisao = decidir401({ caminho, pathname: location.pathname, basePath: BASE_PATH, code: corpo?.code, erro: corpo?.erro });
+    aplicar401(decisao);
+    throw new ApiError(401, decisao.mensagem, corpo?.code || 'NAO_AUTENTICADO');
   }
   if (!res.ok) {
     if (corpo?.code === 'PAINEL_SENHA') {
