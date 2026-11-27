@@ -2,7 +2,8 @@
 # Build:  docker build -t meu-bling .
 # Run:    docker compose up -d   (ver docker-compose.yml)
 FROM node:22-bookworm-slim AS base
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+# sqlite3 fica na imagem para o .backup da cópia antes do deploy, se o host não tiver o comando.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates sqlite3 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY apps/api/package.json apps/api/
